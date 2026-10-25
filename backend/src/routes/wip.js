@@ -3,7 +3,7 @@ import { query, tx } from '../database.js';
 import { requireAuth } from '../auth.js';
 import { userLimit } from '../firewall.js';
 import { fail, uuid } from '../http.js';
-import { activeWip, BASE_FEATURES } from '../services/wip.js';
+import { activeWip, BASE_FEATURES, wipVehicleGifts } from '../services/wip.js';
 import { idempotent } from '../idempotency.js';
 import { ghostNow, refreshGhost } from '../services/ghost.js';
 
@@ -19,6 +19,7 @@ router.get('/tiers', async (req, res) => {
   const plans = (await query(`SELECT id, name, level, duration_days, price_coins FROM wip_plans WHERE is_active = TRUE ORDER BY level, duration_days`)).rows;
   res.json({
     base: BASE_FEATURES,
+    vehicleGifts: await wipVehicleGifts(),
     tiers: tiers.map((t) => ({
       level: t.level, name: t.name, features: { ...BASE_FEATURES, ...t.features },
       plans: plans.filter((p) => p.level === t.level).map((p) => ({

@@ -1,3 +1,11 @@
+## v2.65.1 — Hediyeler nesne ayırmayla yeniden üretildi (paket 8), WIP 8+ araç resimleri
+- 107 hediyenin hepsi yapay zekâ nesne ayırma (ISNet) ile yeniden üretildi: nesnenin gövdesi (araba, heykel, taç,
+  karakter...) tamamen dolu ve opak; koyu lastik, cam, siyah kaporta, gölgeli yüzler artık kesik / yarı saydam değil.
+  Işık, kıvılcım, duman siyah anahtarlamayla yarı saydam kalır. Aynalı zemindeki araç yansıması yarı saydam.
+- Siyah zeminli sahneler (ülkeler, ejderha, yanardağ...) yırtık kenarsız temiz kesilir; renkli zeminli tek nesneler (taç,
+  gül fanusu, aslan başı, pembe şato, DJ) zeminden ayrılıp nesne olarak oynar; tam sahneler (saray, gemi...) yumuşak kenarlı.
+- Görünüm sayfasında WIP 8+ araçlarının resmi araçlı hediyenin kendi resmi (sunucu /api/wip/tiers → vehicleGifts).
+
 ## v2.65.0 — Çerçeve/araç görüntüsü, WIP 8+ araç girişleri, mesaj uyarıları, oda içi profil
 - Çerçeve değişimi odada anında: WIP satın alma ve yönetimden WIP verme/alma artık odalara duyurulur; hayalet (SWIP)
   üye mikrofondayken de görünümü odada yenilenir; odaya yeniden giren kişinin eski görünümü tazelenir.

@@ -29,14 +29,24 @@ export async function wipVehicleGift(level, run = query) {
   const hit = vehicleCache.get(def[0]);
   if (hit && Date.now() - hit.at < 60e3) return hit.value;
   const r = await run(
-    `SELECT g.name, g.animation_url FROM asset_items a JOIN gifts g ON g.id = a.ref_id
+    `SELECT g.name, g.animation_url, g.icon_url FROM asset_items a JOIN gifts g ON g.id = a.ref_id
      WHERE a.key = $1 AND a.kind = 'gift' AND g.animation_url IS NOT NULL`,
     [def[0]],
   );
   const g = r.rows[0];
-  const value = g ? { name: g.name, url: g.animation_url, durationMs: def[1] } : null;
+  const value = g ? { name: g.name, url: g.animation_url, iconUrl: g.icon_url ?? null, durationMs: def[1] } : null;
   vehicleCache.set(def[0], { at: Date.now(), value });
   return value;
+}
+
+/** WIP 8+ araçlarının adı, resmi ve videosu (Görünüm / WIP sayfasındaki küçük resimler için). */
+export async function wipVehicleGifts(run = query) {
+  const out = {};
+  for (const level of Object.keys(WIP_VEHICLE_GIFTS)) {
+    const g = await wipVehicleGift(Number(level), run).catch(() => null);
+    if (g) out[level] = { name: g.name, iconUrl: g.iconUrl, animationUrl: g.url };
+  }
+  return out;
 }
 
 /** Ayrıcalık yoksa açıklayıcı hata (hangi kademede açıldığını söyler). */

@@ -52,7 +52,7 @@ router.get('/', async (req, res) => {
   for (const it of items) {
     if (it.itemType !== 'vehicle' || !(it.wipLevel >= 8) || it.assetUrl) continue;
     const g = await wipVehicleGift(it.wipLevel).catch(() => null);
-    if (g) Object.assign(it, { assetUrl: g.url, vehicleName: g.name });
+    if (g) Object.assign(it, { assetUrl: g.url, vehicleName: g.name, iconUrl: g.iconUrl });
   }
   res.json({ items });
 });

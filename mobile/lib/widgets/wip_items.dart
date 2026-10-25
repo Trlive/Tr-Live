@@ -1,5 +1,32 @@
 import 'package:flutter/material.dart';
+import '../services/api.dart';
 import 'common.dart';
+
+/// WIP 8+ araçları araçlı hediyelerdir: adı, küçük resmi (png) ve videosu sunucudan bir kez alınır.
+class WipVehicleArt {
+  static final ValueNotifier<Map<int, Map<String, dynamic>>> data = ValueNotifier(const {});
+  static bool _loading = false;
+  static DateTime? _at;
+
+  static Future<void> ensure() async {
+    if (_loading || (_at != null && DateTime.now().difference(_at!) < const Duration(minutes: 10))) return;
+    _loading = true;
+    try {
+      final r = await Api.get('/api/wip/tiers');
+      final v = mapOf(r['vehicleGifts']) ?? const {};
+      data.value = {
+        for (final e in v.entries)
+          if (int.tryParse(e.key) != null && mapOf(e.value) != null) int.parse(e.key): mapOf(e.value)!,
+      };
+    } catch (_) {/* eski sunucu: kodla çizilen araç */} finally {
+      _at = DateTime.now(); // başarısızsa da 10 dk yeniden denenmez (her çizimde istek gitmesin)
+      _loading = false;
+    }
+  }
+
+  static String? iconOf(int level) => Api.absoluteUrl(data.value[level >= 11 ? 11 : level]?['iconUrl'] as String?);
+  static String? nameOf(int level) => data.value[level >= 11 ? 11 : level]?['name'] as String?;
+}
 
 /// WIP öğelerinin kodla çizilen önizlemesi (Görünüm sayfası ve yönetim): çerçeve, rozet, sohbet balonu,
 /// giriş efekti ve araç.
@@ -21,19 +48,23 @@ Widget wipItemArt(String type, int level, double size) {
     case 'chat_bubble':
       return WipBubble(level: level, fallback: const Color(0x8C13285A), child: const Text('Merhaba', style: TextStyle(fontSize: 12)));
     case 'vehicle':
-      return Column(mainAxisSize: MainAxisSize.min, children: [
-        Container(
-          width: size * 0.62,
-          height: size * 0.62,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: RadialGradient(colors: [(s?.color ?? Colors.purple).withValues(alpha: 0.55), Colors.transparent]),
-          ),
-          child: Text(s?.vehicle ?? '🚗', style: TextStyle(fontSize: size * 0.34)),
-        ),
-        Text(s?.vehicleName ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 10, color: Colors.white70)),
-      ]);
+      WipVehicleArt.ensure();
+      return ValueListenableBuilder<Map<int, Map<String, dynamic>>>(
+        valueListenable: WipVehicleArt.data,
+        builder: (_, __, ___) {
+          final icon = WipVehicleArt.iconOf(level);
+          if (icon == null) return _vehicleEmoji(s, size);
+          // WIP 8+: araçlı hediyenin kendi resmi.
+          return Column(mainAxisSize: MainAxisSize.min, children: [
+            SizedBox(
+              width: size * 0.8,
+              height: size * 0.62,
+              child: NetImg(icon, fit: BoxFit.contain, errorBuilder: (_, __, ___) => _vehicleEmoji(s, size)),
+            ),
+            Text(WipVehicleArt.nameOf(level) ?? s?.vehicleName ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 10, color: Colors.white70)),
+          ]);
+        },
+      );
     default:
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -42,6 +73,20 @@ Widget wipItemArt(String type, int level, double size) {
       );
   }
 }
+
+Widget _vehicleEmoji(WipStyle? s, double size) => Column(mainAxisSize: MainAxisSize.min, children: [
+      Container(
+        width: size * 0.62,
+        height: size * 0.62,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: RadialGradient(colors: [(s?.color ?? Colors.purple).withValues(alpha: 0.55), Colors.transparent]),
+        ),
+        child: Text(s?.vehicle ?? '🚗', style: TextStyle(fontSize: size * 0.34)),
+      ),
+      Text(s?.vehicleName ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 10, color: Colors.white70)),
+    ]);
 
 /// WIP aracı odaya giriş: kademenin aracı (emoji) parlayan iz bırakarak sağdan gelir, ortada kısa durur
 /// (hafifçe sallanır), soldan çıkar. Altında kademe rozeti ve araç adı.
