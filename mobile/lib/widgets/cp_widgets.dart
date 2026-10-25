@@ -17,6 +17,117 @@ const kCpEffectLevel = 5; // odada kalp efekti
 
 String cpRelationLabel(String? r) => switch (r) { 'cp' => 'CP', 'friend' => 'En İyi Arkadaş', 'kanka' => 'Kanka', _ => '' };
 
+/// İlişki renkleri (profildeki ilişki duvarıyla aynı anlam): CP pembe, En İyi Arkadaş mor, Kanka mavi.
+const kRelPurple = Color(0xFFB36BFF);
+const kRelBlue = Color(0xFF3FA9FF);
+Color relationColor(String? kind) => switch (kind) { 'cp' => kCpPink, 'kanka' => kRelBlue, _ => kRelPurple };
+
+/// CP'nin fotoğrafı pembe kalbin içinde.
+class HeartAvatar extends StatelessWidget {
+  final Map<String, dynamic>? user;
+  final double size;
+  const HeartAvatar({super.key, required this.user, this.size = 60});
+
+  @override
+  Widget build(BuildContext context) {
+    final s = size;
+    return SizedBox(
+      width: s,
+      height: s,
+      child: Stack(alignment: Alignment.center, children: [
+        CustomPaint(size: Size(s, s), painter: const _HeartPainter(border: false)),
+        ClipPath(
+          clipper: const _HeartClipper(0.8),
+          child: SizedBox(width: s, height: s, child: Center(child: UserAvatar(user: user, radius: s * 0.48))),
+        ),
+        IgnorePointer(child: CustomPaint(size: Size(s, s), painter: const _HeartPainter(border: true))),
+      ]),
+    );
+  }
+}
+
+class _HeartPainter extends CustomPainter {
+  final bool border;
+  const _HeartPainter({required this.border});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final c = size.center(Offset.zero);
+    if (border) {
+      canvas.drawPath(
+        heartPath(c, size.width * 0.8),
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = size.width * 0.025
+          ..color = Colors.white70,
+      );
+      return;
+    }
+    final p = heartPath(c, size.width);
+    canvas.drawShadow(p, kCpPink, 4, false);
+    canvas.drawPath(
+      p,
+      Paint()..shader = const LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFFFF9CCF), kCpPink]).createShader(Offset.zero & size),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_HeartPainter old) => old.border != border;
+}
+
+class _HeartClipper extends CustomClipper<Path> {
+  final double scale;
+  const _HeartClipper(this.scale);
+
+  @override
+  Path getClip(Size size) => heartPath(size.center(Offset.zero), size.width * scale);
+
+  @override
+  bool shouldReclip(_HeartClipper old) => old.scale != scale;
+}
+
+/// En İyi Arkadaş (mor) / Kanka (mavi) çerçeveli avatar.
+class RelationAvatar extends StatelessWidget {
+  final Map<String, dynamic>? user;
+  final String kind;
+  final double radius;
+  const RelationAvatar({super.key, required this.user, required this.kind, this.radius = 24});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = relationColor(kind);
+    return Container(
+      padding: const EdgeInsets.all(2.5),
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color.lerp(c, Colors.white, 0.35)!, c]),
+        boxShadow: [BoxShadow(color: c.withValues(alpha: 0.45), blurRadius: 6)],
+      ),
+      child: Container(
+        padding: const EdgeInsets.all(1.5),
+        decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFF1B1B20)),
+        child: UserAvatar(user: user, radius: radius),
+      ),
+    );
+  }
+}
+
+/// İlişki adı (renkli küçük etiket).
+class RelationTag extends StatelessWidget {
+  final String kind;
+  const RelationTag(this.kind, {super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = relationColor(kind);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1.5),
+      decoration: BoxDecoration(color: c.withValues(alpha: 0.22), borderRadius: BorderRadius.circular(8), border: Border.all(color: c.withValues(alpha: 0.7), width: 0.8)),
+      child: Text(cpRelationLabel(kind), style: TextStyle(color: Color.lerp(c, Colors.white, 0.25), fontSize: 10.5, fontWeight: FontWeight.w800)),
+    );
+  }
+}
+
 /// Kalp şekli: [c] merkez, [s] genişlik.
 Path heartPath(Offset c, double s) {
   final w = s, h = s * 0.92;

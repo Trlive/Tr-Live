@@ -8,6 +8,7 @@ import { idempotent } from '../idempotency.js';
 import { ghostNow, refreshGhost } from '../services/ghost.js';
 
 import { addLeaderSpend } from '../services/family.js';
+import { announceUserChange } from '../services/users.js';
 
 export const router = Router();
 router.use(requireAuth);
@@ -76,4 +77,5 @@ router.post('/purchase', userLimit('wip_buy', 10, 3600e3), idempotent('wip_purch
   });
   await refreshGhost(req.user.id, wasGhost); // SWIP'e geçişte önceki hayalet tercihi yeniden etkinleşebilir
   res.json({ wip: await activeWip(req.user.id), balance: result.balance });
+  announceUserChange(req.user.id); // WIP çerçevesi / isim rengi odada hemen değişsin
 });

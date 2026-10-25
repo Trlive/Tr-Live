@@ -83,21 +83,28 @@ class MusicService {
       }
       final url = Api.absoluteUrl(track['url'] as String?);
       if (url == null) return;
+      var fresh = false;
       if (track['id'] != _trackId) {
         _trackId = null; // yükleme başarısız olursa sonraki durumda yeniden denensin
         await _p.setUrl(url);
         if (stale()) return;
         _trackId = track['id'] as String?;
+        fresh = true;
       }
       error.value = null;
-      await _p.setVolume(_vol);
+      if (_p.volume != _vol) await _p.setVolume(_vol);
       if (stale()) return;
       final position = (s['positionMs'] as num?)?.toInt() ?? 0;
-      await _p.seek(Duration(milliseconds: position + (status == 'playing' ? 150 : 0)));
-      if (stale()) return;
+      final target = Duration(milliseconds: position + (status == 'playing' ? 150 : 0));
+      // Yalnızca yeni şarkıda ya da gerçek sapmada konum atlanır. Her eşitlemede atlamak (seek) akışı
+      // yeniden arabelleğe aldırıyor, müzik takılıp ağır çalışıyordu.
+      if (fresh || (_p.position - target).inMilliseconds.abs() > 1500) {
+        await _p.seek(target);
+        if (stale()) return;
+      }
       if (status == 'playing') {
-        unawaited(_p.play().catchError((_) {})); // play() şarkı bitene kadar tamamlanmaz; beklenmez
-      } else {
+        if (!_p.playing) unawaited(_p.play().catchError((_) {})); // play() şarkı bitene kadar tamamlanmaz; beklenmez
+      } else if (_p.playing) {
         await _p.pause();
       }
     } catch (e) {

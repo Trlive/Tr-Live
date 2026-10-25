@@ -7,6 +7,7 @@ import 'package:lottie/lottie.dart';
 import '../services/call_guard.dart';
 import '../services/effect_prefs.dart';
 import '../services/media_cache.dart';
+import 'common.dart' show kFrameScale, frameScaleOf;
 import 'net_image.dart';
 import 'svga_lite.dart';
 
@@ -192,5 +193,33 @@ class _AnimAssetState extends State<AnimAsset> {
       _fail('Görsel açılamadı: $err');
       return const SizedBox.shrink();
     });
+  }
+}
+
+
+/// Avatar çerçevesi: düzende her zaman avatar çapı × [kFrameScale] yer kaplar; çerçevenin kendi oranı
+/// daha büyükse taşarak çizilir (yerleşim kaymaz), avatarla aynı merkezde.
+class FrameBox extends StatelessWidget {
+  final String url;
+  final double avatarRadius;
+  const FrameBox({super.key, required this.url, required this.avatarRadius});
+
+  @override
+  Widget build(BuildContext context) {
+    final base = avatarRadius * 2 * kFrameScale;
+    final size = avatarRadius * 2 * frameScaleOf(url);
+    return IgnorePointer(
+      child: SizedBox(
+        width: base,
+        height: base,
+        child: OverflowBox(
+          minWidth: size,
+          maxWidth: size,
+          minHeight: size,
+          maxHeight: size,
+          child: AnimAsset(key: ValueKey(url), url: url, repeat: true, cache: false),
+        ),
+      ),
+    );
   }
 }

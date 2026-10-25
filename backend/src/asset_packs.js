@@ -14,19 +14,20 @@ const FRAME_PRICE = 5000;
 const FRAME_DAYS = 30;
 // Alıcının mikindeki dairede oynayanlar.
 const SEAT_GIFTS = new Set(['g_egg', 'g_tomato']);
+// [dosya, ad, gösterim oranı (avatar çapının katı; paket 6 ve sonrası)]
 const FRAMES = [
-  ['f_rainbow', 'Altın Gökkuşağı'],
-  ['f_kiss', 'Öpücük'],
-  ['f_ruby', 'Kızıl Yakut'],
-  ['f_phoenix', 'Altın Anka'],
-  ['f_shield', 'Altın Kalkan'],
-  ['f_flame', 'Alev Kanatlar'],
-  ['f_ice', 'Ateş ve Buz'],
-  ['f_diamond', 'Elmas Taç'],
-  ['f_silver', 'Gümüş Tüy'],
-  ['f_violet', 'Mor Gül'],
-  ['f_sapphire', 'Safir Kanat'],
-  ['f_top1', 'Top 1 Yayıncı'],
+  ['f_rainbow', 'Altın Gökkuşağı', 1.6],
+  ['f_kiss', 'Öpücük', 1.6],
+  ['f_ruby', 'Kızıl Yakut', 1.76],
+  ['f_phoenix', 'Altın Anka', 1.89],
+  ['f_shield', 'Altın Kalkan', 1.88],
+  ['f_flame', 'Alev Kanatlar', 2.2],
+  ['f_ice', 'Ateş ve Buz', 1.72],
+  ['f_diamond', 'Elmas Taç', 2.04],
+  ['f_silver', 'Gümüş Tüy', 1.87],
+  ['f_violet', 'Mor Gül', 1.73],
+  ['f_sapphire', 'Safir Kanat', 2.04],
+  ['f_top1', 'Top 1 Yayıncı', 1.8],
 ];
 // [dosya, ad, fiyat, sekme]
 const GIFTS = [
@@ -139,12 +140,20 @@ const GIFTS = [
   ['g_dj', 'DJ', 999, 'popular'],
 ];
 
-const FRAME_META = new Map(FRAMES.map(([key, name]) => [key, { name }]));
+const FRAME_META = new Map(FRAMES.map(([key, name, scale]) => [key, { name, scale }]));
+// Bu sürümden itibaren çerçevelerin deliği tuvalin ortasında ve her çerçevenin gösterim oranı ayrı (FRAMES'teki 3. değer):
+// adres "/media/<id>.s205.webp" olur, uygulama çerçeveyi avatar çapının 2,05 katı çizer (delik avatarı tam sarar).
+const FRAME_GEO_VERSION = 6;
+function withFrameScale(url, scale, version) {
+  if (!scale || version < FRAME_GEO_VERSION || Math.abs(scale - 1.6) < 0.01) return url;
+  const s = String(Math.round(Math.min(2.6, Math.max(1.2, scale)) * 100)).padStart(3, '0');
+  return url.replace(/^(\/media\/[0-9a-f-]{36})\.([a-z0-9]+)$/i, `$1.s${s}.$2`);
+}
 const GIFT_META = new Map(GIFTS.map(([key, name, price, category]) => [key, { name, price, category }]));
 export const PACK_GIFT_COUNT = GIFTS.length;
 export const PACK_FRAME_COUNT = FRAMES.length;
 
-const MEDIA_ID = /^\/media\/([0-9a-f-]{36})\.[a-z0-9]+$/i;
+const MEDIA_ID = /^\/media\/([0-9a-f-]{36})(?:\.s\d{3})?\.[a-z0-9]+$/i;
 
 async function putMedia(c, kind, mime, ext, data, key) {
   const r = await c.query(
@@ -158,12 +167,14 @@ async function dropAssetMedia(c, url) {
   const m = MEDIA_ID.exec(url ?? '');
   if (!m) return;
   // Başka bir hediye / çerçeve / ürün aynı dosyayı kullanıyorsa silinmez.
+  // Adresin oran ekli (".s205.webp") ve eksiz biçimleri aynı dosyadır: kimliğe göre aranır.
+  const like = `/media/${m[1]}.%`;
   await c.query(
     `DELETE FROM media_files WHERE id = $1 AND meta->>'purpose' = 'asset_pack'
-       AND NOT EXISTS (SELECT 1 FROM gifts WHERE icon_url = $2 OR animation_url = $2)
-       AND NOT EXISTS (SELECT 1 FROM frames WHERE image_url = $2)
-       AND NOT EXISTS (SELECT 1 FROM store_items WHERE image_url = $2)`,
-    [m[1], url],
+       AND NOT EXISTS (SELECT 1 FROM gifts WHERE icon_url LIKE $2 OR animation_url LIKE $2)
+       AND NOT EXISTS (SELECT 1 FROM frames WHERE image_url LIKE $2)
+       AND NOT EXISTS (SELECT 1 FROM store_items WHERE image_url LIKE $2)`,
+    [m[1], like],
   );
 }
 
@@ -271,7 +282,7 @@ async function applyFrame(key, version, webp) {
       await remember(c, key, 'frame', old.id, legacy);
       return 'same';
     }
-    const url = await putMedia(c, 'webp', 'image/webp', 'webp', typeof webp === 'function' ? webp() : webp, key);
+    const url = withFrameScale(await putMedia(c, 'webp', 'image/webp', 'webp', typeof webp === 'function' ? webp() : webp, key), meta.scale, version);
     if (old) {
       await c.query(`UPDATE frames SET image_url = $2 WHERE id = $1`, [old.id, url]);
       await c.query(`UPDATE store_items SET image_url = $2 WHERE category = 'frame' AND ref_id = $1`, [old.id, url]);
@@ -321,8 +332,27 @@ async function applyFiles(entries) {
   return results;
 }
 
+/** Paket 6+ çerçevesi eski sunucu koduyla (oran eki olmadan) kurulduysa adresine oran eki eklenir. */
+async function fixFrameScales() {
+  const rows = (await query(
+    `SELECT a.key, a.version, f.id, f.image_url FROM asset_items a JOIN frames f ON f.id = a.ref_id WHERE a.kind = 'frame' AND a.version >= $1`,
+    [FRAME_GEO_VERSION],
+  )).rows;
+  for (const r of rows) {
+    const meta = FRAME_META.get(r.key);
+    const plain = String(r.image_url ?? '').replace(/\.s\d{3}\.([a-z0-9]+)$/i, '.$1');
+    const want = withFrameScale(plain, meta?.scale, r.version);
+    if (!meta || want === r.image_url || !MEDIA_ID.test(want)) continue;
+    await tx(async (c) => {
+      await c.query(`UPDATE frames SET image_url = $2 WHERE id = $1`, [r.id, want]);
+      await c.query(`UPDATE store_items SET image_url = $2 WHERE category = 'frame' AND ref_id = $1`, [r.id, want]);
+    });
+  }
+}
+
 /** Sunucu açılışında: depodaki samples/packN klasörlerini uygular. */
 export async function seedAssetPacks() {
+  await fixFrameScales().catch((e) => console.error('[paket] çerçeve oranı:', e.message));
   const entries = [];
   let dirs = [];
   try { dirs = fs.readdirSync(SAMPLES).filter((d) => /^pack\d+$/.test(d)); } catch { return 0; }

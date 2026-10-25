@@ -195,7 +195,7 @@ class _EntranceBannerState extends State<EntranceBanner> with SingleTickerProvid
                     top: -(avR * kFrameScale - avR),
                     width: avR * 2 * kFrameScale,
                     height: avR * 2 * kFrameScale,
-                    child: IgnorePointer(child: AnimAsset(key: ValueKey(frameUrl), url: frameUrl, repeat: true, cache: false)),
+                    child: FrameBox(url: frameUrl, avatarRadius: avR),
                   ),
               ]),
             ),

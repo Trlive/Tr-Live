@@ -226,6 +226,7 @@ router.post('/users/:userId/wip', async (req, res) => {
   );
   await refreshGhost(userId, wasGhost);
   res.json({ wip: r.rows[0] });
+  announceUserChange(userId);
 });
 
 router.delete('/users/:userId/wip', async (req, res) => {
@@ -235,6 +236,7 @@ router.delete('/users/:userId/wip', async (req, res) => {
   await query(`INSERT INTO financial_audit_logs(admin_id, user_id, action, reference_type) VALUES($1,$2,'admin_wip_revoke','wip')`, [req.user.id, userId]);
   await refreshGhost(userId, wasGhost);
   res.json({ ok: true });
+  announceUserChange(userId);
 });
 
 const FEATURE_TYPES = {
@@ -1309,6 +1311,7 @@ router.post('/announcements', async (req, res) => {
   );
   await auditStaff({ query }, req.user.id, null, 'announcement_add', { id: r.rows[0].id, kind });
   res.status(201).json({ id: r.rows[0].id });
+  hub.broadcastGlobal({ type: 'inbox_update' }); // Mesajlar sekmesi rozeti hemen yenilensin
 });
 
 router.delete('/announcements/:id', async (req, res) => {

@@ -109,6 +109,17 @@ class EmptyState extends StatelessWidget {
 /// Profil, kullanıcı profili ve seviye ekranı aynı oranı kullanır.
 const double kFrameScale = 1.6;
 
+final RegExp _frameScaleRe = RegExp(r'\.s(\d{3})\.[a-z0-9]+$', caseSensitive: false);
+
+/// Çerçevenin kendi gösterim oranı: sunucu kalın / kanatlı çerçevelerin adresine ".s200." gibi ek koyar
+/// (çerçeve avatar çapının 2 katı çizilir, delik avatarı tam sarar). Ek yoksa [kFrameScale].
+double frameScaleOf(String? url) {
+  final m = url == null ? null : _frameScaleRe.firstMatch(url.split('?').first);
+  final v = m == null ? null : int.tryParse(m.group(1)!);
+  if (v == null) return kFrameScale;
+  return (v / 100).clamp(1.2, 2.6).toDouble();
+}
+
 /// Türkçe büyük/küçük harf (Dart'ın toUpperCase'i 'i'yi 'I' yapar).
 String trUpper(String s) => s.replaceAll('i', 'İ').replaceAll('ı', 'I').toUpperCase();
 String trLower(String s) => s.replaceAll('İ', 'i').replaceAll('I', 'ı').toLowerCase();

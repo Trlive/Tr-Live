@@ -244,7 +244,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: SizedBox(
         width: frameSize,
         height: frameSize,
-        child: Stack(alignment: Alignment.center, children: [
+        // Oranı büyük (kanatlı) çerçeveler kutudan taşarak çizilir.
+        child: Stack(alignment: Alignment.center, clipBehavior: Clip.none, children: [
           // Profil efekti (WIP 5+): avatarın arkasında ışık halesi.
           if (features?['profileEffect'] == true && wipLevelOf(wip?['level']) != null)
             Positioned.fill(child: IgnorePointer(child: WipAura(level: wipLevelOf(wip?['level'])!))),
@@ -252,7 +253,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           // Takılı çerçeve yoksa WIP kademesinin çerçevesi.
           if (frame == null && wipLevelOf(wip?['level']) != null)
             Positioned.fill(child: IgnorePointer(child: WipFrame(level: wipLevelOf(wip?['level'])!, avatarRadius: avatarR))),
-          if (frame != null) IgnorePointer(child: SizedBox(width: frameSize, height: frameSize, child: AnimAsset(url: frame, repeat: true, cache: false))),
+          if (frame != null) FrameBox(url: frame, avatarRadius: avatarR),
         ]),
       ),
       ),

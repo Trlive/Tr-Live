@@ -73,7 +73,8 @@ void _preview(BuildContext context, String category, String name, String? url, {
                 ? Center(child: art)
                 : category == 'frame'
                 ? Stack(alignment: Alignment.center, children: [
-                    UserAvatar(user: Session.me.value, radius: 60),
+                    // Avatar, çerçevenin kendi oranına göre (odada / profilde göründüğü gibi).
+                    UserAvatar(user: Session.me.value, radius: 130 / frameScaleOf(u)),
                     if (u != null) AnimAsset(url: u, repeat: true, cache: false),
                   ])
                 : (u == null ? const SizedBox.shrink() : AnimAsset(url: u, repeat: true, cache: false)),
@@ -324,6 +325,7 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
                     final on = it['equipped'] == true;
                     // WIP öğeleri (üyelikten ya da ayrıca verilmiş) dosyasızdır: kodla çizilir.
                     final wipLvl = wipLevelOf(it['wipLevel']);
+                    final vehUrl = _cat == 'vehicle' && wipLvl != null ? Api.absoluteUrl(it['assetUrl'] as String?) : null;
                     return Stack(children: [
                       Positioned.fill(
                         child: _Tile(
@@ -333,7 +335,10 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
                           previewArt: wipLvl == null
                               ? null
                               : _cat == 'vehicle'
-                                  ? ClipRect(child: SizedBox(width: 260, height: 260, child: WipVehicleDrive(key: UniqueKey(), level: wipLvl)))
+                                  // WIP 8+ aracı: araçlı hediyenin animasyonu (sunucu adresini verir).
+                                  ? (vehUrl != null
+                                      ? SizedBox(width: 260, height: 400, child: AnimAsset(key: UniqueKey(), url: vehUrl, repeat: true))
+                                      : ClipRect(child: SizedBox(width: 260, height: 260, child: WipVehicleDrive(key: UniqueKey(), level: wipLvl))))
                                   : FittedBox(child: wipItemArt(_cat, wipLvl, 200)),
                           name: (it['itemName'] ?? '').toString(),
                           topLeft: it['membership'] == true ? 'WIP üyeliği' : (it['expiresAt'] == null ? 'Süresiz' : 'Son tarih'),

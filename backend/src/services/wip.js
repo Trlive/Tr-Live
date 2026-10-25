@@ -13,6 +13,32 @@ export async function minLevelFor(feature, run = query) {
 
 export const wipLabel = (level) => (level >= 11 ? 'SWIP' : `WIP ${level}`);
 
+/** WIP 8 ve üstünün giriş aracı: kodla çizilen araç yerine sırasıyla seçilmiş araçlı hediyenin animasyonu
+ * (hazır paketteki hediye; süre = videonun uzunluğu). Hediye kurulu değilse kodla çizilen araç kalır. */
+export const WIP_VEHICLE_GIFTS = Object.freeze({
+  8: ['g_bluecar', 6500], // Buz (mavi): Mavi Spor Araba
+  9: ['g_orangecar', 3600], // Gökkuşağı: Turuncu Spor Araba
+  10: ['g_bullcar', 7900], // Ateş: Altın Boğa Araba (ateş çemberi)
+  11: ['g_blackcar', 6400], // SWIP · Hayalet: Siyah Spor Araba
+});
+const vehicleCache = new Map(); // level -> { at, value }
+
+export async function wipVehicleGift(level, run = query) {
+  const def = WIP_VEHICLE_GIFTS[Math.min(11, Number(level))];
+  if (!def) return null;
+  const hit = vehicleCache.get(def[0]);
+  if (hit && Date.now() - hit.at < 60e3) return hit.value;
+  const r = await run(
+    `SELECT g.name, g.animation_url FROM asset_items a JOIN gifts g ON g.id = a.ref_id
+     WHERE a.key = $1 AND a.kind = 'gift' AND g.animation_url IS NOT NULL`,
+    [def[0]],
+  );
+  const g = r.rows[0];
+  const value = g ? { name: g.name, url: g.animation_url, durationMs: def[1] } : null;
+  vehicleCache.set(def[0], { at: Date.now(), value });
+  return value;
+}
+
 /** Ayrıcalık yoksa açıklayıcı hata (hangi kademede açıldığını söyler). */
 export async function requireFeature(userId, feature, what) {
   if ((await featuresFor(userId))[feature]) return;

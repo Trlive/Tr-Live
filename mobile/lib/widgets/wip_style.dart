@@ -88,13 +88,13 @@ const Map<int, WipStyle> _styles = {
   7: WipStyle(7, 'Yeşim', Color(0xFF00E5A0), [Color(0xFF004D40), Color(0xFF00BFA5), Color(0xFFA7FFEB)],
       [Color(0xFF00443A), Color(0xFF00897B)], '🌿', '🚁', 'Helikopter', WipNameFx.shimmer, _jade, 2600),
   8: WipStyle(8, 'Buz', Color(0xFF80D8FF), [Color(0xFF0D47A1), Color(0xFF2979FF), Color(0xFF80D8FF)],
-      [Color(0xFF0D3B8A), Color(0xFF1E88E5), Color(0xFF0D3B8A)], '❄️', '🛩️', 'Özel Jet', WipNameFx.shimmer, _ice, 2800),
+      [Color(0xFF0D3B8A), Color(0xFF1E88E5), Color(0xFF0D3B8A)], '❄️', '🏎️', 'Mavi Spor Araba', WipNameFx.shimmer, _ice, 2800),
   9: WipStyle(9, 'Gökkuşağı', Color(0xFFFF7AD9), [Color(0xFFFF5252), Color(0xFFFFD740), Color(0xFF69F0AE), Color(0xFF40C4FF), Color(0xFFE040FB)],
-      [Color(0xFFB71C1C), Color(0xFFEF6C00), Color(0xFF2E7D32), Color(0xFF1565C0), Color(0xFF6A1B9A)], '🌈', '🚀', 'Roket', WipNameFx.shimmer, _rainbow, 3000),
+      [Color(0xFFB71C1C), Color(0xFFEF6C00), Color(0xFF2E7D32), Color(0xFF1565C0), Color(0xFF6A1B9A)], '🌈', '🏎️', 'Turuncu Spor Araba', WipNameFx.shimmer, _rainbow, 3000),
   10: WipStyle(10, 'Ateş', Color(0xFFFF2B2B), [Color(0xFF8A0F1B), Color(0xFFFF2B2B), Color(0xFFFFB13B)],
-      [Color(0xFF5A0A12), Color(0xFFB71C1C), Color(0xFFE65100)], '🔥', '🐉', 'Ejderha', WipNameFx.fire, _fire, 3300),
+      [Color(0xFF5A0A12), Color(0xFFB71C1C), Color(0xFFE65100)], '🔥', '🏎️', 'Altın Boğa Araba', WipNameFx.fire, _fire, 3300),
   11: WipStyle(11, 'Hayalet', Color(0xFFC9B8FF), [Color(0xFF1A1033), Color(0xFF5E35B1), Color(0xFFC9B8FF)],
-      [Color(0xFF140B2E), Color(0xFF3A2470), Color(0xFF140B2E)], '👻', '🛸', 'Hayalet UFO', WipNameFx.ghost, _ghost, 3600),
+      [Color(0xFF140B2E), Color(0xFF3A2470), Color(0xFF140B2E)], '👻', '🏎️', 'Siyah Spor Araba', WipNameFx.ghost, _ghost, 3600),
 };
 
 /// WIP sohbet balonu süslemesi. Seviye yoksa [fallback] düz renk.

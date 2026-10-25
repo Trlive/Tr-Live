@@ -15,6 +15,7 @@ enum PlayMode { all, one, shuffle }
 class RoomPlaylist {
   RoomPlaylist._() {
     MusicService.instance.state.addListener(_onState);
+    mode.addListener(_prefetchNext); // çalma düzeni değişince sıradaki yeniden seçilir
   }
   static final RoomPlaylist instance = RoomPlaylist._();
 
@@ -40,6 +41,7 @@ class RoomPlaylist {
     _roomId = roomId;
     currentPath.value = null;
     _remoteId = null;
+    _plannedPath = null;
   }
 
   Future<void> playTrack(LocalTrack t) async {
@@ -52,6 +54,38 @@ class RoomPlaylist {
     } finally {
       busy.value = false;
     }
+    _prefetchNext();
+  }
+
+  /// Sıradaki şarkı (karıştırmada önceden seçilir ki önceden yüklenen şarkı çalınsın).
+  String? _plannedPath;
+
+  /// Şarkı çalarken sıradaki arka planda sunucuya yüklenir: şarkı bitince bekleme olmadan hemen başlar.
+  void _prefetchNext() {
+    final room = _roomId;
+    final list = _list;
+    _plannedPath = null;
+    if (room == null || list.length < 2 || currentPath.value == null || mode.value == PlayMode.one) return;
+    final next = list[_nextIndex()];
+    _plannedPath = next.path;
+    // Önce bu şarkının çalmaya başlaması beklenir (iki yükleme aynı anda bant genişliğini bölmesin).
+    Future<void>.delayed(const Duration(seconds: 4), () {
+      if (_roomId == room && _plannedPath == next.path && currentPath.value != null) {
+        unawaited(LocalMusic.instance.uploadToRoom(room, next).then((_) {}, onError: (_) {}));
+      }
+    });
+  }
+
+  /// Sıradaki: önceden seçilen (ve yüklenen) şarkı hâlâ listedeyse o, değilse çalma düzenine göre yenisi.
+  LocalTrack _upcoming() {
+    final list = _list;
+    final planned = _plannedPath;
+    if (planned != null && planned != currentPath.value) {
+      for (final t in list) {
+        if (t.path == planned) return t;
+      }
+    }
+    return list[_nextIndex()];
   }
 
   Future<void> next() async {
@@ -61,7 +95,7 @@ class RoomPlaylist {
       if (_roomId != null) await Api.post('/api/rooms/$_roomId/music/next');
       return;
     }
-    await playTrack(list[_nextIndex()]);
+    await playTrack(_upcoming());
   }
 
   Future<void> previous() async {
@@ -74,6 +108,7 @@ class RoomPlaylist {
   Future<void> stop() async {
     currentPath.value = null;
     _remoteId = null;
+    _plannedPath = null;
     if (_roomId != null) await Api.post('/api/rooms/$_roomId/music/stop');
   }
 
@@ -116,7 +151,7 @@ class RoomPlaylist {
       final i = _index;
       if (i >= 0) unawaited(playTrack(list[i]).catchError((_) {}));
     } else {
-      unawaited(playTrack(list[_nextIndex()]).catchError((_) {}));
+      unawaited(playTrack(_upcoming()).catchError((_) {}));
     }
   }
 }

@@ -25,6 +25,33 @@ router.get('/unread-count', async (req, res) => {
   res.json({ unread: r.rows[0].n });
 });
 
+// Mesajlar sekmesindeki her şey (özel mesaj, bildirim, arkadaşlık/CP isteği, destek, resmî kanallar, ajans daveti,
+// aile sohbeti) tek sorguda: sekme rozeti normal mesajdaki gibi hepsinde uyarı verir.
+export const INBOX_ALERTS_SQL = `SELECT
+    (SELECT COUNT(*)::int FROM direct_messages WHERE receiver_id = u.id AND read_at IS NULL) AS dm,
+    (SELECT COUNT(*)::int FROM user_notifications n WHERE n.user_id = u.id AND n.id > u.notify_seen_id
+        AND n.created_at > NOW() - INTERVAL '30 days'
+        AND n.kind NOT IN ('friend_request', 'relation_request')) AS notify, -- istekler aşağıda zaten sayılır
+    ((SELECT COUNT(*)::int FROM friend_requests WHERE target_id = u.id AND status = 'pending' AND created_at > NOW() - INTERVAL '7 days')
+      + (SELECT COUNT(*)::int FROM cp_pairs WHERE (user_a = u.id OR user_b = u.id) AND request_kind IS NOT NULL
+           AND request_from <> u.id AND request_at > NOW() - INTERVAL '24 hours'
+           AND EXISTS (SELECT 1 FROM users ru WHERE ru.id = request_from AND ru.account_status = 'active'))) AS friends,
+    (SELECT COUNT(*)::int FROM support_messages WHERE user_id = u.id AND from_staff = TRUE AND read_at IS NULL) AS support,
+    (SELECT COUNT(*)::int FROM announcements a WHERE a.kind IN ('team', 'event', 'reward')
+        AND a.created_at > COALESCE((u.inbox_seen->>a.kind)::timestamptz, u.announcements_seen_at)) AS official,
+    (SELECT COUNT(*)::int FROM agency_requests q JOIN agencies ag ON ag.id = q.agency_id AND ag.status = 'active'
+        WHERE q.user_id = u.id AND q.direction = 'invite' AND q.status = 'pending') AS agency,
+    (SELECT COUNT(*)::int FROM family_messages m JOIN family_members fm ON fm.family_id = m.family_id AND fm.user_id = u.id
+        WHERE m.id > fm.chat_seen_id AND m.user_id <> u.id) AS family
+  FROM users u WHERE u.id = $1`;
+
+router.get('/alerts', async (req, res) => {
+  const x = (await query(INBOX_ALERTS_SQL, [req.user.id])).rows[0] ?? {};
+  const keys = ['dm', 'notify', 'friends', 'support', 'official', 'agency', 'family'];
+  const out = Object.fromEntries(keys.map((k) => [k, Number(x[k] ?? 0)]));
+  res.json({ ...out, total: keys.reduce((a, k) => a + out[k], 0) });
+});
+
 router.get('/conversations', async (req, res) => {
   const r = await query(
     `WITH mine AS (

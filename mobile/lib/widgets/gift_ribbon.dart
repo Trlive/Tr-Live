@@ -309,10 +309,19 @@ class _GiftRibbonOverlayState extends State<GiftRibbonOverlay> {
     if (widget.roomId != null && RoomDock.minimized.value) return;
     _entranceTimer?.cancel();
     setState(() => _entrance = {'user': e['user'], 'effect': effect, 'seq': ++_entranceSeq});
-    final ms = (effect['durationMs'] as num?)?.toInt() ?? 4000;
-    _entranceTimer = Timer(Duration(milliseconds: ms.clamp(1000, 10000)), () {
+    final ms = ((effect['videoMs'] ?? effect['durationMs']) as num?)?.toInt() ?? 4000;
+    // WIP 8+ aracı (video) ilk seferde indirilir: süreye pay eklenir; video bitince zaten kapanır.
+    final slack = effect['kind'] == 'wip_vehicle' && effect['animationUrl'] != null ? 4000 : 0;
+    _entranceTimer = Timer(Duration(milliseconds: ms.clamp(1000, 10000) + slack), () {
       if (mounted) setState(() => _entrance = null);
     });
+  }
+
+  /// Video bitince giriş gösterimi kapanır (bu arada yeni bir giriş başladıysa ona dokunulmaz).
+  void _endEntrance(Object? seq) {
+    if (!mounted || seq == null || _entrance?['seq'] != seq) return;
+    _entranceTimer?.cancel();
+    setState(() => _entrance = null);
   }
 
   @override
@@ -647,6 +656,7 @@ class _GiftRibbonOverlayState extends State<GiftRibbonOverlay> {
   /// animasyonsa (svga, Lottie, şeffaf mp4, gif) tam ekran oynar. Altında "X, Araç ile geldi" yazar.
   Widget _buildEntrance(double top) {
     final user = mapOf(_entrance!['user']);
+    final seq = _entrance!['seq'];
     final effect = mapOf(_entrance!['effect']) ?? {};
     final url = Api.absoluteUrl(effect['animationUrl'] as String?);
     final wipVehicle = effect['kind'] == 'wip_vehicle';
@@ -656,17 +666,25 @@ class _GiftRibbonOverlayState extends State<GiftRibbonOverlay> {
     final still = const {'png', 'jpg', 'jpeg', 'webp'}.contains(ext);
     final ms = ((effect['durationMs'] as num?)?.toInt() ?? 4000).clamp(1000, 10000);
     final name = (user?['displayName'] ?? 'Biri').toString();
-    final itemName = wipVehicle ? (WipStyle.of(wipLevel)?.vehicleName ?? '') : (effect['itemName'] ?? '').toString();
+    // WIP 8+ aracı sunucudan araçlı hediyenin animasyonuyla gelir (adı da hediyenin adı).
+    final itemName = wipVehicle && url == null ? (WipStyle.of(wipLevel)?.vehicleName ?? '') : (effect['itemName'] ?? WipStyle.of(wipLevel)?.vehicleName ?? '').toString();
     return Positioned.fill(
       child: IgnorePointer(
         child: Stack(alignment: Alignment.center, children: [
           // WIP aracı: kodla çizilir (dosya gerekmez).
-          if (wipVehicle && wipLevel != null)
+          if (wipVehicle && wipLevel != null && url == null)
             WipVehicleDrive(key: ValueKey('wipveh-${_entrance!['seq']}'), level: wipLevel, durationMs: ms)
           else if (url != null && vehicle && still)
             _VehicleDrive(key: ValueKey('veh-${_entrance!['seq']}'), url: url, durationMs: ms)
           else if (url != null)
-            AnimAsset(key: ValueKey('ent-${_entrance!['seq']}'), url: url, cache: false, sound: true),
+            // WIP 8+ aracı araçlı hediyenin videosudur: hediyeler gibi telefona indirilip oynatılır (takılmasın).
+            AnimAsset(
+              key: ValueKey('ent-${_entrance!['seq']}'),
+              url: url,
+              cache: wipVehicle,
+              sound: true,
+              onDone: wipVehicle ? () => _endEntrance(seq) : null,
+            ),
           Positioned(
             bottom: 140,
             child: Material(

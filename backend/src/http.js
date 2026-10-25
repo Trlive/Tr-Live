@@ -66,7 +66,7 @@ export function httpsUrl(value, field = 'Adres') {
 
 /** https adresi veya sunucuya yüklenmiş "/media/<id>.<uzantı>" yolu. */
 export function assetUrl(value, field = 'Adres') {
-  if (typeof value === 'string' && /^\/media\/[0-9a-f-]{36}\.[a-z0-9]{2,5}$/.test(value)) return value;
+  if (typeof value === 'string' && /^\/media\/[0-9a-f-]{36}(?:\.s\d{3})?\.[a-z0-9]{2,5}$/.test(value)) return value;
   return httpsUrl(value, field);
 }
 

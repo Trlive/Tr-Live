@@ -301,8 +301,30 @@ class LocalMusic {
     }
   }
 
-  /// Dosyayı odaya yükler. [playNow]: yetkili ise hemen çalar, değilse sıraya ekler. Sunucudaki şarkı kimliğini döndürür.
-  Future<String> sendToRoom(String roomId, LocalTrack t, {required bool playNow}) async {
+  /// Bu oturumda odaya yüklenmiş şarkılar ("oda|yol|boyut" -> sunucudaki kimlik): aynı şarkı yeniden
+  /// çalınınca dosya bir daha gönderilmez, hemen başlar. Sunucu kaydı 12 saat (her çalınışta uzar) tutar.
+  final Map<String, ({String id, DateTime at})> _uploaded = {};
+  final Map<String, Future<String>> _uploading = {};
+  static String _key(String roomId, LocalTrack t) => '$roomId|${t.path}|${t.sizeBytes}';
+
+  /// Dosyayı odaya yükler (önceden yüklendiyse yeniden göndermez). Sunucudaki şarkı kimliğini döndürür.
+  Future<String> uploadToRoom(String roomId, LocalTrack t) {
+    final k = _key(roomId, t);
+    final c = _uploaded[k];
+    if (c != null && DateTime.now().difference(c.at) < const Duration(hours: 10)) return Future.value(c.id);
+    // Aynı şarkı zaten yükleniyorsa (ör. arka planda önceden yükleme) ikinci kez gönderilmez.
+    return _uploading[k] ??= _upload(roomId, t).then((id) {
+      _uploaded[k] = (id: id, at: DateTime.now());
+      return id;
+    }).whenComplete(() {
+      _uploading.remove(k);
+    });
+  }
+
+  /// Sunucu kaydı silinmişse (süresi doldu) önbellekten düşer; sonraki deneme yeniden yükler.
+  void forgetUpload(String roomId, LocalTrack t) => _uploaded.remove(_key(roomId, t));
+
+  Future<String> _upload(String roomId, LocalTrack t) async {
     final file = File(t.path);
     if (!await file.exists()) throw ApiException('Dosya telefonda bulunamadı. Listeden kaldırıp yeniden ekleyin.');
     final size = await file.length();
@@ -315,12 +337,25 @@ class LocalMusic {
     });
     final id = (up['track'] as Map?)?['id'];
     if (id == null) throw ApiException('Yükleme tamamlanamadı.');
-    if (playNow) {
-      await Api.post('/api/rooms/$roomId/music/play', {'trackId': id});
-    } else {
-      await Api.post('/api/rooms/$roomId/music/queue', {'trackId': id});
-    }
     return id.toString();
+  }
+
+  /// Dosyayı odaya yükler. [playNow]: yetkili ise hemen çalar, değilse sıraya ekler. Sunucudaki şarkı kimliğini döndürür.
+  Future<String> sendToRoom(String roomId, LocalTrack t, {required bool playNow}) async {
+    Future<String> go() async {
+      final id = await uploadToRoom(roomId, t);
+      await Api.post('/api/rooms/$roomId/music/${playNow ? 'play' : 'queue'}', {'trackId': id});
+      return id;
+    }
+
+    try {
+      return await go();
+    } on ApiException catch (e) {
+      // Önceden yüklenen kayıt sunucuda artık yoksa bir kez yeniden yüklenir.
+      if (e.statusCode != 404) rethrow;
+      forgetUpload(roomId, t);
+      return go();
+    }
   }
 }
 

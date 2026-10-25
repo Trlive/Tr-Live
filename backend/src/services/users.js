@@ -2,6 +2,7 @@ import { query } from '../database.js';
 import { USER_PUBLIC_COLUMNS, USER_PUBLIC_JOINS, publicUser } from '../views.js';
 import { hub } from '../realtime.js';
 import { isGhost } from './presence.js';
+import { wipVehicleGift } from './wip.js';
 
 export async function loadPublicRow(id, run = query) {
   const r = await run(`SELECT ${USER_PUBLIC_COLUMNS} FROM users u ${USER_PUBLIC_JOINS} WHERE u.id = $1`, [id]);
@@ -32,10 +33,18 @@ export async function activeEntranceEffect(userId, run = query) {
     [userId],
   );
   const row = r.rows[0];
+  // WIP 8+ aracı: seçilmiş araçlı hediyenin animasyonu (eski uygulamalar kodla çizilen aracı göstermeye devam eder).
+  const wipVehicle = async (level, itemKey, itemName) => {
+    const g = level >= 8 ? await wipVehicleGift(level, run).catch(() => null) : null;
+    return {
+      // durationMs eski uygulamalarda kodla çizilen aracın süresidir (4600); video süresi ayrı alanda.
+      kind: 'wip_vehicle', level, itemKey, itemName: g?.name ?? itemName, animationUrl: g?.url ?? null, durationMs: 4600, videoMs: g?.durationMs ?? null,
+    };
+  };
   const fromRow = (x) => {
     if (x.item_key.startsWith('wip:')) {
       const level = x.wip_level ?? Number(x.item_key.slice(4));
-      return { kind: 'wip_vehicle', level, itemKey: x.item_key, itemName: x.item_name, animationUrl: null, durationMs: 4600 };
+      return wipVehicle(level, x.item_key, x.item_name);
     }
     const vehicle = x.item_type === 'vehicle';
     return {
@@ -52,7 +61,7 @@ export async function activeEntranceEffect(userId, run = query) {
     [userId],
   )).rows[0];
   if (w?.level && w.wip_hidden?.vehicle !== true) {
-    return { kind: 'wip_vehicle', level: w.level, itemKey: `wip:${w.level}`, itemName: null, animationUrl: null, durationMs: 4600 };
+    return wipVehicle(w.level, `wip:${w.level}`, null);
   }
   return row ? fromRow(row) : null;
 }
@@ -63,13 +72,18 @@ export async function activeEntranceEffect(userId, run = query) {
  */
 export async function announceUserChange(userId) {
   try {
-    if (await isGhost(userId)) return;
-    const rooms = (await query(`SELECT room_id FROM room_members WHERE user_id = $1`, [userId])).rows;
+    const ghost = await isGhost(userId);
+    const rooms = (await query(`SELECT room_id, microphone FROM room_members WHERE user_id = $1`, [userId])).rows;
     if (!rooms.length) return;
     const row = await loadPublicRow(userId);
     if (!row) return;
     const user = publicUser(row, null);
-    for (const r of rooms) hub.broadcastRoom(r.room_id, { type: 'room_member_updated', roomId: r.room_id, user });
+    for (const r of rooms) {
+      const payload = { type: 'room_member_updated', roomId: r.room_id, user };
+      // Hayalet (SWIP) üye yalnızca mikrofondayken görünür: o zaman odaya duyurulur; değilse yalnızca kendisi yeniler.
+      if (!ghost || r.microphone) hub.broadcastRoom(r.room_id, payload);
+      else hub.sendToUser(userId, payload);
+    }
   } catch (error) {
     console.error('[görünüm] odalara bildirilemedi:', error.message);
   }

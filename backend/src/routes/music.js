@@ -66,6 +66,34 @@ export function detectAudio(buf) {
   return null;
 }
 
+/** Kullanıcının hiçbir odada çalmayan ve sırada olmayan en eski geçici parçasını (dosyasıyla) siler. */
+async function evictOldestTemp(userId) {
+  let r;
+  try {
+    r = await query(
+      `DELETE FROM music_tracks WHERE id = (
+         SELECT t.id FROM music_tracks t WHERE t.is_temp AND t.created_by = $1 AND t.expires_at > NOW()
+           AND NOT EXISTS (SELECT 1 FROM room_music m WHERE m.track_id = t.id)
+           AND NOT EXISTS (SELECT 1 FROM room_music_queue q WHERE q.track_id = t.id)
+         ORDER BY t.created_at LIMIT 1 FOR UPDATE SKIP LOCKED)
+       RETURNING url`,
+      [userId],
+    );
+  } catch (_) {
+    return false; // aynı anda çalınmaya / sıraya alındı: silinmez
+  }
+  for (const row of r.rows) {
+    try { await fs.unlink(path.join(config.uploadDir, 'music', path.basename(row.url))); } catch (_) { /* dosya zaten yok */ }
+  }
+  return r.rowCount > 0;
+}
+
+/** Yeniden çalınan / sıraya eklenen geçici parça silinmesin: süresi uzatılır (telefon aynı şarkıyı yeniden yüklemez). */
+const keepTemp = (run, trackId) => run(
+  `UPDATE music_tracks SET expires_at = GREATEST(expires_at, NOW() + make_interval(hours => $2::int)) WHERE id = $1 AND is_temp`,
+  [trackId, TEMP_TRACK_TTL_HOURS],
+);
+
 router.post('/rooms/:roomId/music/upload',
   userLimit('music_upload', 60, 10 * 60e3),
   // Yetki, 25 MB'lık gövde belleğe alınmadan ÖNCE denetlenir (yetkisiz istek sunucuyu yormasın).
@@ -90,7 +118,10 @@ router.post('/rooms/:roomId/music/upload',
 
     const mine = (await query(`SELECT COUNT(*)::int AS n FROM music_tracks WHERE is_temp AND created_by = $1 AND expires_at > NOW()`, [req.user.id])).rows[0].n;
     const tempCap = MUSIC_MANAGERS.includes(member.role) ? MAX_TEMP_PER_MANAGER : MAX_TEMP_PER_USER;
-    if (mine >= tempCap) throw fail(`Aynı anda en fazla ${tempCap} yüklenmiş parçanız olabilir. Biri bitince tekrar deneyin.`, 409);
+    // Sınır dolduysa çalmayan / sırada olmayan en eski yüklemesi silinir (uzun çalma listesi yarıda kalmasın).
+    if (mine >= tempCap && !(MUSIC_MANAGERS.includes(member.role) && (await evictOldestTemp(req.user.id)))) {
+      throw fail(`Aynı anda en fazla ${tempCap} yüklenmiş parçanız olabilir. Biri bitince tekrar deneyin.`, 409);
+    }
 
     const dir = path.join(config.uploadDir, 'music');
     await fs.mkdir(dir, { recursive: true });
@@ -121,6 +152,7 @@ router.post('/rooms/:roomId/music/queue', userLimit('music_queue', 60, 60e3), as
     await c.query(`SELECT id FROM rooms WHERE id = $1 FOR UPDATE`, [roomId]); // sıra sınırı yarışını önler
     const track = (await c.query(`SELECT id FROM music_tracks WHERE id = $1 AND is_active = TRUE AND (owner_room_id IS NULL OR owner_room_id = $2)`, [trackId, roomId])).rows[0];
     if (!track) throw fail('Şarkı bulunamadı.', 404);
+    await keepTemp((q, p) => c.query(q, p), trackId);
     const counts = (await c.query(
       `SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE added_by = $2)::int AS mine FROM room_music_queue WHERE room_id = $1`, [roomId, req.user.id],
     )).rows[0];
@@ -157,6 +189,7 @@ router.post('/rooms/:roomId/music/play', userLimit('music_ctl', 40, 60e3), async
   if (trackId) {
     const t = (await query(`SELECT id FROM music_tracks WHERE id = $1 AND is_active = TRUE AND (owner_room_id IS NULL OR owner_room_id = $2)`, [trackId, roomId])).rows[0];
     if (!t) throw fail('Şarkı bulunamadı.', 404);
+    await keepTemp(query, trackId);
     await query(
       `INSERT INTO room_music(room_id, track_id, status, position_ms, updated_at, controlled_by) VALUES($1,$2,'playing',0,NOW(),$3)
        ON CONFLICT (room_id) DO UPDATE SET track_id = EXCLUDED.track_id, status = 'playing', position_ms = 0, updated_at = NOW(), controlled_by = EXCLUDED.controlled_by`,

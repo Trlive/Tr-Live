@@ -1,3 +1,23 @@
+## v2.65.0 — Çerçeve/araç görüntüsü, WIP 8+ araç girişleri, mesaj uyarıları, oda içi profil
+- Çerçeve değişimi odada anında: WIP satın alma ve yönetimden WIP verme/alma artık odalara duyurulur; hayalet (SWIP)
+  üye mikrofondayken de görünümü odada yenilenir; odaya yeniden giren kişinin eski görünümü tazelenir.
+- Müzik daha hafif: dinleyenlerde her 30 sn'de bir yapılan konum atlaması (seek) yalnızca gerçek sapmada yapılır
+  (müzik takılıp arabelleğe alınıyordu). Aynı şarkı tekrar çalınınca dosya yeniden yüklenmez; çalma listesinde sıradaki
+  şarkı arka planda önceden yüklenir (şarkılar arası bekleme yok). 45 yükleme sınırı dolunca en eski kullanılmayan
+  yükleme silinir (uzun liste yarıda kalmaz). Şimdi çalıyor paneli yarım saniyede bir tümden çizilmez.
+- Mesajlar sekmesi rozeti: arkadaşlık/CP isteği, bildirimler, destek, TR Live Ekibi / etkinlik / ödül duyuruları,
+  ajans daveti ve aile sohbeti de normal mesaj gibi sekmede (ve odadaki mesaj simgesinde) sayı gösterir.
+- Çerçeveler yeniden üretildi (paket 6): fotoğraf yeri tam ortada ve fotoğrafı tam sarar; kalın/kanatlı çerçeveler
+  kendi oranında (avatarın 2,2 katına kadar) çizilir, yerleşim kaymaz.
+- Araçlı hediyeler (paket 7): lastik, cam, koyu kaporta artık saydam değil (siyah araba hayalet gibi görünmüyor),
+  Ramazan arabası düzgün kesildi.
+- WIP 8+ araç girişi araçlı hediyelerle: WIP 8 Mavi Spor Araba, WIP 9 Turuncu Spor Araba, WIP 10 Altın Boğa Araba,
+  SWIP Siyah Spor Araba (hediye paketi kurulu değilse eski çizim araç).
+- Oda içi açılır profil: CP yazısı kalktı; ilişkiler en başta pembe kalp içinde CP, sonra mor çerçevede En İyi Arkadaş,
+  mavi çerçevede Kanka olarak görünür ("Yakın Arkadaşlarım" başlığı yok). Rozetler yalnızca varsa, başlıksız görünür.
+- "!" menüsü: oda yetkilisine "Odadan banla / Odadan at / Sohbette sustur"; yönetici ve yardımcı admine "Kullanıcıyı
+  banla (süreli/süresiz)", "Adını değiştir", "Profil fotoğrafını kaldır", yöneticiye "Uygulamada sohbet yasağı".
+
 ## v2.64.1 — Katalog donması, oda duyuruları, hediye düğmesi
 - Katalog önizlemede hediyeler artık küçük resim (png) olarak görünür; animasyon yalnızca karta dokununca ayrı pencerede
   oynar (169 hediyenin hepsi birden oynayıp sayfayı donduruyordu).

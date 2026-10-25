@@ -83,7 +83,8 @@ app.get(['/health', '/api/health'], async (req, res) => {
 });
 
 app.get('/media/:file', async (req, res) => {
-  const m = /^([0-9a-f-]{36})\.[a-z0-9]{2,5}$/.exec(req.params.file);
+  // ".s200" eki: çerçevenin gösterim oranı (uygulama okur); dosya aynı.
+  const m = /^([0-9a-f-]{36})(?:\.s\d{3})?\.[a-z0-9]{2,5}$/.exec(req.params.file);
   if (!m) return res.status(404).end();
   const headers = { 'Cache-Control': 'public, max-age=31536000, immutable', 'X-Content-Type-Options': 'nosniff', 'Cross-Origin-Resource-Policy': 'cross-origin', ETag: `"${m[1]}"` };
   // Dosyalar değişmez (yeni yükleme = yeni kimlik): istemcide varsa gövde gönderilmez.

@@ -636,8 +636,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         break;
       case 'room_member_joined':
         final u = mapOf(e['user']);
-        if (u != null && !_members.any((m) => m['userId'] == u['id'])) {
-          setState(() => _members.add({'userId': u['id'], 'role': 'user', 'microphone': false, 'seatIndex': null, 'user': u}));
+        if (u != null) {
+          final i = _members.indexWhere((m) => m['userId']?.toString() == u['id']?.toString());
+          if (i < 0) {
+            setState(() => _members.add({'userId': u['id'], 'role': 'user', 'microphone': false, 'seatIndex': null, 'user': u}));
+          } else if (u['id']?.toString() != Session.id) {
+            // Zaten listedeyse (yeniden giriş) görünümü tazelenir: çıkıp girerken değişen çerçeve hemen yansır.
+            setState(() => _members[i] = {..._members[i], 'user': u});
+          }
         }
         // Hayalet (SWIP) üye mikrofona çıkınca "sessiz" gelir: giriş şeridi gösterilmez.
         if (u != null && e['silent'] != true && u['id']?.toString() != Session.id && EffectPrefs.entranceFx) _entrance.add(u);
@@ -658,7 +664,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           _loadMembers().catchError((_) {});
         } else if (nu != null) {
           setState(() {
-            final i = _members.indexWhere((m) => m['userId'] == nu['id']);
+            final i = _members.indexWhere((m) => m['userId']?.toString() == nu['id']?.toString());
             if (i >= 0) _members[i] = {..._members[i], 'user': nu};
           });
         }
@@ -2125,12 +2131,27 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           future: Future.wait([
             Api.get('/api/users/$userId').then<Map<String, dynamic>?>((r) => mapOf(r['profile'])).catchError((_) => null),
             Api.get('/api/users/$userId/card').then<Map<String, dynamic>?>((r) => r).catchError((_) => null),
+            Api.get('/api/cp/wall/$userId').then<Map<String, dynamic>?>((r) => r).catchError((_) => null),
           ]),
           builder: (context, snap) {
             final profile = snap.data?[0];
             final card = snap.data?[1];
-            final supporters = listOf(card?['supporters']);
+            final wall = snap.data?[2];
             final medals = listOf(card?['medals']);
+            // Yakın arkadaşlar: önce CP (pembe kalp), sonra En İyi Arkadaş (mor) ve Kanka (mavi) — profildeki ilişki duvarı.
+            final cpUser = mapOf(mapOf(wall?['cp'])?['user']);
+            final rels = <(String, Map<String, dynamic>)>[
+              for (final it in listOf(mapOf(wall?['friend'])?['items']))
+                if (mapOf(it['user']) != null) ('friend', mapOf(it['user'])!),
+              for (final it in listOf(mapOf(wall?['kanka'])?['items']))
+                if (mapOf(it['user']) != null) ('kanka', mapOf(it['user'])!),
+            ];
+            void openUser(Map<String, dynamic> u) {
+              final id = u['id']?.toString();
+              if (id == null || u['isHidden'] == true) return;
+              close();
+              Navigator.push(this.context, MaterialPageRoute(builder: (_) => UserProfileScreen(userId: id)));
+            }
             var following = profile?['isFollowing'] == true;
             final family = mapOf(profile?['family']);
             final username = (profile?['publicId'] ?? user?['publicId'] ?? profile?['username'] ?? user?['username'] ?? '').toString();
@@ -2159,8 +2180,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                             if (role != 'user') _pill(_roleLabels[role] ?? role, Pal.cyan),
                             if (family != null) _pill('${family['name']}', Pal.red),
                             if (seat != null) _pill('${seat + 1}. koltuk', Colors.white24),
-                            if (mapOf(profile?['cp'])?['partner'] != null)
-                              _pill('CP: ${mapOf(mapOf(profile?['cp'])?['partner'])?['displayName'] ?? ''}', kCpPink, icon: Icons.favorite),
                             // Koruyucu ayrıcalığı: en yüksek puanlı koruyucu mini kartta görünür.
                             if (mapOf(mapOf(profile?['guardian'])?['user']) != null)
                               Container(
@@ -2186,55 +2205,64 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                 const Icon(Icons.copy, size: 14, color: Colors.white54),
                               ]),
                             ),
-                          const SizedBox(height: 10),
-                          const Text('Yakın Arkadaşlarım', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
-                          const SizedBox(height: 8),
                           if (snap.connectionState != ConnectionState.done)
                             const Padding(padding: EdgeInsets.all(14), child: SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2)))
-                          else if (supporters.isEmpty)
-                            const Padding(padding: EdgeInsets.symmetric(vertical: 10), child: Text('Henüz yok.', style: TextStyle(color: Colors.white54)))
-                          else
-                            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                              for (final s in supporters)
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 5),
-                                  child: Column(mainAxisSize: MainAxisSize.min, children: [
-                                    Container(
-                                      padding: const EdgeInsets.all(2),
-                                      decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Pal.purple, width: 2)),
-                                      child: UserAvatar(user: mapOf(s['user']), radius: 24),
+                          else if (cpUser != null || rels.isNotEmpty) ...[
+                            const SizedBox(height: 12),
+                            Center(
+                              child: SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                child: Row(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.end, children: [
+                                  if (cpUser != null)
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                                      child: GestureDetector(
+                                        onTap: () => openUser(cpUser),
+                                        child: Column(mainAxisSize: MainAxisSize.min, children: [
+                                          HeartAvatar(user: cpUser, size: 62),
+                                          const SizedBox(height: 4),
+                                          const RelationTag('cp'),
+                                        ]),
+                                      ),
                                     ),
-                                    const SizedBox(height: 3),
-                                    LevelPill(level: mapOf(s['user'])?['coinLevel'] ?? 1, send: true, height: 16),
-                                  ]),
-                                ),
-                            ]),
-                          const SizedBox(height: 12),
-                          Container(
-                            height: 64,
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            decoration: BoxDecoration(border: Border.all(color: Pal.amber), borderRadius: BorderRadius.circular(10)),
-                            child: Row(children: [
-                              const Text('Madalyalar', style: TextStyle(fontWeight: FontWeight.w700)),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: medals.isEmpty
-                                    ? const Align(alignment: Alignment.centerRight, child: Text('Henüz yok', style: TextStyle(color: Colors.white54, fontSize: 12)))
-                                    : ListView(scrollDirection: Axis.horizontal, reverse: true, children: [
-                                        for (final md in medals)
-                                          Padding(
-                                            padding: const EdgeInsets.only(left: 6),
-                                            child: Tooltip(
-                                              message: (md['name'] ?? '').toString(),
-                                              child: Api.absoluteUrl(md['assetUrl'] as String?) != null
-                                                  ? NetImg(Api.absoluteUrl(md['assetUrl'] as String?)!, width: 52, height: 52, errorBuilder: (_, __, ___) => const Icon(Icons.military_tech, color: Pal.amber, size: 40))
-                                                  : const Icon(Icons.military_tech, color: Pal.amber, size: 40),
-                                            ),
-                                          ),
-                                      ]),
+                                  for (final r in rels)
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                                      child: GestureDetector(
+                                        onTap: () => openUser(r.$2),
+                                        child: Column(mainAxisSize: MainAxisSize.min, children: [
+                                          RelationAvatar(user: r.$2, kind: r.$1, radius: 23),
+                                          const SizedBox(height: 4),
+                                          RelationTag(r.$1),
+                                        ]),
+                                      ),
+                                    ),
+                                ]),
                               ),
-                            ]),
-                          ),
+                            ),
+                          ],
+                          // Rozetler: yalnızca varsa (başlıksız).
+                          if (medals.isNotEmpty) ...[
+                            const SizedBox(height: 12),
+                            Center(
+                              child: SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                                  for (final md in medals)
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                                      child: Tooltip(
+                                        message: (md['name'] ?? '').toString(),
+                                        child: Api.absoluteUrl(md['assetUrl'] as String?) != null
+                                            ? NetImg(Api.absoluteUrl(md['assetUrl'] as String?)!, width: 52, height: 52, errorBuilder: (_, __, ___) => const Icon(Icons.military_tech, color: Pal.amber, size: 40))
+                                            : const Icon(Icons.military_tech, color: Pal.amber, size: 40),
+                                      ),
+                                    ),
+                                ]),
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 4),
                           // CP / yakınlık: iki kişi arasındaki seviye ve ilişki seçimi (3. kademeden itibaren).
                           if (!isSelf) CpPanel(userId: userId, displayName: (user?['displayName'] ?? '').toString(), user: user),
                           // Yönetim düğmeleri: yalnızca yetkili olana görünür.
@@ -2333,11 +2361,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     );
   }
 
-  Widget _pill(String text, Color color, {IconData? icon}) => Container(
+  Widget _pill(String text, Color color) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
         decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(10)),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
-          if (icon != null) ...[Icon(icon, size: 12, color: Colors.white), const SizedBox(width: 3)],
           Text(text, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Colors.white)),
         ]),
       );
@@ -2378,14 +2405,116 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
+      isScrollControlled: true,
       builder: (c) => SafeArea(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
+        child: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
           ListTile(leading: const Icon(Icons.flag_outlined), title: const Text('Şikâyet et'), onTap: () { Navigator.pop(c); reportDialog(context, kind: 'user', targetUserId: userId, roomId: widget.roomId); }),
           ListTile(leading: const Icon(Icons.person_off_outlined), title: const Text('Kullanıcıyı engelle'), onTap: () { Navigator.pop(c); blockUserDialog(context, userId, name); }),
-          if (canRoomBlock) ListTile(leading: const Icon(Icons.block), title: const Text('Bu odadan engelle'), onTap: () { Navigator.pop(c); _moderate(userId, 'block'); }),
+          if (canRoomBlock) ...[
+            ListTile(
+              leading: const Icon(Icons.block, color: Colors.orangeAccent),
+              title: const Text('Odadan banla'),
+              subtitle: const Text('Bu odaya bir daha giremez'),
+              onTap: () async {
+                Navigator.pop(c);
+                if (await confirm(context, '$name bu odadan banlansın mı?', action: 'Banla', destructive: true)) _moderate(userId, 'block');
+              },
+            ),
+            ListTile(leading: const Icon(Icons.exit_to_app), title: const Text('Odadan at'), onTap: () async {
+              Navigator.pop(c);
+              if (await confirm(context, '$name odadan atılsın mı?', action: 'At')) _moderate(userId, 'kick');
+            }),
+            ListTile(leading: const Icon(Icons.comments_disabled), title: const Text('Sohbette sustur'), onTap: () { Navigator.pop(c); _muteChoice(userId); }),
+          ],
+          // Uygulama yöneticisi / yardımcı admin kısayolları (yetkiyi sunucu ayrıca denetler).
+          if (Session.isStaff) ...[
+            const Divider(height: 1),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 10, 16, 2),
+              child: Align(alignment: Alignment.centerLeft, child: Text('Yönetici kısayolları', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w800, fontSize: 13))),
+            ),
+            ListTile(
+              leading: const Icon(Icons.gavel, color: Colors.redAccent),
+              title: const Text('Kullanıcıyı banla', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w700)),
+              onTap: () { Navigator.pop(c); _staffBan(userId, name); },
+            ),
+            if (Session.isAdmin)
+              ListTile(
+                leading: const Icon(Icons.speaker_notes_off_outlined),
+                title: const Text('Uygulamada sohbet yasağı'),
+                onTap: () { Navigator.pop(c); _staffChatBan(userId, name); },
+              ),
+            ListTile(
+              leading: const Icon(Icons.drive_file_rename_outline),
+              title: const Text('Adını değiştir'),
+              onTap: () { Navigator.pop(c); _staffRename(userId, name); },
+            ),
+            ListTile(
+              leading: const Icon(Icons.no_photography_outlined),
+              title: const Text('Profil fotoğrafını kaldır'),
+              onTap: () { Navigator.pop(c); _staffRemoveAvatar(userId, name); },
+            ),
+          ],
+        ]),
+        ),
+      ),
+    );
+  }
+
+  /// Yönetici kısayolu: süre seçilir, neden (isteğe bağlı) yazılır, onaylanınca hesap banlanır.
+  Future<void> _staffBan(String userId, String name) async {
+    const options = <(String, int?)>[('1 saat', 1), ('1 gün', 24), ('7 gün', 168), ('30 gün', 720), ('Süresiz', null)];
+    final picked = await showModalBottomSheet<(String, int?)>(
+      context: context,
+      showDragHandle: true,
+      builder: (c) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Padding(padding: const EdgeInsets.only(bottom: 6), child: Text('$name · ban süresi', style: const TextStyle(fontWeight: FontWeight.w800))),
+          for (final o in options)
+            ListTile(leading: Icon(o.$2 == null ? Icons.block : Icons.timer_outlined, color: Colors.redAccent), title: Text(o.$1), onTap: () => Navigator.pop(c, o)),
         ]),
       ),
     );
+    if (picked == null || !mounted) return;
+    final f = await formDialog(context, 'Ban nedeni (isteğe bağlı)', ['Neden']);
+    if (f == null || !mounted) return;
+    if (!await confirm(context, '$name ${picked.$2 == null ? 'süresiz' : picked.$1} banlansın mı? Tüm oturumları kapanır ve odalardan çıkarılır.', action: 'Banla', destructive: true)) return;
+    if (!mounted) return;
+    final r = await guard(context, () => Api.post('/api/admin/users/$userId/ban', {if (picked.$2 != null) 'hours': picked.$2, 'reason': (f['Neden'] ?? '').trim()}));
+    if (r != null && mounted) toast(context, '$name banlandı (${picked.$1}).');
+  }
+
+  Future<void> _staffChatBan(String userId, String name) async {
+    const options = <(String, int)>[('1 saat', 60), ('1 gün', 1440), ('7 gün', 10080), ('Yasağı kaldır', 0)];
+    final picked = await showModalBottomSheet<(String, int)>(
+      context: context,
+      showDragHandle: true,
+      builder: (c) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Padding(padding: const EdgeInsets.only(bottom: 6), child: Text('$name · sohbet yasağı', style: const TextStyle(fontWeight: FontWeight.w800))),
+          for (final o in options)
+            ListTile(leading: Icon(o.$2 == 0 ? Icons.chat : Icons.speaker_notes_off_outlined), title: Text(o.$1), onTap: () => Navigator.pop(c, o)),
+        ]),
+      ),
+    );
+    if (picked == null || !mounted) return;
+    final r = await guard(context, () => Api.post('/api/admin/users/$userId/chat-restriction', {'minutes': picked.$2}));
+    if (r != null && mounted) toast(context, picked.$2 == 0 ? 'Sohbet yasağı kaldırıldı.' : '$name ${picked.$1} sohbet edemeyecek.');
+  }
+
+  Future<void> _staffRename(String userId, String name) async {
+    final f = await formDialog(context, 'Görünen adı değiştir', ['Yeni ad'], initial: {'Yeni ad': name});
+    if (f == null || !mounted) return;
+    final r = await guard(context, () => Api.post('/api/admin/users/$userId/display-name', {'displayName': (f['Yeni ad'] ?? '').trim()}));
+    if (r != null && mounted) toast(context, 'Ad değiştirildi.');
+  }
+
+  Future<void> _staffRemoveAvatar(String userId, String name) async {
+    if (!await confirm(context, '$name adlı kullanıcının profil fotoğrafı kaldırılsın mı?', action: 'Kaldır', destructive: true)) return;
+    if (!mounted) return;
+    final r = await guard(context, () => Api.post('/api/admin/users/$userId/avatar', {'avatarUrl': null}));
+    if (r != null && mounted) toast(context, 'Profil fotoğrafı kaldırıldı.');
   }
 
   void _membersSheet() => showViewers(context, _members, _memberSheet);
@@ -2532,7 +2661,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             top: (slotSize - seatR * 2 * kFrameScale) / 2,
             width: seatR * 2 * kFrameScale,
             height: seatR * 2 * kFrameScale,
-            child: IgnorePointer(child: AnimAsset(key: ValueKey(frameUrl), url: frameUrl, repeat: true, cache: false)),
+            child: FrameBox(url: frameUrl, avatarRadius: seatR),
           ),
         // Mikrofon emojisi: avatarın üstünde birkaç saniye oynar.
         if (_micEmoji[userId] != null)

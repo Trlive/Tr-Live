@@ -595,9 +595,11 @@ class _SpinningDiscState extends State<SpinningDisc> with SingleTickerProviderSt
   @override
   Widget build(BuildContext context) {
     final s = widget.size;
+    // İçerik ayrı katmanda bir kez çizilir; dönerken yalnızca katman döner (gölge her karede yeniden çizilmez).
     return RotationTransition(
       turns: _c,
-      child: Container(
+      child: RepaintBoundary(
+        child: Container(
         width: s,
         height: s,
         decoration: BoxDecoration(
@@ -623,6 +625,7 @@ class _SpinningDiscState extends State<SpinningDisc> with SingleTickerProviderSt
             ),
           ]),
         ),
+      ),
       ),
     );
   }
@@ -653,20 +656,23 @@ class _NowPlaying extends StatefulWidget {
 class _NowPlayingState extends State<_NowPlaying> with SingleTickerProviderStateMixin {
   Timer? _tick;
   double? _drag;
+  final ValueNotifier<int> _clock = ValueNotifier<int>(0);
   late final AnimationController _bars;
 
   @override
   void initState() {
     super.initState();
     _bars = AnimationController(vsync: this, duration: const Duration(milliseconds: 900))..repeat();
+    // Yalnızca ilerleme çubuğu yenilenir (tüm panel yarım saniyede bir yeniden çizilmesin).
     _tick = Timer.periodic(const Duration(milliseconds: 500), (_) {
-      if (mounted && _drag == null) setState(() {});
+      if (mounted && _drag == null) _clock.value++;
     });
   }
 
   @override
   void dispose() {
     _tick?.cancel();
+    _clock.dispose();
     _bars.dispose();
     super.dispose();
   }
@@ -695,7 +701,7 @@ class _NowPlayingState extends State<_NowPlaying> with SingleTickerProviderState
           final track = mapOf(s?['track']);
           final playing = s?['status'] == 'playing';
           final duration = ((track?['durationMs'] as num?) ?? 0).toDouble();
-          final pos = (_drag ?? MusicService.instance.currentPositionMs().toDouble()).clamp(0, duration > 0 ? duration : 1).toDouble();
+          double pos() => (_drag ?? MusicService.instance.currentPositionMs().toDouble()).clamp(0, duration > 0 ? duration : 1).toDouble();
           final room = widget.roomId;
           return Padding(
             padding: EdgeInsets.fromLTRB(20, 12, 20, 14 + mq.padding.bottom),
@@ -735,7 +741,7 @@ class _NowPlayingState extends State<_NowPlaying> with SingleTickerProviderState
                 ),
               ]),
               const Spacer(),
-              SpinningDisc(size: math.min(mq.size.width * 0.58, 260), playing: playing),
+              RepaintBoundary(child: SpinningDisc(size: math.min(mq.size.width * 0.58, 260), playing: playing)),
               const SizedBox(height: 22),
               Text(track == null ? 'Şu an müzik çalmıyor' : (track['title'] ?? '').toString(), maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center,
                   style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800)),
@@ -743,9 +749,12 @@ class _NowPlayingState extends State<_NowPlaying> with SingleTickerProviderState
               Text(track == null ? (widget.canManage ? 'Listeden bir şarkı seç' : 'Müziği oda yetkilileri açar') : (playing ? 'Odaya yayınlanıyor' : 'Duraklatıldı'),
                   style: const TextStyle(color: _dim, fontSize: 15)),
               const SizedBox(height: 14),
-              SizedBox(height: 16, child: playing ? _visualizer() : const SizedBox.shrink()),
+              SizedBox(height: 16, child: playing ? RepaintBoundary(child: _visualizer()) : const SizedBox.shrink()),
               const Spacer(),
-              if (track != null) ...[
+              if (track != null)
+                ValueListenableBuilder<int>(
+                  valueListenable: _clock,
+                  builder: (context, _, __) => Column(children: [
                 SliderTheme(
                   data: SliderTheme.of(context).copyWith(
                     trackHeight: 3,
@@ -756,7 +765,7 @@ class _NowPlayingState extends State<_NowPlaying> with SingleTickerProviderState
                     thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 9),
                   ),
                   child: Slider(
-                    value: pos,
+                    value: pos(),
                     max: duration > 0 ? duration : 1,
                     onChanged: widget.canManage ? (v) => setState(() => _drag = v) : null,
                     onChangeEnd: widget.canManage && room != null
@@ -769,11 +778,12 @@ class _NowPlayingState extends State<_NowPlaying> with SingleTickerProviderState
                 ),
                 const SizedBox(height: 6),
                 Row(children: [
-                  Text(_mmss(pos), style: const TextStyle(color: _dim)),
+                  Text(_mmss(pos()), style: const TextStyle(color: _dim)),
                   const Spacer(),
                   Text(_mmss(duration), style: const TextStyle(color: _dim)),
                 ]),
-              ],
+                  ]),
+                ),
               const SizedBox(height: 14),
               if (widget.canManage)
                 Row(mainAxisAlignment: MainAxisAlignment.center, children: [

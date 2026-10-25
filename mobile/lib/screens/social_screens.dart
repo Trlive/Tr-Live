@@ -167,9 +167,9 @@ class _LevelsScreenState extends State<LevelsScreen> {
               child: Column(children: [
                 SizedBox(
                   height: 190,
-                  child: Stack(alignment: Alignment.center, children: [
+                  child: Stack(alignment: Alignment.center, clipBehavior: Clip.none, children: [
                     UserAvatar(user: me, radius: 56),
-                    if (frame != null) IgnorePointer(child: SizedBox(width: 56 * 2 * kFrameScale, height: 56 * 2 * kFrameScale, child: AnimAsset(url: frame, repeat: true, cache: false))),
+                    if (frame != null) FrameBox(url: frame, avatarRadius: 56),
                     // Seviye rozeti: sağ altta (taç = atış, kalp = alış).
                     Positioned(right: 0, bottom: 0, child: LevelBadgeImage(level: level, send: !_broadcaster, size: 78)),
                   ]),

@@ -3,7 +3,7 @@ import { query, tx } from '../database.js';
 import { requireAuth } from '../auth.js';
 import { fail, uuid } from '../http.js';
 import { announceUserChange } from '../services/users.js';
-import { wipLabel } from '../services/wip.js';
+import { wipLabel, wipVehicleGift } from '../services/wip.js';
 
 // WIP üyeliğinin verdiği görünüm öğeleri: Görünüm sayfasında ayrı ayrı takılıp çıkarılabilir.
 const WIP_KINDS = { vehicle: 'aracı', frame: 'çerçevesi', chat_bubble: 'sohbet balonu', entrance_effect: 'giriş efekti', badge: 'rozeti' };
@@ -47,6 +47,12 @@ router.get('/', async (req, res) => {
         equipped: w.wip_hidden?.[type] !== true && !items.some((i) => i.itemType === type && i.equipped),
       });
     }
+  }
+  // WIP 8+ aracı: önizlemede araçlı hediyenin animasyonu oynar.
+  for (const it of items) {
+    if (it.itemType !== 'vehicle' || !(it.wipLevel >= 8) || it.assetUrl) continue;
+    const g = await wipVehicleGift(it.wipLevel).catch(() => null);
+    if (g) Object.assign(it, { assetUrl: g.url, vehicleName: g.name });
   }
   res.json({ items });
 });

@@ -133,7 +133,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                 child: UserAvatar(user: p, radius: avatarR),
               ),
               if (frame == null) WipFrame.around(wipLevelOf(p['wipFrame'] ?? wip?['level']), avatarR),
-              if (frame != null) IgnorePointer(child: SizedBox(width: avatarR * 2 * kFrameScale, height: avatarR * 2 * kFrameScale, child: AnimAsset(url: frame, repeat: true, cache: false))),
+              if (frame != null) FrameBox(url: frame, avatarRadius: avatarR),
             ]),
           ),
         ),
