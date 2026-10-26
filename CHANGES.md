@@ -1,3 +1,9 @@
+## v2.66.1 — Renkli ID (bronz, gümüş, altın)
+- Üç renkli ID: Bronz, Gümüş ve Altın. Kullanıcının ID'si metalik renkte, üzerinden ışık geçen yazıyla görünür
+  (profil, kullanıcı sayfası, oda içi profil kartı). Özel ID varsa özel ID kapsülü öncelikli.
+- Yönetim: kullanıcı sayfasında "Renkli ID ver" (ve Öğe ver → Renkli ID); gün sayısı ya da süresiz verilir.
+- Görünüm: yeni "Renkli ID" sekmesi; sahip olunan renkli ID'ler önizlenir, Etkinleştir / Kaldır ile takılır.
+
 ## v2.66.0 — Ajans sistemi v2: maaş tablosu, Ajansım, asistanlar, transferler, davet merkezi, özel ID
 - Yayıncı maaşı mavi tabloya göre (44 seviye, elmas kotaları ×10: 1. seviye 200.000 💎 … 44. seviye 2,5 milyar 💎).
   İki yöntem: Yöntem 1 = ay içinde alınan toplam elmas → "Maaş 1"; Yöntem 2 = dönem kapanırken bakiyede kalan elmas →

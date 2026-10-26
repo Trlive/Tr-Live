@@ -2200,6 +2200,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                               user: {
                                 'publicId': profile?['publicId'] ?? user?['publicId'],
                                 'specialId': profile?['specialId'] ?? user?['specialId'],
+                                'idColor': profile?['idColor'] ?? user?['idColor'],
                                 'wipLevel': user?['wipLevel'],
                                 'nameColor': user?['nameColor'],
                               },

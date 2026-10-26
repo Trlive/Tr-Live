@@ -369,9 +369,17 @@ router.post('/coin-packages/:id/active', requireSuperAdmin, async (req, res) => 
   res.json({ ok: true });
 });
 
+// Renkli ID (Görünüm'de takılır): kullanıcının ID'si bronz / gümüş / altın parıltılı yazılır. Dosyasız, kodla çizilir.
+export const COLORED_IDS = Object.freeze({ bronz: 'Bronz Renkli ID', gumus: 'Gümüş Renkli ID', altin: 'Altın Renkli ID' });
+// STORE_CATS aşağıda tanımlı: liste istek anında kurulur (modül yüklenirken TDZ hatası olmasın).
+const grantCats = () => [...STORE_CATS, 'colored_id'];
+
 // Yönetici "öğe ver" listesi: kategoriye göre tüm katalog öğeleri.
 router.get('/grantables', requireSuperAdmin, async (req, res) => {
-  const category = oneOf(req.query.category, STORE_CATS, 'Kategori');
+  const category = oneOf(req.query.category, grantCats(), 'Kategori');
+  if (category === 'colored_id') {
+    return res.json({ items: Object.entries(COLORED_IDS).map(([k, name]) => ({ key: `cid:${k}`, name, imageUrl: null, wip: false, idColor: k })) });
+  }
   let items;
   if (category === 'frame') {
     items = (await query(`SELECT id::text AS key, name, image_url FROM frames WHERE is_active = TRUE ORDER BY name`)).rows;
@@ -390,10 +398,43 @@ router.get('/grantables', requireSuperAdmin, async (req, res) => {
 // Seçilen katalog öğesini kullanıcıya ver. days boş/0 = süresiz.
 router.post('/users/:userId/grant', requireSuperAdmin, async (req, res) => {
   const userId = uuid(req.params.userId, 'Kullanıcı');
-  const category = oneOf(req.body?.category, STORE_CATS, 'Kategori');
+  const category = oneOf(req.body?.category, grantCats(), 'Kategori');
   const key = text(req.body?.itemKey, 'Öğe', { min: 1, max: 80, required: true });
   const days = req.body?.days ? positiveInt(req.body.days, 'Gün', 3650) : null;
   await assertUser(userId);
+  if (category === 'colored_id') {
+    const color = /^cid:(bronz|gumus|altin)$/.exec(key)?.[1];
+    if (!color) throw fail('Geçersiz renkli ID.');
+    // Aynı renk zaten varsa yeni satır açılmaz: süresi uzar (gün verilmezse süresiz olur).
+    const ext = await query(
+      `UPDATE inventory_items SET expires_at = CASE WHEN $3::int IS NULL OR expires_at IS NULL THEN NULL
+                                                   ELSE GREATEST(expires_at, NOW()) + ($3::int * INTERVAL '1 day') END
+       WHERE id = (SELECT id FROM inventory_items WHERE user_id = $1 AND item_type = 'colored_id' AND item_key = $2 AND is_active = TRUE
+                     AND (expires_at IS NULL OR expires_at > NOW()) ORDER BY created_at DESC LIMIT 1)
+       RETURNING id`,
+      [userId, key, days],
+    );
+    if (ext.rowCount) {
+      await query(
+        `INSERT INTO financial_audit_logs(admin_id, user_id, action, reference_type, reference_id, metadata) VALUES($1,$2,'admin_inventory_grant','inventory',$3,$4)`,
+        [req.user.id, userId, ext.rows[0].id, JSON.stringify({ category, key, days, extended: true })],
+      );
+      return res.status(201).json({ id: ext.rows[0].id, name: COLORED_IDS[color], extended: true });
+    }
+    const r = await query(
+      `INSERT INTO inventory_items(user_id, item_type, item_key, item_name, expires_at, metadata)
+       VALUES($1,'colored_id',$2,$3, CASE WHEN $4::int IS NULL THEN NULL ELSE NOW() + ($4::int * INTERVAL '1 day') END, $5) RETURNING id`,
+      [userId, key, COLORED_IDS[color], days, JSON.stringify({ idColor: color, grantedBy: req.user.id })],
+    );
+    await equipIfNone(query, userId, 'colored_id', r.rows[0].id);
+    await query(
+      `INSERT INTO financial_audit_logs(admin_id, user_id, action, reference_type, reference_id, metadata) VALUES($1,$2,'admin_inventory_grant','inventory',$3,$4)`,
+      [req.user.id, userId, r.rows[0].id, JSON.stringify({ category, key, days })],
+    );
+    res.status(201).json({ id: r.rows[0].id, name: COLORED_IDS[color] });
+    announceUserChange(userId);
+    return;
+  }
   let name; let asset;
   const wipMatch = /^wip:(\d{1,2})$/.exec(key);
   if (wipMatch) {

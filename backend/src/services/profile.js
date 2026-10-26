@@ -28,7 +28,10 @@ export async function loadProfile(viewerId, targetId) {
   const r = await query(
     `SELECT u.*, uw.level AS wip_level, uw.expires_at AS wip_expires_at, wt.name AS wip_name, wt.features AS wip_features, is_ghost(u.id) AS ghost,
             CASE WHEN u.birth_date IS NULL THEN NULL ELSE DATE_PART('year', AGE(u.birth_date))::int END AS age,
-            si.special_id, si.expires_at AS special_id_until, hb.badge AS host_badge, hb.expires_at AS host_badge_until
+            si.special_id, si.expires_at AS special_id_until, hb.badge AS host_badge, hb.expires_at AS host_badge_until,
+            (SELECT substring(ci.item_key FROM 5) FROM inventory_items ci
+              WHERE ci.user_id = u.id AND ci.item_type = 'colored_id' AND ci.is_active = TRUE AND (ci.expires_at IS NULL OR ci.expires_at > NOW())
+                AND COALESCE(ci.metadata->>'equipped' = 'true', FALSE) ORDER BY ci.created_at DESC LIMIT 1) AS id_color
      FROM users u
      LEFT JOIN special_ids si ON si.user_id = u.id AND si.expires_at > NOW()
      LEFT JOIN host_badges hb ON hb.user_id = u.id AND hb.expires_at > NOW()
@@ -111,6 +114,7 @@ export async function loadProfile(viewerId, targetId) {
     publicId: u.public_id ?? null,
     specialId: u.special_id ?? null,
     hostBadge: u.host_badge ?? null,
+    idColor: u.id_color ?? null,
     nameColor: u.wip_features?.nameColor ?? null,
     username: u.username,
     displayName: u.display_name,

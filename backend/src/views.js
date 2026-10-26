@@ -24,6 +24,9 @@ export const USER_PUBLIC_COLUMNS = `u.id, u.username, u.public_id, u.display_nam
       AND (wi.expires_at IS NULL OR wi.expires_at > NOW()) AND COALESCE(wi.metadata->>'equipped' = 'true', FALSE)) AS wip_items,
   (SELECT si.special_id FROM special_ids si WHERE si.user_id = u.id AND si.expires_at > NOW()) AS special_id,
   (SELECT hb.badge FROM host_badges hb WHERE hb.user_id = u.id AND hb.expires_at > NOW()) AS host_badge,
+  (SELECT substring(ci.item_key FROM 5) FROM inventory_items ci
+    WHERE ci.user_id = u.id AND ci.item_type = 'colored_id' AND ci.is_active = TRUE AND (ci.expires_at IS NULL OR ci.expires_at > NOW())
+      AND COALESCE(ci.metadata->>'equipped' = 'true', FALSE) ORDER BY ci.created_at DESC LIMIT 1) AS id_color,
   CASE WHEN u.cp_partner_id IS NULL THEN NULL ELSE (SELECT cp.exp FROM cp_pairs cp
     WHERE cp.user_a = LEAST(u.id, u.cp_partner_id) AND cp.user_b = GREATEST(u.id, u.cp_partner_id) AND cp.relation = 'cp') END AS cp_exp`;
 export const USER_PUBLIC_JOINS = `LEFT JOIN user_wip uw ON uw.user_id = u.id AND uw.is_active = TRUE AND uw.expires_at > NOW()
@@ -42,7 +45,7 @@ export function publicUser(row, viewerId = null) {
     return {
       id: row.id, publicId: null, username: HIDDEN_NAME, displayName: HIDDEN_NAME, avatarUrl: null,
       coinLevel: row.coin_level, giftLevel: row.gift_level, wipLevel: null, nameColor: null, frameUrl: null, isHidden: true,
-      chatBubbleUrl: null, micWaveUrl: null, profileCardUrl: null, roomCardUrl: null, specialId: null, hostBadge: null,
+      chatBubbleUrl: null, micWaveUrl: null, profileCardUrl: null, roomCardUrl: null, specialId: null, hostBadge: null, idColor: null,
     };
   }
   return {
@@ -51,6 +54,8 @@ export function publicUser(row, viewerId = null) {
     // Maaş ödülü / yönetimce verilen özel ID (süslü kimlik) ve yayıncı rozeti (Bronz … Özel).
     specialId: row.special_id ?? null,
     hostBadge: row.host_badge ?? null,
+    // Takılı renkli ID (Görünüm): bronz / gumus / altin.
+    idColor: row.id_color ?? null,
     username: row.username,
     displayName: row.display_name,
     avatarUrl: row.avatar_url,

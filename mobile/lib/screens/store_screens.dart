@@ -4,6 +4,7 @@ import '../services/session.dart';
 import '../widgets/anim_asset.dart';
 import '../widgets/app_theme.dart';
 import '../widgets/common.dart';
+import '../widgets/id_badge.dart';
 import '../widgets/wip_items.dart';
 
 /// Kategoriler: [anahtar, Mağaza adı, Görünüm adı]
@@ -283,11 +284,13 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final order = ['vehicle', 'frame', 'chat_bubble', 'entrance_effect', 'badge', 'mic_wave', 'mini_card', 'room_card'];
-    // Rozet mağazada satılmaz (yalnızca WIP / yönetim); Görünüm'de ayrı sekme.
+    final order = ['vehicle', 'frame', 'chat_bubble', 'entrance_effect', 'badge', 'colored_id', 'mic_wave', 'mini_card', 'room_card'];
+    // Rozet ve renkli ID mağazada satılmaz (yalnızca WIP / yönetim); Görünüm'de ayrı sekme.
     const extra = [
       ['badge', 'Rozet', 'Rozet'],
+      ['colored_id', 'Renkli ID', 'Renkli ID'],
     ];
+    final myId = (Session.me.value?['publicId'] ?? '12345678').toString();
     final cats = [for (final k in order) [..._cats, ...extra].firstWhere((c) => c[0] == k)];
     return Scaffold(
       appBar: AppBar(
@@ -307,9 +310,11 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
                   child: Padding(
                     padding: const EdgeInsets.all(24),
                     child: Column(mainAxisSize: MainAxisSize.min, children: [
-                      const Text('Bu kategoride ürünün yok.', style: TextStyle(color: Pal.textDim)),
-                      const SizedBox(height: 10),
-                      FilledButton.icon(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const StoreScreen())), icon: const Icon(Icons.storefront), label: const Text('Mağazaya git')),
+                      Text(_cat == 'colored_id' ? 'Renkli ID\'n yok. Renkli ID yönetim tarafından verilir.' : 'Bu kategoride ürünün yok.', textAlign: TextAlign.center, style: const TextStyle(color: Pal.textDim)),
+                      if (_cat != 'colored_id' && _cat != 'badge') ...[
+                        const SizedBox(height: 10),
+                        FilledButton.icon(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const StoreScreen())), icon: const Icon(Icons.storefront), label: const Text('Mağazaya git')),
+                      ],
                     ]),
                   ),
                 );
@@ -323,16 +328,23 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
                   itemBuilder: (_, i) {
                     final it = items[i];
                     final on = it['equipped'] == true;
-                    // WIP öğeleri (üyelikten ya da ayrıca verilmiş) dosyasızdır: kodla çizilir.
+                    // WIP öğeleri (üyelikten ya da ayrıca verilmiş) ve renkli ID dosyasızdır: kodla çizilir.
                     final wipLvl = wipLevelOf(it['wipLevel']);
+                    final idTier = _cat == 'colored_id' ? it['itemKey'].toString().split(':').last : null;
                     final vehUrl = _cat == 'vehicle' && wipLvl != null ? Api.absoluteUrl(it['assetUrl'] as String?) : null;
                     return Stack(children: [
                       Positioned.fill(
                         child: _Tile(
                           category: _cat,
                           url: it['assetUrl'] as String?,
-                          art: wipLvl == null ? null : LayoutBuilder(builder: (_, box) => Center(child: FittedBox(child: wipItemArt(_cat, wipLvl, box.biggest.shortestSide.clamp(40, 160).toDouble())))),
-                          previewArt: wipLvl == null
+                          art: idTier != null
+                              ? Center(child: FittedBox(child: Padding(padding: const EdgeInsets.all(4), child: ColoredIdText(text: 'ID: $myId', tier: idTier, fontSize: 14))))
+                              : wipLvl == null
+                                  ? null
+                                  : LayoutBuilder(builder: (_, box) => Center(child: FittedBox(child: wipItemArt(_cat, wipLvl, box.biggest.shortestSide.clamp(40, 160).toDouble())))),
+                          previewArt: idTier != null
+                              ? Padding(padding: const EdgeInsets.all(16), child: ColoredIdText(text: 'ID: $myId', tier: idTier, fontSize: 26))
+                              : wipLvl == null
                               ? null
                               : _cat == 'vehicle'
                                   // WIP 8+ aracı: araçlı hediyenin animasyonu (sunucu adresini verir).

@@ -8,6 +8,7 @@ import '../services/api.dart';
 import '../services/session.dart';
 import '../widgets/anim_asset.dart';
 import '../widgets/common.dart';
+import '../widgets/id_badge.dart';
 import '../widgets/wip_items.dart';
 import 'admin_events.dart';
 import 'admin_content.dart';
@@ -760,6 +761,12 @@ class _UsersTabState extends State<_UsersTab> {
           if (admin) OutlinedButton.icon(onPressed: _wip, icon: const Icon(Icons.workspace_premium), label: const Text('WIP ver')),
           if (admin) OutlinedButton.icon(onPressed: () => _run(() => Api.delete('/api/admin/users/${u['id']}/wip'), 'WIP kaldırıldı.'), icon: const Icon(Icons.remove_circle_outline), label: const Text('WIP al')),
           if (admin) OutlinedButton.icon(onPressed: _inventory, icon: const Icon(Icons.inventory_2), label: const Text('Öğe ver (çerçeve, rozet…)')),
+          if (admin)
+            OutlinedButton.icon(
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => GrantItemPage(user: u, initialCategory: 'colored_id'))),
+              icon: const Icon(Icons.format_color_text),
+              label: const Text('Renkli ID ver'),
+            ),
           if (admin) OutlinedButton.icon(onPressed: _specialId, icon: const Icon(Icons.badge_outlined), label: const Text('Özel ID ver')),
           if (admin) OutlinedButton.icon(onPressed: () => _removeMark('special-id'), icon: const Icon(Icons.remove_circle_outline), label: const Text('Özel ID al')),
           if (admin) OutlinedButton.icon(onPressed: _hostBadge, icon: const Icon(Icons.military_tech), label: const Text('Yayıncı rozeti ver')),
@@ -1568,7 +1575,8 @@ class _SecurityTabState extends State<_SecurityTab> {
 /// Öğe ver: kategori seç, listeden öğeyi seç, gün yaz, gönder (WIP verme gibi tek ekranda).
 class GrantItemPage extends StatefulWidget {
   final Map<String, dynamic> user;
-  const GrantItemPage({super.key, required this.user});
+  final String initialCategory;
+  const GrantItemPage({super.key, required this.user, this.initialCategory = 'frame'});
 
   @override
   State<GrantItemPage> createState() => _GrantItemPageState();
@@ -1577,6 +1585,7 @@ class GrantItemPage extends StatefulWidget {
 class _GrantItemPageState extends State<GrantItemPage> {
   static const _cats = [
     ['frame', 'Çerçeve'],
+    ['colored_id', 'Renkli ID'],
     ['badge', 'Rozet'],
     ['chat_bubble', 'Sohbet Balonu'],
     ['entrance_effect', 'Giriş Efekti'],
@@ -1585,7 +1594,7 @@ class _GrantItemPageState extends State<GrantItemPage> {
     ['mic_wave', 'Mikrofon Dalgası'],
     ['vehicle', 'Araç'],
   ];
-  String _cat = 'frame';
+  late String _cat = widget.initialCategory;
   String? _selected;
   final _days = TextEditingController(text: '30');
   bool _sending = false;
@@ -1654,9 +1663,17 @@ class _GrantItemPageState extends State<GrantItemPage> {
                                 Expanded(
                                   child: LayoutBuilder(
                                     builder: (c, box) => Center(
-                                      child: it['wip'] == true
-                                          ? _wipPreview(int.tryParse(it['key'].toString().split(':').last) ?? 1, box.biggest.shortestSide)
-                                          : mediaPreview(it['imageUrl'] as String?, frame: _cat == 'frame', size: box.biggest.shortestSide),
+                                      child: _cat == 'colored_id'
+                                          ? FittedBox(
+                                              child: ColoredIdText(
+                                                text: 'ID: ${widget.user['publicId'] ?? '12345678'}',
+                                                tier: (it['idColor'] ?? it['key'].toString().split(':').last).toString(),
+                                                fontSize: 13,
+                                              ),
+                                            )
+                                          : it['wip'] == true
+                                              ? _wipPreview(int.tryParse(it['key'].toString().split(':').last) ?? 1, box.biggest.shortestSide)
+                                              : mediaPreview(it['imageUrl'] as String?, frame: _cat == 'frame', size: box.biggest.shortestSide),
                                     ),
                                   ),
                                 ),

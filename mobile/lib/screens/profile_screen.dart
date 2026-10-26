@@ -261,7 +261,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       const SizedBox(height: 2),
       // Özel ID varsa süslü kapsül; WIP'li kişide ID de adı gibi renkli.
       IdBadge(
-        user: {'publicId': p['publicId'], 'specialId': p['specialId'], 'wipLevel': wip?['level'], 'nameColor': features?['nameColor']},
+        user: {'publicId': p['publicId'], 'specialId': p['specialId'], 'idColor': p['idColor'], 'wipLevel': wip?['level'], 'nameColor': features?['nameColor']},
         fontSize: 12.5,
         color: Pal.textDim,
       ),

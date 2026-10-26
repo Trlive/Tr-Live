@@ -148,8 +148,76 @@ class _SpecialIdPillState extends State<SpecialIdPill> with SingleTickerProvider
   }
 }
 
-/// Kullanıcı kimliği: özel ID varsa süslü kapsül, yoksa WIP'li kişide adı gibi renkli/parlayan "ID: …", değilse düz yazı.
-/// user: publicId, specialId, wipLevel, nameColor alanları okunur.
+/// Renkli ID (Görünüm'de takılır): bronz / gümüş / altın metalik, üzerinden ışık geçen ID yazısı.
+const Map<String, List<Color>> kIdColors = {
+  'bronz': [Color(0xFFFFE0C2), Color(0xFFE8955A), Color(0xFF9C5426), Color(0xFFF7B983)],
+  'gumus': [Color(0xFFFFFFFF), Color(0xFFD5DEE8), Color(0xFF8C9AAB), Color(0xFFEFF4F9)],
+  'altin': [Color(0xFFFFF8C9), Color(0xFFFFD54F), Color(0xFFDB9A00), Color(0xFFFFEE99)],
+};
+const Map<String, Color> _idGlow = {'bronz': Color(0xFFC46A2E), 'gumus': Color(0xFF9FB3C8), 'altin': Color(0xFFFFB300)};
+const Map<String, String> kIdColorNames = {'bronz': 'Bronz Renkli ID', 'gumus': 'Gümüş Renkli ID', 'altin': 'Altın Renkli ID'};
+
+class ColoredIdText extends StatefulWidget {
+  final String text;
+  final String tier;
+  final double fontSize;
+  const ColoredIdText({super.key, required this.text, required this.tier, this.fontSize = 13});
+
+  @override
+  State<ColoredIdText> createState() => _ColoredIdTextState();
+}
+
+class _ColoredIdTextState extends State<ColoredIdText> with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 2400))..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = kIdColors[widget.tier] ?? kIdColors['altin']!;
+    final glow = _idGlow[widget.tier] ?? const Color(0xFFFFB300);
+    final f = widget.fontSize;
+    final content = Row(mainAxisSize: MainAxisSize.min, children: [
+      Icon(Icons.workspace_premium, size: f + 3, color: Colors.white),
+      SizedBox(width: f * 0.2),
+      Flexible(
+        child: Text(
+          widget.text,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: f,
+            fontWeight: FontWeight.w900,
+            letterSpacing: f * 0.05,
+            color: Colors.white,
+            shadows: [Shadow(color: glow.withValues(alpha: 0.8), blurRadius: 6)],
+          ),
+        ),
+      ),
+    ]);
+    return RepaintBoundary(
+      child: AnimatedBuilder(
+        animation: _c,
+        child: content,
+        builder: (context, child) {
+          final t = Curves.easeInOut.transform(_c.value);
+          return ShaderMask(
+            blendMode: BlendMode.srcIn,
+            shaderCallback: (r) => LinearGradient(begin: Alignment(-2.0 + 2.0 * t, 0), end: Alignment(2.0 * t, 0), colors: colors, tileMode: TileMode.mirror).createShader(r),
+            child: child,
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// Kullanıcı kimliği: özel ID varsa süslü kapsül; takılı renkli ID (bronz/gümüş/altın) varsa metalik yazı; yoksa WIP'li kişide
+/// adı gibi renkli/parlayan "ID: …", değilse düz yazı. user: publicId, specialId, idColor, wipLevel, nameColor alanları okunur.
 class IdBadge extends StatelessWidget {
   final Map<String, dynamic>? user;
   final double fontSize;
@@ -165,9 +233,12 @@ class IdBadge extends StatelessWidget {
     if (id.isEmpty) return const SizedBox.shrink();
     final level = (user?['wipLevel'] as num?)?.toInt();
     final nameColor = parseColor(user?['nameColor'] as String?);
+    final String tier = user?['idColor']?.toString() ?? '';
     final Widget label = hasSpecial
         ? SpecialIdPill(id: special, height: fontSize * 1.7)
-        : (level != null && level > 0)
+        : kIdColors.containsKey(tier)
+            ? ColoredIdText(text: 'ID: $id', tier: tier, fontSize: fontSize + 0.5)
+            : (level != null && level > 0)
             ? WipNameText('ID: $id', level: level, color: nameColor, style: TextStyle(fontSize: fontSize, color: nameColor ?? color))
             : Text('ID: $id', style: TextStyle(fontSize: fontSize, color: color));
     if (!copyable) return label;

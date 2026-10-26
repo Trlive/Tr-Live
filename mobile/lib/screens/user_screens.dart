@@ -205,7 +205,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           if (p['hostBadge'] != null) HostBadgeChip(badge: p['hostBadge']?.toString(), height: 18),
         ]),
         const SizedBox(height: 4),
-        IdBadge(user: {'publicId': p['publicId'], 'specialId': p['specialId'], 'wipLevel': wip?['level'], 'nameColor': features?['nameColor']}, fontSize: 12, color: _dim),
+        IdBadge(user: {'publicId': p['publicId'], 'specialId': p['specialId'], 'idColor': p['idColor'], 'wipLevel': wip?['level'], 'nameColor': features?['nameColor']}, fontSize: 12, color: _dim),
         if (p['presence'] is Map) Padding(padding: const EdgeInsets.only(top: 2), child: PresenceLine(presence: mapOf(p['presence']), fontSize: 12)),
       ],
     ]);
