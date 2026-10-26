@@ -436,14 +436,17 @@ test('ajans/yayıncı: başvuru, kod, onay, katılma, hedef/maaş, komisyon kade
   ok(await api('POST', '/api/broadcaster/leave-agency', { token: U.e.token }));
   await sql(`DELETE FROM broadcasters WHERE user_id = $1`, [U.e.id]);
 
-  // Ayarlar: yalnızca yönetici; geçersiz kademeler reddedilir.
+  // Ayarlar: yalnızca yönetici; geçersiz kademe / maaş tablosu reddedilir.
   status(await api('PUT', '/api/admin/agency-config', { token: U.a.token, body: { settings: { cycle: 'monthly' } } }), 403);
   status(await api('PUT', '/api/admin/agency-config', { token: U.d.token, body: { salaryTiers: [{ hours: 9, diamonds: 100, salaryCents: 5 }, { hours: 1, diamonds: 200, salaryCents: 9 }] } }), 400, 'azalan kademe');
   ok(await api('PUT', '/api/admin/agency-config', { token: U.d.token, body: {
-    settings: { cycle: 'monthly', penaltyBps: 5000, requireOfficialEvents: false, minEventCount: 0, currency: 'USD' },
-    salaryTiers: [{ hours: 1, diamonds: 100, salaryCents: 1000 }, { hours: 10, diamonds: 1000, salaryCents: 5000 }],
-    commissionTiers: [{ minDiamonds: 0, bps: 2000 }, { minDiamonds: 150, bps: 3000 }],
+    settings: { cycle: 'monthly', penaltyBps: 5000, requireOfficialEvents: false, minEventCount: 0, currency: 'USD', validDayMinutes: 60, requireGameHours: false, transferWaitHours: 72 },
   } }));
+  const lv = (diamonds, hours, s1, ag) => ({ diamonds, days: null, hours, gameHours: 0, salary1Cents: s1, salary2Cents: '0', agencyCents: ag });
+  status(await api('PUT', '/api/admin/pay-levels', { token: U.a.token, body: { levels: [lv('100', 1, '1000', '300')] } }), 403);
+  status(await api('PUT', '/api/admin/pay-levels', { token: U.d.token, body: { levels: [lv('1000', 1, '1000', '300'), lv('100', 1, '1', '1')] } }), 400, 'azalan elmas kotası');
+  // Test için küçük tablo: 100 Diamond + 1 saat → 10 $ maaş, ajansa 3 $ prim; 1000 Diamond + 10 saat → 50 $.
+  ok(await api('PUT', '/api/admin/pay-levels', { token: U.d.token, body: { levels: [lv('100', 1, '1000', '300'), lv('1000', 10, '5000', '900')] } }));
 
   // Yalnızca yayıncı onayından SONRAKİ süre ve hediyeler sayılır: önceki hediyeler (Tüm Oda testi) onaydan önceye, onay 4 saat öncesine alınır.
   await sql(`UPDATE gift_transactions SET created_at = NOW() - INTERVAL '5 hours' WHERE receiver_id = $1`, [U.f.id]);
@@ -462,8 +465,7 @@ test('ajans/yayıncı: başvuru, kod, onay, katılma, hedef/maaş, komisyon kade
   assert.equal(dash.body.broadcasters[0].diamonds, '200', 'kazanca kendine hediye dahil değil');
   assert.ok(dash.body.broadcasters[0].seconds >= 7200);
   assert.equal(dash.body.totals.teamDiamonds, '200');
-  assert.equal(dash.body.totals.commissionBps, 3000, '200 ≥ 150 → ikinci kademe');
-  assert.equal(dash.body.totals.estimatedCommissionDiamonds, '60');
+  assert.equal(dash.body.totals.estimatedCommissionCents, '300', '200 ≥ 100 → 1. seviyenin ajans primi');
   assert.equal(dash.body.broadcasters[0].tier, 1);
   assert.equal(dash.body.broadcasters[0].estimatedCents, '1000');
   status(await api('GET', `/api/agencies/${agencyId}/dashboard`, { token: U.g.token }), 403, 'başkası paneli göremez');
@@ -488,8 +490,8 @@ test('ajans/yayıncı: başvuru, kod, onay, katılma, hedef/maaş, komisyon kade
   const detail = await api('GET', `/api/admin/payouts/${pid}`, { token: U.d.token });
   ok(detail);
   const hs = detail.body.hostStatements[0]; const as = detail.body.agencyStatements[0];
-  assert.equal(hs.salaryCents, '1000'); assert.equal(hs.penaltyApplied, false);
-  assert.equal(as.commissionDiamonds, '60');
+  assert.equal(hs.salaryCents, '1000'); assert.equal(hs.penaltyApplied, false); assert.equal(hs.method, 1);
+  assert.equal(as.commissionCents, '300'); assert.equal(as.ownerCents, '300');
 
   // KYC onayı olmadan yayıncı maaşı ödenemez
   status(await api('POST', `/api/admin/statements/host/${hs.id}/pay`, { token: U.d.token }), 409, 'KYC yok');
@@ -503,6 +505,16 @@ test('ajans/yayıncı: başvuru, kod, onay, katılma, hedef/maaş, komisyon kade
   assert.equal(stm.body.statements[0].status, 'paid');
   const astm = await api('GET', `/api/agencies/${agencyId}/statements`, { token: U.e.token });
   assert.equal(astm.body.agencyStatements[0].status, 'paid');
+  // Ajans Merkezi ve maaş tablosu uçları
+  const home = await api('GET', `/api/agency-center/${agencyId}/home`, { token: U.e.token });
+  ok(home);
+  assert.equal(home.body.role, 'owner');
+  status(await api('GET', `/api/agency-center/${agencyId}/home`, { token: U.g.token }), 403, 'başkası Ajansım\'ı göremez');
+  ok(await api('GET', '/api/agency-center/pay-table', { token: U.f.token }));
+  // Varsayılan 44 seviyeli tabloya dön (sonraki testler etkilenmesin).
+  const reset = await api('POST', '/api/admin/pay-levels/reset', { token: U.d.token });
+  ok(reset);
+  assert.equal(reset.body.config.payLevels.length, 44);
 });
 
 test('oda: gizli oda + davet kodu, tema, WIP özel tema, sayı tahtası, sohbet temizleme', { skip, timeout: 60000 }, async () => {

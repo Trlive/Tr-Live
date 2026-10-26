@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api.dart';
 import '../services/background_service.dart';
@@ -10,9 +9,11 @@ import '../widgets/anim_asset.dart';
 import '../widgets/app_theme.dart';
 import '../widgets/lucky_bag.dart';
 import '../widgets/common.dart';
+import '../widgets/id_badge.dart';
 import '../widgets/cp_widgets.dart';
 import 'admin_screen.dart';
 import 'agency_screen.dart';
+import 'agency_center.dart';
 import 'dealer_screen.dart';
 import 'edit_profile_screen.dart';
 import 'family_screen.dart';
@@ -217,11 +218,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (mounted) _reload();
   }
 
-  Future<void> _copyId(Map<String, dynamic> p) async {
-    await Clipboard.setData(ClipboardData(text: '${p['publicId'] ?? ''}'));
-    if (mounted) toast(context, 'ID kopyalandı.');
-  }
-
   String? _frameOf(Map<String, dynamic> p) {
     final items = p['equipped'];
     if (items is! List) return null;
@@ -261,17 +257,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
         user: {'displayName': p['displayName'], 'wipLevel': wip?['level'], 'nameColor': features?['nameColor']},
         style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
       ),
+      if (p['hostBadge'] != null) Padding(padding: const EdgeInsets.only(top: 4), child: HostBadgeChip(badge: p['hostBadge']?.toString(), height: 19)),
       const SizedBox(height: 2),
-      InkWell(
-        onTap: () => _copyId(p),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Text('ID: ${p['publicId'] ?? '-'}', style: const TextStyle(color: Pal.textDim, fontSize: 12.5)),
-            const SizedBox(width: 6),
-            const Icon(Icons.copy, size: 14, color: Pal.textDim),
-          ]),
-        ),
+      // Özel ID varsa süslü kapsül; WIP'li kişide ID de adı gibi renkli.
+      IdBadge(
+        user: {'publicId': p['publicId'], 'specialId': p['specialId'], 'wipLevel': wip?['level'], 'nameColor': features?['nameColor']},
+        fontSize: 12.5,
+        color: Pal.textDim,
       ),
     ]);
   }
@@ -386,6 +378,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _menu(Map<String, dynamic> p, bool isDealer) {
     final agencyOwned = mapOf(p['agencyOwned']);
+    final agencyAssistant = mapOf(p['agencyAssistant']);
     final broadcasterStatus = p['broadcasterStatus']?.toString();
     final isBroadcaster = broadcasterStatus == 'approved';
     Widget row(IconData icon, Color color, String title, VoidCallback onTap, {String? sub}) => ListTile(
@@ -404,7 +397,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
         // Yayıncı Merkezi: yalnızca ajans davetini kabul etmiş (onaylı) yayıncılar. Başvuru yok; davet Mesajlar'a düşer.
         if (isBroadcaster) row(Icons.podcasts, Pal.cyan, 'Yayıncı Merkezi', () => _open(const AgencyScreen(mode: 'broadcaster'))),
         // Ajans Merkezi: yalnızca ajans sahibi (ajansı yönetici açar). Ajans sahibi aynı zamanda yayıncı da olabilir.
-        if (agencyOwned != null) row(Icons.business, Pal.cyan, 'Ajans Merkezi', () => _open(const AgencyScreen(mode: 'agency')), sub: '${agencyOwned['name']} · ${const {'pending': 'İnceleniyor', 'active': 'Aktif', 'suspended': 'Askıda', 'rejected': 'Reddedildi'}[agencyOwned['status']] ?? agencyOwned['status']}'),
+        if (agencyOwned != null)
+          row(Icons.business, Pal.cyan, 'Ajans Merkezi', () => _open(const AgencyCenterScreen()),
+              sub: '${agencyOwned['name']} · ${const {'pending': 'İnceleniyor', 'active': 'Aktif', 'suspended': 'Askıda', 'rejected': 'Reddedildi'}[agencyOwned['status']] ?? agencyOwned['status']}')
+        else if (agencyAssistant != null)
+          row(Icons.support_agent, Pal.cyan, 'Ajans Merkezi', () => _open(const AgencyCenterScreen()), sub: '${agencyAssistant['agencyName']} · Asistan'),
         row(Icons.shield_outlined, const Color(0xFFFF4FA8), 'Koruyuculuğum', () => _open(MyGuardianScreen(profileBuilder: (id) => UserProfileScreen(userId: id))), sub: 'Koruyucuların ve koruduğun kişiler'),
         row(Icons.task_alt, Colors.greenAccent, 'Günlük Görevler', () => showDailySheet(context)),
         if (isDealer) row(Icons.store_mall_directory, Pal.cyan, 'Bayi paneli', () => _open(const DealerScreen())),

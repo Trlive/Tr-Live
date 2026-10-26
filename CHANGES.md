@@ -1,3 +1,30 @@
+## v2.66.0 — Ajans sistemi v2: maaş tablosu, Ajansım, asistanlar, transferler, davet merkezi, özel ID
+- Yayıncı maaşı mavi tabloya göre (44 seviye, elmas kotaları ×10: 1. seviye 200.000 💎 … 44. seviye 2,5 milyar 💎).
+  İki yöntem: Yöntem 1 = ay içinde alınan toplam elmas → "Maaş 1"; Yöntem 2 = dönem kapanırken bakiyede kalan elmas →
+  "Maaş 2" (o seviyenin elmas kotası maaşa çevrilir). Yüksek olan ödenir; yayıncı "elmaslarım çevrilmesin" diyebilir.
+  Seviyenin gün (en az 60 dk yayın yapılan gün) ve saat şartı tutmazsa şartı tutan alt seviyeye düşülür; 16+ şartsız.
+  Oyun saati bilgi olarak gösterilir (yönetimden şart yapılabilir).
+- Ajans primi yayıncı başına: yayıncının ajanstayken aldığı elmasın ulaştığı seviyenin "Ajans primi" (şart aranmaz).
+- Seviye ödülleri dönem kapanınca otomatik: VIP günü (daha yüksek üyelik bozulmaz), Bronz/Gümüş/Altın/Süper/Özel
+  Yayıncı rozeti, özel ID (göz alıcı 6 haneli numara). Profilde, oda kartında rozet ve özel ID kapsülü görünür;
+  özel ID'si olmayan WIP üyelerin ID'si de adı gibi renkli/parlayan yazılır. Aramada özel ID ile bulunur.
+- Ajans Merkezi (ajans sahibi ve asistan): Ajansım (bu ay tahmini prim, bugün/dün artışı, asistan payları), ajans
+  istatistikleri (bu ay / geçen ayın aynı dönemi / geçen ay elmas, % değişim, aktif / canlı / yeni yayıncı, düşüşte ve gün
+  riskindeki yayıncılar), aylık ajans sıralaması, görev merkezi (ajans seviyesi D→S), yayıncı istatistikleri (filtre,
+  sıralama, seviye, iki yöntem, şart eksikleri, sonraki seviyeye kalan), kazanç detayları (günlük grafik), ajans bilgisi
+  ve duyurusu (yayıncılara bildirim), maaş tablosu, hesap özetleri.
+- Asistan sistemi: en fazla 7 asistan; davet 7 gün geçerli; pay oranı (en fazla %50) ajans sahibi belirler. Asistan
+  yayıncı davet eder, istatistikleri görür; davet ettiği yayıncıların ajans priminden payını alır. Kaldırma / ayrılma geçmişi.
+- Transfer geçmişi: katılma, ajans değiştirme, ayrılma, çıkarılma kayıtları. Başka ajanstaki yayıncı davet kabul edince
+  ve yayıncı ajanstan ayrılmak isteyince mevcut ajansın onayı istenir; 72 saatte yanıt yoksa otomatik onay. Reddedilen
+  istek 7 gün içinde platform (yönetim) incelemesine taşınabilir.
+- Davet Merkezi: ajans sahibi yeni ajans önerir (yönetim onaylar), davet ettiği ajansların priminin %5'ini alır;
+  bugün/dün/bu ay tahmini, ödenen/bekleyen, davet sıralaması.
+- Yönetim: maaş tablosu düzenleyici (seviye ekle/sil, varsayılana döndür), yeni ayarlar (geçerli gün dakikası, oyun saati,
+  Yöntem 2, asistan sınırı/payı, davet primi, transfer süresi, ajans seviyeleri), dönem ayrıntısında yayıncı / ajans /
+  asistan / davet sekmeleri, arama ve filtre, not (dekont no) ile "ödendi", toplu ödendi, iptal (çevrilen elmas iade),
+  transfer ve ajans önerisi onayları, kullanıcıya özel ID ve yayıncı rozeti verme, ajans açarken davet eden ajans kodu.
+
 ## v2.65.1 — Hediyeler nesne ayırmayla yeniden üretildi (paket 8), WIP 8+ araç resimleri
 - 107 hediyenin hepsi yapay zekâ nesne ayırma (ISNet) ile yeniden üretildi: nesnenin gövdesi (araba, heykel, taç,
   karakter...) tamamen dolu ve opak; koyu lastik, cam, siyah kaporta, gölgeli yüzler artık kesik / yarı saydam değil.

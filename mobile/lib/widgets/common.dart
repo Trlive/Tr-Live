@@ -531,7 +531,7 @@ Future<Map<String, dynamic>?> pickUser(BuildContext context, {bool admin = false
                   ListTile(
                     leading: UserAvatar(user: u, radius: 16),
                     title: Text((u['displayName'] ?? '').toString()),
-                    subtitle: Text(u['publicId'] != null ? 'ID: ${u['publicId']} · @${u['username']}' : '@${u['username']}'),
+                    subtitle: Text((u['specialId'] ?? u['publicId']) != null ? 'ID: ${u['specialId'] ?? u['publicId']} · @${u['username']}' : '@${u['username']}'),
                     onTap: () => Navigator.pop(c, u),
                   ),
               ]),

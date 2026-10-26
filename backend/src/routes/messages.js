@@ -39,8 +39,10 @@ export const INBOX_ALERTS_SQL = `SELECT
     (SELECT COUNT(*)::int FROM support_messages WHERE user_id = u.id AND from_staff = TRUE AND read_at IS NULL) AS support,
     (SELECT COUNT(*)::int FROM announcements a WHERE a.kind IN ('team', 'event', 'reward')
         AND a.created_at > COALESCE((u.inbox_seen->>a.kind)::timestamptz, u.announcements_seen_at)) AS official,
-    (SELECT COUNT(*)::int FROM agency_requests q JOIN agencies ag ON ag.id = q.agency_id AND ag.status = 'active'
-        WHERE q.user_id = u.id AND q.direction = 'invite' AND q.status = 'pending') AS agency,
+    ((SELECT COUNT(*)::int FROM agency_requests q JOIN agencies ag ON ag.id = q.agency_id AND ag.status = 'active'
+        WHERE q.user_id = u.id AND q.direction = 'invite' AND q.status = 'pending')
+     + (SELECT COUNT(*)::int FROM agency_assistants s JOIN agencies ag ON ag.id = s.agency_id AND ag.status = 'active'
+        WHERE s.user_id = u.id AND s.status = 'pending' AND s.created_at > NOW() - INTERVAL '7 days')) AS agency,
     (SELECT COUNT(*)::int FROM family_messages m JOIN family_members fm ON fm.family_id = m.family_id AND fm.user_id = u.id
         WHERE m.id > fm.chat_seen_id AND m.user_id <> u.id) AS family
   FROM users u WHERE u.id = $1`;

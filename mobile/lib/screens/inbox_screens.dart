@@ -91,7 +91,7 @@ class _MessagesHomeState extends State<MessagesHome> {
         });
         return;
       }
-      if (e['type'] == 'support_message' || e['type'] == 'agency_invite' || e['type'] == 'cp_request' || e['type'] == 'notify' || e['type'] == 'family_chat') {
+      if (e['type'] == 'support_message' || e['type'] == 'agency_invite' || e['type'] == 'agency_assistant_invite' || e['type'] == 'cp_request' || e['type'] == 'notify' || e['type'] == 'family_chat') {
         _loadBadges();
         return;
       }
@@ -511,7 +511,7 @@ class _FriendRequestsScreenState extends State<FriendRequestsScreen> {
   }
 }
 
-/// Ajans davetleri: ajans sahibinin gönderdiği yayıncılık davetleri. Kabul edilince ajansın yayıncısı olunur.
+/// Ajans davetleri: yayıncılık davetleri (başka ajanstaysan transfer isteği olur) ve asistanlık davetleri.
 class AgencyInvitesScreen extends StatefulWidget {
   const AgencyInvitesScreen({super.key});
 
@@ -523,6 +523,17 @@ class _AgencyInvitesScreenState extends State<AgencyInvitesScreen> {
   int _v = 0;
   final Set<String> _busy = {};
 
+  Future<Map<String, dynamic>> _load() async {
+    final res = await Future.wait([
+      Api.get('/api/broadcaster/requests'),
+      Api.get('/api/agency-assistant/invites').catchError((_) => <String, dynamic>{'invites': []}),
+    ]);
+    return {
+      'hosts': listOf(res[0]['requests']).where((x) => x['direction'] == 'invite').toList(),
+      'assistants': listOf(res[1]['invites']),
+    };
+  }
+
   Future<void> _respond(String id, bool accept) async {
     if (_busy.contains(id)) return;
     setState(() => _busy.add(id));
@@ -530,78 +541,127 @@ class _AgencyInvitesScreenState extends State<AgencyInvitesScreen> {
     if (!mounted) return;
     setState(() => _busy.remove(id));
     if (r != null) {
-      toast(context, accept ? 'Ajansa katıldın, artık yayıncısın! 🎉' : 'Davet reddedildi.');
+      toast(
+        context,
+        !accept
+            ? 'Davet reddedildi.'
+            : r['transfer'] == 'pending'
+                ? 'Transfer isteğin gönderildi; mevcut ajansın onaylayınca yeni ajansa geçersin.'
+                : 'Ajansa katıldın, artık yayıncısın! 🎉',
+      );
+      Inbox.refresh();
       setState(() => _v++);
     }
+  }
+
+  Future<void> _respondAssistant(String id, bool accept) async {
+    if (_busy.contains(id)) return;
+    setState(() => _busy.add(id));
+    final r = await guard(context, () => Api.post('/api/agency-assistant/invites/$id/respond', {'accept': accept}));
+    if (!mounted) return;
+    setState(() => _busy.remove(id));
+    if (r != null) {
+      toast(context, accept ? 'Artık ajans asistanısın! Profil → Ajans Merkezi 🎉' : 'Davet reddedildi.');
+      Inbox.refresh();
+      setState(() => _v++);
+    }
+  }
+
+  Widget _card({required Map<String, dynamic>? agency, required String time, required String body, required String id, required bool assistant, String? extra}) {
+    final busy = _busy.contains(id);
+    final logo = Api.absoluteUrl(agency?['logoUrl'] as String?);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        gradient: LinearGradient(colors: assistant ? const [Color(0xFF1F3A55), Color(0xFF121E36)] : const [Color(0xFF3A1F55), Color(0xFF1E1236)]),
+        border: Border.all(color: assistant ? const Color(0x5560A5FA) : const Color(0x55B794F4)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          CircleAvatar(
+            radius: 22,
+            backgroundColor: assistant ? const Color(0xFF2563EB) : const Color(0xFF6D28D9),
+            backgroundImage: logo == null ? null : NetImage(logo, targetW: 132, targetH: 132),
+            child: logo == null ? Icon(assistant ? Icons.support_agent : Icons.business_center_rounded, color: Colors.white) : null,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text((agency?['name'] ?? 'Ajans').toString(), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+              Text(time, style: const TextStyle(color: Pal.textDim, fontSize: 12)),
+            ]),
+          ),
+          if (assistant)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(color: const Color(0x3360A5FA), borderRadius: BorderRadius.circular(10)),
+              child: const Text('Asistanlık', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Color(0xFF93C5FD))),
+            ),
+        ]),
+        const SizedBox(height: 10),
+        Text(body, style: const TextStyle(color: Colors.white70)),
+        if (extra != null) Padding(padding: const EdgeInsets.only(top: 6), child: Text(extra, style: const TextStyle(color: Pal.amber, fontSize: 12))),
+        const SizedBox(height: 12),
+        Row(children: [
+          Expanded(
+            child: OutlinedButton(
+              style: OutlinedButton.styleFrom(foregroundColor: Pal.textDim, shape: const StadiumBorder()),
+              onPressed: busy ? null : () => assistant ? _respondAssistant(id, false) : _respond(id, false),
+              child: const Text('Reddet'),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: Pal.green, foregroundColor: Colors.white, shape: const StadiumBorder()),
+              onPressed: busy ? null : () => assistant ? _respondAssistant(id, true) : _respond(id, true),
+              child: const Text('Kabul et'),
+            ),
+          ),
+        ]),
+      ]),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(titleSpacing: 0, title: const Text('Ajans daveti', style: TextStyle(fontWeight: FontWeight.w800))),
-      body: AsyncBody<List<Map<String, dynamic>>>(
+      body: AsyncBody<Map<String, dynamic>>(
         version: _v,
-        load: () async => listOf((await Api.get('/api/broadcaster/requests'))['requests']).where((x) => x['direction'] == 'invite').toList(),
-        builder: (context, list, reload) => list.isEmpty
-            ? const Center(child: Text('Bekleyen ajans daveti yok.', style: TextStyle(color: Pal.textDim, fontSize: 15)))
-            : RefreshIndicator(
-                onRefresh: reload,
-                child: ListView(padding: const EdgeInsets.all(12), children: [
-                  for (final r in list)
-                    Builder(builder: (context) {
-                      final a = mapOf(r['agency']);
-                      final id = r['id'].toString();
-                      final busy = _busy.contains(id);
-                      final logo = Api.absoluteUrl(a?['logoUrl'] as String?);
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 10),
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(16),
-                          gradient: const LinearGradient(colors: [Color(0xFF3A1F55), Color(0xFF1E1236)]),
-                          border: Border.all(color: const Color(0x55B794F4)),
-                        ),
-                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Row(children: [
-                            CircleAvatar(
-                              radius: 22,
-                              backgroundColor: const Color(0xFF6D28D9),
-                              backgroundImage: logo == null ? null : NetImage(logo, targetW: 132, targetH: 132),
-                              child: logo == null ? const Icon(Icons.business_center_rounded, color: Colors.white) : null,
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                                Text((a?['name'] ?? 'Ajans').toString(), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-                                Text(yohoTime(r['createdAt'], withClock: true), style: const TextStyle(color: Pal.textDim, fontSize: 12)),
-                              ]),
-                            ),
-                          ]),
-                          const SizedBox(height: 10),
-                          const Text('Seni yayıncı olarak ajansına davet ediyor. Kabul edersen bu ajansın yayıncısı olursun.', style: TextStyle(color: Colors.white70)),
-                          const SizedBox(height: 12),
-                          Row(children: [
-                            Expanded(
-                              child: OutlinedButton(
-                                style: OutlinedButton.styleFrom(foregroundColor: Pal.textDim, shape: const StadiumBorder()),
-                                onPressed: busy ? null : () => _respond(id, false),
-                                child: const Text('Reddet'),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: FilledButton(
-                                style: FilledButton.styleFrom(backgroundColor: Pal.green, foregroundColor: Colors.white, shape: const StadiumBorder()),
-                                onPressed: busy ? null : () => _respond(id, true),
-                                child: const Text('Kabul et'),
-                              ),
-                            ),
-                          ]),
-                        ]),
-                      );
-                    }),
-                ]),
-              ),
+        load: _load,
+        builder: (context, d, reload) {
+          final hosts = listOf(d['hosts']);
+          final assistants = listOf(d['assistants']);
+          if (hosts.isEmpty && assistants.isEmpty) {
+            return const Center(child: Text('Bekleyen ajans daveti yok.', style: TextStyle(color: Pal.textDim, fontSize: 15)));
+          }
+          return RefreshIndicator(
+            onRefresh: reload,
+            child: ListView(padding: const EdgeInsets.all(12), children: [
+              for (final r in hosts)
+                _card(
+                  agency: mapOf(r['agency']),
+                  time: yohoTime(r['createdAt'], withClock: true),
+                  id: r['id'].toString(),
+                  assistant: false,
+                  body: 'Seni yayıncı olarak ajansına davet ediyor. Kabul edersen bu ajansın yayıncısı olursun.',
+                  extra: r['transfer'] == true ? 'Şu an başka bir ajanstasın: kabul edersen mevcut ajansına transfer isteği gider (onay ya da süre dolunca geçersin).' : null,
+                ),
+              for (final a in assistants)
+                _card(
+                  agency: mapOf(a['agency']),
+                  time: yohoTime(a['createdAt'], withClock: true),
+                  id: a['id'].toString(),
+                  assistant: true,
+                  body: '${mapOf(a['agency'])?['ownerName'] ?? 'Ajans sahibi'} seni ajans asistanı olarak davet ediyor. Yayıncı davet edebilir, ajans istatistiklerini görebilirsin; '
+                      'davet ettiğin yayıncıların ajans priminden %${(((a['shareBps'] as num?) ?? 0) / 100).toStringAsFixed(((a['shareBps'] as num?) ?? 0) % 100 == 0 ? 0 : 1)} pay alırsın.',
+                ),
+            ]),
+          );
+        },
       ),
     );
   }

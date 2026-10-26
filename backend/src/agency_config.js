@@ -32,6 +32,24 @@ export function validateAgencyConfig(input) {
       if (typeof s.currency !== 'string' || !/^[A-Z]{3}$/.test(s.currency)) throw fail('Para birimi 3 büyük harf olmalı (örn. USD).');
       out.settings.currency = s.currency;
     }
+    // v2.66: maaş tablosu, asistan, transfer ve davet merkezi ayarları.
+    const ints = {
+      validDayMinutes: [1, 1440, 'Geçerli gün için dakika 1-1440 olmalı.'],
+      maxAssistants: [0, 50, 'Asistan sayısı 0-50 olmalı.'],
+      maxAssistantBps: [0, 10000, 'Asistan payı 0-10000 (baz puan) olmalı.'],
+      referralBps: [0, 10000, 'Davet primi 0-10000 (baz puan) olmalı.'],
+      transferWaitHours: [0, 720, 'Transfer bekleme süresi 0-720 saat olmalı.'],
+    };
+    for (const [k, [min, max, msg]] of Object.entries(ints)) {
+      if (s[k] === undefined) continue;
+      if (!Number.isInteger(s[k]) || s[k] < min || s[k] > max) throw fail(msg);
+      out.settings[k] = s[k];
+    }
+    for (const k of ['requireGameHours', 'allowBalanceMethod']) {
+      if (s[k] === undefined) continue;
+      if (typeof s[k] !== 'boolean') throw fail(`${k} true/false olmalı.`);
+      out.settings[k] = s[k];
+    }
   }
 
   if (input.salaryTiers !== undefined) {

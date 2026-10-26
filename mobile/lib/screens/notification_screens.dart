@@ -6,6 +6,7 @@ import '../services/session.dart';
 import '../services/socket_service.dart';
 import '../widgets/app_theme.dart';
 import '../widgets/common.dart';
+import 'agency_screen.dart';
 import 'family_screen.dart';
 import 'inbox_screens.dart';
 import 'user_screens.dart';
@@ -61,6 +62,10 @@ class _NotificationsPageState extends State<NotificationsPage> {
         'family_notice' || 'family_join' => Icons.groups_rounded,
         'guardian' => Icons.shield_rounded,
         'relation_request' => Icons.favorite_border_rounded,
+        'agency_notice' => Icons.campaign_rounded,
+        'agency_transfer' => Icons.swap_horiz_rounded,
+        'agency_assistant' => Icons.support_agent,
+        'agency_salary' => Icons.payments_rounded,
         _ => Icons.notifications_rounded,
       };
 
@@ -70,6 +75,9 @@ class _NotificationsPageState extends State<NotificationsPage> {
         'follow' || 'friend_request' || 'friend_accept' => Pal.amber,
         'room_open' => Pal.green,
         'family_notice' || 'family_join' => Pal.purple,
+        'agency_notice' || 'agency_assistant' => const Color(0xFF38BDF8),
+        'agency_transfer' => const Color(0xFFF472B6),
+        'agency_salary' => Pal.green,
         _ => Pal.cyan,
       };
 
@@ -88,6 +96,13 @@ class _NotificationsPageState extends State<NotificationsPage> {
       page = const FamilyScreen();
     } else if (kind.startsWith('post_')) {
       page = UserProfileScreen(userId: Session.id);
+    } else if (kind == 'agency_assistant' && d['inviteId'] != null) {
+      page = const AgencyInvitesScreen();
+    } else if (kind == 'agency_salary') {
+      page = const HostStatementsScreen();
+    } else if (kind == 'agency_notice' || kind == 'agency_transfer') {
+      // Ajans sahibi / asistan Ajans Merkezi'ni, yayıncı Yayıncı Merkezi'ni açar.
+      page = d['transferId'] != null || d['agencyId'] == null ? const AgencyCenterOrHostScreen() : const AgencyScreen(mode: 'broadcaster');
     } else if (d['userId'] != null) {
       page = UserProfileScreen(userId: d['userId'].toString());
     }

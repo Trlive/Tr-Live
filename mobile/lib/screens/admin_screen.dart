@@ -576,6 +576,65 @@ class _UsersTabState extends State<_UsersTab> {
     await _run(() => Api.post('/api/admin/users/${_user!['id']}/wip', {'level': level, 'days': days}), 'WIP verildi.');
   }
 
+  /// Özel ID: numara boş bırakılırsa göz alıcı 6 haneli numara otomatik verilir. Var olan özel ID'nin süresi uzar.
+  Future<void> _specialId() async {
+    const lId = 'Özel ID (2-7 hane; boş = otomatik)';
+    const lDays = 'Gün';
+    final f = await formDialog(context, 'Özel ID ver', [lId, lDays], initial: {lId: '', lDays: '30'});
+    if (f == null || !mounted) return;
+    final days = int.tryParse(f[lDays] ?? '');
+    final id = (f[lId] ?? '').trim();
+    if (days == null || days < 1) return toast(context, 'Gün sayı olmalı.', error: true);
+    if (id.isNotEmpty && !RegExp(r'^[1-9]\d{1,6}$').hasMatch(id)) return toast(context, 'Özel ID 2-7 haneli olmalı ve 0 ile başlamamalı.', error: true);
+    final r = await guard(context, () => Api.post('/api/admin/users/${_user!['id']}/special-id', {'days': days, if (id.isNotEmpty) 'specialId': id}));
+    if (r != null && mounted) toast(context, 'Özel ID verildi: ${r['specialId']}');
+  }
+
+  Future<void> _hostBadge() async {
+    var badge = 'altin';
+    final days = TextEditingController(text: '30');
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, setS) => AlertDialog(
+          title: const Text('Yayıncı rozeti ver'),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            DropdownButtonFormField<String>(
+              // ignore: deprecated_member_use
+              value: badge,
+              decoration: const InputDecoration(labelText: 'Rozet'),
+              items: const [
+                DropdownMenuItem(value: 'bronz', child: Text('Bronz Yayıncı')),
+                DropdownMenuItem(value: 'gumus', child: Text('Gümüş Yayıncı')),
+                DropdownMenuItem(value: 'altin', child: Text('Altın Yayıncı')),
+                DropdownMenuItem(value: 'super', child: Text('Süper Yayıncı')),
+                DropdownMenuItem(value: 'ozel', child: Text('Özel Yayıncı')),
+              ],
+              onChanged: (v) => setS(() => badge = v ?? badge),
+            ),
+            TextField(controller: days, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Gün')),
+          ]),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Vazgeç')),
+            FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Ver')),
+          ],
+        ),
+      ),
+    );
+    final d = int.tryParse(days.text.trim());
+    days.dispose();
+    if (ok != true || !mounted) return;
+    if (d == null || d < 1) return toast(context, 'Gün sayı olmalı.', error: true);
+    await _run(() => Api.post('/api/admin/users/${_user!['id']}/host-badge', {'badge': badge, 'days': d}), 'Rozet verildi.');
+  }
+
+  Future<void> _removeMark(String what) async {
+    final label = what == 'special-id' ? 'Özel ID' : 'Yayıncı rozeti';
+    if (!await confirm(context, '$label kaldırılsın mı?', action: 'Kaldır', destructive: true)) return;
+    if (!mounted) return;
+    await _run(() => Api.delete('/api/admin/users/${_user!['id']}/$what'), '$label kaldırıldı.');
+  }
+
   Future<void> _inventory() async {
     final u = _user;
     if (u == null) return;
@@ -701,6 +760,10 @@ class _UsersTabState extends State<_UsersTab> {
           if (admin) OutlinedButton.icon(onPressed: _wip, icon: const Icon(Icons.workspace_premium), label: const Text('WIP ver')),
           if (admin) OutlinedButton.icon(onPressed: () => _run(() => Api.delete('/api/admin/users/${u['id']}/wip'), 'WIP kaldırıldı.'), icon: const Icon(Icons.remove_circle_outline), label: const Text('WIP al')),
           if (admin) OutlinedButton.icon(onPressed: _inventory, icon: const Icon(Icons.inventory_2), label: const Text('Öğe ver (çerçeve, rozet…)')),
+          if (admin) OutlinedButton.icon(onPressed: _specialId, icon: const Icon(Icons.badge_outlined), label: const Text('Özel ID ver')),
+          if (admin) OutlinedButton.icon(onPressed: () => _removeMark('special-id'), icon: const Icon(Icons.remove_circle_outline), label: const Text('Özel ID al')),
+          if (admin) OutlinedButton.icon(onPressed: _hostBadge, icon: const Icon(Icons.military_tech), label: const Text('Yayıncı rozeti ver')),
+          if (admin) OutlinedButton.icon(onPressed: () => _removeMark('host-badge'), icon: const Icon(Icons.remove_circle_outline), label: const Text('Rozeti al')),
         ]),
       ],
     ]);
@@ -740,21 +803,19 @@ class _AgenciesTabState extends State<_AgenciesTab> {
       if (name != null && mounted) toast(context, 'Ajans adı en az 3 karakter olmalı.', error: true);
       return;
     }
-    await _run(() => Api.post('/api/admin/agencies', {'userId': u['id'], 'name': name.trim()}), done: '${u['displayName'] ?? u['username']} artık "${name.trim()}" ajansının sahibi.');
+    if (!mounted) return;
+    final ref = await askText(context, 'Davet eden ajans kodu (isteğe bağlı)', hint: '8 haneli ajans kodu; yoksa boş bırakın', keyboard: TextInputType.number);
+    if (!mounted) return;
+    await _run(() => Api.post('/api/admin/agencies', {'userId': u['id'], 'name': name.trim(), if (ref != null && ref.isNotEmpty) 'referrerCode': ref}),
+        done: '${u['displayName'] ?? u['username']} artık "${name.trim()}" ajansının sahibi.');
   }
 
-  Future<void> _overrideCommission(Map<String, dynamic> a) async {
-    final f = await formDialog(context, 'Ajansa özel komisyon', ['Komisyon % (boş = genel kademe tablosu)'],
-        initial: {'Komisyon % (boş = genel kademe tablosu)': a['overrideBps'] == null ? '' : '${(a['overrideBps'] as num) / 100}'});
-    if (f == null || !mounted) return;
-    final raw = (f['Komisyon % (boş = genel kademe tablosu)'] ?? '').replaceAll(',', '.');
-    int? bps;
-    if (raw.isNotEmpty) {
-      final pct = double.tryParse(raw);
-      if (pct == null || pct < 0 || pct > 100) return toast(context, '0 ile 100 arasında bir oran girin.', error: true);
-      bps = (pct * 100).round();
-    }
-    await _run(() => Api.post('/api/admin/agencies/${a['id']}/commission-override', {'bps': bps}), done: 'Güncellendi.');
+  Future<void> _setReferrer(Map<String, dynamic> a) async {
+    const label = 'Davet eden ajansın kodu (boş = kaldır)';
+    final f = await formDialog(context, 'Davet eden ajans', [label], initial: {label: (mapOf(a['referrer'])?['agencyCode'] ?? '').toString()});
+    if (f == null || !mounted) return; // Vazgeç: değişiklik yok
+    final code = (f[label] ?? '').trim();
+    await _run(() => Api.post('/api/admin/agencies/${a['id']}/referrer', {'code': code.isEmpty ? null : code}), done: code.isEmpty ? 'Davet eden ajans kaldırıldı.' : 'Güncellendi.');
   }
 
   @override
@@ -777,19 +838,20 @@ class _AgenciesTabState extends State<_AgenciesTab> {
               Card(
                 child: ListTile(
                   title: Text(a['name'].toString()),
-                  subtitle: Text('Sahip: @${a['ownerUsername']} · ${a['status']} · kod: ${a['agencyCode'] ?? '-'} · ${a['overrideBps'] == null ? 'kademeli komisyon' : '%${((a['overrideBps'] as num) / 100).toStringAsFixed(1)} özel'} · ${a['broadcasterCount']} yayıncı'),
+                  subtitle: Text('Sahip: @${a['ownerUsername']} · ${a['status']} · kod: ${a['agencyCode'] ?? '-'} · ${a['broadcasterCount']} yayıncı · ${a['assistantCount'] ?? 0} asistan'
+                      '${mapOf(a['referrer']) != null ? '\nDavet eden: ${mapOf(a['referrer'])?['name']}' : ''}'),
                   trailing: !Session.isAdmin
                       ? null
                       : PopupMenuButton<String>(
                           onSelected: (s) {
-                            if (s == 'override') _overrideCommission(a);
+                            if (s == 'referrer') _setReferrer(a);
                             if (s == 'active' || s == 'suspended' || s == 'rejected') _run(() => Api.post('/api/admin/agencies/${a['id']}/status', {'status': s}), done: 'Güncellendi.');
                           },
                           itemBuilder: (_) => const [
                             PopupMenuItem(value: 'active', child: Text('Onayla / aktif et')),
                             PopupMenuItem(value: 'suspended', child: Text('Askıya al')),
                             PopupMenuItem(value: 'rejected', child: Text('Reddet')),
-                            PopupMenuItem(value: 'override', child: Text('Ajansa özel komisyon')),
+                            PopupMenuItem(value: 'referrer', child: Text('Davet eden ajansı ayarla')),
                           ],
                         ),
                 ),

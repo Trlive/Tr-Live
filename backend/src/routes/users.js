@@ -23,7 +23,8 @@ router.get('/search', userLimit('user_search', 60, 60e3), async (req, res) => {
   const r = await query(
     `SELECT ${USER_PUBLIC_COLUMNS} FROM users u ${USER_PUBLIC_JOINS}
      WHERE u.account_status = 'active' AND u.is_hidden = FALSE AND u.id <> $3
-       AND (lower(u.username) LIKE $1 ESCAPE '\\' OR lower(u.display_name) LIKE $1 ESCAPE '\\' OR lower(u.public_id) = $2)
+       AND (lower(u.username) LIKE $1 ESCAPE '\\' OR lower(u.display_name) LIKE $1 ESCAPE '\\' OR lower(u.public_id) = $2
+            OR EXISTS (SELECT 1 FROM special_ids si WHERE si.user_id = u.id AND si.special_id = $2 AND si.expires_at > NOW()))
        AND NOT EXISTS (SELECT 1 FROM user_blocks b WHERE (b.blocker_id = $3 AND b.blocked_id = u.id) OR (b.blocker_id = u.id AND b.blocked_id = $3))
      ORDER BY COALESCE(lower(u.public_id) = $2, FALSE) DESC, (lower(u.username) = $2) DESC, u.username LIMIT 20`,
     [like(q), q.toLowerCase(), req.user.id],

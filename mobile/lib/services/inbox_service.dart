@@ -21,7 +21,7 @@ class Inbox {
       if (t == 'inbox_update') {
         // Herkese aynı anda giden duyuru: istekler 0-15 sn'ye yayılır (sunucu aynı anda yüklenmesin).
         _refreshSoon(Duration(milliseconds: 350 + _rnd.nextInt(15000)));
-      } else if (const {'dm', 'connected', 'notify', 'friend_update', 'cp_request', 'cp_update', 'support_message', 'agency_invite', 'family_chat', 'event_reward'}.contains(t)) {
+      } else if (const {'dm', 'connected', 'notify', 'friend_update', 'cp_request', 'cp_update', 'support_message', 'agency_invite', 'agency_assistant_invite', 'family_chat', 'event_reward'}.contains(t)) {
         _refreshSoon();
       }
       if (t == 'friend_update' || t == 'cp_request' || t == 'cp_update' || t == 'connected' || t == 'notify') refreshBadges();

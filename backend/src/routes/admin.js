@@ -9,9 +9,15 @@ import { prepareMp4 } from '../services/media_tools.js';
 import { applyPackZip, packStatus } from '../asset_packs.js';
 import { SERVER_VERSION } from './system.js';
 import { validateAgencyConfig } from '../agency_config.js';
-import { loadConfig, configJson, closePeriod, hostStatementJson, agencyStatementJson } from '../services/payouts.js';
+import {
+  loadConfig, configJson, closePeriod, hostStatementJson, agencyStatementJson, assistantStatementJson, referralStatementJson,
+} from '../services/payouts.js';
+import { validatePayLevels, validateGrades, DEFAULT_PAY_LEVELS, BADGES, SPECIAL_ID_RE } from '../paytable.js';
+import { grantSpecialId, grantBadge } from '../services/agency_rewards.js';
+import { applyTransfer, notifyTransferResult, logTransfer } from '../services/agency_ops.js';
+import { notifyUser } from '../services/notify.js';
 import { parsePeriodKey, previousPeriod } from '../settlement.js';
-import { ensureAgencyCode } from './agencies.js';
+import { ensureAgencyCode, TRANSFER_SELECT, transferJson } from './agencies.js';
 import { equipIfNone, announceUserChange } from '../services/users.js';
 import { EVENT_KINDS, EVENT_TITLES, isStar, validateRewards, rewardsView, defaultRules } from '../services/weekly_events.js';
 import { cleanPublic } from '../safe_text.js';
@@ -68,6 +74,7 @@ router.get('/users', async (req, res) => {
   const r = await query(
     `SELECT id, public_id, username, display_name, avatar_url, coins, diamonds, system_role, account_status, banned_until, ban_reason, chat_restricted_until
      FROM users WHERE lower(username) LIKE $1 ESCAPE '\\' OR lower(display_name) LIKE $1 ESCAPE '\\' OR id::text = $2 OR public_id = $2
+       OR id = (SELECT si.user_id FROM special_ids si WHERE si.special_id = $2 AND si.expires_at > NOW())
      ORDER BY (public_id = $2) DESC, username LIMIT 20`,
     [`%${q.replace(/[\\%_]/g, (m) => `\\${m}`)}%`, q],
   );
@@ -839,46 +846,83 @@ router.post('/dealers/:dealerId/sell', requireSuperAdmin, async (req, res) => {
 router.get('/agencies', async (req, res) => {
   const status = req.query.status ? oneOf(String(req.query.status), ['pending', 'active', 'suspended', 'rejected'], 'Durum') : null;
   const r = await query(
-    `SELECT a.*, u.username AS owner_username, (SELECT COUNT(*)::int FROM broadcasters b WHERE b.agency_id = a.id) AS broadcaster_count
-     FROM agencies a JOIN users u ON u.id = a.owner_id WHERE ($1::text IS NULL OR a.status = $1) ORDER BY a.created_at DESC LIMIT 200`,
+    `SELECT a.*, u.username AS owner_username, ra.name AS referrer_name, ra.agency_code AS referrer_code,
+       (SELECT COUNT(*)::int FROM broadcasters b WHERE b.agency_id = a.id) AS broadcaster_count,
+       (SELECT COUNT(*)::int FROM agency_assistants s WHERE s.agency_id = a.id AND s.status = 'active') AS assistant_count
+     FROM agencies a JOIN users u ON u.id = a.owner_id LEFT JOIN agencies ra ON ra.id = a.referrer_agency_id
+     WHERE ($1::text IS NULL OR a.status = $1) ORDER BY a.created_at DESC LIMIT 200`,
     [status],
   );
   res.json({ agencies: r.rows.map((a) => ({
     id: a.id, name: a.name, ownerId: a.owner_id, ownerUsername: a.owner_username, status: a.status,
     commissionBps: a.commission_bps, overrideBps: a.commission_override_bps, agencyCode: a.agency_code, broadcasterCount: a.broadcaster_count, createdAt: a.created_at,
+    assistantCount: a.assistant_count, referrer: a.referrer_agency_id ? { id: a.referrer_agency_id, name: a.referrer_name, agencyCode: a.referrer_code } : null,
   })) });
 });
+
+async function agencyIdByCode(code, run = query) {
+  const c = String(code ?? '').trim();
+  if (!/^\d{8}$/.test(c)) throw fail('Davet eden ajans kodu 8 haneli olmalı.');
+  const a = (await run(`SELECT id FROM agencies WHERE agency_code = $1 AND status = 'active'`, [c])).rows[0];
+  if (!a) throw fail('Bu koda ait aktif ajans bulunamadı.', 404);
+  return a.id;
+}
+
+/** Ajans açar (transaction içinde): kişi ajans sahibi olur, ajans doğrudan aktiftir. */
+async function createAgency(c, { userId, name, description = null, adminId, referrerAgencyId = null }) {
+  const u = (await c.query(`SELECT id, account_status FROM users WHERE id = $1 FOR UPDATE`, [userId])).rows[0];
+  if (!u || u.account_status !== 'active') throw fail('Kullanıcı bulunamadı veya hesabı aktif değil.', 404);
+  if ((await c.query(`SELECT 1 FROM agencies WHERE owner_id = $1 AND status <> 'rejected'`, [userId])).rowCount) {
+    throw fail('Bu kullanıcının zaten bir ajansı var.', 409);
+  }
+  // Ajans sahibi aynı anda başka ajansın asistanı olamaz.
+  await c.query(`UPDATE agency_assistants SET status = 'resigned', ended_at = NOW() WHERE user_id = $1 AND status IN ('active','pending')`, [userId]);
+  const row = (await c.query(
+    `INSERT INTO agencies(name, owner_id, description, status, approved_by, approved_at, referrer_agency_id) VALUES($1,$2,$3,'active',$4,NOW(),$5) RETURNING *`,
+    [name, userId, description, adminId, referrerAgencyId],
+  )).rows[0];
+  await c.query(
+    `INSERT INTO financial_audit_logs(admin_id, user_id, action, reference_type, reference_id, metadata) VALUES($1,$2,'agency_create','agency',$3,$4)`,
+    [adminId, userId, row.id, JSON.stringify({ name, referrerAgencyId })],
+  );
+  return row;
+}
+
+const agencyDupError = (error) => {
+  if (error.code === '23505') return fail(error.constraint === 'idx_agencies_owner' ? 'Bu kullanıcının zaten bir ajansı var.' : 'Bu ajans adı kullanılıyor.', 409);
+  return error;
+};
 
 // Yönetici bir kullanıcıyı (ID / kullanıcı adı ile seçilir) ajans sahibi yapar; ajans doğrudan aktif açılır.
 router.post('/agencies', requireSuperAdmin, async (req, res) => {
   const userId = uuid(req.body?.userId, 'Kullanıcı');
   const name = cleanPublic(text(req.body?.name, 'Ajans adı', { min: 3, max: 60, required: true }), 'Ajans adı');
   const description = text(req.body?.description, 'Açıklama', { max: 500 });
+  const referrerAgencyId = req.body?.referrerCode ? await agencyIdByCode(req.body.referrerCode) : null;
   let agency;
   try {
-    agency = await tx(async (c) => {
-      const u = (await c.query(`SELECT id, account_status FROM users WHERE id = $1 FOR UPDATE`, [userId])).rows[0];
-      if (!u || u.account_status !== 'active') throw fail('Kullanıcı bulunamadı veya hesabı aktif değil.', 404);
-      if ((await c.query(`SELECT 1 FROM agencies WHERE owner_id = $1 AND status <> 'rejected'`, [userId])).rowCount) {
-        throw fail('Bu kullanıcının zaten bir ajansı var.', 409);
-      }
-      const row = (await c.query(
-        `INSERT INTO agencies(name, owner_id, description, status, approved_by, approved_at) VALUES($1,$2,$3,'active',$4,NOW()) RETURNING *`,
-        [name, userId, description, req.user.id],
-      )).rows[0];
-      await c.query(
-        `INSERT INTO financial_audit_logs(admin_id, user_id, action, reference_type, reference_id, metadata) VALUES($1,$2,'agency_create','agency',$3,$4)`,
-        [req.user.id, userId, row.id, JSON.stringify({ name })],
-      );
-      return row;
-    });
+    agency = await tx((c) => createAgency(c, { userId, name, description, adminId: req.user.id, referrerAgencyId }));
   } catch (error) {
-    if (error.code === '23505') throw fail(error.constraint === 'idx_agencies_owner' ? 'Bu kullanıcının zaten bir ajansı var.' : 'Bu ajans adı kullanılıyor.', 409);
-    throw error;
+    throw agencyDupError(error);
   }
   const code = await ensureAgencyCode(agency.id);
   hub.sendToUser(userId, { type: 'agency_created', agency: { id: agency.id, name: agency.name } });
   res.status(201).json({ agency: { id: agency.id, name: agency.name, status: agency.status, agencyCode: code } });
+});
+
+// Davet eden ajans (Davet Merkezi primi) sonradan ayarlanır / kaldırılır.
+router.post('/agencies/:agencyId/referrer', requireSuperAdmin, async (req, res) => {
+  const agencyId = uuid(req.params.agencyId, 'Ajans');
+  const ref = req.body?.code ? await agencyIdByCode(req.body.code) : null;
+  if (ref === agencyId) throw fail('Ajans kendi kendini davet etmiş olamaz.');
+  if (ref && (await query(`SELECT 1 FROM agencies WHERE id = $1 AND referrer_agency_id = $2`, [ref, agencyId])).rowCount) {
+    throw fail('İki ajans birbirini davet etmiş olamaz.');
+  }
+  const r = await query(`UPDATE agencies SET referrer_agency_id = $2 WHERE id = $1 RETURNING id`, [agencyId, ref]);
+  if (!r.rowCount) throw fail('Ajans bulunamadı.', 404);
+  await query(`INSERT INTO financial_audit_logs(admin_id, action, reference_type, reference_id, metadata) VALUES($1,'agency_referrer','agency',$2,$3)`,
+    [req.user.id, agencyId, JSON.stringify({ referrerAgencyId: ref })]);
+  res.json({ ok: true });
 });
 
 // Komisyon para etkisi taşıdığı için yalnızca yönetici.
@@ -923,35 +967,57 @@ router.get('/broadcasters', async (req, res) => {
 router.post('/broadcasters/:userId/status', async (req, res) => {
   const userId = uuid(req.params.userId, 'Kullanıcı');
   const status = oneOf(req.body?.status, ['approved', 'rejected', 'suspended'], 'Durum');
-  const r = await query(
-    `UPDATE broadcasters SET status = $2::text,
-       approved_by = CASE WHEN $2::text = 'approved' THEN $3::uuid ELSE approved_by END,
-       approved_at = CASE WHEN $2::text = 'approved' THEN NOW() ELSE approved_at END,
-       agency_id = CASE WHEN $2::text IN ('rejected','suspended') THEN NULL ELSE agency_id END
-     WHERE user_id = $1 RETURNING user_id, status`,
-    [userId, status, req.user.id],
-  );
-  if (!r.rowCount) throw fail('Yayıncı başvurusu bulunamadı.', 404);
-  await query(
-    `INSERT INTO financial_audit_logs(admin_id, user_id, action, reference_type, metadata) VALUES($1,$2,'broadcaster_status','broadcaster',$3)`,
-    [req.user.id, userId, JSON.stringify({ status })],
-  );
-  res.json({ broadcaster: r.rows[0] });
+  const row = await tx(async (c) => {
+    const prev = (await c.query(`SELECT agency_id FROM broadcasters WHERE user_id = $1 FOR UPDATE`, [userId])).rows[0];
+    if (!prev) throw fail('Yayıncı başvurusu bulunamadı.', 404);
+    const r = await c.query(
+      `UPDATE broadcasters SET status = $2::text,
+         approved_by = CASE WHEN $2::text = 'approved' THEN $3::uuid ELSE approved_by END,
+         approved_at = CASE WHEN $2::text = 'approved' THEN NOW() ELSE approved_at END,
+         agency_id = CASE WHEN $2::text IN ('rejected','suspended') THEN NULL ELSE agency_id END,
+         invited_by = CASE WHEN $2::text IN ('rejected','suspended') THEN NULL ELSE invited_by END
+       WHERE user_id = $1 RETURNING user_id, status, agency_id`,
+      [userId, status, req.user.id],
+    );
+    if (prev.agency_id && !r.rows[0].agency_id) {
+      await c.query(
+        `UPDATE agency_transfers SET status = 'cancelled', decided_at = NOW(), decided_by = $2, note = 'Platform: yayıncılık durumu değişti.'
+         WHERE user_id = $1 AND status IN ('pending_source','pending_platform')`, [userId, req.user.id],
+      );
+      await logTransfer(c, { userId, from: prev.agency_id, kind: 'admin', decidedBy: req.user.id, note: `Yayıncılık ${status === 'suspended' ? 'askıya alındı' : 'reddedildi'}` });
+    }
+    await c.query(
+      `INSERT INTO financial_audit_logs(admin_id, user_id, action, reference_type, metadata) VALUES($1,$2,'broadcaster_status','broadcaster',$3)`,
+      [req.user.id, userId, JSON.stringify({ status })],
+    );
+    return r.rows[0];
+  });
+  res.json({ broadcaster: { user_id: row.user_id, status: row.status } });
 });
 
-// ---------------- Ajans ayarları, etkinlikler, dönem kapatma, KYC ----------------
+// ---------------- Ajans ayarları ve maaş tablosu ----------------
 router.get('/agency-config', async (req, res) => {
   res.json({ config: configJson(await loadConfig()) });
 });
 
+const SETTING_COLUMNS = {
+  cycle: 'cycle', penaltyBps: 'penalty_bps', requireOfficialEvents: 'require_official_events', minEventCount: 'min_event_count', currency: 'currency',
+  validDayMinutes: 'valid_day_minutes', requireGameHours: 'require_game_hours', allowBalanceMethod: 'allow_balance_method',
+  maxAssistants: 'max_assistants', maxAssistantBps: 'max_assistant_bps', referralBps: 'referral_bps', transferWaitHours: 'transfer_wait_hours',
+};
+
 router.put('/agency-config', requireSuperAdmin, async (req, res) => {
   const v = validateAgencyConfig(req.body);
+  const grades = req.body?.agencyGrades !== undefined ? validateGrades(req.body.agencyGrades) : null;
   await tx(async (c) => {
     if (v.settings) {
-      const m = { cycle: 'cycle', penaltyBps: 'penalty_bps', requireOfficialEvents: 'require_official_events', minEventCount: 'min_event_count', currency: 'currency' };
-      for (const [k, col] of Object.entries(m)) {
+      for (const [k, col] of Object.entries(SETTING_COLUMNS)) {
         if (v.settings[k] !== undefined) await c.query(`UPDATE agency_settings SET ${col} = $1, updated_at = NOW() WHERE id = 1`, [v.settings[k]]);
       }
+    }
+    if (grades) {
+      await c.query(`UPDATE agency_settings SET agency_grades = $1, updated_at = NOW() WHERE id = 1`,
+        [JSON.stringify(grades.map((g) => ({ name: g.name, min: g.min.toString() })))]);
     }
     if (v.salaryTiers) {
       await c.query(`DELETE FROM host_salary_tiers`);
@@ -965,7 +1031,38 @@ router.put('/agency-config', requireSuperAdmin, async (req, res) => {
         await c.query(`INSERT INTO agency_commission_tiers(level, min_team_diamonds, commission_bps) VALUES($1,$2,$3)`, [t.level, t.minDiamonds.toString(), t.bps]);
       }
     }
-    await c.query(`INSERT INTO financial_audit_logs(admin_id, action, reference_type, metadata) VALUES($1,'agency_config_update','agency_config',$2)`, [req.user.id, JSON.stringify(Object.keys(v))]);
+    await c.query(`INSERT INTO financial_audit_logs(admin_id, action, reference_type, metadata) VALUES($1,'agency_config_update','agency_config',$2)`,
+      [req.user.id, JSON.stringify([...Object.keys(v), ...(grades ? ['agencyGrades'] : [])])]);
+  });
+  res.json({ config: configJson(await loadConfig()) });
+});
+
+async function savePayLevels(c, levels) {
+  await c.query(`DELETE FROM host_pay_levels`);
+  for (const l of levels) {
+    await c.query(
+      `INSERT INTO host_pay_levels(level, required_days, required_hours, game_hours, diamonds, salary1_cents, salary2_cents, agency_cents,
+         vip_level, vip_days, badge, special_id_days, special_id_count) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+      [l.level, l.days, l.hours, l.gameHours, l.diamonds.toString(), l.salary1Cents.toString(), l.salary2Cents.toString(), l.agencyCents.toString(),
+        l.vipLevel, l.vipDays, l.badge, l.specialIdDays, l.specialIdCount],
+    );
+  }
+}
+
+router.put('/pay-levels', requireSuperAdmin, async (req, res) => {
+  const levels = validatePayLevels(req.body?.levels);
+  await tx(async (c) => {
+    await savePayLevels(c, levels);
+    await c.query(`INSERT INTO financial_audit_logs(admin_id, action, reference_type, metadata) VALUES($1,'pay_levels_update','agency_config',$2)`,
+      [req.user.id, JSON.stringify({ levels: levels.length })]);
+  });
+  res.json({ config: configJson(await loadConfig()) });
+});
+
+router.post('/pay-levels/reset', requireSuperAdmin, async (req, res) => {
+  await tx(async (c) => {
+    await savePayLevels(c, DEFAULT_PAY_LEVELS);
+    await c.query(`INSERT INTO financial_audit_logs(admin_id, action, reference_type, metadata) VALUES($1,'pay_levels_reset','agency_config','{}')`, [req.user.id]);
   });
   res.json({ config: configJson(await loadConfig()) });
 });
@@ -990,6 +1087,148 @@ router.post('/broadcasters/:userId/contract', requireSuperAdmin, async (req, res
   res.json({ ok: true, tier });
 });
 
+// ---------------- Transferler (platform incelemesi) ----------------
+router.get('/agency-transfers', async (req, res) => {
+  const st = String(req.query.status ?? 'pending');
+  const list = st === 'pending' ? ['pending_platform', 'pending_source'] : st === 'all' ? null : [oneOf(st, ['pending_platform', 'pending_source', 'approved', 'rejected', 'cancelled'], 'Durum')];
+  const r = await query(
+    `${TRANSFER_SELECT} WHERE ($1::text[] IS NULL OR t.status = ANY($1::text[]))
+     ORDER BY (t.status = 'pending_platform') DESC, t.created_at DESC LIMIT 200`, [list],
+  );
+  res.json({ transfers: r.rows.map(transferJson) });
+});
+
+router.post('/agency-transfers/:id/decide', requireSuperAdmin, async (req, res) => {
+  const id = uuid(req.params.id, 'Transfer');
+  const approve = req.body?.approve === true;
+  const note = text(req.body?.note, 'Not', { max: 200 });
+  const r = await tx(async (c) => {
+    const t = (await c.query(`SELECT * FROM agency_transfers WHERE id = $1 FOR UPDATE`, [id])).rows[0];
+    if (!t || !['pending_platform', 'pending_source'].includes(t.status)) throw fail('Bekleyen transfer bulunamadı.', 404);
+    if (approve) return { t, res: await applyTransfer(c, t, req.user.id) };
+    const n = `Platform: ${note ?? 'reddedildi'}`;
+    await c.query(`UPDATE agency_transfers SET status = 'rejected', decided_at = NOW(), decided_by = $2, note = $3 WHERE id = $1`, [id, req.user.id, n]);
+    return { t, res: { ok: false, note: n } };
+  });
+  await query(`INSERT INTO financial_audit_logs(admin_id, user_id, action, reference_type, reference_id, metadata) VALUES($1,$2,'agency_transfer_decide','agency_transfer',$3,$4)`,
+    [req.user.id, r.t.user_id, id, JSON.stringify({ approve, applied: r.res.ok })]);
+  await notifyTransferResult(r.t, r.res.ok, r.res.note);
+  res.json({ ok: true, applied: r.res.ok, note: r.res.note ?? null });
+});
+
+// ---------------- Ajans başvuruları (Davet Merkezi önerileri) ----------------
+router.get('/agency-applications', async (req, res) => {
+  const st = String(req.query.status ?? 'pending');
+  const r = await query(
+    `SELECT x.*, u.username, u.display_name, u.public_id, ra.name AS referrer_name, cu.username AS created_by_username
+     FROM agency_applications x JOIN users u ON u.id = x.user_id LEFT JOIN agencies ra ON ra.id = x.referrer_agency_id
+     LEFT JOIN users cu ON cu.id = x.created_by
+     WHERE ($1 = 'all' OR x.status = $1) ORDER BY x.created_at DESC LIMIT 100`, [st],
+  );
+  res.json({ applications: r.rows.map((x) => ({
+    id: x.id, name: x.name, note: x.note, status: x.status, createdAt: x.created_at, decidedAt: x.decided_at,
+    user: { id: x.user_id, username: x.username, displayName: x.display_name, publicId: x.public_id },
+    referrer: x.referrer_agency_id ? { id: x.referrer_agency_id, name: x.referrer_name } : null, createdBy: x.created_by_username ?? null,
+  })) });
+});
+
+router.post('/agency-applications/:id/decide', requireSuperAdmin, async (req, res) => {
+  const id = uuid(req.params.id, 'Başvuru');
+  const approve = req.body?.approve === true;
+  const rename = req.body?.name ? cleanPublic(text(req.body.name, 'Ajans adı', { min: 3, max: 60 }), 'Ajans adı') : null;
+  let out;
+  try {
+    out = await tx(async (c) => {
+      const x = (await c.query(`SELECT * FROM agency_applications WHERE id = $1 AND status = 'pending' FOR UPDATE`, [id])).rows[0];
+      if (!x) throw fail('Bekleyen başvuru bulunamadı.', 404);
+      if (!approve) {
+        await c.query(`UPDATE agency_applications SET status = 'rejected', decided_at = NOW(), decided_by = $2 WHERE id = $1`, [id, req.user.id]);
+        return { x, agency: null };
+      }
+      const ref = x.referrer_agency_id
+        ? (await c.query(`SELECT id FROM agencies WHERE id = $1 AND status = 'active'`, [x.referrer_agency_id])).rows[0]?.id ?? null : null;
+      const agency = await createAgency(c, { userId: x.user_id, name: rename ?? x.name, adminId: req.user.id, referrerAgencyId: ref });
+      await c.query(`UPDATE agency_applications SET status = 'approved', decided_at = NOW(), decided_by = $2, agency_id = $3 WHERE id = $1`, [id, req.user.id, agency.id]);
+      return { x, agency };
+    });
+  } catch (error) {
+    throw agencyDupError(error);
+  }
+  if (out.agency) {
+    await ensureAgencyCode(out.agency.id);
+    hub.sendToUser(out.x.user_id, { type: 'agency_created', agency: { id: out.agency.id, name: out.agency.name } });
+  }
+  if (out.x.referrer_agency_id) {
+    const ref = (await query(`SELECT owner_id FROM agencies WHERE id = $1`, [out.x.referrer_agency_id])).rows[0];
+    if (ref) {
+      notifyUser(ref.owner_id, 'agency_notice', out.agency ? 'Ajans öneriniz onaylandı' : 'Ajans öneriniz onaylanmadı',
+        out.agency ? `"${out.agency.name}" ajansı açıldı. Davet Merkezi'nde takip edebilirsiniz.` : `"${out.x.name}" ajans öneriniz onaylanmadı.`, {});
+    }
+  }
+  res.json({ ok: true, agencyId: out.agency?.id ?? null });
+});
+
+// ---------------- Özel ID ve yayıncı rozeti ----------------
+router.get('/users/:userId/marks', async (req, res) => {
+  const userId = uuid(req.params.userId, 'Kullanıcı');
+  const r = (await query(
+    `SELECT (SELECT row_to_json(s) FROM (SELECT special_id, expires_at, source FROM special_ids WHERE user_id = $1) s) AS special,
+            (SELECT row_to_json(b) FROM (SELECT badge, expires_at, source FROM host_badges WHERE user_id = $1) b) AS badge`, [userId],
+  )).rows[0];
+  res.json({ specialId: r.special, hostBadge: r.badge });
+});
+
+router.post('/users/:userId/special-id', requireSuperAdmin, async (req, res) => {
+  const userId = uuid(req.params.userId, 'Kullanıcı');
+  const days = positiveInt(req.body?.days, 'Gün', 3650);
+  const raw = req.body?.specialId === undefined || req.body?.specialId === null ? '' : String(req.body.specialId).trim();
+  if (raw && !SPECIAL_ID_RE.test(raw)) throw fail('Özel ID 2-7 haneli olmalı ve 0 ile başlamamalı.');
+  await assertUser(userId);
+  if (raw && (await query(`SELECT 1 FROM users WHERE public_id = $1 AND id <> $2`, [raw, userId])).rowCount) throw fail('Bu numara bir kullanıcının ID\'si.', 409);
+  const r = await tx(async (c) => {
+    const x = await grantSpecialId(c, userId, days, { value: raw || null, source: 'admin' });
+    if (!x) throw fail('Özel ID üretilemedi, tekrar deneyin.', 503);
+    await c.query(`INSERT INTO financial_audit_logs(admin_id, user_id, action, reference_type, metadata) VALUES($1,$2,'special_id_grant','user',$3)`,
+      [req.user.id, userId, JSON.stringify({ specialId: x.special_id, days })]);
+    return x;
+  });
+  res.json({ ok: true, specialId: r.special_id, expiresAt: r.expires_at });
+  announceUserChange(userId);
+});
+
+router.delete('/users/:userId/special-id', requireSuperAdmin, async (req, res) => {
+  const userId = uuid(req.params.userId, 'Kullanıcı');
+  await query(`DELETE FROM special_ids WHERE user_id = $1`, [userId]);
+  await query(`INSERT INTO financial_audit_logs(admin_id, user_id, action, reference_type) VALUES($1,$2,'special_id_revoke','user')`, [req.user.id, userId]);
+  res.json({ ok: true });
+  announceUserChange(userId);
+});
+
+router.post('/users/:userId/host-badge', requireSuperAdmin, async (req, res) => {
+  const userId = uuid(req.params.userId, 'Kullanıcı');
+  const badge = oneOf(req.body?.badge, BADGES, 'Rozet');
+  const days = positiveInt(req.body?.days, 'Gün', 3650);
+  await assertUser(userId);
+  await query(
+    `INSERT INTO host_badges(user_id, badge, expires_at, source) VALUES($1,$2,NOW() + ($3::int * INTERVAL '1 day'),'admin')
+     ON CONFLICT (user_id) DO UPDATE SET badge = EXCLUDED.badge, expires_at = EXCLUDED.expires_at, source = 'admin', updated_at = NOW()`,
+    [userId, badge, days],
+  );
+  await query(`INSERT INTO financial_audit_logs(admin_id, user_id, action, reference_type, metadata) VALUES($1,$2,'host_badge_grant','user',$3)`,
+    [req.user.id, userId, JSON.stringify({ badge, days })]);
+  res.json({ ok: true });
+  announceUserChange(userId);
+});
+
+router.delete('/users/:userId/host-badge', requireSuperAdmin, async (req, res) => {
+  const userId = uuid(req.params.userId, 'Kullanıcı');
+  await query(`DELETE FROM host_badges WHERE user_id = $1`, [userId]);
+  await query(`INSERT INTO financial_audit_logs(admin_id, user_id, action, reference_type) VALUES($1,$2,'host_badge_revoke','user')`, [req.user.id, userId]);
+  res.json({ ok: true });
+  announceUserChange(userId);
+});
+
+// ---------------- Resmi etkinlikler, dönem kapatma, KYC ----------------
 router.post('/events', async (req, res) => {
   const title = text(req.body?.title, 'Başlık', { min: 3, max: 120, required: true });
   const startsAt = new Date(req.body?.startsAt);
@@ -1025,22 +1264,40 @@ router.post('/payouts/close', requireSuperAdmin, async (req, res) => {
   if (!key) key = previousPeriod(cfg.settings.cycle).key;
   try { parsePeriodKey(key); } catch (e) { throw fail(e.message); }
   const out = await closePeriod({ adminId: req.user.id, periodKey: key, force: req.body?.force === true });
-  res.status(201).json(out);
+  const { rewardedUserIds, paidHosts, currency, ...rest } = out;
+  res.status(201).json(rest);
+  // Ödül alanların görünümü odalarda yenilenir; maaşı oluşan yayıncılara bildirim gider (hata asıl işlemi bozmaz).
+  for (const id of rewardedUserIds) announceUserChange(id);
+  for (const h of paidHosts) {
+    const amount = `${(Number(BigInt(h.cents)) / 100).toFixed(2)} ${currency}`;
+    notifyUser(h.userId, 'agency_salary', 'Maaş özetin hazır', `${out.periodKey} dönemi maaşın hesaplandı: ${amount}. Yayıncı Merkezi → Maaş özetlerim.`, {});
+  }
 });
 
 router.get('/payouts', async (req, res) => {
   const r = await query(
     `SELECT p.id, p.period_key, p.cycle, p.starts_at, p.ends_at, p.closed_at,
        (SELECT COUNT(*)::int FROM host_statements h WHERE h.period_id = p.id) AS hosts,
-       (SELECT COUNT(*)::int FROM host_statements h WHERE h.period_id = p.id AND h.status = 'pending') AS pending_hosts,
-       (SELECT COALESCE(SUM(salary_cents),0) FROM host_statements h WHERE h.period_id = p.id) AS total_salary_cents,
+       (SELECT COUNT(*)::int FROM host_statements h WHERE h.period_id = p.id AND h.status = 'pending' AND h.salary_cents > 0) AS pending_hosts,
+       (SELECT COALESCE(SUM(salary_cents),0) FROM host_statements h WHERE h.period_id = p.id AND h.status <> 'void') AS total_salary_cents,
+       (SELECT COALESCE(SUM(salary_cents),0) FROM host_statements h WHERE h.period_id = p.id AND h.status = 'paid') AS paid_salary_cents,
        (SELECT COUNT(*)::int FROM agency_statements a WHERE a.period_id = p.id) AS agencies,
-       (SELECT COUNT(*)::int FROM agency_statements a WHERE a.period_id = p.id AND a.status = 'pending') AS pending_agencies
+       (SELECT COUNT(*)::int FROM agency_statements a WHERE a.period_id = p.id AND a.status = 'pending') AS pending_agencies,
+       (SELECT COALESCE(SUM(owner_cents),0) FROM agency_statements a WHERE a.period_id = p.id AND a.status <> 'void') AS total_owner_cents,
+       (SELECT COUNT(*)::int FROM assistant_statements s WHERE s.period_id = p.id) AS assistants,
+       (SELECT COUNT(*)::int FROM assistant_statements s WHERE s.period_id = p.id AND s.status = 'pending') AS pending_assistants,
+       (SELECT COALESCE(SUM(amount_cents),0) FROM assistant_statements s WHERE s.period_id = p.id AND s.status <> 'void') AS total_assistant_cents,
+       (SELECT COUNT(*)::int FROM referral_statements s WHERE s.period_id = p.id) AS referrals,
+       (SELECT COUNT(*)::int FROM referral_statements s WHERE s.period_id = p.id AND s.status = 'pending') AS pending_referrals,
+       (SELECT COALESCE(SUM(amount_cents),0) FROM referral_statements s WHERE s.period_id = p.id AND s.status <> 'void') AS total_referral_cents
      FROM payout_periods p ORDER BY p.starts_at DESC LIMIT 52`,
   );
   res.json({ periods: r.rows.map((p) => ({
     id: p.id, periodKey: p.period_key, cycle: p.cycle, startsAt: p.starts_at, endsAt: p.ends_at, closedAt: p.closed_at,
-    hosts: p.hosts, pendingHosts: p.pending_hosts, totalSalaryCents: String(p.total_salary_cents), agencies: p.agencies, pendingAgencies: p.pending_agencies,
+    hosts: p.hosts, pendingHosts: p.pending_hosts, totalSalaryCents: String(p.total_salary_cents), paidSalaryCents: String(p.paid_salary_cents),
+    agencies: p.agencies, pendingAgencies: p.pending_agencies, totalOwnerCents: String(p.total_owner_cents),
+    assistants: p.assistants, pendingAssistants: p.pending_assistants, totalAssistantCents: String(p.total_assistant_cents),
+    referrals: p.referrals, pendingReferrals: p.pending_referrals, totalReferralCents: String(p.total_referral_cents),
   })) });
 });
 
@@ -1048,48 +1305,125 @@ router.get('/payouts/:id', async (req, res) => {
   const id = uuid(req.params.id, 'Dönem');
   const p = (await query(`SELECT * FROM payout_periods WHERE id = $1`, [id])).rows[0];
   if (!p) throw fail('Dönem bulunamadı.', 404);
+  const args = [id, p.period_key, p.starts_at, p.ends_at];
   const hosts = (await query(
-    `SELECT h.*, $2::text AS period_key, $3::timestamptz AS starts_at, $4::timestamptz AS ends_at, u.username, u.kyc_status
-     FROM host_statements h JOIN users u ON u.id = h.user_id WHERE h.period_id = $1 ORDER BY h.salary_cents DESC`,
-    [id, p.period_key, p.starts_at, p.ends_at],
+    `SELECT h.*, $2::text AS period_key, $3::timestamptz AS starts_at, $4::timestamptz AS ends_at, u.username, u.display_name, u.public_id, u.kyc_status,
+       a.name AS agency_name
+     FROM host_statements h JOIN users u ON u.id = h.user_id LEFT JOIN agencies a ON a.id = h.agency_id
+     WHERE h.period_id = $1 ORDER BY h.salary_cents DESC, h.diamonds DESC`, args,
   )).rows;
   const agencies = (await query(
-    `SELECT s.*, $2::text AS period_key, $3::timestamptz AS starts_at, $4::timestamptz AS ends_at, a.name AS agency_name
-     FROM agency_statements s JOIN agencies a ON a.id = s.agency_id WHERE s.period_id = $1 ORDER BY s.commission_diamonds DESC`,
-    [id, p.period_key, p.starts_at, p.ends_at],
+    `SELECT s.*, $2::text AS period_key, $3::timestamptz AS starts_at, $4::timestamptz AS ends_at, a.name AS agency_name,
+       u.username AS owner_username, u.kyc_status AS owner_kyc
+     FROM agency_statements s JOIN agencies a ON a.id = s.agency_id JOIN users u ON u.id = a.owner_id
+     WHERE s.period_id = $1 ORDER BY s.commission_cents DESC, s.commission_diamonds DESC`, args,
+  )).rows;
+  const assistants = (await query(
+    `SELECT s.*, $2::text AS period_key, $3::timestamptz AS starts_at, $4::timestamptz AS ends_at, a.name AS agency_name, u.username, u.display_name, u.kyc_status
+     FROM assistant_statements s JOIN agencies a ON a.id = s.agency_id JOIN users u ON u.id = s.user_id
+     WHERE s.period_id = $1 ORDER BY s.amount_cents DESC`, args,
+  )).rows;
+  const referrals = (await query(
+    `SELECT s.*, $2::text AS period_key, $3::timestamptz AS starts_at, $4::timestamptz AS ends_at, a.name AS agency_name, ia.name AS invited_agency_name
+     FROM referral_statements s JOIN agencies a ON a.id = s.agency_id JOIN agencies ia ON ia.id = s.invited_agency_id
+     WHERE s.period_id = $1 ORDER BY s.amount_cents DESC`, args,
   )).rows;
   res.json({
-    period: { id: p.id, periodKey: p.period_key, cycle: p.cycle, startsAt: p.starts_at, endsAt: p.ends_at, closedAt: p.closed_at },
-    hostStatements: hosts.map((h) => ({ ...hostStatementJson(h), kycStatus: h.kyc_status })),
-    agencyStatements: agencies.map(agencyStatementJson),
+    period: { id: p.id, periodKey: p.period_key, cycle: p.cycle, startsAt: p.starts_at, endsAt: p.ends_at, closedAt: p.closed_at, currency: p.config?.settings?.currency ?? null },
+    hostStatements: hosts.map((h) => ({ ...hostStatementJson(h), publicId: h.public_id, kycStatus: h.kyc_status })),
+    agencyStatements: agencies.map((a) => ({ ...agencyStatementJson(a), ownerUsername: a.owner_username, ownerKyc: a.owner_kyc })),
+    assistantStatements: assistants.map((s) => ({ ...assistantStatementJson(s), kycStatus: s.kyc_status })),
+    referralStatements: referrals.map(referralStatementJson),
   });
 });
 
-// Ödeme platform dışında yapılır; burada yalnızca "ödendi" işaretlenir. Yayıncı için KYC onayı şarttır.
+const STATEMENT_TABLES = {
+  host: { table: 'host_statements', amount: 'salary_cents', action: 'host_salary_paid' },
+  agency: { table: 'agency_statements', amount: 'owner_cents', action: 'agency_commission_paid' },
+  assistant: { table: 'assistant_statements', amount: 'amount_cents', action: 'assistant_share_paid' },
+  referral: { table: 'referral_statements', amount: 'amount_cents', action: 'referral_reward_paid' },
+};
+
+// Ödeme platform dışında (banka / havale vb.) yapılır; burada "ödendi" işaretlenir ve isteğe bağlı not (dekont no) yazılır.
+// Yayıncı maaşı için KYC onayı şarttır.
 router.post('/statements/:kind/:id/pay', requireSuperAdmin, async (req, res) => {
-  const kind = oneOf(req.params.kind, ['host', 'agency'], 'Tür');
+  const kind = oneOf(req.params.kind, Object.keys(STATEMENT_TABLES), 'Tür');
   const id = uuid(req.params.id, 'Özet');
+  const note = text(req.body?.note, 'Not', { max: 200 });
+  const t = STATEMENT_TABLES[kind];
   await tx(async (c) => {
-    if (kind === 'host') {
-      const h = (await c.query(`SELECT h.*, u.kyc_status FROM host_statements h JOIN users u ON u.id = h.user_id WHERE h.id = $1 FOR UPDATE OF h`, [id])).rows[0];
-      if (!h) throw fail('Özet bulunamadı.', 404);
-      if (h.status !== 'pending') throw fail('Bu özet zaten işlenmiş.', 409);
-      if (BigInt(h.salary_cents) > 0n && h.kyc_status !== 'approved') throw fail('Yayıncının kimlik doğrulaması (KYC) onaylı değil.', 409);
-      await c.query(`UPDATE host_statements SET status = 'paid', paid_at = NOW(), paid_by = $2 WHERE id = $1`, [id, req.user.id]);
-      await c.query(`INSERT INTO financial_audit_logs(admin_id, user_id, action, reference_type, reference_id, metadata) VALUES($1,$2,'host_salary_paid','host_statement',$3,$4)`,
-        [req.user.id, h.user_id, id, JSON.stringify({ salaryCents: String(h.salary_cents) })]);
-    } else {
-      const a = (await c.query(`SELECT * FROM agency_statements WHERE id = $1 FOR UPDATE`, [id])).rows[0];
-      if (!a) throw fail('Özet bulunamadı.', 404);
-      if (a.status !== 'pending') throw fail('Bu özet zaten işlenmiş.', 409);
-      await c.query(`UPDATE agency_statements SET status = 'paid', paid_at = NOW(), paid_by = $2 WHERE id = $1`, [id, req.user.id]);
-      await c.query(`INSERT INTO financial_audit_logs(admin_id, action, reference_type, reference_id, amount_diamonds, metadata) VALUES($1,'agency_commission_paid','agency_statement',$2,$3,$4)`,
-        [req.user.id, id, a.commission_diamonds, JSON.stringify({ agencyId: a.agency_id })]);
+    const row = (await c.query(`SELECT * FROM ${t.table} WHERE id = $1 FOR UPDATE`, [id])).rows[0];
+    if (!row) throw fail('Özet bulunamadı.', 404);
+    if (row.status !== 'pending') throw fail('Bu özet zaten işlenmiş.', 409);
+    if (kind === 'host' && BigInt(row.salary_cents) > 0n) {
+      const k = (await c.query(`SELECT kyc_status FROM users WHERE id = $1`, [row.user_id])).rows[0]?.kyc_status;
+      if (k !== 'approved') throw fail('Yayıncının kimlik doğrulaması (KYC) onaylı değil.', 409);
     }
+    await c.query(`UPDATE ${t.table} SET status = 'paid', paid_at = NOW(), paid_by = $2, pay_note = $3 WHERE id = $1`, [id, req.user.id, note]);
+    await c.query(
+      `INSERT INTO financial_audit_logs(admin_id, user_id, action, reference_type, reference_id, metadata) VALUES($1,$2,$3,$4,$5,$6)`,
+      [req.user.id, row.user_id ?? null, t.action, t.table, id, JSON.stringify({ amountCents: String(row[t.amount] ?? 0), note })],
+    );
   });
   res.json({ ok: true });
 });
 
+// Toplu "ödendi": dönemin bekleyen özetleri (yayıncıda KYC onayı olmayanlar atlanır).
+router.post('/payouts/:id/pay-all', requireSuperAdmin, async (req, res) => {
+  const periodId = uuid(req.params.id, 'Dönem');
+  const kind = oneOf(req.body?.kind, Object.keys(STATEMENT_TABLES), 'Tür');
+  const note = text(req.body?.note, 'Not', { max: 200 });
+  const t = STATEMENT_TABLES[kind];
+  const out = await tx(async (c) => {
+    const r = kind === 'host'
+      ? await c.query(
+          `UPDATE host_statements h SET status = 'paid', paid_at = NOW(), paid_by = $2, pay_note = $3 FROM users u
+           WHERE h.period_id = $1 AND h.status = 'pending' AND u.id = h.user_id AND (h.salary_cents = 0 OR u.kyc_status = 'approved')
+           RETURNING h.id, h.salary_cents AS amount`, [periodId, req.user.id, note],
+        )
+      : await c.query(
+          `UPDATE ${t.table} SET status = 'paid', paid_at = NOW(), paid_by = $2, pay_note = $3 WHERE period_id = $1 AND status = 'pending'
+           RETURNING id, ${t.amount} AS amount`, [periodId, req.user.id, note],
+        );
+    const left = (await c.query(`SELECT COUNT(*)::int AS n FROM ${t.table} WHERE period_id = $1 AND status = 'pending'`, [periodId])).rows[0].n;
+    const total = r.rows.reduce((s, x) => s + BigInt(x.amount ?? 0), 0n);
+    await c.query(
+      `INSERT INTO financial_audit_logs(admin_id, action, reference_type, reference_id, metadata) VALUES($1,$2,'payout_period',$3,$4)`,
+      [req.user.id, `${t.action}_bulk`, periodId, JSON.stringify({ count: r.rowCount, totalCents: total.toString(), skipped: left, note })],
+    );
+    return { paid: r.rowCount, skipped: left, totalCents: total.toString() };
+  });
+  res.json({ ok: true, ...out });
+});
+
+// Özeti iptal et (hatalı / şüpheli). Yöntem 2 ile maaşa çevrilen elmaslar yayıncıya iade edilir.
+router.post('/statements/:kind/:id/void', requireSuperAdmin, async (req, res) => {
+  const kind = oneOf(req.params.kind, Object.keys(STATEMENT_TABLES), 'Tür');
+  const id = uuid(req.params.id, 'Özet');
+  const note = text(req.body?.note, 'Not', { max: 200 });
+  const t = STATEMENT_TABLES[kind];
+  const out = await tx(async (c) => {
+    const row = (await c.query(`SELECT * FROM ${t.table} WHERE id = $1 FOR UPDATE`, [id])).rows[0];
+    if (!row) throw fail('Özet bulunamadı.', 404);
+    if (row.status !== 'pending') throw fail('Yalnızca bekleyen özet iptal edilebilir.', 409);
+    await c.query(`UPDATE ${t.table} SET status = 'void', paid_at = NOW(), paid_by = $2, pay_note = $3 WHERE id = $1`, [id, req.user.id, note]);
+    let refunded = 0n;
+    if (kind === 'host' && BigInt(row.consumed_diamonds ?? 0) > 0n) {
+      refunded = BigInt(row.consumed_diamonds);
+      await c.query(`UPDATE users SET diamonds = diamonds + $2, updated_at = NOW() WHERE id = $1`, [row.user_id, refunded.toString()]);
+      await c.query(
+        `INSERT INTO wallet_transactions(user_id, transaction_type, diamond_amount, reference_id, description) VALUES($1,'salary_conversion_refund',$2,$3,$4)`,
+        [row.user_id, refunded.toString(), id, 'Maaş özeti iptal edildi: maaşa çevrilen elmaslar iade edildi'],
+      );
+    }
+    await c.query(
+      `INSERT INTO financial_audit_logs(admin_id, user_id, action, reference_type, reference_id, metadata) VALUES($1,$2,'statement_void',$3,$4,$5)`,
+      [req.user.id, row.user_id ?? null, t.table, id, JSON.stringify({ note, refundedDiamonds: refunded.toString() })],
+    );
+    return { refunded: refunded.toString() };
+  });
+  res.json({ ok: true, refundedDiamonds: out.refunded });
+});
 router.get('/kyc', async (req, res) => {
   const status = oneOf(String(req.query.status ?? 'pending'), ['pending', 'approved', 'rejected'], 'Durum');
   const r = await query(`SELECT id, username, display_name, kyc_status FROM users WHERE kyc_status = $1 ORDER BY username LIMIT 200`, [status]);

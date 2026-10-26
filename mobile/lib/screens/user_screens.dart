@@ -5,6 +5,7 @@ import '../widgets/anim_asset.dart';
 import '../services/session.dart';
 import '../widgets/app_theme.dart';
 import '../widgets/common.dart';
+import '../widgets/id_badge.dart';
 import '../widgets/fig.dart';
 import 'guardian_screens.dart';
 import 'relations_screens.dart';
@@ -201,9 +202,10 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           LevelPill(level: p['coinLevel'] ?? 1, send: true, height: 18),
           LevelPill(level: p['giftLevel'] ?? 1, send: false, height: 18),
           if (p['broadcaster'] != null) _pill(Icons.podcasts, 'Yayıncı', const Color(0xFFB0003A)),
+          if (p['hostBadge'] != null) HostBadgeChip(badge: p['hostBadge']?.toString(), height: 18),
         ]),
         const SizedBox(height: 4),
-        Text('ID: ${p['publicId'] ?? '-'}', style: const TextStyle(color: _dim, fontSize: 12)),
+        IdBadge(user: {'publicId': p['publicId'], 'specialId': p['specialId'], 'wipLevel': wip?['level'], 'nameColor': features?['nameColor']}, fontSize: 12, color: _dim),
         if (p['presence'] is Map) Padding(padding: const EdgeInsets.only(top: 2), child: PresenceLine(presence: mapOf(p['presence']), fontSize: 12)),
       ],
     ]);

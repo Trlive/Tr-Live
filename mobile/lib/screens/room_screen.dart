@@ -26,6 +26,7 @@ import '../services/session.dart';
 import '../services/socket_service.dart';
 import '../widgets/app_theme.dart';
 import '../widgets/common.dart';
+import '../widgets/id_badge.dart';
 import '../widgets/cp_widgets.dart';
 import '../widgets/crown_icon.dart';
 import '../widgets/gift_ribbon.dart';
@@ -2179,6 +2180,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                             if (user?['wipLevel'] != null) _pill(wipLabel(wipLevelOf(user?['wipLevel'])), WipStyle.of(wipLevelOf(user?['wipLevel']))?.color ?? Pal.amber),
                             if (role != 'user') _pill(_roleLabels[role] ?? role, Pal.cyan),
                             if (family != null) _pill('${family['name']}', Pal.red),
+                            if ((profile?['hostBadge'] ?? user?['hostBadge']) != null) HostBadgeChip(badge: (profile?['hostBadge'] ?? user?['hostBadge'])?.toString(), height: 20),
                             if (seat != null) _pill('${seat + 1}. koltuk', Colors.white24),
                             // Koruyucu ayrıcalığı: en yüksek puanlı koruyucu mini kartta görünür.
                             if (mapOf(mapOf(profile?['guardian'])?['user']) != null)
@@ -2193,7 +2195,17 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                               ),
                           ]),
                           const SizedBox(height: 8),
-                          if (username.isNotEmpty)
+                          if ((profile?['specialId'] ?? user?['specialId'] ?? profile?['publicId'] ?? user?['publicId']) != null)
+                            IdBadge(
+                              user: {
+                                'publicId': profile?['publicId'] ?? user?['publicId'],
+                                'specialId': profile?['specialId'] ?? user?['specialId'],
+                                'wipLevel': user?['wipLevel'],
+                                'nameColor': user?['nameColor'],
+                              },
+                              fontSize: 13,
+                            )
+                          else if (username.isNotEmpty)
                             InkWell(
                               onTap: () {
                                 Clipboard.setData(ClipboardData(text: username));

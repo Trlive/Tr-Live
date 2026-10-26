@@ -22,6 +22,8 @@ export const USER_PUBLIC_COLUMNS = `u.id, u.username, u.public_id, u.display_nam
   (SELECT jsonb_object_agg(wi.item_type, (wi.metadata->>'wipLevel')::int) FROM inventory_items wi
     WHERE wi.user_id = u.id AND wi.item_key LIKE 'wip:%' AND wi.is_active = TRUE
       AND (wi.expires_at IS NULL OR wi.expires_at > NOW()) AND COALESCE(wi.metadata->>'equipped' = 'true', FALSE)) AS wip_items,
+  (SELECT si.special_id FROM special_ids si WHERE si.user_id = u.id AND si.expires_at > NOW()) AS special_id,
+  (SELECT hb.badge FROM host_badges hb WHERE hb.user_id = u.id AND hb.expires_at > NOW()) AS host_badge,
   CASE WHEN u.cp_partner_id IS NULL THEN NULL ELSE (SELECT cp.exp FROM cp_pairs cp
     WHERE cp.user_a = LEAST(u.id, u.cp_partner_id) AND cp.user_b = GREATEST(u.id, u.cp_partner_id) AND cp.relation = 'cp') END AS cp_exp`;
 export const USER_PUBLIC_JOINS = `LEFT JOIN user_wip uw ON uw.user_id = u.id AND uw.is_active = TRUE AND uw.expires_at > NOW()
@@ -40,12 +42,15 @@ export function publicUser(row, viewerId = null) {
     return {
       id: row.id, publicId: null, username: HIDDEN_NAME, displayName: HIDDEN_NAME, avatarUrl: null,
       coinLevel: row.coin_level, giftLevel: row.gift_level, wipLevel: null, nameColor: null, frameUrl: null, isHidden: true,
-      chatBubbleUrl: null, micWaveUrl: null, profileCardUrl: null, roomCardUrl: null,
+      chatBubbleUrl: null, micWaveUrl: null, profileCardUrl: null, roomCardUrl: null, specialId: null, hostBadge: null,
     };
   }
   return {
     id: row.id,
     publicId: row.public_id ?? null,
+    // Maaş ödülü / yönetimce verilen özel ID (süslü kimlik) ve yayıncı rozeti (Bronz … Özel).
+    specialId: row.special_id ?? null,
+    hostBadge: row.host_badge ?? null,
     username: row.username,
     displayName: row.display_name,
     avatarUrl: row.avatar_url,

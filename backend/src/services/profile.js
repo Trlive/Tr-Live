@@ -27,8 +27,11 @@ export async function equippedItems(userId, run = query) {
 export async function loadProfile(viewerId, targetId) {
   const r = await query(
     `SELECT u.*, uw.level AS wip_level, uw.expires_at AS wip_expires_at, wt.name AS wip_name, wt.features AS wip_features, is_ghost(u.id) AS ghost,
-            CASE WHEN u.birth_date IS NULL THEN NULL ELSE DATE_PART('year', AGE(u.birth_date))::int END AS age
+            CASE WHEN u.birth_date IS NULL THEN NULL ELSE DATE_PART('year', AGE(u.birth_date))::int END AS age,
+            si.special_id, si.expires_at AS special_id_until, hb.badge AS host_badge, hb.expires_at AS host_badge_until
      FROM users u
+     LEFT JOIN special_ids si ON si.user_id = u.id AND si.expires_at > NOW()
+     LEFT JOIN host_badges hb ON hb.user_id = u.id AND hb.expires_at > NOW()
      LEFT JOIN user_wip uw ON uw.user_id = u.id AND uw.is_active = TRUE AND uw.expires_at > NOW()
      LEFT JOIN wip_tiers wt ON wt.level = uw.level
      WHERE u.id = $1`,
@@ -106,6 +109,9 @@ export async function loadProfile(viewerId, targetId) {
   const profile = {
     id: u.id,
     publicId: u.public_id ?? null,
+    specialId: u.special_id ?? null,
+    hostBadge: u.host_badge ?? null,
+    nameColor: u.wip_features?.nameColor ?? null,
     username: u.username,
     displayName: u.display_name,
     avatarUrl: u.avatar_url,
@@ -154,6 +160,15 @@ export async function loadProfile(viewerId, targetId) {
   };
 
   if (isSelf) {
+    // Ajans asistanlığı (Profil → Ajans Merkezi girişi) ve bekleyen asistan davetleri.
+    const assistant = await query(
+      `SELECT s.agency_id, a.name,
+         (SELECT COUNT(*)::int FROM agency_assistants p JOIN agencies pa ON pa.id = p.agency_id AND pa.status = 'active'
+           WHERE p.user_id = $1 AND p.status = 'pending' AND p.created_at > NOW() - INTERVAL '7 days') AS invites
+       FROM (SELECT 1) one
+       LEFT JOIN agency_assistants s ON s.user_id = $1 AND s.status = 'active'
+       LEFT JOIN agencies a ON a.id = s.agency_id AND a.status = 'active'`, [targetId],
+    );
     const badge = await query(
       `SELECT (SELECT COUNT(*)::int FROM profile_visitors WHERE profile_user_id = $1 AND last_visited_at > $2) AS new_visitors,
               (SELECT COUNT(*)::int FROM follows WHERE followed_id = $1 AND created_at > $3) AS new_followers,
@@ -165,6 +180,9 @@ export async function loadProfile(viewerId, targetId) {
       followers: profile.followers, following: profile.following, visitorCount: counts.rows[0].visitors,
       broadcasterStatus: b?.status ?? null,
       agencyOwned: ownedAgency.rows[0] ? { id: ownedAgency.rows[0].id, name: ownedAgency.rows[0].name, status: ownedAgency.rows[0].status } : null,
+      agencyAssistant: assistant.rows[0]?.name ? { agencyId: assistant.rows[0].agency_id, agencyName: assistant.rows[0].name } : null,
+      assistantInvites: assistant.rows[0]?.invites ?? 0,
+      specialIdUntil: u.special_id_until ?? null, hostBadgeUntil: u.host_badge_until ?? null,
       wip: profile.wip, equipped: items, family: profile.family, broadcaster: profile.broadcaster, cp,
     });
   }

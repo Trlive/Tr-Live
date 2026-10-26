@@ -64,8 +64,10 @@ router.get('/inbox-summary', requireAuth, async (req, res) => {
        (SELECT COUNT(*)::int FROM announcements a WHERE a.kind = 'event' AND a.created_at > ${seen('event')}) AS event,
        (SELECT COUNT(*)::int FROM announcements a WHERE a.kind = 'reward' AND a.created_at > ${seen('reward')}) AS reward,
        (SELECT COUNT(*)::int FROM follows f WHERE f.followed_id = u.id AND f.created_at > u.announcements_seen_at) AS followers,
-       (SELECT COUNT(*)::int FROM agency_requests q JOIN agencies ag ON ag.id = q.agency_id AND ag.status = 'active'
-          WHERE q.user_id = u.id AND q.direction = 'invite' AND q.status = 'pending') AS agency
+       ((SELECT COUNT(*)::int FROM agency_requests q JOIN agencies ag ON ag.id = q.agency_id AND ag.status = 'active'
+          WHERE q.user_id = u.id AND q.direction = 'invite' AND q.status = 'pending')
+        + (SELECT COUNT(*)::int FROM agency_assistants s JOIN agencies ag ON ag.id = s.agency_id AND ag.status = 'active'
+          WHERE s.user_id = u.id AND s.status = 'pending' AND s.created_at > NOW() - INTERVAL '7 days')) AS agency
      FROM users u WHERE u.id = $1`,
     [req.user.id],
   );
