@@ -44,15 +44,16 @@ class _IncomeCenterScreenState extends State<IncomeCenterScreen> {
 
   Future<Map<String, dynamic>> _load() async {
     // İstekler aynı anda gönderilir (sırayla beklenmez).
-    final hostF = Api.get('/api/broadcaster/me').then((b) => mapOf(b['broadcaster'])?['status'] == 'approved').catchError((_) => false);
+    final hostF = Api.get('/api/broadcaster/me').then((b) => mapOf(b['broadcaster'])).catchError((_) => null);
     final res = await Future.wait([Api.get('/api/me'), Api.get('/api/me/wallet', query: {'limit': '60'})]);
     final me = mapOf(res[0]['user']) ?? {};
     Session.me.value = me;
     final w = res[1];
     final recent = listOf(w['transactions']).where((t) => t['type'] == 'gift_received').take(8).toList();
-    final host = await hostF;
+    final b = await hostF;
+    final host = b?['status'] == 'approved';
     if (mounted) _host.value = host;
-    return {'me': me, 'recent': recent, 'host': host};
+    return {'me': me, 'recent': recent, 'host': host, 'withdraw': host && withdrawEligible(b!)};
   }
 
   @override
@@ -108,7 +109,8 @@ class _IncomeCenterScreenState extends State<IncomeCenterScreen> {
                     await WalletScreen.exchange(context, diamonds, () async => setState(() => _version++));
                   }),
                 ),
-                if (data['host'] == true) ...[
+                // Para Çekme yalnızca yayıncı kotayı doldurup maaş hak ettiğinde görünür.
+                if (data['withdraw'] == true) ...[
                   const SizedBox(width: 12),
                   Expanded(child: _bigBtn('Para Çekme', const [Color(0xFF05C150), Color(0xFF22E85F)], () => Navigator.push(context, MaterialPageRoute(builder: (_) => const WithdrawScreen())))),
                 ],
@@ -330,6 +332,16 @@ class _BroadcastHistoryScreenState extends State<BroadcastHistoryScreen> {
   }
 }
 
+/// Para çekme hakkı: onaylı yayıncı bu dönemde kotayı doldurup maaş hak etti (tahmini maaş > 0) ya da kapanmış dönemden
+/// ödenmemiş maaşı var. Sunucu "withdrawEligible" gönderir; eski sunucuda tahmini maaşa bakılır.
+bool withdrawEligible(Map<String, dynamic> b) {
+  if (b['status'] != 'approved') return false;
+  final e = b['withdrawEligible'];
+  if (e is bool) return e;
+  final cents = BigInt.tryParse('${mapOf(b['progress'])?['estimatedCents'] ?? 0}') ?? BigInt.zero;
+  return cents > BigInt.zero;
+}
+
 /// Para Çekme: yayıncı maaşı (tahmini) ve ödeme koşulları. Ödeme, kimlik doğrulaması sonrası yönetim/ajans tarafından yapılır.
 class WithdrawScreen extends StatelessWidget {
   const WithdrawScreen({super.key});
@@ -345,16 +357,25 @@ class WithdrawScreen extends StatelessWidget {
           if (b == null || b['status'] != 'approved') {
             return const Center(child: Padding(padding: EdgeInsets.all(24), child: Text('Para çekme yalnızca onaylı yayıncılar içindir. Yayıncı olmak için bir ajansın seni davet etmesi gerekir.\n\nElmaslarını Gelir Merkezi\'ndeki "Elmas Bozdurma" ile coin\'e çevirebilirsin.', textAlign: TextAlign.center, style: TextStyle(color: Pal.textDim, height: 1.4))));
           }
+          if (!withdrawEligible(b)) {
+            return const Center(child: Padding(padding: EdgeInsets.all(24), child: Text('Para çekme, maaş kotasını doldurup maaş hak ettiğinde açılır.\n\nKotanı ve kalan elmasını Yayıncı Merkezi\'nden görebilirsin.', textAlign: TextAlign.center, style: TextStyle(color: Pal.textDim, height: 1.4))));
+          }
           final p = mapOf(b['progress']) ?? {};
           final cur = (p['currency'] ?? 'USD').toString();
           final kyc = (b['kycStatus'] ?? 'none').toString();
           const kycText = {'none': 'Doğrulanmadı', 'pending': 'İnceleniyor', 'approved': 'Onaylı', 'rejected': 'Reddedildi'};
+          final unpaid = BigInt.tryParse('${b['unpaidSalaryCents'] ?? 0}') ?? BigInt.zero;
           return ListView(padding: const EdgeInsets.all(16), children: [
             Row(children: [
               Expanded(child: _card('Bu dönem tahmini maaş', fmtMoney(p['estimatedCents'] ?? 0, cur), kGoldDeep)),
               const SizedBox(width: 12),
               Expanded(child: _card('Toplam elmas', fmtNumber(b['totalDiamonds']), const [Color(0xFF3A2E14), Color(0xFF6B5320)])),
             ]),
+            // Kapanmış dönemlerden hak edilip henüz ödenmemiş maaş.
+            if (unpaid > BigInt.zero) ...[
+              const SizedBox(height: 12),
+              _card('Ödenmeyi bekleyen maaş', fmtMoney(b['unpaidSalaryCents'], cur), const [Color(0xFF05833A), Color(0xFF16B95A)]),
+            ],
             const SizedBox(height: 16),
             ListTile(
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: const BorderSide(color: Pal.outline)),

@@ -67,9 +67,9 @@ router.get('/:userId', async (req, res) => {
   const targetId = uuid(req.params.userId, 'Kullanıcı');
   const profile = await loadProfile(req.user.id, targetId);
   if (!profile) throw fail('Kullanıcı bulunamadı.', 404);
-  // "Gizli ziyaret" (WIP ayrıcalığı) olan kişi ziyaretçi listesine düşmez.
-  // Gizli kullanıcı, hayalet mod ve "gizli ziyaret" ziyaretçi listesine hiç düşmez.
-  if (targetId !== req.user.id && !profile.isHidden && !req.user.is_hidden && !(await featuresFor(req.user.id)).invisibleVisit && !(await isGhost(req.user.id))) {
+  // Gizli kullanıcı, hayalet mod ve "Görüntüleme geçmişini gizle" (WIP 7+ ayrıcalığı / yönetici; Ayarlar → Gizlilik'ten
+  // açılıp kapatılır) açık kişi ziyaretçi listesine düşmez.
+  if (targetId !== req.user.id && !profile.isHidden && !req.user.is_hidden && !((req.user.system_role === 'admin' || (await featuresFor(req.user.id)).invisibleVisit) && req.user.hide_visits !== false) && !(await isGhost(req.user.id))) {
     await query(
       `INSERT INTO profile_visitors(profile_user_id, visitor_id) VALUES($1,$2)
        ON CONFLICT (profile_user_id, visitor_id) DO UPDATE SET visit_count = profile_visitors.visit_count + 1, last_visited_at = NOW()`,

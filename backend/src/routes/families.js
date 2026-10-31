@@ -123,7 +123,8 @@ router.get('/:familyId', async (req, res) => {
       [id],
     ),
     role && RANK[role] >= RANK.admin
-      ? query(`SELECT COUNT(*)::int AS n FROM family_join_requests WHERE family_id = $1`, [id]) : Promise.resolve({ rows: [{ n: 0 }] }),
+      ? query(`SELECT COUNT(*)::int AS n FROM family_join_requests jr JOIN users ru ON ru.id = jr.user_id AND ru.account_status = 'active'
+               WHERE jr.family_id = $1`, [id]) : Promise.resolve({ rows: [{ n: 0 }] }),
     query(`SELECT 1 FROM family_join_requests WHERE family_id = $1 AND user_id = $2`, [id, me]),
     query(`SELECT COUNT(*)::int AS n FROM family_members WHERE family_id = $1 AND role = 'admin'`, [id]),
   ]);
@@ -219,7 +220,7 @@ router.put('/:familyId/settings', async (req, res) => {
 router.post('/:familyId/join', userLimit('family_join', 20, 3600e3), async (req, res) => {
   const id = uuid(req.params.familyId, 'Aile');
   const me = req.user.id;
-  await tx(async (c) => {
+  const inserted = await tx(async (c) => {
     const u = (await c.query(`SELECT id, coin_level FROM users WHERE id = $1 FOR UPDATE`, [me])).rows[0];
     const f = (await c.query(`SELECT id, level, join_min_level FROM families WHERE id = $1 AND is_active = TRUE`, [id])).rows[0];
     if (!f) throw fail('Aile bulunamadı.', 404);
@@ -228,11 +229,17 @@ router.post('/:familyId/join', userLimit('family_join', 20, 3600e3), async (req,
     if ((u.coin_level ?? 1) < (f.join_min_level ?? 0)) throw fail(`Bu aileye başvurmak için zenginlik seviyeniz en az ${f.join_min_level} olmalı.`);
     const count = (await c.query(`SELECT COUNT(*)::int AS n FROM family_members WHERE family_id = $1`, [id])).rows[0].n;
     if (count >= familyCapacity(f.level)) throw fail('Aile dolu.', 409);
-    await c.query(`INSERT INTO family_join_requests(family_id, user_id) VALUES($1,$2) ON CONFLICT DO NOTHING`, [id, me]);
+    const ins = await c.query(`INSERT INTO family_join_requests(family_id, user_id) VALUES($1,$2) ON CONFLICT DO NOTHING`, [id, me]);
+    return ins.rowCount > 0;
   });
-  // Yöneticilere haber ver
-  const admins = (await query(`SELECT user_id FROM family_members WHERE family_id = $1 AND role IN ('owner','admin')`, [id])).rows;
-  for (const a of admins) hub.sendToUser(a.user_id, { type: 'family_request', familyId: id });
+  // Yöneticilere haber ver: aile sayfasında / profilde kırmızı rozet (soket) ve Bildirimler'de kayıt + telefon bildirimi.
+  // Aynı başvuru tekrar gönderilirse yöneticiler yeniden rahatsız edilmez.
+  const admins = inserted ? (await query(`SELECT user_id FROM family_members WHERE family_id = $1 AND role IN ('owner','admin')`, [id])).rows : [];
+  const who = req.user.is_hidden ? 'Gizli Kullanıcı' : (req.user.display_name || req.user.username || 'Biri');
+  for (const a of admins) {
+    hub.sendToUser(a.user_id, { type: 'family_request', familyId: id });
+    notifyUser(a.user_id, 'family_request', '👪 Aileye yeni istek', `${who} ailene katılmak istiyor.`, { familyId: id, userId: me });
+  }
   res.json({ ok: true, requested: true, family: familyJson(await activeFamily(id), { myRole: null, requested: true }) });
 });
 

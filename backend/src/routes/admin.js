@@ -249,6 +249,7 @@ router.delete('/users/:userId/wip', async (req, res) => {
 const FEATURE_TYPES = {
   nameColor: 'color', badge: 'string', maxRooms: 'int', viewVisitors: 'bool', vipGifts: 'bool', muteImmunity: 'bool', kickImmunity: 'bool',
   profileEffect: 'bool', customRoomTheme: 'bool', invisibleVisit: 'bool', animatedAvatar: 'bool', ghostMode: 'bool',
+  hideCountry: 'bool', hideOnline: 'bool', hiddenUser: 'bool',
 };
 function cleanFeatures(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw fail('Özellikler nesne olmalı.');

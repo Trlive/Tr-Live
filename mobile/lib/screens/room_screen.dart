@@ -1424,8 +1424,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           toast(context, 'Bu aracı kullanma yetkiniz yok.', error: true);
         }
 
-        // Temel araç: koyu metalik yuvarlak düğme + iki satır etiket (tasarımdaki gibi, küçük).
-        Widget feature(IconData icon, String label, VoidCallback onTap, {Color? color}) => InkWell(
+        // Temel araç: renkli yuvarlak düğme (beyaz simge) + iki satır etiket. [tint]: düğmenin rengi.
+        // [active]: açık durumdaki araç (kilitli, gizli, sohbet yasağı, sırada…) etiketin altında küçük çizgiyle gösterilir.
+        Widget feature(IconData icon, String label, VoidCallback onTap, {required Color tint, bool active = false}) => InkWell(
               borderRadius: BorderRadius.circular(12),
               onTap: onTap,
               child: Padding(
@@ -1436,17 +1437,36 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                     height: 44,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFF6B6B70), Color(0xFF2A2A2E), Color(0xFF18181B)]),
-                      border: Border.all(color: const Color(0x40FFFFFF), width: 0.8),
-                      boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 4, offset: Offset(0, 2))],
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [Color.lerp(tint, Colors.white, 0.28)!, tint, Color.lerp(tint, Colors.black, 0.22)!],
+                      ),
+                      border: Border.all(color: Colors.white.withValues(alpha: active ? 0.9 : 0.22), width: active ? 1.6 : 0.8),
+                      boxShadow: [BoxShadow(color: tint.withValues(alpha: 0.45), blurRadius: 8, offset: const Offset(0, 2))],
                     ),
-                    child: Icon(icon, size: 21, color: color ?? Colors.white),
+                    child: Icon(icon, size: 21, color: Colors.white),
                   ),
                   const SizedBox(height: 5),
                   Text(label, textAlign: TextAlign.center, maxLines: 2, style: const TextStyle(fontSize: 11, color: Color(0xFFDADADF), height: 1.15)),
+                  const SizedBox(height: 3),
+                  Container(
+                    width: 16,
+                    height: 3,
+                    decoration: BoxDecoration(color: active ? tint : Colors.transparent, borderRadius: BorderRadius.circular(2)),
+                  ),
                 ]),
               ),
             );
+        // Araç renkleri (canlı, koyu zeminde okunur).
+        const cPink = Color(0xFFFF4F9A);
+        const cGreen = Color(0xFF22C987);
+        const cCyan = Color(0xFF14B8E6);
+        const cPurple = Color(0xFF7C5CFF);
+        const cRed = Color(0xFFEF4444);
+        const cBlue = Color(0xFF3B82F6);
+        const cOrange = Color(0xFFFF8A3D);
+        const cTeal = Color(0xFF14B8A6);
 
         // İnteraktif özellik: kare görsel kutu + etiket.
         Widget tile(Widget art, String label, VoidCallback onTap, {List<Color> colors = const [Color(0xFF2B2B30), Color(0xFF151518)]}) => InkWell(
@@ -1477,33 +1497,33 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         final tools = <Widget>[
           // Sıra: Odayı temizle, Sohbet yasağı, Oda kilitleme, Oda gizleme, Ses ve efektler, Müzik, Mikrofon Modu, Tema,
           // Odayı paylaş, Odayı kapat. (Oda sesini kapatma alt çubukta.)
-          if (_isManager) feature(Icons.cleaning_services, 'Odayı\nTemizle', () => need(_isManager, _clearChat)),
-          if (_isOwnerOrCohost) feature(chatOn ? Icons.speaker_notes_off : Icons.chat, chatOn ? 'Sohbet\nYasağı' : 'Sohbeti\nAç', () => need(_isOwnerOrCohost, () => _patchRoom({'chatEnabled': !chatOn})), color: chatOn ? null : Colors.greenAccent),
-          if (_myRole == 'owner') feature(locked ? Icons.lock : Icons.lock_open, 'Oda\nKilitleme', () => need(_myRole == 'owner', _roomPassword), color: locked ? Colors.orangeAccent : null),
-          if (_myRole == 'owner') feature(hidden ? Icons.visibility_off : Icons.visibility, 'Oda\nGizleme', () => need(_myRole == 'owner', _toggleHidden), color: hidden ? Colors.orangeAccent : null),
-          feature(Icons.graphic_eq, 'Ses ve\nEfektler', () => run(_effectsAndSound)),
-          if (_isManager) feature(Icons.library_music, 'Müzik', () => run(_openMusic)),
+          if (_isManager) feature(Icons.cleaning_services, 'Odayı\nTemizle', () => need(_isManager, _clearChat), tint: cPink),
+          if (_isOwnerOrCohost) feature(chatOn ? Icons.speaker_notes_off : Icons.chat, chatOn ? 'Sohbet\nYasağı' : 'Sohbeti\nAç', () => need(_isOwnerOrCohost, () => _patchRoom({'chatEnabled': !chatOn})), tint: cCyan, active: !chatOn),
+          if (_myRole == 'owner') feature(locked ? Icons.lock : Icons.lock_open, 'Oda\nKilitleme', () => need(_myRole == 'owner', _roomPassword), tint: cGreen, active: locked),
+          if (_myRole == 'owner') feature(hidden ? Icons.visibility_off : Icons.visibility, 'Oda\nGizleme', () => need(_myRole == 'owner', _toggleHidden), tint: cPink, active: hidden),
+          feature(Icons.graphic_eq, 'Ses ve\nEfektler', () => run(_effectsAndSound), tint: cPurple),
+          if (_isManager) feature(Icons.library_music, 'Müzik', () => run(_openMusic), tint: cGreen, active: MusicService.instance.state.value?['status'] == 'playing'),
           if (_isOwnerOrCohost && !_isLive) feature(Icons.mic_external_on, _isVideo ? 'Yayın\nModu' : 'Mikrofon\nModu', () {
             Navigator.pop(sheet);
             // Alt pencerenin kapanma animasyonu bitmeden yenisini açmak bazı cihazlarda açılmıyor; kısa bekle.
             Future.delayed(const Duration(milliseconds: 300), () {
               if (mounted) _micMode();
             });
-          }),
-          if (_isOwnerOrCohost) feature(Icons.palette, 'Tema', () => need(_isOwnerOrCohost, _roomThemes)),
-          feature(Icons.share, 'Odayı\nPaylaş', () => run(_shareRoom)),
-          if (_myRole == 'owner') feature(Icons.power_settings_new, 'Odayı\nKapat', () => run(_closeRoom), color: Colors.redAccent),
+          }, tint: cPurple),
+          if (_isOwnerOrCohost) feature(Icons.palette, 'Tema', () => need(_isOwnerOrCohost, _roomThemes), tint: cPink),
+          feature(Icons.share, 'Odayı\nPaylaş', () => run(_shareRoom), tint: cBlue),
+          if (_myRole == 'owner') feature(Icons.power_settings_new, 'Odayı\nKapat', () => run(_closeRoom), tint: cRed),
           // Koltuk / kamera araçları (duruma göre).
           if (_onSeat && _isVideo)
             feature(_camOn ? Icons.videocam : Icons.videocam_off, 'Kamera', () => run(() {
                   setState(() => _camOn = !_camOn);
                   _syncPublish();
-                })),
-          if (_onSeat && _isVideo && _camOn) feature(Icons.cameraswitch, 'Kamerayı\nÇevir', () => run(_flipCamera)),
+                }), tint: cOrange, active: _camOn),
+          if (_onSeat && _isVideo && _camOn) feature(Icons.cameraswitch, 'Kamerayı\nÇevir', () => run(_flipCamera), tint: cTeal),
           if (queueMode)
-            feature(_inQueue ? Icons.hourglass_bottom : Icons.front_hand, _inQueue ? (_micRequest ? 'İsteği\nGeri Al' : 'Sıradan\nÇık') : (_micRequest ? 'Mikrofon\nİste' : 'Sıraya\nGir'), () => run(_toggleQueue), color: _inQueue ? Colors.orangeAccent : Colors.greenAccent),
-          if (_onSeat) feature(Icons.mic_off, 'Mikrofondan\nİn', () => run(_leaveMic)),
-          if (_canSeatManage && _micRequest) feature(Icons.how_to_reg, 'Mikrofon\nİstekleri', () => run(_micRequestsSheet), color: Colors.greenAccent),
+            feature(_inQueue ? Icons.hourglass_bottom : Icons.front_hand, _inQueue ? (_micRequest ? 'İsteği\nGeri Al' : 'Sıradan\nÇık') : (_micRequest ? 'Mikrofon\nİste' : 'Sıraya\nGir'), () => run(_toggleQueue), tint: _inQueue ? cOrange : cGreen, active: _inQueue),
+          if (_onSeat) feature(Icons.mic_off, 'Mikrofondan\nİn', () => run(_leaveMic), tint: cRed),
+          if (_canSeatManage && _micRequest) feature(Icons.how_to_reg, 'Mikrofon\nİstekleri', () => run(_micRequestsSheet), tint: cGreen),
         ];
         return ConstrainedBox(
           constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(sheet).height * 0.82),

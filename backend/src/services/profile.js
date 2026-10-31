@@ -55,7 +55,7 @@ export async function loadProfile(viewerId, targetId) {
     query(
       `SELECT (SELECT COUNT(*)::int FROM follows WHERE followed_id = $1) AS followers,
               (SELECT COUNT(*)::int FROM follows WHERE follower_id = $1) AS following,
-              (SELECT COUNT(*)::int FROM profile_visitors WHERE profile_user_id = $1) AS visitors,
+              (SELECT COUNT(*)::int FROM profile_visitors WHERE profile_user_id = $1 AND last_visited_at > NOW() - INTERVAL '7 days') AS visitors,
               (SELECT COUNT(*)::int FROM friend_requests WHERE status = 'accepted' AND (requester_id = $1 OR target_id = $1)) AS friends`,
       [targetId],
     ),
@@ -123,8 +123,8 @@ export async function loadProfile(viewerId, targetId) {
     bio: u.bio,
     gender: u.gender,
     age: u.age,
-    country: u.country,
-    city: u.city,
+    // Ülke/Bölgeyi gizle (WIP ayrıcalığı): başkalarına "Bilinmiyor" görünür; kişinin kendisi gerçek değeri görür.
+    ...(u.hide_country && !isSelf ? { country: null, city: null, locationHidden: true } : { country: u.country, city: u.city }),
     coinLevel: u.coin_level,
     giftLevel: u.gift_level,
     createdAt: u.created_at,
@@ -174,7 +174,8 @@ export async function loadProfile(viewerId, targetId) {
        LEFT JOIN agencies a ON a.id = s.agency_id AND a.status = 'active'`, [targetId],
     );
     const badge = await query(
-      `SELECT (SELECT COUNT(*)::int FROM profile_visitors WHERE profile_user_id = $1 AND last_visited_at > $2) AS new_visitors,
+      `SELECT (SELECT COUNT(*)::int FROM profile_visitors WHERE profile_user_id = $1 AND last_visited_at > $2
+                 AND last_visited_at > NOW() - INTERVAL '7 days') AS new_visitors,
               (SELECT COUNT(*)::int FROM follows WHERE followed_id = $1 AND created_at > $3) AS new_followers,
               (SELECT COUNT(*)::int FROM friend_requests WHERE target_id = $1 AND status = 'pending') AS friend_requests`,
       [targetId, u.visitors_seen_at, u.followers_seen_at],

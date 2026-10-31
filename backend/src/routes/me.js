@@ -43,9 +43,23 @@ router.patch('/', async (req, res) => {
     if (typeof b.language !== 'string' || !LANG_RE.test(b.language)) throw fail('Dil geçersiz.');
     set('language', b.language);
   }
+  // Gizlilik ayarları WIP ayrıcalığıdır (yöneticiler hariç); kapatmak her zaman serbest.
+  const isAdmin = req.user.system_role === 'admin';
+  const needFeature = async (on, feature, what) => { if (on && !isAdmin) await requireFeature(req.user.id, feature, what); };
   if (b.isHidden !== undefined) {
     if (typeof b.isHidden !== 'boolean') throw fail('Gizli kullanıcı değeri geçersiz.');
+    await needFeature(b.isHidden, 'hiddenUser', 'Gizli kullanıcı modu');
     set('is_hidden', b.isHidden);
+  }
+  if (b.hideCountry !== undefined) {
+    if (typeof b.hideCountry !== 'boolean') throw fail('Ülke gizleme değeri geçersiz.');
+    await needFeature(b.hideCountry, 'hideCountry', 'Ülke/Bölgeyi gizleme');
+    set('hide_country', b.hideCountry);
+  }
+  if (b.hideVisits !== undefined) {
+    if (typeof b.hideVisits !== 'boolean') throw fail('Görüntüleme geçmişi değeri geçersiz.');
+    await needFeature(b.hideVisits, 'invisibleVisit', 'Görüntüleme geçmişini gizleme');
+    set('hide_visits', b.hideVisits);
   }
   if (b.whoCanDm !== undefined) set('who_can_dm', oneOf(b.whoCanDm, ['everyone', 'following', 'nobody'], 'Mesaj gizliliği'));
   if (b.gender !== undefined) set('gender', b.gender === null ? null : oneOf(b.gender, ['male', 'female', 'other'], 'Cinsiyet'));
@@ -64,6 +78,7 @@ router.patch('/', async (req, res) => {
   if (b.city !== undefined) set('city', text(b.city, 'Şehir', { max: 60 }));
   if (b.showPresence !== undefined) {
     if (typeof b.showPresence !== 'boolean') throw fail('Çevrimiçi durumu değeri geçersiz.');
+    await needFeature(!b.showPresence, 'hideOnline', 'Çevrimiçi saati gizleme');
     set('show_presence', b.showPresence);
   }
   // SWIP hayalet modu: odalara görünmeden girme, çevrimiçi görünmeme, iz bırakmadan profil ziyareti.
@@ -106,20 +121,21 @@ router.get('/notifications/pending', async (req, res) => {
   const after = /^\d{1,18}$/.test(String(req.query.after ?? '')) ? String(req.query.after) : '0';
   const last = (await query(`SELECT COALESCE(MAX(id), 0)::text AS id FROM user_notifications WHERE user_id = $1`, [req.user.id])).rows[0].id;
   const r = await query(
-    `SELECT id::text, kind, title, body, data FROM user_notifications
-     WHERE user_id = $1 AND id > $2::bigint AND created_at > NOW() - INTERVAL '3 days' ORDER BY id DESC LIMIT 20`,
+    `SELECT n.id::text AS id, n.kind, n.title, n.body, n.data FROM user_notifications n
+     WHERE n.user_id = $1 AND n.id > $2::bigint AND n.created_at > NOW() - INTERVAL '3 days' ORDER BY n.id DESC LIMIT 20`,
     [req.user.id, after],
   );
   res.json({ lastId: last, notifications: r.rows.reverse() });
 });
 
-// Mesajlar → Bildirimler: son 30 günün bildirimleri (en yeniden eskiye), sayfalı.
+// Mesajlar → Bildirimler: son 7 günün bildirimleri, en yeni en üstte (sayfalı).
 router.get('/notifications', async (req, res) => {
   const before = /^\d{1,18}$/.test(String(req.query.before ?? '')) ? String(req.query.before) : null;
   const r = await query(
-    `SELECT id::text, kind, title, body, data, created_at FROM user_notifications
-     WHERE user_id = $1 AND created_at > NOW() - INTERVAL '30 days' AND ($2::bigint IS NULL OR id < $2::bigint)
-     ORDER BY id DESC LIMIT 50`,
+    // Sıralama sayısal numaraya göre (n.id): metne çevrilmiş "id"ye göre sıralamak 9'u 10'un önüne koyuyordu.
+    `SELECT n.id::text AS id, n.kind, n.title, n.body, n.data, n.created_at FROM user_notifications n
+     WHERE n.user_id = $1 AND n.created_at > NOW() - INTERVAL '7 days' AND ($2::bigint IS NULL OR n.id < $2::bigint)
+     ORDER BY n.id DESC LIMIT 100`,
     [req.user.id, before],
   );
   const seen = (await query(`SELECT notify_seen_id::text AS s FROM users WHERE id = $1`, [req.user.id])).rows[0]?.s ?? '0';
@@ -130,7 +146,7 @@ router.get('/notifications', async (req, res) => {
 router.get('/notifications/unread', async (req, res) => {
   const r = await query(
     `SELECT COUNT(*)::int AS n FROM user_notifications n JOIN users u ON u.id = n.user_id
-     WHERE n.user_id = $1 AND n.id > u.notify_seen_id AND n.created_at > NOW() - INTERVAL '30 days'`,
+     WHERE n.user_id = $1 AND n.id > u.notify_seen_id AND n.created_at > NOW() - INTERVAL '7 days'`,
     [req.user.id],
   );
   res.json({ unread: r.rows[0].n });
@@ -452,17 +468,22 @@ router.get('/levels', async (req, res) => {
 // Kırmızı rozetler (yeni ziyaretçi, yeni takipçi, bekleyen arkadaş isteği).
 router.get('/badges', async (req, res) => {
   const r = await query(
-    `SELECT (SELECT COUNT(*)::int FROM profile_visitors WHERE profile_user_id = $1 AND last_visited_at > u.visitors_seen_at) AS visitors,
+    `SELECT (SELECT COUNT(*)::int FROM profile_visitors WHERE profile_user_id = $1 AND last_visited_at > u.visitors_seen_at
+               AND last_visited_at > NOW() - INTERVAL '7 days') AS visitors,
             (SELECT COUNT(*)::int FROM follows WHERE followed_id = $1 AND created_at > u.followers_seen_at) AS followers,
             ((SELECT COUNT(*)::int FROM friend_requests WHERE target_id = $1 AND status = 'pending' AND created_at > NOW() - INTERVAL '7 days')
              + (SELECT COUNT(*)::int FROM cp_pairs WHERE (user_a = $1 OR user_b = $1) AND request_kind IS NOT NULL
                   AND request_from <> $1 AND request_at > NOW() - INTERVAL '24 hours'
-                  AND EXISTS (SELECT 1 FROM users ru WHERE ru.id = request_from AND ru.account_status = 'active'))) AS friends
+                  AND EXISTS (SELECT 1 FROM users ru WHERE ru.id = request_from AND ru.account_status = 'active'))) AS friends,
+            -- Ailemde bekleyen katılma istekleri (yalnızca aile sahibi / yöneticisi için).
+            (SELECT COUNT(*)::int FROM family_join_requests jr
+               JOIN family_members fm ON fm.family_id = jr.family_id AND fm.user_id = $1 AND fm.role IN ('owner','admin')
+               JOIN users ru ON ru.id = jr.user_id AND ru.account_status = 'active') AS family
      FROM users u WHERE u.id = $1`,
     [req.user.id],
   );
-  const x = r.rows[0] ?? { visitors: 0, followers: 0, friends: 0 };
-  res.json({ visitors: x.visitors, followers: x.followers, friends: x.friends, total: x.visitors + x.followers + x.friends });
+  const x = r.rows[0] ?? { visitors: 0, followers: 0, friends: 0, family: 0 };
+  res.json({ visitors: x.visitors, followers: x.followers, friends: x.friends, family: x.family, total: x.visitors + x.followers + x.friends + x.family });
 });
 
 // Liste açılınca rozet sıfırlanır.
@@ -472,14 +493,15 @@ router.post('/seen', async (req, res) => {
   res.json({ ok: true });
 });
 
-// Profil ziyaretçileri: sayı herkese açık, liste WIP kademesine bağlı (viewVisitors).
+// Profil ziyaretçileri: son 7 gün, en son ziyaret eden en üstte. Liste WIP kademesine bağlı (viewVisitors).
 router.get('/visitors', async (req, res) => {
   const wip = await activeWip(req.user.id);
   if (!wip?.features.viewVisitors) throw fail('Ziyaretçi listesi WIP 2 ve üzeri için açıktır.', 403);
   const r = await query(
     `SELECT ${USER_PUBLIC_COLUMNS}, pv.visit_count, pv.last_visited_at
      FROM profile_visitors pv JOIN users u ON u.id = pv.visitor_id ${USER_PUBLIC_JOINS}
-     WHERE pv.profile_user_id = $1 ORDER BY pv.last_visited_at DESC LIMIT 50`,
+     WHERE pv.profile_user_id = $1 AND pv.last_visited_at > NOW() - INTERVAL '7 days'
+     ORDER BY pv.last_visited_at DESC LIMIT 200`,
     [req.user.id],
   );
   res.json({

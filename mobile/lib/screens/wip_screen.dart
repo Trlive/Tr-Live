@@ -21,8 +21,11 @@ const List<(String, IconData, String)> _perks = [
   ('profileEffect', Icons.auto_awesome, 'Profil ışık efekti'),
   ('kickImmunity', Icons.shield_outlined, 'Odadan atılamaz'),
   ('customRoomTheme', Icons.wallpaper, 'Özel oda teması'),
-  ('invisibleVisit', Icons.visibility_off_outlined, 'Gizli ziyaret'),
+  ('hideCountry', Icons.public_off_outlined, 'Ülke/Bölgeyi gizle'),
+  ('hideOnline', Icons.schedule_outlined, 'Çevrimiçi saati gizle'),
+  ('invisibleVisit', Icons.visibility_off_outlined, 'Görüntüleme geçmişini gizle'),
   ('animatedAvatar', Icons.gif_box_outlined, 'Hareketli profil fotoğrafı'),
+  ('hiddenUser', Icons.person_off_outlined, 'Gizli kullanıcı'),
   ('ghostMode', Icons.blur_on, 'Hayalet mod'),
 ];
 

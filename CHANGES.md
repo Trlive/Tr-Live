@@ -1,3 +1,35 @@
+## v2.68.0 — Renkli oda araçları, yeni Ayarlar ve Gizlilik (WIP), konuşma silme, aile istek uyarısı
+- Oda → İnteraktif Özellikler / Temel Araçlar: düğmeler renkli (yeşil kilit, pembe temizle/tema/gizle, mavi sohbet,
+  mor mikrofon modu, kırmızı kapat…); düzen aynı. Açık durumdaki araç (kilitli, gizli, sohbet yasağı, müzik çalıyor,
+  kamera açık, sırada) etiketin altında küçük renkli çizgiyle gösterilir.
+- Profil → Ayarlar yeniden düzenlendi: Hesap & Güvenlik (güvenlik düzeyi: Düşük/Orta/Yüksek — şifre, telefon, kimlik
+  doğrulama), Gizlilik, Bildirimler, Dil, Paylaş (davet metni kopyalanır), Yardım (Müşteri hizmetleri), Geri bildirim,
+  Hakkında (sürümler, hata kaydı), Takas (cüzdan · elmas bozdurma), Arka plan izinleri, Oturumu kapat. Renkli simgeler.
+- Gizlilik (WIP ayrıcalıkları, her ayarın altında hangi kademede açıldığı yazar; yoksa kilitli, dokununca WIP sayfası):
+  Ülke/Bölgeyi gizle (WIP 4, profilde "Bilinmiyor"), Çevrimiçi saati gizle (WIP 4), Görüntüleme geçmişini gizle (WIP 7,
+  artık açılıp kapatılabilir), Gizli kullanıcı (WIP 10), Hayalet mod (SWIP). İletişim izni (kimler mesaj atabilir) ve
+  Engellenen kullanıcılar da burada. Gizli kullanıcı ve çevrimiçi gizleme artık ücretsiz değil: üyeliği yetmeyen
+  kişilerde bu ayarlar kapatılır; üyelik bitince / kademe düşünce 5 dk içinde kendiliğinden kapanır (yöneticiler hariç).
+  Kademeler yönetimden (WIP tablosu) değiştirilebilir: hideCountry, hideOnline, hiddenUser.
+- Mesajlar: konuşmayı sil (sola kaydır ya da basılı tut). Yalnızca silen kişide silinir; karşı taraf görmeye devam eder,
+  yeni mesaj gelince konuşma yalnızca yeni mesajlarla yeniden görünür.
+- Aile: biri aileye katılma isteği gönderince aile sahibi ve yöneticilere bildirim (Bildirimler + telefon bildirimi),
+  profildeki "Aile" düğmesinde ve profil sekmesinde kırmızı rozet, aile sayfasında "N yeni katılma isteği" uyarısı
+  (dokununca istekler açılır) ve "Aile üyeleri" yanında rozet.
+- Düzeltme: Bildirimler listesinde sıralama metin olarak yapılıyordu (9 numaralı bildirim 22'nin önüne geçiyordu);
+  artık en yeni bildirim her zaman en üstte.
+
+## v2.67.2 — Para Çekme yalnızca maaş hak edilince
+- Gelir Merkezi'ndeki "Para Çekme" düğmesi artık yalnızca yayıncı maaş kotasını doldurup maaş hak ettiğinde görünür:
+  ajanstaki onaylı yayıncının bu dönemde tahmini maaşı 0'dan büyükse, biten ama yönetimin henüz kapatmadığı önceki dönemde
+  maaş hak ettiyse ya da kapanmış dönemden henüz ödenmemiş maaşı varsa. Diğer durumlarda gizli (sayfa yine de açılırsa
+  "kotanı doldurunca açılır" yazar). Para Çekme sayfasında ödenmeyi bekleyen maaş ayrıca gösterilir.
+
+## v2.67.1 — Bildirimler ve ziyaretçiler: son 7 gün
+- Mesajlar → Bildirimler artık son 7 günü gösterir (önce 30 gün), en yeni bildirim en üstte. Okunmamış sayısı da son 7 gün.
+- Profil → Ziyaretçiler: son 7 günde profilini ziyaret edenler, en son ziyaret eden en üstte (önce tüm zamanlar, ilk 50).
+  Profildeki ziyaretçi sayısı ve kırmızı rozet de son 7 güne göre.
+
 ## v2.67.0 — Daha az internet, daha az pil
 - Sunucu bağlantısı açık tutulur (keep-alive): her istekte yeniden güvenli bağlantı kurulmuyor; uygulama, resimler ve
   hediye dosyaları tek ortak bağlantıyı kullanıyor (daha hızlı, daha az veri ve pil). Kopmuş bağlantıda okuma isteği bir

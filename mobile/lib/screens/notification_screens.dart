@@ -43,8 +43,11 @@ class _NotificationsPageState extends State<NotificationsPage> {
     try {
       final r = await Api.get('/api/me/notifications');
       if (!mounted) return;
+      // Son 7 gün; en yeni en üstte.
+      final list = listOf(r['notifications'])
+        ..sort((a, b) => (int.tryParse('${b['id']}') ?? 0).compareTo(int.tryParse('${a['id']}') ?? 0));
       setState(() {
-        _items = listOf(r['notifications']);
+        _items = list;
         _error = null;
       });
       Api.post('/api/me/notifications/seen').catchError((_) => <String, dynamic>{});
@@ -59,7 +62,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
         'follow' => Icons.person_add_alt_1_rounded,
         'friend_request' || 'friend_accept' => Icons.waving_hand_rounded,
         'room_open' => Icons.mic_rounded,
-        'family_notice' || 'family_join' => Icons.groups_rounded,
+        'family_notice' || 'family_join' || 'family_request' => Icons.groups_rounded,
         'guardian' => Icons.shield_rounded,
         'relation_request' => Icons.favorite_border_rounded,
         'agency_notice' => Icons.campaign_rounded,
@@ -74,7 +77,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
         'post_comment' => Pal.cyan,
         'follow' || 'friend_request' || 'friend_accept' => Pal.amber,
         'room_open' => Pal.green,
-        'family_notice' || 'family_join' => Pal.purple,
+        'family_notice' || 'family_join' || 'family_request' => Pal.purple,
         'agency_notice' || 'agency_assistant' => const Color(0xFF38BDF8),
         'agency_transfer' => const Color(0xFFF472B6),
         'agency_salary' => Pal.green,
@@ -120,15 +123,21 @@ class _NotificationsPageState extends State<NotificationsPage> {
           : items == null
               ? const Center(child: CircularProgressIndicator())
               : items.isEmpty
-                  ? const Center(child: Text('Henüz bildirimin yok.', style: TextStyle(color: Pal.textDim)))
+                  ? const Center(child: Text('Son 7 günde bildirimin yok.', style: TextStyle(color: Pal.textDim)))
                   : RefreshIndicator(
                       onRefresh: _load,
                       child: ListView.separated(
                         padding: const EdgeInsets.symmetric(vertical: 6),
-                        itemCount: items.length,
-                        separatorBuilder: (_, __) => const Divider(height: 1, indent: 72, color: Color(0x1FFFFFFF)),
-                        itemBuilder: (_, i) {
-                          final n = items[i];
+                        itemCount: items.length + 1,
+                        separatorBuilder: (_, i) => i == 0 ? const SizedBox.shrink() : const Divider(height: 1, indent: 72, color: Color(0x1FFFFFFF)),
+                        itemBuilder: (_, idx) {
+                          if (idx == 0) {
+                            return const Padding(
+                              padding: EdgeInsets.fromLTRB(16, 4, 16, 6),
+                              child: Text('Son 7 gün', style: TextStyle(color: Pal.textDim, fontSize: 12, fontWeight: FontWeight.w600)),
+                            );
+                          }
+                          final n = items[idx - 1];
                           final kind = (n['kind'] ?? '').toString();
                           return ListTile(
                             onTap: () => _open(n),

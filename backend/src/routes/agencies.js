@@ -371,6 +371,24 @@ router.get('/broadcaster/me', async (req, res) => {
     `SELECT COALESCE(SUM(COALESCE(diamond_amount, coin_amount)), 0) AS diamonds FROM gift_transactions WHERE receiver_id = $1 AND sender_id <> $1`, [req.user.id],
   )).rows[0];
   const kyc = (await query(`SELECT kyc_status FROM users WHERE id = $1`, [req.user.id])).rows[0].kyc_status;
+  // Para çekme yalnızca maaş hak edildiğinde görünür: bu dönemde kotayı doldurup maaşı hak etmiş (tahmini maaş > 0) ya da
+  // kapanmış dönemden henüz ödenmemiş maaşı var.
+  const unpaid = (await query(
+    `SELECT COALESCE(SUM(salary_cents), 0)::text AS cents FROM host_statements WHERE user_id = $1 AND status = 'pending' AND salary_cents > 0`,
+    [req.user.id],
+  )).rows[0].cents;
+  // Maaş yalnızca ajanstaki yayıncıya hesaplanır (ajansı olmayana dönem kapanınca maaş çıkmaz).
+  let withdrawEligible = b.status === 'approved' && ((Boolean(b.agency_id) && BigInt(progress?.estimatedCents ?? 0) > 0n) || BigInt(unpaid) > 0n);
+  // Önceki dönem bitti ama yönetim henüz kapatmadı: o dönemde hak edilen maaş da sayılır (yeni dönem başında düğme kaybolmasın).
+  if (!withdrawEligible && b.status === 'approved' && b.agency_id && progress) {
+    const prevDate = new Date(new Date(progress.startsAt).getTime() - 1000);
+    const prevKey = periodBounds(cfg.settings.cycle, prevDate).key;
+    const closed = await query(`SELECT 1 FROM payout_periods WHERE period_key = $1`, [prevKey]);
+    if (!closed.rowCount) {
+      const prev = await hostProgress(b, cfg, prevDate);
+      withdrawEligible = BigInt(prev.estimatedCents) > 0n;
+    }
+  }
   const pending = (await query(`${TRANSFER_SELECT} WHERE t.user_id = $1 AND t.status IN ('pending_source','pending_platform')`, [req.user.id])).rows[0];
   const lastRejected = pending ? null : (await query(
     `${TRANSFER_SELECT} WHERE t.user_id = $1 AND t.status = 'rejected' AND t.decided_at > NOW() - ($2::int * INTERVAL '1 day') ORDER BY t.decided_at DESC LIMIT 1`,
@@ -386,6 +404,7 @@ router.get('/broadcaster/me', async (req, res) => {
       pendingTransfer: pending ? transferJson(pending) : null,
       rejectedTransfer: lastRejected ? transferJson(lastRejected) : null,
       progress: progress ?? undefined, config: configJson(cfg),
+      withdrawEligible, unpaidSalaryCents: unpaid,
     },
   });
 });

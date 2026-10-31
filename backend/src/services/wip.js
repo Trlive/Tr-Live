@@ -3,6 +3,7 @@ import { query } from '../database.js';
 export const BASE_FEATURES = Object.freeze({
   nameColor: null, badge: null, maxRooms: 1, viewVisitors: false, vipGifts: false, muteImmunity: false, kickImmunity: false,
   profileEffect: false, customRoomTheme: false, invisibleVisit: false, animatedAvatar: false, ghostMode: false,
+  hideCountry: false, hideOnline: false, hiddenUser: false,
 });
 
 /** Bir ayrıcalığın açıldığı en düşük kademe (hata mesajlarında "WIP 6 ve üzeri" demek için; panelden değişebilir). */

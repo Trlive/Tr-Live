@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api.dart';
-import '../services/background_service.dart';
 import '../services/auth_service.dart';
 import '../services/session.dart';
 import '../services/inbox_service.dart';
@@ -15,13 +13,13 @@ import 'admin_screen.dart';
 import 'agency_screen.dart';
 import 'agency_center.dart';
 import 'dealer_screen.dart';
-import 'edit_profile_screen.dart';
 import 'family_screen.dart';
 import 'social_screens.dart';
 import 'store_screens.dart';
 import 'income_screens.dart';
 import 'login_screen.dart';
 import 'misc_screens.dart';
+import 'settings_screens.dart';
 import 'support_screens.dart';
 import 'guardian_screens.dart';
 import 'user_screens.dart';
@@ -131,87 +129,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => StatefulBuilder(
-          builder: (context, setLocal) => Scaffold(
-            appBar: AppBar(title: const Text('Ayarlar')),
-            body: ListView(children: [
-              ListTile(leading: const Icon(Icons.edit), title: const Text('Profili düzenle'), trailing: const Icon(Icons.chevron_right), onTap: () => _open(const EditProfileScreen())),
-              ListTile(leading: const Icon(Icons.block), title: const Text('Engellenen kullanıcılar'), trailing: const Icon(Icons.chevron_right), onTap: () => _open(const BlockedUsersScreen())),
-              ListTile(leading: const Icon(Icons.notifications_active_outlined), title: const Text('Bildirimler'), subtitle: const Text('Arkadaşlık isteği, yeni takipçi, arkadaşın oda açması'), trailing: const Icon(Icons.chevron_right), onTap: _notifyPrefs),
-              ListTile(leading: const Icon(Icons.receipt_long), title: const Text('Cüzdan ve Elmas Bozdurma'), trailing: const Icon(Icons.chevron_right), onTap: () => _open(const WalletScreen())),
-              SwitchListTile(
-                secondary: const Icon(Icons.visibility_off),
-                title: const Text('Gizli kullanıcı modu'),
-                subtitle: const Text('Odalarda adınız ve fotoğrafınız gizlenir, aramada çıkmazsınız.'),
-                value: p['isHidden'] == true,
-                onChanged: (v) async {
-                  final r = await guard(context, () => Api.patch('/api/me', {'isHidden': v}));
-                  if (r == null || !context.mounted) return; // sunucu reddettiyse anahtar eski hâlinde kalsın
-                  p['isHidden'] = v;
-                  final me = mapOf(r['user']);
-                  if (me != null) Session.me.value = me;
-                  toast(context, v ? 'Gizli kullanıcı açık: odalarda ve listelerde herkese (sana da) "Gizli Kullanıcı" görünürsün.' : 'Gizli kullanıcı kapandı.');
-                  setLocal(() {});
-                },
-              ),
-              // SWIP ayrıcalığı: hayalet mod (üyelik bitince sunucu kendiliğinden etkisiz sayar).
-              if (mapOf(mapOf(p['wip'])?['features'])?['ghostMode'] == true || p['ghostMode'] == true)
-                SwitchListTile(
-                  secondary: const Text('👻', style: TextStyle(fontSize: 22)),
-                  title: const Text('Hayalet mod (SWIP)'),
-                  subtitle: const Text('Odaya girişiniz duyurulmaz; dinleyici listesinde, kişi sayısında ve çevrimiçi listelerde görünmezsiniz.'),
-                  value: p['ghostMode'] == true,
-                  onChanged: (v) async {
-                    final r = await guard(context, () => Api.patch('/api/me', {'ghostMode': v}));
-                    if (r == null || !context.mounted) return;
-                    p['ghostMode'] = v;
-                    final me = mapOf(r['user']);
-                    if (me != null) Session.me.value = me;
-                    toast(context, v
-                        ? (me?['ghostActive'] == true ? '👻 Hayalet mod açık: odalarda görünmezsin (mikrofona çıkınca görünürsün).' : 'Hayalet mod yalnızca SWIP üyeliği sürerken çalışır.')
-                        : 'Hayalet mod kapandı.');
-                    setLocal(() {});
-                  },
-                ),
-              SwitchListTile(
-                secondary: const Icon(Icons.online_prediction),
-                title: const Text('Çevrimiçi durumumu göster'),
-                subtitle: const Text('Kapalıyken kimse çevrimiçi olduğunuzu veya son görülme zamanınızı göremez.'),
-                value: p['showPresence'] != false,
-                onChanged: (v) async {
-                  final r = await guard(context, () => Api.patch('/api/me', {'showPresence': v}));
-                  if (r == null || !context.mounted) return;
-                  p['showPresence'] = v;
-                  setLocal(() {});
-                },
-              ),
-              const Divider(),
-              ListTile(
-                leading: const Icon(Icons.layers_outlined),
-                title: const Text('Arka plan ve balon izinleri'),
-                subtitle: const Text('Oda arka planda açık kalsın, diğer uygulamaların üzerinde balon görünsün'),
-                onTap: () async {
-                  final prefs = await SharedPreferences.getInstance();
-                  await prefs.remove('asked_battery');
-                  await prefs.remove('asked_overlay');
-                  if (!context.mounted) return;
-                  await BackgroundService.instance.ensurePermissions((msg, action) => confirm(context, msg, action: action));
-                },
-              ),
-              ListTile(leading: const Icon(Icons.bug_report_outlined), title: const Text('Hata kaydı'), trailing: const Icon(Icons.chevron_right), onTap: () => _open(const ErrorLogScreen())),
-              ListTile(
-                leading: const Icon(Icons.devices),
-                title: const Text('Oturumlarım'),
-                subtitle: const Text('Hesabınızın açık olduğu cihazlar'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => _open(const SessionsScreen()),
-              ),
-              ListTile(leading: const Icon(Icons.lock_reset), title: const Text('Şifre değiştir'), onTap: _changePassword),
-              ListTile(leading: const Icon(Icons.logout), title: const Text('Çıkış yap'), onTap: _goLogin),
-              ListTile(leading: const Icon(Icons.delete_forever, color: Colors.redAccent), title: const Text('Hesabı sil', style: TextStyle(color: Colors.redAccent)), onTap: _deleteAccount),
-              const SizedBox(height: 24),
-            ]),
-          ),
+        builder: (_) => SettingsScreen(
+          profile: p,
+          onChangePassword: _changePassword,
+          onLogout: _goLogin,
+          onDeleteAccount: _deleteAccount,
+          onNotifyPrefs: _notifyPrefs,
         ),
       ),
     );
@@ -346,18 +269,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _quickTiles(Map<String, dynamic> p) {
     final wip = mapOf(p['wip']);
-    Widget tile(IconData icon, Color color, String label, VoidCallback onTap) => Expanded(
+    Widget tile(IconData icon, Color color, String label, VoidCallback onTap, {int badge = 0}) => Expanded(
           child: InkWell(
             borderRadius: BorderRadius.circular(14),
             onTap: onTap,
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 8),
               child: Column(mainAxisSize: MainAxisSize.min, children: [
-                Container(
-                  width: 50,
-                  height: 50,
-                  decoration: BoxDecoration(shape: BoxShape.circle, gradient: RadialGradient(colors: [color.withValues(alpha: 0.35), color.withValues(alpha: 0.08)])),
-                  child: Icon(icon, size: 26, color: color),
+                Badge(
+                  isLabelVisible: badge > 0,
+                  label: Text(badge > 99 ? '99+' : '$badge'),
+                  offset: const Offset(2, -2),
+                  child: Container(
+                    width: 50,
+                    height: 50,
+                    decoration: BoxDecoration(shape: BoxShape.circle, gradient: RadialGradient(colors: [color.withValues(alpha: 0.35), color.withValues(alpha: 0.08)])),
+                    child: Icon(icon, size: 26, color: color),
+                  ),
                 ),
                 const SizedBox(height: 5),
                 Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11.5, color: Pal.text)),
@@ -369,7 +297,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
       child: Row(children: [
         tile(Icons.military_tech, Colors.amber, 'Leveller', () => _open(const LevelsScreen())),
-        tile(Icons.groups, Colors.orangeAccent, 'Aile', () => _open(const FamilyScreen())),
+        // Aileme katılma isteği geldiyse (yönetici) kırmızı rozet.
+        ValueListenableBuilder<Map<String, int>>(
+          valueListenable: Inbox.badges,
+          builder: (_, b, __) => tile(Icons.groups, Colors.orangeAccent, 'Aile', () => _open(const FamilyScreen()), badge: b['family'] ?? 0),
+        ),
         tile(Icons.workspace_premium, Pal.cyan, wip == null ? 'WIP' : wipLabel(wipLevelOf(wip['level'])), () => _open(const WipScreen())),
         tile(Icons.checkroom, Pal.cyan, 'Görünüm', () => _open(const AppearanceScreen())),
       ]),

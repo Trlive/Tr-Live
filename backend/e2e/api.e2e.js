@@ -28,6 +28,10 @@ const env = {
 
 let server; let pool;
 const sql = (q, p = []) => pool.query(q, p);
+const giveWip = (u, level) => sql(
+  `INSERT INTO user_wip(user_id, level, starts_at, expires_at, is_active) VALUES($1,$2,NOW(),NOW()+INTERVAL '1 day',TRUE)
+   ON CONFLICT (user_id) DO UPDATE SET level=$2, expires_at=NOW()+INTERVAL '1 day', is_active=TRUE`, [u.id, level]);
+const dropWip = (u) => sql(`DELETE FROM user_wip WHERE user_id = $1`, [u.id]);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function api(method, p, { body, token, headers = {}, raw } = {}) {
@@ -113,13 +117,16 @@ test('profil: düzenleme, arama, takip, gizli mod, avatar yükleme, engelleme et
   assert.equal(prof.body.profile.isFollowing, true);
   assert.equal(prof.body.profile.followers, 1);
   assert.equal(prof.body.profile.coins, undefined, 'başkasının bakiyesi görünmemeli');
-  // gizli mod
+  // gizli mod: WIP 10 ayrıcalığı (üyeliği olmayan açamaz)
+  assert.equal((await api('PATCH', '/api/me', { token: U.c.token, body: { isHidden: true } })).status, 403, 'gizli kullanıcı WIP 10 ister');
+  await giveWip(U.c, 10);
   ok(await api('PATCH', '/api/me', { token: U.c.token, body: { isHidden: true } }));
   const hidden = await api('GET', `/api/users/${U.c.id}`, { token: U.a.token });
   assert.equal(hidden.body.profile.displayName, 'Gizli Kullanıcı');
   const s2 = await api('GET', `/api/users/search?q=${encodeURIComponent(`e2e_${tag}_c`)}`, { token: U.a.token });
   assert.ok(!s2.body.users.some((u) => u.id === U.c.id), 'gizli kullanıcı aramada çıkmamalı');
   ok(await api('PATCH', '/api/me', { token: U.c.token, body: { isHidden: false } }));
+  await dropWip(U.c);
   // avatar (1x1 png)
   const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
   const up = await api('PUT', '/api/me/avatar', { token: U.b.token, raw: png, headers: { 'Content-Type': 'image/png' } });
@@ -1190,6 +1197,9 @@ test('çevrimiçi durumu: soket bağlıyken çevrimiçi, gizleyince görünmez',
   const st = await snap;
   assert.ok(st.users.some((u) => u.userId === p1.id && u.online === true), 'izleme anlık görüntüsü');
   const hidden = next(w2, 'presence');
+  // Çevrimiçi saati gizleme WIP 4 ayrıcalığı.
+  assert.equal((await api('PATCH', '/api/me', { token: p1.token, body: { showPresence: false } })).status, 403, 'çevrimiçi gizleme WIP 4 ister');
+  await giveWip(p1, 4);
   ok(await api('PATCH', '/api/me', { token: p1.token, body: { showPresence: false } }));
   const ev = await hidden;
   assert.equal(ev.userId, p1.id);
@@ -1280,10 +1290,6 @@ test('para işlemi tekrar koruması, hediye combo, coin geçmişi süzme', { ski
 });
 
 // ---------------------------------------------------------------- v2.38
-const giveWip = (u, level) => sql(
-  `INSERT INTO user_wip(user_id, level, starts_at, expires_at, is_active) VALUES($1,$2,NOW(),NOW()+INTERVAL '1 day',TRUE)
-   ON CONFLICT (user_id) DO UPDATE SET level=$2, expires_at=NOW()+INTERVAL '1 day', is_active=TRUE`, [u.id, level]);
-
 test('WIP 10 + SWIP: kademeler, Vip hediye kilidi, hayalet mod', { skip, timeout: 60000 }, async () => {
   const owner = await register('swipO');
   const ghost = await register('swipG');

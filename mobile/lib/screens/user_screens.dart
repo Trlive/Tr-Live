@@ -318,7 +318,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     final family = mapOf(p['family']);
     final supporters = listOf(card['supporters']);
     final bio = (p['bio'] ?? '').toString();
-    final place = [p['city'], p['country']].where((e) => e != null && '$e'.isNotEmpty).join(', ');
+    // Ülke/Bölgeyi gizle (WIP ayrıcalığı) açık kişide konum "Bilinmiyor".
+    final place = p['locationHidden'] == true ? 'Bilinmiyor' : [p['city'], p['country']].where((e) => e != null && '$e'.isNotEmpty).join(', ');
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 14, 24, 28),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

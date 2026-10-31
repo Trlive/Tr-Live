@@ -252,17 +252,27 @@ class VisitorsScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Profil ziyaretçileri')),
       body: AsyncBody<List<Map<String, dynamic>>>(
-        load: () async => listOf((await Api.get('/api/me/visitors'))['visitors']),
+        load: () async {
+          // Son 7 gün; en son ziyaret eden en üstte.
+          final list = listOf((await Api.get('/api/me/visitors'))['visitors']);
+          DateTime at(Map<String, dynamic> v) => DateTime.tryParse('${v['lastVisitedAt']}') ?? DateTime.fromMillisecondsSinceEpoch(0);
+          list.sort((a, b) => at(b).compareTo(at(a)));
+          return list;
+        },
         builder: (context, items, reload) => items.isEmpty
-            ? const Center(child: Text('Henüz ziyaretçi yok.'))
+            ? const Center(child: Text('Son 7 günde ziyaretçi yok.'))
             : RefreshIndicator(
                 onRefresh: reload,
                 child: ListView(children: [
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 10, 16, 4),
+                    child: Text('Son 7 gün', style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.w600)),
+                  ),
                   for (final v in items)
                     ListTile(
                       leading: UserAvatar(user: mapOf(v['user'])),
                       title: UserName(user: mapOf(v['user'])),
-                      subtitle: Text('${v['visitCount']} ziyaret · ${_date(v['lastVisitedAt'])}'),
+                      subtitle: Text('Son ziyaret: ${_date(v['lastVisitedAt'])} · toplam ${v['visitCount']} ziyaret'),
                       onTap: () {
                         final id = mapOf(v['user'])?['id'];
                         if (id is String) Navigator.push(context, MaterialPageRoute(builder: (_) => UserProfileScreen(userId: id)));

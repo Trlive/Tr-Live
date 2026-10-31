@@ -109,6 +109,8 @@ export function selfUser(row) {
     isHidden: Boolean(row.is_hidden),
     whoCanDm: row.who_can_dm ?? 'everyone',
     showPresence: row.show_presence !== false,
+    hideCountry: row.hide_country === true,
+    hideVisits: row.hide_visits !== false,
     ghostMode: row.ghost_mode === true,
     chatRestrictedUntil: row.chat_restricted_until && new Date(row.chat_restricted_until) > new Date() ? row.chat_restricted_until : null,
     systemRole: row.system_role,

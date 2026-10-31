@@ -9,7 +9,8 @@ import 'socket_service.dart';
 class Inbox {
   static final ValueNotifier<int> unread = ValueNotifier<int>(0);
   /// Profil kırmızı rozetleri: yeni ziyaretçi, yeni takipçi, bekleyen arkadaş isteği.
-  static final ValueNotifier<Map<String, int>> badges = ValueNotifier<Map<String, int>>(const {'visitors': 0, 'followers': 0, 'friends': 0, 'total': 0});
+  /// family: ailemde bekleyen katılma istekleri (yalnızca aile sahibi / yöneticisi).
+  static final ValueNotifier<Map<String, int>> badges = ValueNotifier<Map<String, int>>(const {'visitors': 0, 'followers': 0, 'friends': 0, 'family': 0, 'total': 0});
   static StreamSubscription? _sub;
   static Timer? _timer;
 
@@ -26,7 +27,7 @@ class Inbox {
         _refreshSoon();
       }
       if (t == 'connected') _lastAll = DateTime.now(); // yeniden bağlanınca zaten yenileniyor
-      if (t == 'friend_update' || t == 'cp_request' || t == 'cp_update' || t == 'connected' || t == 'notify') refreshBadges();
+      if (t == 'friend_update' || t == 'cp_request' || t == 'cp_update' || t == 'connected' || t == 'notify' || t == 'family_request') refreshBadges();
     });
     // Asıl güncellemeler soketten anında gelir; bu yalnızca güvenlik ağı: 3 dk'da bir ve yalnızca uygulama ekrandayken
     // (arka planda telefonu uyandırıp internet harcamasın). Uzun aradan sonra ekrana dönünce bir kez yenilenir.
@@ -64,7 +65,7 @@ class Inbox {
     _soon?.cancel();
     _soon = null;
     unread.value = 0;
-    badges.value = const {'visitors': 0, 'followers': 0, 'friends': 0, 'total': 0};
+    badges.value = const {'visitors': 0, 'followers': 0, 'friends': 0, 'family': 0, 'total': 0};
   }
 
   static Timer? _soon;
@@ -95,7 +96,7 @@ class Inbox {
     try {
       final r = await Api.get('/api/me/badges');
       int n(String k) => (r[k] as num?)?.toInt() ?? 0;
-      badges.value = {'visitors': n('visitors'), 'followers': n('followers'), 'friends': n('friends'), 'total': n('total')};
+      badges.value = {'visitors': n('visitors'), 'followers': n('followers'), 'friends': n('friends'), 'family': n('family'), 'total': n('total')};
     } catch (_) {/* oturum yoksa yoksay */}
   }
 

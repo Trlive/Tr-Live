@@ -29,6 +29,7 @@ import { router as giftsRouter } from './routes/gifts.js';
 import { router as agenciesRouter } from './routes/agencies.js';
 import { router as agencyCenterRouter } from './routes/agency_center.js';
 import { startTransferTicker } from './services/agency_ops.js';
+import { startPrivacySweeper } from './services/privacy.js';
 import { router as musicRouter } from './routes/music.js';
 import { router as chatRouter } from './routes/chat.js';
 import { router as messagesRouter } from './routes/messages.js';
@@ -239,6 +240,7 @@ const relationTicker = startRelationRefundTicker();
 const guardianTicker = startGuardianTicker();
 const familyJanitor = startFamilyJanitor();
 const transferTicker = startTransferTicker();
+const privacySweeper = startPrivacySweeper();
 closeStaleMicSessions().catch((e) => console.error('Mikrofon oturumları temizlenemedi:', e.message));
 const janitor = startFirewallJanitor();
 // Bir günden eski işlem (idempotency) anahtarları saatte bir silinir.
@@ -267,6 +269,7 @@ async function shutdown(signal) {
   clearInterval(guardianTicker);
   clearInterval(familyJanitor);
   clearInterval(transferTicker);
+  clearInterval(privacySweeper);
   clearInterval(janitor);
   clearInterval(idemJanitor);
   const force = setTimeout(() => process.exit(1), 10000);

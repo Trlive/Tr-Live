@@ -248,6 +248,46 @@ class _MessagesHomeState extends State<MessagesHome> {
 
   Widget _icon(IconData i, Color c, double s) => FittedBox(child: Icon(i, color: c, size: s));
 
+  // ---------- Konuşmayı sil ----------
+  /// Yalnızca benim tarafımda silinir (karşı taraf görmeye devam eder). true: silindi.
+  Future<bool> _deleteConversation(Map<String, dynamic> c) async {
+    final peer = mapOf(c['peer']);
+    final id = peer?['id']?.toString();
+    if (id == null) return false;
+    final name = (peer?['displayName'] ?? peer?['username'] ?? '').toString();
+    if (!await confirm(context, '$name ile konuşma senden silinsin mi? Karşı taraf mesajları görmeye devam eder.', action: 'Sil', destructive: true)) return false;
+    if (!mounted) return false;
+    final r = await guard(context, () => Api.delete('/api/messages/with/$id'));
+    if (r == null) return false;
+    Inbox.refresh();
+    return true;
+  }
+
+  void _removeConversation(Map<String, dynamic> c) {
+    if (!mounted) return;
+    final id = mapOf(c['peer'])?['id']?.toString();
+    setState(() => _conv = _conv.where((x) => mapOf(x['peer'])?['id']?.toString() != id).toList());
+  }
+
+  Future<void> _conversationMenu(Map<String, dynamic> c) async {
+    final pick = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Pal.surface,
+      showDragHandle: true,
+      builder: (s) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(
+            leading: const Icon(Icons.delete_outline_rounded, color: Pal.red),
+            title: const Text('Konuşmayı sil', style: TextStyle(color: Pal.red, fontWeight: FontWeight.w700)),
+            onTap: () => Navigator.pop(s, 'delete'),
+          ),
+          const SizedBox(height: 8),
+        ]),
+      ),
+    );
+    if (pick == 'delete' && mounted && await _deleteConversation(c)) _removeConversation(c);
+  }
+
   // ---------- Sohbet satırı ----------
   Widget _row(Map<String, dynamic> c, double w) {
     final peer = mapOf(c['peer']);
@@ -256,8 +296,25 @@ class _MessagesHomeState extends State<MessagesHome> {
     final m = homeMargin(w);
     final rowH = (w * 0.19).clamp(64.0, 84.0).toDouble();
     final typing = _typing.contains(peer?['id']?.toString());
-    return InkWell(
+    // Sola kaydır ya da basılı tut: konuşmayı sil.
+    return Dismissible(
+      key: ValueKey('conv-${peer?['id']}'),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 24),
+        color: Pal.red,
+        child: const Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(Icons.delete_outline_rounded, color: Colors.white),
+          SizedBox(width: 6),
+          Text('Sil', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
+        ]),
+      ),
+      confirmDismiss: (_) => _deleteConversation(c),
+      onDismissed: (_) => _removeConversation(c),
+      child: InkWell(
       onTap: peer == null ? null : () => _push(ChatScreen(peer: peer)),
+      onLongPress: peer == null ? null : () => _conversationMenu(c),
       child: SizedBox(
         height: rowH,
         child: Row(children: [
@@ -295,6 +352,7 @@ class _MessagesHomeState extends State<MessagesHome> {
           ),
         ]),
       ),
+    ),
     );
   }
 

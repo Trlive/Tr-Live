@@ -1,6 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api.dart';
+import '../services/inbox_service.dart';
+import '../services/socket_service.dart';
 import '../services/room_dock.dart';
 import '../services/session.dart';
 import '../widgets/app_theme.dart';
@@ -204,8 +207,24 @@ class FamilyPage extends StatefulWidget {
 
 class _FamilyPageState extends State<FamilyPage> {
   int _v = 0;
+  StreamSubscription? _sub;
 
   String get _id => widget.familyId;
+
+  @override
+  void initState() {
+    super.initState();
+    // Aileye yeni katılma isteği gelince (yönetici) sayfa yenilenir: kırmızı uyarı hemen görünür.
+    _sub = SocketService.instance.events.listen((e) {
+      if (e['type'] == 'family_request' && e['familyId'] == _id) _reload();
+    });
+  }
+
+  @override
+  void dispose() {
+    _sub?.cancel();
+    super.dispose();
+  }
 
   void _reload() {
     if (mounted) setState(() => _v++);
@@ -214,6 +233,7 @@ class _FamilyPageState extends State<FamilyPage> {
   Future<void> _push(Widget page) async {
     await Navigator.push(context, MaterialPageRoute(builder: (_) => page));
     _reload();
+    Inbox.refreshBadges(); // istek yanıtlandıysa profildeki rozet de güncellensin
   }
 
   Future<void> _settings(Map<String, dynamic> f) async {
@@ -390,6 +410,7 @@ class _FamilyPageState extends State<FamilyPage> {
           final role = f['myRole']?.toString();
           final member = f['myRole'] != null;
           final admin = role == 'owner' || role == 'admin';
+          final pending = (f['pendingRequests'] as num?)?.toInt() ?? 0;
           return Scaffold(
             backgroundColor: Pal.bg,
             appBar: _appBar(context, '${f['name'] ?? ''}', actions: [
@@ -401,7 +422,31 @@ class _FamilyPageState extends State<FamilyPage> {
                 onRefresh: reload,
                 child: ListView(padding: const EdgeInsets.only(bottom: 120), children: [
                   _FamilyHeader(family: f, showProgress: member, onTier: () => _push(FamilyLevelsPage(initialTier: _tierOf(f['level']), family: f))),
-                  const SizedBox(height: 40),
+                  // Yönetici: bekleyen katılma istekleri için kırmızı uyarı (dokununca istekler açılır).
+                  if (admin && pending > 0)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 16, 12, 0),
+                      child: Material(
+                        color: Pal.red.withValues(alpha: 0.16),
+                        borderRadius: BorderRadius.circular(14),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(14),
+                          onTap: () => _push(FamilyRequestsPage(familyId: _id)),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                            decoration: BoxDecoration(borderRadius: BorderRadius.circular(14), border: Border.all(color: Pal.red.withValues(alpha: 0.7))),
+                            child: Row(children: [
+                              Badge(label: Text('$pending'), child: const Icon(Icons.notifications_active_rounded, color: Pal.red, size: 26)),
+                              const SizedBox(width: 12),
+                              Expanded(child: Text('$pending yeni katılma isteği', style: const TextStyle(color: _ink, fontWeight: FontWeight.w800, fontSize: 15))),
+                              const Text('Gör', style: TextStyle(color: Pal.red, fontWeight: FontWeight.w800)),
+                              const Icon(Icons.chevron_right, color: Pal.red),
+                            ]),
+                          ),
+                        ),
+                      ),
+                    ),
+                  SizedBox(height: admin && pending > 0 ? 24 : 40),
                   _section('Aile bildirimi'),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(15, 8, 15, 0),
@@ -415,6 +460,7 @@ class _FamilyPageState extends State<FamilyPage> {
                     onTap: member ? () => _push(FamilyMembersPage(familyId: _id, myRole: role ?? 'member')) : null,
                     child: Row(children: [
                       Expanded(child: _section('Aile üyeleri')),
+                      if (admin && pending > 0) Badge(label: Text('$pending yeni'), backgroundColor: Pal.red),
                       if (member) const Padding(padding: EdgeInsets.only(right: 12), child: Icon(Icons.chevron_right, color: _dim, size: 30)),
                     ]),
                   ),

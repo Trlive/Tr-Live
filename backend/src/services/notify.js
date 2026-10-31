@@ -7,7 +7,7 @@ import { hub } from '../realtime.js';
 /** Tercih anahtarları: friend (arkadaşlık), follow (takipçi), room (arkadaş oda açtı). Yoksa açık. */
 export const NOTIFY_KINDS = {
   friend_request: 'friend', friend_accept: 'friend', follow: 'follow', room_open: 'room',
-  post_like: 'moment', post_comment: 'moment', family_notice: 'family', family_join: 'family',
+  post_like: 'moment', post_comment: 'moment', family_notice: 'family', family_join: 'family', family_request: 'family',
 };
 
 const clip = (s, n) => String(s ?? '').slice(0, n);
