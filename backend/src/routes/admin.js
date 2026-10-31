@@ -40,6 +40,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import { idempotent } from '../idempotency.js';
 import { ghostNow, refreshGhost } from '../services/ghost.js';
+import { mountPanelRoutes } from './admin_panel.js';
 
 export const router = Router();
 router.use(requireAuth, requireStaff);
@@ -54,6 +55,9 @@ router.get('/me/permissions', (req, res) => {
   const admin = req.user.system_role === 'admin';
   res.json({ role: req.user.system_role, full: admin, can: admin ? ['all'] : ['search_users', 'ban', 'unban', 'change_display_name', 'change_avatar'] });
 });
+
+// Web paneli: kullanıcı listesi / ayrıntısı, odalar, hareketler, istatistik (admin_panel.js).
+mountPanelRoutes(router);
 
 const INVENTORY_TYPES = ['frame', 'entrance_effect', 'badge', 'profile_effect'];
 const wipLevel = (v) => {
@@ -1528,15 +1532,31 @@ router.get('/music/tracks', requireSuperAdmin, async (req, res) => {
 // ---------------- Şikâyetler (admin + support) ----------------
 router.get('/reports', async (req, res) => {
   const status = oneOf(String(req.query.status ?? 'open'), ['open', 'resolved', 'dismissed'], 'Durum');
+  // Şikâyet edilen mesajın metni (oda mesajı / özel mesaj) yalnızca o mesaj için gösterilir; konuşmanın geri kalanı açılmaz.
   const r = await query(
-    `SELECT r.*, ru.username AS reporter_username, tu.username AS target_username FROM reports r
-     JOIN users ru ON ru.id = r.reporter_id LEFT JOIN users tu ON tu.id = r.target_user_id
-     WHERE r.status = $1 ORDER BY r.created_at DESC LIMIT 100`,
+    `SELECT r.*, ru.username AS reporter_username, tu.username AS target_username, tu.display_name AS target_name, tu.public_id AS target_public_id,
+            tu.account_status AS target_status, ro.name AS room_name, rb.username AS resolved_by_username,
+            CASE WHEN r.kind = 'room_message' THEN rmsg.body WHEN r.kind = 'dm' THEN dm.body END AS message_text,
+            CASE WHEN r.kind = 'room_message' THEN rmsg.user_id WHEN r.kind = 'dm' THEN dm.sender_id END AS message_sender_id,
+            mu.username AS message_sender_username
+     FROM reports r
+     JOIN users ru ON ru.id = r.reporter_id LEFT JOIN users tu ON tu.id = r.target_user_id LEFT JOIN rooms ro ON ro.id = r.room_id
+     LEFT JOIN users rb ON rb.id = r.resolved_by
+     LEFT JOIN room_messages rmsg ON r.kind = 'room_message' AND rmsg.id = r.message_id
+     -- Özel mesaj yalnızca şikâyet edenin taraf olduğu konuşmadansa gösterilir (başkasının mesajı kimlikle çekilemez).
+     LEFT JOIN direct_messages dm ON r.kind = 'dm' AND dm.id = r.message_id AND r.reporter_id IN (dm.sender_id, dm.receiver_id)
+     LEFT JOIN users mu ON mu.id = CASE WHEN r.kind = 'room_message' THEN rmsg.user_id WHEN r.kind = 'dm' THEN dm.sender_id END
+     WHERE r.status = $1 ORDER BY r.created_at DESC LIMIT 200`,
     [status],
   );
   res.json({ reports: r.rows.map((x) => ({
     id: x.id, kind: x.kind, reason: x.reason, details: x.details, status: x.status, createdAt: x.created_at,
-    reporter: x.reporter_username, targetUserId: x.target_user_id, target: x.target_username, roomId: x.room_id, messageId: x.message_id,
+    reporter: x.reporter_username, reporterId: x.reporter_id, targetUserId: x.target_user_id, target: x.target_username,
+    targetName: x.target_name ?? null, targetPublicId: x.target_public_id ?? null, targetStatus: x.target_status ?? null,
+    roomId: x.room_id, roomName: x.room_name ?? null, messageId: x.message_id, messageText: x.message_text ?? null,
+    // Mesajı yazan, şikâyet edilen kişiden farklı olabilir (şikâyet eden yanlış kişiyi seçmiş olabilir): panel bunu ayrıca gösterir.
+    messageSenderId: x.message_sender_id ?? null, messageSender: x.message_sender_username ?? null,
+    resolvedAt: x.resolved_at ?? null, resolvedNote: x.resolved_note ?? null, resolvedBy: x.resolved_by_username ?? null,
   })) });
 });
 

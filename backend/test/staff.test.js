@@ -9,6 +9,13 @@ test('yardımcı admin yalnızca dar yetkilere erişir', () => {
   assert.ok(supportMayCall('POST', '/users/abc/unban'));
   assert.ok(supportMayCall('POST', '/users/abc/display-name'));
   assert.ok(supportMayCall('POST', '/users/abc/avatar'));
+  // v2.70 web paneli: liste / ayrıntı / bekleyen işler okunabilir; geçmiş, odalar ve hareketler yöneticiye aittir.
+  assert.ok(supportMayCall('GET', '/users/list'));
+  assert.ok(supportMayCall('GET', '/users/abc/detail'));
+  assert.ok(supportMayCall('GET', '/overview/pending'));
+  for (const [m, p] of [['GET', '/users/abc/history'], ['GET', '/rooms'], ['GET', '/rooms/abc/detail'], ['POST', '/rooms/abc/close'],
+    ['POST', '/rooms/abc/members/x/kick'], ['GET', '/gift-transactions'], ['GET', '/wallet-transactions'], ['GET', '/stats/daily'],
+    ['GET', '/families'], ['POST', '/users/abc/detail'], ['GET', '/users/abc/devices']]) assert.equal(supportMayCall(m, p), false, `${m} ${p}`);
   for (const [m, p] of [['POST', '/users/abc/coins'], ['POST', '/users/abc/wip'], ['POST', '/users/abc/staff-role'], ['GET', '/staff'],
     ['POST', '/gifts'], ['PUT', '/agency-config'], ['POST', '/payouts/close'], ['GET', '/finance/audit'], ['POST', '/security/blocks'],
     ['POST', '/users/abc/kyc'], ['POST', '/dealers']]) assert.equal(supportMayCall(m, p), false, `${m} ${p}`);

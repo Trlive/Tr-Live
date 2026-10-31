@@ -1,3 +1,25 @@
+## v2.70.0 — Tam teferruatlı web yönetim paneli (sunucu uçları)
+- Kullanıcı listesi: GET /api/admin/users/list — tüm üyeler sayfa sayfa (50'şer); arama (kullanıcı adı, görünen ad, ID,
+  özel ID; yönetici için telefon), filtre (durum, rol / tüm yetkililer, cinsiyet, WIP, yayıncı, son 24 saatte aktif,
+  son 24 saatte yeni üye, sohbeti kısıtlı), sıralama (yeni / eski / son görülen / Coin / Elmas / harcayan / kazanan / ad) ve
+  özet sayılar. Yardımcı admin bakiyeleri görmez.
+- Kullanıcı ayrıntısı: GET /api/admin/users/:id/detail — profil, gizlilik ayarları, WIP / özel ID / rozet, aile, ajans ve
+  yayıncılık, bulunduğu ve açtığı odalar, hakkındaki şikâyetler, otomatik ihlaller, sayılar (takipçi, hediye, oda, şikâyet).
+  Yönetici ayrıca bakiye, telefon, doğum tarihi, bağlı Google / Facebook hesabı, KYC ve envanteri görür.
+- Kullanıcı geçmişi (yönetici): GET /api/admin/users/:id/history?kind=wallet|gifts_sent|gifts_received|audit — sayfalı.
+- Odalar (yönetici): liste (açık / kapanmış, arama, tür), ayrıntı (içeridekiler — gizli dinleyiciler dahil, son 100 mesaj,
+  oturumdaki hediyeler ve en çok gönderenler, odayla ilgili şikâyetler), odayı kapatma, kişiyi odadan çıkarma, oda mesajı
+  silme. Hepsi işlem kaydına yazılır.
+- Platform geneli hediye akışı ve cüzdan hareketleri (sayfalı, filtreli), son 7/14/30 günün günlük istatistiği (yeni üye,
+  hediye, Coin, oda, şikâyet — Türkiye saatiyle), aileler listesi, menü rozetleri için bekleyen işler sayısı
+  (GET /api/admin/overview/pending).
+- Şikâyet listesinde şikâyet edilen mesajın metni (yalnızca o mesaj), oda adı, hedefin durumu ve kararı veren görünür.
+- Yardımcı admin izinlerine yalnızca liste, ayrıntı ve bekleyen iş sayısı (okuma) eklendi.
+- Veritabanı: 051_admin_panel.sql (gönderilen hediye, şikâyet, işlem kaydı ve oda sorguları için dizinler).
+- Web paneli (Trlive-Web) bu uçlarla yeniden yazıldı: Kullanıcılar → tıklayınca ayrıntı sayfası (Genel, İşlemler, Cüzdan,
+  Hediyeler, Envanter, Cihazlar, Şikâyet, Destek, Kayıtlar), Odalar, Aileler, Yetkililer, Şikâyetler, Destek, Güvenlik,
+  Ajanslar, Maaş Dönemleri, Kimlik Onayları, Mali Kayıtlar, Katalog, Duyurular, Ayarlar.
+
 ## v2.69.0 — Yasal metinler, kayıt onayı, web paneli bağlantısı, şanslı hediye olasılıkları
 - Kayıt ekranında onay kutusu: "18 yaşından büyük olduğumu; Kullanıcı Sözleşmesi ve Gizlilik Politikası'nı okuyup kabul
   ettiğimi onaylıyorum. KVKK Aydınlatma Metni'ni okudum." (bağlantılar sitedeki metinleri açar). Kayıt olurken ve Google /
