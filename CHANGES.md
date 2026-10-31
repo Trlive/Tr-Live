@@ -1,3 +1,24 @@
+## v2.67.0 — Daha az internet, daha az pil
+- Sunucu bağlantısı açık tutulur (keep-alive): her istekte yeniden güvenli bağlantı kurulmuyor; uygulama, resimler ve
+  hediye dosyaları tek ortak bağlantıyı kullanıyor (daha hızlı, daha az veri ve pil). Kopmuş bağlantıda okuma isteği bir
+  kez kendiliğinden tekrarlanır.
+- Anlık bağlantı (soket): sunucu 30 sn'de bir küçük canlılık mesajı yollar, telefon artık 25 sn'de bir ping atmıyor.
+  Uygulamaya dönünce sağlam bağlantı boşuna kopartılıp yeniden kurulmuyor. Odada değilken uygulama 10 dk'dan uzun arka
+  planda kalırsa bağlantı kapanır (telefon uyuyabilsin); açınca hemen bağlanır, kaçan bildirimler o an gelir.
+  Büyük soket mesajları sıkıştırılarak gönderilir.
+- Ekran artık her sayfada açık kalmıyor: yalnızca oda ekranı açıkken kararmaz; oda küçültülünce / diğer sayfalarda
+  telefonun kendi ekran zaman aşımı geçerli.
+- Arama algılama: Android 12+ telefonlarda ses modu olayla izleniyor (sürekli sorgu yok); uygulamadaki 0,8 sn'lik
+  ikinci sorgu kaldırıldı (yalnızca eski kurulumlarda yedek olarak 2 sn).
+- Oda sesi: 32 kbps konuşma sesi (önce 48) → konuşurken ses verisi ~%33 az; sessizken zaten veri gitmez.
+  Görüntülü odada kamera 540p (önce 720p). Uygulama arka plana geçince görüntülü odada başkalarının görüntüsü indirilmez ve
+  kamera kapanır (ses sürer); dönünce kendiliğinden açılır.
+- Seyrek yoklama: oda sinyali 25 sn → 60 sn; müzik eşitleme yalnızca müzik çalarken (dakikada bir); mesaj rozetleri 3 dk'da
+  bir ve yalnızca uygulama ekrandayken; etkinlik / destek / yönetim sayfaları yalnızca ekrandayken yenilenir.
+- Hediye dosyaları yalnızca Wi-Fi'de önceden iner (mobil veride, gönderilince / gelince iner). Önbellek temizliği seyrek.
+- Yüklenen görseller daha küçük: profil fotoğrafı 512 px, oda fotoğrafı 600 px, gönderi/mesaj görseli 1280 px, JPEG %80-84.
+- Küçültülmüş oda balonunun dönüşü saniyede 15 kare (önce 60-120); üstte sayfa varken / arka planda hiç çizilmez.
+
 ## v2.66.1 — Renkli ID (bronz, gümüş, altın)
 - Üç renkli ID: Bronz, Gümüş ve Altın. Kullanıcının ID'si metalik renkte, üzerinden ışık geçen yazıyla görünür
   (profil, kullanıcı sayfası, oda içi profil kartı). Özel ID varsa özel ID kapsülü öncelikli.

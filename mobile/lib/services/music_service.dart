@@ -52,8 +52,11 @@ class MusicService {
     }
     await refresh();
     _resync?.cancel();
-    // Sapmayı düzeltmek için 30 sn'de bir sunucu durumuyla yeniden eşitle.
-    _resync = Timer.periodic(const Duration(seconds: 30), (_) => refresh());
+    // Sapmayı düzeltmek için dakikada bir sunucu durumuyla yeniden eşitle — yalnızca müzik çalarken (durum değişiklikleri
+    // zaten soketten anında gelir; müzik yokken boşuna sorulmaz).
+    _resync = Timer.periodic(const Duration(seconds: 60), (_) {
+      if (state.value?['status'] == 'playing') refresh();
+    });
   }
 
   Future<void> refresh() async {

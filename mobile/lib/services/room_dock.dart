@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'background_service.dart';
 
 class RoomRequest {
@@ -30,7 +31,29 @@ class RoomDock {
 
   static bool get isOpen => request.value != null;
 
+  // ---------- Ekranı açık tutma (yalnızca oda ekranı açıkken) ----------
+  // Eskiden uygulamanın her sayfasında ekran hiç kararmıyordu (pil). Artık yalnızca oda tam ekran açıkken açık kalır;
+  // oda küçültülünce / kapanınca telefonun kendi ekran zaman aşımı geçerli olur.
+  static bool _hooked = false;
+  static bool? _awake;
+
+  static void _hookAwake() {
+    if (_hooked) return;
+    _hooked = true;
+    request.addListener(_syncAwake);
+    minimized.addListener(_syncAwake);
+  }
+
+  static void _syncAwake() {
+    final on = request.value != null && !minimized.value;
+    if (_awake == on) return;
+    _awake = on;
+    if (defaultTargetPlatform != TargetPlatform.android) return;
+    const MethodChannel('trlive/device').invokeMethod<void>('keepScreenOn', on).catchError((_) {});
+  }
+
   static void open(RoomRequest r) {
+    _hookAwake();
     if (request.value?.roomId == r.roomId) {
       minimized.value = false;
       return;
@@ -38,6 +61,7 @@ class RoomDock {
     _serial++;
     request.value = r;
     minimized.value = false;
+    _syncAwake();
     BackgroundService.instance.roomOpened(r.name);
   }
 

@@ -211,6 +211,10 @@ app.use((error, req, res, next) => {
 });
 
 const server = http.createServer(app);
+// Boşta bağlantı 125 sn açık kalır: önündeki Caddy (2 dk) ve telefonlar aynı bağlantıyı yeniden kullanır, her istekte
+// yeni bağlantı/TLS kurulmaz (daha az internet ve pil). headersTimeout keepAliveTimeout'tan büyük olmalı.
+server.keepAliveTimeout = 125000;
+server.headersTimeout = 126000;
 attachRealtime(server, {
   authenticate: authenticateToken,
   isRoomMember,

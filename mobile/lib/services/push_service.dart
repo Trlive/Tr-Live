@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/widgets.dart';
 import '../version.dart';
@@ -9,7 +8,8 @@ import 'api.dart';
 import 'socket_service.dart';
 
 /// Yönetim panelinden "herkese telefon bildirimi". Uygulama açıkken ya da arka planda çalışırken soketten anında
-/// telefon bildirimi olarak düşer; uygulama kapalıyken gönderilenler, uygulama açılınca / öne gelince gösterilir.
+/// telefon bildirimi olarak düşer (odada değilken arka planda 10 dk'dan sonra soket kapanır — pil); uygulama kapalıyken
+/// ya da soket kapalıyken gönderilenler, uygulama açılınca / öne gelince gösterilir.
 class PushService with WidgetsBindingObserver {
   PushService._();
   static final PushService _observer = PushService._();
@@ -111,7 +111,7 @@ class PushService with WidgetsBindingObserver {
     final prefs = await SharedPreferences.getInstance();
     await prefs.reload();
     var last = prefs.getString(_lastKey);
-    final r = await http
+    final r = await Api.client
         .get(Uri.parse('${Api.baseUrl}/api/push/latest?after=${last ?? '0'}'), headers: {'X-App-Version': kAppVersion})
         .timeout(const Duration(seconds: 20));
     if (r.statusCode != 200) return;

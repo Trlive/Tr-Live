@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 import 'package:http/http.dart' as http;
+import 'package:http/io_client.dart';
 import '../version.dart';
 
 class ApiException implements Exception {
@@ -21,6 +23,14 @@ Map<String, dynamic>? mapOf(dynamic v) => v is Map ? Map<String, dynamic>.from(v
 class Api {
   static const baseUrl = String.fromEnvironment('API_URL', defaultValue: 'http://10.0.2.2:3000');
   static const _timeout = Duration(seconds: 20);
+
+  /// Tüm uygulamanın paylaştığı HTTP istemcisi. Bağlantı açık tutulur (keep-alive): her istekte yeniden TLS el sıkışması
+  /// yapılmaz — daha az internet, daha az pil, daha hızlı yanıt. Boşta 25 sn kalan bağlantı kapanır (sunucu tarafı
+  /// kapatmadan ve operatör NAT'ı sessizce düşürmeden önce). Yanıtlar sıkıştırılmış (gzip) gelir, otomatik açılır.
+  static final http.Client client = IOClient(HttpClient()
+    ..idleTimeout = const Duration(seconds: 25)
+    ..connectionTimeout = const Duration(seconds: 15)
+    ..autoUncompress = true);
 
   /// Kısa ömürlü erişim token'ı (1 saat). Eski sürümden kalma oturumlarda 30 günlük tek token olabilir.
   static String? token;
@@ -79,7 +89,7 @@ class Api {
       if (rt == null) return false;
       http.Response r;
       try {
-        r = await http
+        r = await client
             .post(_uri('/api/auth/refresh'),
                 headers: {'Content-Type': 'application/json', 'X-App-Version': kAppVersion},
                 body: jsonEncode({'refreshToken': rt, 'device': {'appVersion': kAppVersion}}))
@@ -131,7 +141,8 @@ class Api {
     return url.startsWith('http') ? url : '$baseUrl$url';
   }
 
-  static Future<Map<String, dynamic>> _send(Future<http.Response> Function() request, {Duration? timeout, bool mutating = false, bool retried = false}) async {
+  static Future<Map<String, dynamic>> _send(Future<http.Response> Function() request,
+      {Duration? timeout, bool mutating = false, bool retried = false, bool netRetried = false}) async {
     if (!retried) {
       try {
         await ensureFreshToken();
@@ -147,6 +158,11 @@ class Api {
           ? 'Sunucu zamanında yanıt vermedi; işlem gerçekleşmiş olabilir. Tekrar denemeden önce bakiyeni/sonucu kontrol et.'
           : 'Sunucu yanıt vermedi. Lütfen tekrar deneyin.');
     } catch (_) {
+      // Okuma isteği: açık tutulan bağlantı bu arada kopmuş olabilir; yeni bağlantıyla bir kez daha dene.
+      if (!mutating && !netRetried) {
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+        return _send(request, timeout: timeout, mutating: mutating, retried: retried, netRetried: true);
+      }
       throw ApiException('Sunucuya ulaşılamadı. İnternet bağlantınızı kontrol edin.');
     }
     dynamic data;
@@ -160,11 +176,11 @@ class Api {
     }
     if (r.statusCode == 401 && token != null) {
       // Başka bir istek bu arada token'ı yeniledi: yeni token'la bir kez daha dene.
-      if (!retried && token != sentToken) return _send(request, timeout: timeout, mutating: mutating, retried: true);
+      if (!retried && token != sentToken) return _send(request, timeout: timeout, mutating: mutating, retried: true, netRetried: netRetried);
       // Erişim token'ının süresi dolmuş olabilir: bir kez yenileyip isteği tekrarla. 401'de sunucu isteği işlemez,
       // bu yüzden hediye gibi değişiklik yapan istekleri tekrarlamak güvenlidir.
       if (!retried && refreshToken != null) {
-        if (await refreshSession()) return _send(request, timeout: timeout, mutating: mutating, retried: true);
+        if (await refreshSession()) return _send(request, timeout: timeout, mutating: mutating, retried: true, netRetried: netRetried);
       }
       // Yalnızca reddedilen token hâlâ geçerli oturumsa çıkış yapılır (bu arada çıkış/yeniden giriş olduysa dokunulmaz).
       if (token != null && token == sentToken) onUnauthorized?.call();
@@ -178,10 +194,10 @@ class Api {
   }
 
   static Future<Map<String, dynamic>> get(String path, {Map<String, String>? query}) =>
-      _send(() => http.get(_uri(path, query), headers: _headers()));
+      _send(() => client.get(_uri(path, query), headers: _headers()));
 
   static Future<Map<String, dynamic>> post(String path, [Map<String, dynamic>? body]) =>
-      _send(() => http.post(_uri(path), headers: _headers(), body: jsonEncode(body ?? {})), mutating: true);
+      _send(() => client.post(_uri(path), headers: _headers(), body: jsonEncode(body ?? {})), mutating: true);
 
   /// Para işlemleri için tek seferlik anahtar (Idempotency-Key).
   static String newIdempotencyKey() {
@@ -195,7 +211,7 @@ class Api {
   /// [key] verilirse o kullanılır (ör. ağ hatasından sonra kullanıcı aynı işlemi tekrar denediğinde).
   static Future<Map<String, dynamic>> postOnce(String path, Map<String, dynamic> body, {String? key}) async {
     final k = key ?? newIdempotencyKey();
-    Future<http.Response> req() => http.post(_uri(path), headers: {..._headers(), 'Idempotency-Key': k}, body: jsonEncode(body));
+    Future<http.Response> req() => client.post(_uri(path), headers: {..._headers(), 'Idempotency-Key': k}, body: jsonEncode(body));
     try {
       return await _send(req, mutating: true);
     } on ApiException catch (e) {
@@ -215,19 +231,19 @@ class Api {
   }
 
   static Future<Map<String, dynamic>> patch(String path, [Map<String, dynamic>? body]) =>
-      _send(() => http.patch(_uri(path), headers: _headers(), body: jsonEncode(body ?? {})), mutating: true);
+      _send(() => client.patch(_uri(path), headers: _headers(), body: jsonEncode(body ?? {})), mutating: true);
 
   static Future<Map<String, dynamic>> put(String path, [Map<String, dynamic>? body]) =>
-      _send(() => http.put(_uri(path), headers: _headers(), body: jsonEncode(body ?? {})), mutating: true);
+      _send(() => client.put(_uri(path), headers: _headers(), body: jsonEncode(body ?? {})), mutating: true);
 
   static Future<Map<String, dynamic>> delete(String path, [Map<String, dynamic>? body]) =>
-      _send(() => http.delete(_uri(path), headers: _headers(), body: body == null ? null : jsonEncode(body)), mutating: true);
+      _send(() => client.delete(_uri(path), headers: _headers(), body: body == null ? null : jsonEncode(body)), mutating: true);
 
   /// Ham görsel yükleme (png / jpeg / webp).
   static Future<Map<String, dynamic>> putBytes(String path, Uint8List bytes, String contentType) =>
-      _send(() => http.put(_uri(path), headers: _headers(contentType), body: bytes), timeout: const Duration(minutes: 2), mutating: true);
+      _send(() => client.put(_uri(path), headers: _headers(contentType), body: bytes), timeout: const Duration(minutes: 2), mutating: true);
 
   /// Ham dosya gönderimi (POST) — büyük dosyalar için uzun zaman aşımı.
   static Future<Map<String, dynamic>> postBytes(String path, Uint8List bytes, String contentType, {Map<String, String>? query}) =>
-      _send(() => http.post(_uri(path, query), headers: _headers(contentType), body: bytes), timeout: const Duration(minutes: 6), mutating: true);
+      _send(() => client.post(_uri(path, query), headers: _headers(contentType), body: bytes), timeout: const Duration(minutes: 6), mutating: true);
 }

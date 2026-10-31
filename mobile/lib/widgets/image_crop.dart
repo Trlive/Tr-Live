@@ -14,13 +14,13 @@ class CropSpec {
   const CropSpec(this.aspect, this.outWidth, {this.circle = false, required this.title});
 
   /// Profil fotoğrafı: kare, daire kılavuzlu.
-  static const avatar = CropSpec(1, 720, circle: true, title: 'Profil fotoğrafını ayarla');
+  static const avatar = CropSpec(1, 512, circle: true, title: 'Profil fotoğrafını ayarla');
 
   /// Profil kapak fotoğrafı: profil sayfasındaki alanla aynı oran (Figma: 375 × 343).
   static const profileCover = CropSpec(375 / 343, 1080, title: 'Kapak fotoğrafını ayarla');
 
   /// Oda fotoğrafı: oda kartındaki kare görsel.
-  static const roomCover = CropSpec(1, 720, title: 'Oda fotoğrafını ayarla');
+  static const roomCover = CropSpec(1, 600, title: 'Oda fotoğrafını ayarla');
 
   /// Ana sayfa bannerı: 3:1.
   static const banner = CropSpec(3, 1200, title: 'Bannerı ayarla');
@@ -260,5 +260,6 @@ class _MaskPainter extends CustomPainter {
 Uint8List _encodeJpg((Uint8List, int, int) a) {
   final (rgba, w, h) = a;
   final image = img.Image.fromBytes(width: w, height: h, bytes: rgba.buffer, bytesOffset: rgba.offsetInBytes, numChannels: 4, rowStride: w * 4);
-  return img.encodeJpg(image, quality: 88);
+  // 84: gözle fark edilmez, dosya ~%25 küçük (herkes bu resmi indirir → daha az internet).
+  return img.encodeJpg(image, quality: 84);
 }

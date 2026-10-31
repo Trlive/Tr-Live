@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import '../services/api.dart';
 
 /// İnternetten gelen görseller için telefon önbelleği.
 /// Sunucudaki görsel adresleri değişmez (yeni yükleme = yeni adres), bu yüzden bir kez inen dosya tekrar indirilmez:
@@ -13,7 +14,7 @@ class ImageDiskCache {
   ImageDiskCache._();
   static Directory? _dir;
   static final Map<String, Future<Uint8List>> _inflight = {};
-  static final http.Client _client = http.Client();
+  static http.Client get _client => Api.client; // uygulamanın paylaşılan (keep-alive) istemcisi
   static const int maxBytes = 200 * 1024 * 1024;
   static DateTime? _lastTrim;
 

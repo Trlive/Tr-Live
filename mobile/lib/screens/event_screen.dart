@@ -7,6 +7,7 @@ import '../widgets/common.dart';
 import '../widgets/fig.dart';
 import '../widgets/wip_items.dart';
 import 'user_screens.dart';
+import '../services/app_visibility.dart';
 
 /// Haftalık etkinlik grupları (banner'lar ve sayfalar bu üç gruba göre).
 enum EventGroup { couple, royal, star }
@@ -151,9 +152,9 @@ class _EventScreenState extends State<EventScreen> {
   void initState() {
     super.initState();
     _init();
-    // Sıralama canlı: sayfa açıkken 10 saniyede bir sessizce yenilenir.
-    _poll = Timer.periodic(const Duration(seconds: 10), (_) {
-      if (mounted && _data != null) _load();
+    // Sıralama canlı: sayfa ekrandayken 15 saniyede bir sessizce yenilenir (arka planda / üstte başka sayfa varken durur).
+    _poll = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (mounted && _data != null && AppVisibility.isForeground && (ModalRoute.of(context)?.isCurrent ?? true)) _load();
     });
   }
 

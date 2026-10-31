@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
+import android.net.ConnectivityManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -22,7 +23,8 @@ import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 
 // TR Live ana ekranı (GitHub derlemesi bu dosyayı flutter create'in ürettiği MainActivity'nin yerine koyar).
-//  * Uygulama açıkken ekran kendiliğinden kapanmaz (FLAG_KEEP_SCREEN_ON).
+//  * Ekran yalnızca oda ekranı açıkken açık tutulur (Flutter "keepScreenOn" çağırır); diğer sayfalarda telefonun
+//    kendi ekran zaman aşımı geçerlidir (pil tasarrufu).
 //  * Telefon araması: Android'in arama durumu (TelephonyManager) ve ses modu izlenir, Flutter'a "trlive/phone_call"
 //    kanalından true/false gönderilir. Oda sesi kendi ses odağını aldığı için odak sinyali gelmeyen telefonlarda da çalışır.
 class MainActivity : FlutterActivity() {
@@ -55,24 +57,32 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    private var modeListener: Any? = null
+
+    /// Telefonun ses modu: zil çalıyor / normal görüşme sürüyorsa arama var.
+    private fun readMode() {
+        try {
+            val am = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+            val m = am?.mode ?: AudioManager.MODE_NORMAL
+            modeBusy = m == AudioManager.MODE_IN_CALL || m == AudioManager.MODE_RINGTONE || m == 4 // 4: MODE_CALL_SCREENING
+        } catch (e: Exception) {
+            modeBusy = false
+        }
+        emit()
+    }
+
+    // Yalnızca mod dinleyicisi kurulamayan (Android 11 ve öncesi) telefonlarda: 2 sn'de bir okunur.
     private val modePoll = object : Runnable {
         override fun run() {
-            if (!polling) return
-            try {
-                val am = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
-                val m = am?.mode ?: AudioManager.MODE_NORMAL
-                modeBusy = m == AudioManager.MODE_IN_CALL || m == AudioManager.MODE_RINGTONE || m == 4 // 4: MODE_CALL_SCREENING
-            } catch (e: Exception) {
-                modeBusy = false
-            }
-            emit()
-            main.postDelayed(this, 700)
+            if (!polling || modeListener != null) return
+            readMode()
+            main.postDelayed(this, 2000)
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        // Ekran artık her zaman açık tutulmaz (pil): yalnızca oda ekranı açıkken Flutter "keepScreenOn" ile açar.
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -140,6 +150,16 @@ class MainActivity : FlutterActivity() {
                     }
                 }
                 "headsetConnected" -> result.success(headsetConnected())
+                "isMetered" -> {
+                    // Mobil veri / kotalı bağlantı mı (Wi-Fi değilse true). Hediye dosyaları yalnızca kotasız ağda önceden iner.
+                    val metered = try {
+                        val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+                        cm?.isActiveNetworkMetered ?: true
+                    } catch (e: Exception) {
+                        true
+                    }
+                    result.success(metered)
+                }
                 "hasMicPermission" -> {
                     result.success(checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
                 }
@@ -239,7 +259,17 @@ class MainActivity : FlutterActivity() {
     private fun startWatch() {
         if (!polling) {
             polling = true
-            main.post(modePoll)
+            readMode()
+            if (Build.VERSION.SDK_INT >= 31) {
+                // Android 12+: mod değişince sistem haber verir; sürekli sorgu yok (pil).
+                try {
+                    val am = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+                    if (am != null) modeListener = ModeWatch.register(am, mainExecutor) { main.post { readMode() } }
+                } catch (e: Exception) {
+                    modeListener = null
+                }
+            }
+            if (modeListener == null) main.postDelayed(modePoll, 2000)
         }
         if (callback != null || legacyListener != null) return
         val tm = getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager ?: return
@@ -272,6 +302,14 @@ class MainActivity : FlutterActivity() {
     private fun stopWatch() {
         polling = false
         main.removeCallbacks(modePoll)
+        val ml = modeListener
+        modeListener = null
+        if (ml != null && Build.VERSION.SDK_INT >= 31) {
+            try {
+                (getSystemService(Context.AUDIO_SERVICE) as? AudioManager)?.let { ModeWatch.unregister(it, ml) }
+            } catch (e: Exception) {
+            }
+        }
         val tm = telephony
         try {
             if (tm != null && Build.VERSION.SDK_INT >= 31) {
@@ -289,6 +327,20 @@ class MainActivity : FlutterActivity() {
         legacyListener = null
         phoneBusy = false
         modeBusy = false
+    }
+}
+
+/// Android 12+ ses modu dinleyicisi (OnModeChangedListener). Eski sürümlerde bu sınıf hiç yüklenmez.
+@TargetApi(31)
+private object ModeWatch {
+    fun register(am: AudioManager, executor: java.util.concurrent.Executor, onChange: () -> Unit): Any {
+        val l = AudioManager.OnModeChangedListener { onChange() }
+        am.addOnModeChangedListener(executor, l)
+        return l
+    }
+
+    fun unregister(am: AudioManager, l: Any) {
+        if (l is AudioManager.OnModeChangedListener) am.removeOnModeChangedListener(l)
     }
 }
 

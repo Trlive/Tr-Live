@@ -4,6 +4,7 @@ import '../services/api.dart';
 import '../version.dart';
 import '../widgets/app_theme.dart';
 import '../widgets/common.dart';
+import '../services/app_visibility.dart';
 
 String _dt(dynamic iso) {
   final d = DateTime.tryParse((iso ?? '').toString())?.toLocal();
@@ -42,7 +43,10 @@ class _DashboardTabState extends State<DashboardTab> {
   void initState() {
     super.initState();
     _load();
-    _timer = Timer.periodic(const Duration(seconds: 10), (_) => _load());
+    // Yalnızca sayfa ekranda ve uygulama öndeyken yenilenir (arka planda boşuna internet/pil harcamasın).
+    _timer = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (mounted && AppVisibility.isForeground && (ModalRoute.of(context)?.isCurrent ?? true)) _load();
+    });
   }
 
   @override

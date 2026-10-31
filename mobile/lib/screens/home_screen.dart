@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import '../services/app_visibility.dart';
 import '../services/music_service.dart';
 import '../widgets/app_theme.dart';
 import '../widgets/banner_carousel.dart';
@@ -543,6 +545,8 @@ class RoomsTabState extends State<RoomsTab> {
 
 
 /// Küçültülmüş oda balonu: oda fotoğrafı yavaşça döner.
+/// Pil: dönüş saniyede 15 kareyle çizilir (sürekli 60-120 kare gerekmez; 10 sn'de bir tur gözle aynı görünür).
+/// Üstüne başka sayfa açıldıysa ya da uygulama arka plandaysa hiç çizilmez.
 class _SpinningRoomCover extends StatefulWidget {
   final String? cover;
   final String initial;
@@ -552,12 +556,43 @@ class _SpinningRoomCover extends StatefulWidget {
   State<_SpinningRoomCover> createState() => _SpinningRoomCoverState();
 }
 
-class _SpinningRoomCoverState extends State<_SpinningRoomCover> with SingleTickerProviderStateMixin {
-  late final AnimationController _spin = AnimationController(vsync: this, duration: const Duration(seconds: 10))..repeat();
+class _SpinningRoomCoverState extends State<_SpinningRoomCover> {
+  static const _fps = 15;
+  static const _periodMs = 10000;
+  Timer? _t;
+  double _turns = 0;
+  bool _visible = true;
+
+  @override
+  void initState() {
+    super.initState();
+    AppVisibility.foreground.addListener(_sync);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _visible = TickerMode.of(context); // üstte başka sayfa varken false
+    _sync();
+  }
+
+  void _sync() {
+    final run = _visible && AppVisibility.isForeground;
+    if (run && _t == null) {
+      const step = 1000 ~/ _fps;
+      _t = Timer.periodic(const Duration(milliseconds: step), (_) {
+        if (mounted) setState(() => _turns = (_turns + step / _periodMs) % 1.0);
+      });
+    } else if (!run) {
+      _t?.cancel();
+      _t = null;
+    }
+  }
 
   @override
   void dispose() {
-    _spin.dispose();
+    AppVisibility.foreground.removeListener(_sync);
+    _t?.cancel();
     super.dispose();
   }
 
@@ -581,8 +616,8 @@ class _SpinningRoomCoverState extends State<_SpinningRoomCover> with SingleTicke
       ),
       child: ClipOval(
         child: RepaintBoundary(
-          child: RotationTransition(
-            turns: _spin,
+          child: Transform.rotate(
+            angle: _turns * 2 * math.pi,
             child: widget.cover == null
                 ? fallback
                 : NetImg(widget.cover!, box: const Size.square(64), fit: BoxFit.cover, errorBuilder: (_, __, ___) => fallback),

@@ -144,11 +144,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     _enter();
   }
 
-  /// Her 25 sn'de sunucuya "oda açık" sinyali gider: üyeyi canlı tutar, WebSocket aboneliğini tazeler,
-  /// oda sunucuda kapanmışsa kullanıcı sonsuza dek ölü odada kalmaz.
+  /// Her 60 sn'de sunucuya "oda açık" sinyali gider: üyeyi canlı tutar, WebSocket aboneliğini tazeler,
+  /// oda sunucuda kapanmışsa kullanıcı sonsuza dek ölü odada kalmaz. (Sunucu üyeyi 5 dk sinyalsiz kalınca çıkarır;
+  /// soket bağlıyken hiç çıkarmaz. 25 sn yerine 60 sn: telefon daha seyrek uyanır, daha az internet.)
   void _startHeartbeat() {
     _beat?.cancel();
-    _beat = Timer.periodic(const Duration(seconds: 25), (_) async {
+    _beat = Timer.periodic(const Duration(seconds: 60), (_) async {
       if (!mounted || !_joined || _closing) return;
       SocketService.instance.subscribeRoom(widget.roomId);
       try {
@@ -165,10 +166,58 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 
   /// Arka plandan dönünce oda bilgisi yenilenir (bağlantı arada kopmuş olabilir).
+  /// Arka plana geçince görüntülü odada görüntü indirilmez / kamera kapanır (ses sürer); dönünce geri açılır.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.hidden) {
+      _pauseVideo();
+      return;
+    }
+    // Bölünmüş ekranda uygulama görünür ama "inactive" kalabilir: görüntü yine açılsın.
+    if (state == AppLifecycleState.inactive) {
+      if (_joined && !_closing && mounted) _resumeVideo();
+      return;
+    }
     if (state != AppLifecycleState.resumed || !_joined || _closing || !mounted) return;
+    _resumeVideo();
     _resync();
+  }
+
+  // ---------- Arka planda görüntü tasarrufu (görüntülü odalar) ----------
+  bool _videoPaused = false;
+  final Set<Object> _unsubbed = Set<Object>.identity();
+
+  void _pauseVideo() {
+    final room = _lk;
+    if (_videoPaused || !_isVideo) return;
+    _videoPaused = true;
+    if (room == null) return;
+    _unsubscribeRemoteVideo(room);
+    final lp = room.localParticipant;
+    if (lp != null && lp.isCameraEnabled()) _quiet(lp.setCameraEnabled(false));
+  }
+
+  /// Başkalarının görüntüsü arka planda indirilmez (ekranda görünmüyor; internet ve pil boşa gitmesin).
+  void _unsubscribeRemoteVideo(lk.Room room) {
+    for (final p in room.remoteParticipants.values.toList()) {
+      for (final pub in p.videoTrackPublications.toList()) {
+        if (pub.subscribed && _unsubbed.add(pub)) _quiet(pub.unsubscribe());
+      }
+    }
+  }
+
+  void _resumeVideo() {
+    if (!_videoPaused) return;
+    _videoPaused = false;
+    _unsubbed.clear();
+    final room = _lk;
+    if (room == null) return;
+    for (final p in room.remoteParticipants.values.toList()) {
+      for (final pub in p.videoTrackPublications.toList()) {
+        if (!pub.subscribed) _quiet(pub.subscribe());
+      }
+    }
+    _syncPublish();
   }
 
   /// Bağlantı koptuktan / uygulama arka plandan döndükten sonra kaçırılan olayları telafi eder:
@@ -773,6 +822,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   void _onLkChanged() {
     if (_roomMuted || CallGuard.instance.inCall.value) _applyRoomSound();
     final r = _lk;
+    // Arka plandayken yeni açılan kameralar da indirilmez.
+    if (_videoPaused && r != null) _unsubscribeRemoteVideo(r);
     // Ses sunucusu bağlantısı koptuysa (ağ değişimi, sunucudan çıkarılma sonrası yeniden katılma) yeniden kur.
     if (r != null && r.connectionState == lk.ConnectionState.disconnected && !_lkConnecting && !_closing && mounted) {
       _lk = null;
@@ -836,7 +887,17 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       if (url == null || url.isEmpty || token == null) throw ApiException('Ses sunucusu yapılandırılmamış.');
       await _loadNoisePref();
       await HeadsetAudio.instance.start(); // kulaklık takılıysa yüksek kaliteli ses modu (bağlanmadan önce)
-      room = lk.Room(roomOptions: lk.RoomOptions(adaptiveStream: true, dynacast: true, defaultAudioCaptureOptions: _audioOptions));
+      room = lk.Room(roomOptions: lk.RoomOptions(
+        adaptiveStream: true,
+        dynacast: true,
+        defaultAudioCaptureOptions: _audioOptions,
+        // Konuşma sesi: 32 kbps (konuşma için fazlasıyla yeterli; varsayılan 48), sessizken neredeyse hiç veri gitmez (DTX).
+        // DİKKAT: "red" bilerek verilmedi. Bu SDK'da red: true (varsayılan) yedek ses kopyasını KAPATIR, red: false AÇAR
+        // (ses verisi ~2 katına çıkar). Varsayılanda kalsın.
+        defaultAudioPublishOptions: const lk.AudioPublishOptions(encoding: lk.AudioEncoding(maxBitrate: 32000), dtx: true),
+        // Kamera 540p (varsayılan 720p): telefon ekranında fark az, yükleme ~yarı, işlemci/pil daha az yorulur.
+        defaultCameraCaptureOptions: const lk.CameraCaptureOptions(params: lk.VideoParametersPresets.h540_169),
+      ));
       room.addListener(_onLkChanged);
       await room.connect(url, token);
       if (!mounted || _closing) {
@@ -899,7 +960,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     for (var attempt = 0; attempt < 3; attempt++) {
       try {
         await room.localParticipant?.setMicrophoneEnabled(_onSeat && _micOn && !_seatMuted && !CallGuard.instance.inCall.value);
-        if (_isVideo) await room.localParticipant?.setCameraEnabled(_onSeat && _camOn);
+        if (_isVideo) await room.localParticipant?.setCameraEnabled(_onSeat && _camOn && !_videoPaused);
         BackgroundService.instance.micChanged(_onSeat); // izin verildikten sonra servis "mikrofon" türüne geçer
         return;
       } catch (_) {

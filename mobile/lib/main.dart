@@ -6,6 +6,7 @@ import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/update_screen.dart';
 import 'services/api.dart';
+import 'services/app_visibility.dart';
 import 'services/auth_service.dart';
 import 'services/background_service.dart';
 import 'services/error_log.dart';
@@ -53,6 +54,8 @@ Future<void> _boot() async {
   // Açılış hiçbir koşulda takılmasın: hazırlık adımları hata verse / gecikse de uygulama ekranı açılır.
   // Efekt ayarları (hediye animasyonu, araç, şerit, global bildirim) telefondan okunur.
   await EffectPrefs.load().timeout(const Duration(seconds: 2), onTimeout: () {});
+  // Uygulama ekranda mı: arka plandayken periyodik sorgular durur (pil/internet).
+  AppVisibility.instance.init();
   try {
     BackgroundService.instance.init();
   } catch (e, s) {

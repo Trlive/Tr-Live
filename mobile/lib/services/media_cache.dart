@@ -1,5 +1,6 @@
 import 'dart:io';
-import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
+import 'package:flutter/services.dart';
 import 'api.dart';
 
 /// Hediye/çerçeve dosyalarını kullanıcının telefonuna (uygulama önbelleği) bir kez indirir; sonra internetsiz oynatır.
@@ -33,7 +34,7 @@ class MediaCache {
           f.setLastModified(DateTime.now()).catchError((_) => null);
           return f;
         }
-        final r = await http.get(Uri.parse(url)).timeout(const Duration(minutes: 2));
+        final r = await Api.client.get(Uri.parse(url)).timeout(const Duration(minutes: 2));
         if (r.statusCode != 200 || r.bodyBytes.isEmpty) throw Exception('indirilemedi (${r.statusCode})');
         final tmp = File('${f.path}.part');
         await tmp.writeAsBytes(r.bodyBytes, flush: true);
@@ -55,6 +56,30 @@ class MediaCache {
   /// Aynı anda en fazla 3 dosya indirilir (çok sayıda hediye telefonu ve interneti boğmasın).
   /// [first] true: sıranın başına eklenir (hediye paneli açıkken o hediyeler önce insin).
   static void prefetch(Iterable<String?> urls, {bool first = false}) {
+    // Mobil veride (kotalı bağlantı) önceden indirme yapılmaz: hediye gönderilince / gelince o an iner.
+    final list = urls.toList();
+    unmetered().then((ok) {
+      if (ok) _enqueue(list, first);
+    });
+  }
+
+  static DateTime _meterAt = DateTime.fromMillisecondsSinceEpoch(0);
+  static bool _unmetered = true;
+
+  /// Bağlantı kotasız mı (Wi-Fi). Mobil veride false. Sonuç 1 dk saklanır (her çağrıda Android'e sorulmaz).
+  static Future<bool> unmetered() async {
+    if (defaultTargetPlatform != TargetPlatform.android) return true;
+    if (DateTime.now().difference(_meterAt) < const Duration(minutes: 1)) return _unmetered;
+    try {
+      _unmetered = !(await const MethodChannel('trlive/device').invokeMethod<bool>('isMetered') ?? false);
+    } catch (_) {
+      _unmetered = true; // eski derleme: eskisi gibi indir
+    }
+    _meterAt = DateTime.now();
+    return _unmetered;
+  }
+
+  static void _enqueue(List<String?> urls, bool first) {
     final add = <String>[];
     for (final u in urls) {
       if (u == null || u.isEmpty) continue;
@@ -91,6 +116,7 @@ class MediaCache {
   /// Hepsi indirilmez: yüksek kaliteli hediyeler büyüktür, diğerleri gelince / panelde görününce iner.
   static Future<void> warmGifts({bool force = false}) async {
     if (_giftsWarmed && !force) return;
+    if (!await unmetered()) return; // mobil veride toplu indirme yok; Wi-Fi'de bir sonraki oda girişinde iner
     try {
       final r = await Api.get('/api/gifts');
       final list = r['gifts'];
@@ -102,7 +128,12 @@ class MediaCache {
     } catch (_) {/* internet yoksa sonra denenir */}
   }
 
+  static DateTime _trimAt = DateTime.fromMillisecondsSinceEpoch(0);
+
+  /// Önbellek sınırı aşıldıysa en eski dosyaları siler. Klasörü taramak pahalı: en fazla 2 dk'da bir.
   static Future<void> _trim(Directory dir) async {
+    if (DateTime.now().difference(_trimAt) < const Duration(minutes: 2)) return;
+    _trimAt = DateTime.now();
     try {
       final files = <File>[];
       var total = 0;

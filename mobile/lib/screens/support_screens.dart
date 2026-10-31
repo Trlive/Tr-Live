@@ -5,6 +5,7 @@ import '../services/session.dart';
 import '../services/socket_service.dart';
 import '../widgets/app_theme.dart';
 import '../widgets/common.dart';
+import '../services/app_visibility.dart';
 
 String _tl(dynamic cents) {
   final c = BigInt.tryParse('$cents') ?? BigInt.zero;
@@ -222,7 +223,10 @@ class _SupportChatScreenState extends State<SupportChatScreen> {
   void initState() {
     super.initState();
     _load();
-    _poll = Timer.periodic(const Duration(seconds: 8), (_) => _load());
+    // Yeni mesaj soketten anında gelir; bu yalnızca güvenlik ağı (ekrandayken 20 sn'de bir).
+    _poll = Timer.periodic(const Duration(seconds: 20), (_) {
+      if (mounted && AppVisibility.isForeground && (ModalRoute.of(context)?.isCurrent ?? true)) _load();
+    });
     _sub = SocketService.instance.events.listen((e) {
       if (e['type'] == 'support_message') _load();
     });

@@ -49,6 +49,8 @@ function markClosed(userId) {
   offlineTimers.set(userId, t);
 }
 
+const HB_MSG = JSON.stringify({ type: 'hb' });
+
 function safeSend(ws, payload) {
   if (ws.readyState !== OPEN) return;
   try { ws.send(JSON.stringify(payload)); } catch (_) { /* yoksay */ }
@@ -136,7 +138,23 @@ export function attachRealtime(server, {
   onPresence = () => {}, presenceSnapshot = async () => [], canTyping = async () => false,
   isPresenceVisible = async (u) => u.show_presence !== false && !u.is_hidden,
 }) {
-  wss = new WebSocketServer({ server, path: '/ws', maxPayload: 8 * 1024 });
+  // perMessageDeflate: 1 KB'tan büyük mesajlar sıkıştırılır (üye listesi, skor tablosu…) → telefonda daha az internet.
+  // Küçük mesajlar (çoğunluk) sıkıştırılmaz; bağlam saklanmaz (bağlantı başına bellek az kalır).
+  wss = new WebSocketServer({
+    server,
+    path: '/ws',
+    maxPayload: 8 * 1024,
+    perMessageDeflate: {
+      threshold: 1024,
+      serverNoContextTakeover: true,
+      clientNoContextTakeover: true,
+      // Sunucunun sıkıştırma penceresi küçük (bağlantı başına ~16 KB bellek; binlerce bağlantıda bellek şişmesin).
+      // Telefon büyük pencereyle açabildiği için bu ayar her istemcide güvenli. İstemci penceresi sınırlanmaz.
+      serverMaxWindowBits: 11,
+      zlibDeflateOptions: { level: 5, memLevel: 4 },
+      concurrencyLimit: 8,
+    },
+  });
   presenceHook = (userId, online) => { Promise.resolve().then(() => onPresence(userId, online)).catch(() => {}); };
 
   async function handleMessage(ws, raw) {
@@ -248,6 +266,9 @@ export function attachRealtime(server, {
       if (!ws.isAlive) { ws.terminate(); continue; }
       ws.isAlive = false;
       try { ws.ping(); } catch (_) { /* yoksay */ }
+      // Uygulama bu küçük mesajı görünce bağlantının canlı olduğunu bilir; kendisi ayrıca ping atmaz (telefon daha az uyanır).
+      // Aynı anda gittiği için telefonun radyosu bir kez uyanır.
+      if (ws.readyState === OPEN) { try { ws.send(HB_MSG); } catch (_) { /* yoksay */ } }
     }
   }, 30000);
   heartbeat.unref();

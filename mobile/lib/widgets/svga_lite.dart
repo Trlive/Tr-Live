@@ -1,7 +1,7 @@
 import 'dart:io' show File, ZLibCodec;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
-import 'package:http/http.dart' as http;
+import '../services/api.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -139,7 +139,7 @@ class SvgaMovie {
     if (file != null) {
       raw = await file.readAsBytes();
     } else {
-      final r = await http.get(Uri.parse(url!)).timeout(const Duration(seconds: 60));
+      final r = await Api.client.get(Uri.parse(url!)).timeout(const Duration(seconds: 60));
       if (r.statusCode != 200) throw Exception('svga indirilemedi (${r.statusCode})');
       raw = r.bodyBytes;
     }

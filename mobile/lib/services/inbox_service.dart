@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'api.dart';
+import 'app_visibility.dart';
 import 'socket_service.dart';
 
 /// Okunmamış özel mesaj sayısı (sekme rozeti için).
@@ -24,18 +25,38 @@ class Inbox {
       } else if (const {'dm', 'connected', 'notify', 'friend_update', 'cp_request', 'cp_update', 'support_message', 'agency_invite', 'agency_assistant_invite', 'family_chat', 'event_reward'}.contains(t)) {
         _refreshSoon();
       }
+      if (t == 'connected') _lastAll = DateTime.now(); // yeniden bağlanınca zaten yenileniyor
       if (t == 'friend_update' || t == 'cp_request' || t == 'cp_update' || t == 'connected' || t == 'notify') refreshBadges();
     });
+    // Asıl güncellemeler soketten anında gelir; bu yalnızca güvenlik ağı: 3 dk'da bir ve yalnızca uygulama ekrandayken
+    // (arka planda telefonu uyandırıp internet harcamasın). Uzun aradan sonra ekrana dönünce bir kez yenilenir.
     _timer?.cancel();
-    _timer = Timer.periodic(const Duration(seconds: 60), (_) {
-      refreshBadges();
-      refresh();
+    _timer = Timer.periodic(const Duration(minutes: 3), (_) {
+      if (AppVisibility.isForeground) _refreshAll();
     });
-    refresh();
+    AppVisibility.foreground.removeListener(_onVisibility);
+    AppVisibility.foreground.addListener(_onVisibility);
+    _refreshAll();
+  }
+
+  static DateTime _lastAll = DateTime.fromMillisecondsSinceEpoch(0);
+
+  static void _refreshAll() {
+    _lastAll = DateTime.now();
     refreshBadges();
+    refresh();
+  }
+
+  static void _onVisibility() {
+    if (_timer == null || !AppVisibility.isForeground) return;
+    // Soket yeniden bağlanırsa ("connected") zaten yenilenir; birkaç sn bekleyip yalnızca gerekirse sor.
+    Timer(const Duration(seconds: 4), () {
+      if (_timer != null && AppVisibility.isForeground && DateTime.now().difference(_lastAll) > const Duration(minutes: 2)) _refreshAll();
+    });
   }
 
   static void stop() {
+    AppVisibility.foreground.removeListener(_onVisibility);
     _sub?.cancel();
     _sub = null;
     _timer?.cancel();

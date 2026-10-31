@@ -22,8 +22,10 @@ String? sniffImageMime(Uint8List b) {
 /// Galeriden görsel seçer; biçim ve boyut denetimini yapar. İptal veya hata durumunda null döner.
 /// [crop] verilirse seçimden sonra kırpma ekranı açılır (kullanıcı kaydırıp büyüterek kadrajı ayarlar);
 /// sonuç o oranda, en fazla [CropSpec.outWidth] genişliğinde JPEG olur.
-Future<PickedImage?> pickImage(BuildContext context, {double maxWidth = 1600, CropSpec? crop}) async {
-  final picked = await ImagePicker().pickImage(source: ImageSource.gallery, maxWidth: crop == null ? maxWidth : 2048, imageQuality: crop == null ? 85 : 95);
+Future<PickedImage?> pickImage(BuildContext context, {double maxWidth = 1280, CropSpec? crop}) async {
+  // Gönderi / mesaj görselleri 1280 px ve %80 kalite: telefonda net görünür, dosya ~yarı (gönderen de görenler de daha az
+  // internet harcar).
+  final picked = await ImagePicker().pickImage(source: ImageSource.gallery, maxWidth: crop == null ? maxWidth : 2048, imageQuality: crop == null ? 80 : 95);
   if (picked == null) return null;
   var bytes = await picked.readAsBytes();
   var mime = sniffImageMime(bytes);
