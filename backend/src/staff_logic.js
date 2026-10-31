@@ -6,6 +6,13 @@ const SUPPORT_ROUTES = [
   ['GET', /^\/users\/list$/],
   ['GET', /^\/users\/[^/]+\/detail$/],
   ['GET', /^\/overview\/pending$/],
+  // v2.71: Coin yükleme (en fazla 100.000, düşemez), WIP verme / alma, öğe verme, seviye verme (en fazla 100).
+  ['POST', /^\/users\/[^/]+\/coins$/],
+  ['POST', /^\/users\/[^/]+\/wip$/],
+  ['DELETE', /^\/users\/[^/]+\/wip$/],
+  ['GET', /^\/grantables$/],
+  ['POST', /^\/users\/[^/]+\/grant$/],
+  ['POST', /^\/users\/[^/]+\/level$/],
   ['POST', /^\/users\/[^/]+\/ban$/],
   ['POST', /^\/users\/[^/]+\/unban$/],
   ['POST', /^\/users\/[^/]+\/display-name$/],

@@ -21,12 +21,12 @@ import { ensureAgencyCode, TRANSFER_SELECT, transferJson } from './agencies.js';
 import { equipIfNone, announceUserChange } from '../services/users.js';
 import { EVENT_KINDS, EVENT_TITLES, isStar, validateRewards, rewardsView, defaultRules } from '../services/weekly_events.js';
 import { cleanPublic } from '../safe_text.js';
-import { WIP_MIN_LEVEL, WIP_MAX_LEVEL } from '../levels.js';
+import { WIP_MIN_LEVEL, WIP_MAX_LEVEL, MAX_LEVEL, expForLevel, levelFromExp, levelExp } from '../levels.js';
 import { wipLabel } from '../services/wip.js';
 import { dealerSell } from '../services/dealers.js';
 import { hub } from '../realtime.js';
 import { leaveRoom } from '../services/rooms.js';
-import { banIpPersist, unbanIp, listBans, securityStats, userLimit } from '../firewall.js';
+import { banIpPersist, unbanIp, listBans, securityStats, userLimit, hitLimit } from '../firewall.js';
 import net from 'node:net';
 import { saveUpload, removeUpload, removeAnimatedAvatar, IMAGE_TYPES, OWN_IMAGE_RE } from '../services/images.js';
 import { revokeAllSessions } from '../services/sessions.js';
@@ -53,7 +53,12 @@ router.use((req, res, next) => {
 
 router.get('/me/permissions', (req, res) => {
   const admin = req.user.system_role === 'admin';
-  res.json({ role: req.user.system_role, full: admin, can: admin ? ['all'] : ['search_users', 'ban', 'unban', 'change_display_name', 'change_avatar'] });
+  res.json({
+    role: req.user.system_role, full: admin,
+    can: admin ? ['all'] : ['search_users', 'ban', 'unban', 'change_display_name', 'change_avatar', 'chat_restriction',
+      'load_coins', 'grant_level', 'grant_wip', 'grant_items'],
+    limits: admin ? null : { coinsPerLoad: Number(SUPPORT_COIN_LIMIT), maxLevel: SUPPORT_LEVEL_LIMIT },
+  });
 });
 
 // Web paneli: kullanıcı listesi / ayrıntısı, odalar, hareketler, istatistik (admin_panel.js).
@@ -72,12 +77,24 @@ async function assertUser(id, run = query) {
   return u;
 }
 
+// Yardımcı admin (Coin yükleme, WIP, öğe, seviye) yalnızca normal kullanıcılara işlem yapar; yönetici herkese.
+export const SUPPORT_COIN_LIMIT = 100000n;
+export const SUPPORT_LEVEL_LIMIT = 100;
+async function assertStaffTarget(req, userId) {
+  const target = await assertUser(userId);
+  if (req.user.system_role !== 'admin' && !mayActOnUser(req.user.system_role, target.system_role)) {
+    throw fail('Bu hesap üzerinde işlem yetkiniz yok.', 403);
+  }
+  return target;
+}
+
 // ---------------- Kullanıcı arama ve durum ----------------
 router.get('/users', async (req, res) => {
   const q = String(req.query.q ?? '').trim().toLowerCase();
   if (q.length < 2) throw fail('Arama için en az 2 karakter girin.');
   const r = await query(
-    `SELECT id, public_id, username, display_name, avatar_url, coins, diamonds, system_role, account_status, banned_until, ban_reason, chat_restricted_until
+    `SELECT id, public_id, username, display_name, avatar_url, coins, diamonds, system_role, account_status, banned_until, ban_reason, chat_restricted_until,
+            coin_level, gift_level
      FROM users WHERE lower(username) LIKE $1 ESCAPE '\\' OR lower(display_name) LIKE $1 ESCAPE '\\' OR id::text = $2 OR public_id = $2
        OR id = (SELECT si.user_id FROM special_ids si WHERE si.special_id = $2 AND si.expires_at > NOW())
      ORDER BY (public_id = $2) DESC, username LIMIT 20`,
@@ -86,6 +103,7 @@ router.get('/users', async (req, res) => {
   res.json({
     users: r.rows.map((u) => ({
       id: u.id, publicId: u.public_id ?? null, username: u.username, displayName: u.display_name, coins: String(u.coins), diamonds: String(u.diamonds),
+      coinLevel: u.coin_level, giftLevel: u.gift_level,
       systemRole: u.system_role, accountStatus: u.account_status, avatarUrl: u.avatar_url, bannedUntil: u.banned_until, banReason: u.ban_reason,
       chatRestrictedUntil: u.chat_restricted_until && new Date(u.chat_restricted_until) > new Date() ? u.chat_restricted_until : null,
       ...(req.user.system_role === 'admin' ? {} : { coins: undefined, diamonds: undefined }),
@@ -206,11 +224,19 @@ router.get('/staff', requireSuperAdmin, async (req, res) => {
   res.json({ staff: r.rows.map((u) => ({ id: u.id, username: u.username, displayName: u.display_name, systemRole: u.system_role })) });
 });
 
-// ---------------- Coin (yalnızca yönetici) ----------------
-router.post('/users/:userId/coins', requireSuperAdmin, idempotent('admin_coins'), async (req, res) => {
+// ---------------- Coin ----------------
+// Yönetici: sınırsız ekler / düşer. Yardımcı admin: yalnızca normal kullanıcıya, tek seferde en fazla 100.000 Coin yükler (düşemez).
+router.post('/users/:userId/coins', idempotent('admin_coins'), async (req, res) => {
   const userId = uuid(req.params.userId, 'Kullanıcı');
   const delta = bigAmount(req.body?.amount, 'Coin miktarı', { allowNegative: true });
   const reason = text(req.body?.reason, 'Neden', { max: 300 }) || 'Admin Coin düzenlemesi';
+  if (req.user.system_role !== 'admin') {
+    if (delta <= 0n) throw fail('Yardımcı admin yalnızca Coin yükleyebilir (düşemez).', 403);
+    if (delta > SUPPORT_COIN_LIMIT) throw fail('Yardımcı admin tek seferde en fazla 100.000 Coin yükleyebilir.', 403);
+    await assertStaffTarget(req, userId);
+    // Kötüye kullanıma karşı hız sınırı: yardımcı admin saatte en fazla 30 yükleme yapar.
+    if (!hitLimit(`support_coins:${req.user.id}`, 30, 3600e3).allowed) throw fail('Çok fazla Coin yükleme yaptınız; biraz sonra tekrar deneyin.', 429);
+  }
   const result = await tx(async (c) => {
     const user = (await c.query(`SELECT coins FROM users WHERE id = $1 AND account_status = 'active' FOR UPDATE`, [userId])).rows[0];
     if (!user) throw fail('Kullanıcı bulunamadı.', 404);
@@ -225,11 +251,44 @@ router.post('/users/:userId/coins', requireSuperAdmin, idempotent('admin_coins')
     await c.query(
       `INSERT INTO financial_audit_logs(admin_id, user_id, action, reference_type, amount_coins, balance_before, balance_after, metadata)
        VALUES($1,$2,'admin_coin_adjustment','user',$3,$4,$5,$6)`,
-      [req.user.id, userId, delta.toString(), before.toString(), after.toString(), JSON.stringify({ reason })],
+      [req.user.id, userId, delta.toString(), before.toString(), after.toString(), JSON.stringify({ reason, by: req.user.system_role })],
     );
     return { before: before.toString(), after: after.toString() };
   });
   res.json(result);
+});
+
+// ---------------- Seviye ----------------
+// Kullanıcı seviyesi (gönderilen Coin) veya yayıncı seviyesi (alınan Elmas) verilir: seviye için gereken exp farkı
+// level_exp_bonus / host_level_exp_bonus'a yazılır; gerçek harcama / kazanç değişmez, sonraki hediyeler üstüne eklenir.
+// Yönetici: 1-300 arası her seviye (düşürebilir de). Yardımcı admin: yalnızca normal kullanıcıya, en fazla 100. seviye ve yalnızca yükseltir.
+router.post('/users/:userId/level', async (req, res) => {
+  const userId = uuid(req.params.userId, 'Kullanıcı');
+  const kind = oneOf(req.body?.kind ?? 'user', ['user', 'host'], 'Seviye türü');
+  const level = Number(req.body?.level);
+  if (!Number.isInteger(level) || level < 1 || level > MAX_LEVEL) throw fail(`Seviye 1-${MAX_LEVEL} arasında olmalı.`);
+  const admin = req.user.system_role === 'admin';
+  if (!admin && level > SUPPORT_LEVEL_LIMIT) throw fail(`Yardımcı admin en fazla ${SUPPORT_LEVEL_LIMIT}. seviyeyi verebilir.`, 403);
+  await assertStaffTarget(req, userId);
+  const [total, bonus, col] = kind === 'user'
+    ? ['total_sent_coins', 'level_exp_bonus', 'coin_level'] : ['total_received_diamonds', 'host_level_exp_bonus', 'gift_level'];
+  const out = await tx(async (c) => {
+    const u = (await c.query(`SELECT ${total} AS total, ${bonus} AS bonus, account_status FROM users WHERE id = $1 FOR UPDATE`, [userId])).rows[0];
+    if (!u) throw fail('Kullanıcı bulunamadı.', 404);
+    if (u.account_status === 'deleted') throw fail('Silinmiş hesap değiştirilemez.', 409);
+    const before = levelFromExp(levelExp(u.total, u.bonus));
+    // Yardımcı admin yalnızca yükseltir: aynı seviyeyi yeniden vermek de ilerlemeyi sıfırlayacağı için kabul edilmez.
+    if (!admin && level <= before) throw fail(`Kullanıcı zaten ${before}. seviyede; yardımcı admin yalnızca daha yüksek seviye verebilir.`, 403);
+    const newBonus = expForLevel(level) - BigInt(u.total);
+    await c.query(`UPDATE users SET ${bonus} = $2, ${col} = $3, updated_at = NOW() WHERE id = $1`, [userId, newBonus.toString(), level]);
+    await c.query(
+      `INSERT INTO financial_audit_logs(admin_id, user_id, action, reference_type, metadata) VALUES($1,$2,'level_set','user',$3)`,
+      [req.user.id, userId, JSON.stringify({ kind, before, after: level, by: req.user.system_role })],
+    );
+    return { before, level };
+  });
+  res.json({ ok: true, kind, ...out });
+  announceUserChange(userId);
 });
 
 // ---------------- WIP ----------------
@@ -237,7 +296,7 @@ router.post('/users/:userId/wip', async (req, res) => {
   const userId = uuid(req.params.userId, 'Kullanıcı');
   const level = wipLevel(req.body?.level);
   const days = positiveInt(req.body?.days, 'WIP süresi', 3650);
-  await assertUser(userId);
+  await assertStaffTarget(req, userId);
   const wasGhost = await ghostNow(userId);
   const r = await query(
     `INSERT INTO user_wip(user_id, level, starts_at, expires_at, is_active)
@@ -248,7 +307,7 @@ router.post('/users/:userId/wip', async (req, res) => {
   );
   await query(
     `INSERT INTO financial_audit_logs(admin_id, user_id, action, reference_type, metadata) VALUES($1,$2,'admin_wip_grant','wip',$3)`,
-    [req.user.id, userId, JSON.stringify({ level, days })],
+    [req.user.id, userId, JSON.stringify({ level, days, by: req.user.system_role })],
   );
   await refreshGhost(userId, wasGhost);
   res.json({ wip: r.rows[0] });
@@ -257,6 +316,7 @@ router.post('/users/:userId/wip', async (req, res) => {
 
 router.delete('/users/:userId/wip', async (req, res) => {
   const userId = uuid(req.params.userId, 'Kullanıcı');
+  await assertStaffTarget(req, userId);
   const wasGhost = await ghostNow(userId);
   await query(`UPDATE user_wip SET is_active = FALSE WHERE user_id = $1`, [userId]);
   await query(`INSERT INTO financial_audit_logs(admin_id, user_id, action, reference_type) VALUES($1,$2,'admin_wip_revoke','wip')`, [req.user.id, userId]);
@@ -395,7 +455,7 @@ export const COLORED_IDS = Object.freeze({ bronz: 'Bronz Renkli ID', gumus: 'Gü
 const grantCats = () => [...STORE_CATS, 'colored_id'];
 
 // Yönetici "öğe ver" listesi: kategoriye göre tüm katalog öğeleri.
-router.get('/grantables', requireSuperAdmin, async (req, res) => {
+router.get('/grantables', async (req, res) => {
   const category = oneOf(req.query.category, grantCats(), 'Kategori');
   if (category === 'colored_id') {
     return res.json({ items: Object.entries(COLORED_IDS).map(([k, name]) => ({ key: `cid:${k}`, name, imageUrl: null, wip: false, idColor: k })) });
@@ -416,12 +476,12 @@ router.get('/grantables', requireSuperAdmin, async (req, res) => {
 });
 
 // Seçilen katalog öğesini kullanıcıya ver. days boş/0 = süresiz.
-router.post('/users/:userId/grant', requireSuperAdmin, async (req, res) => {
+router.post('/users/:userId/grant', async (req, res) => {
   const userId = uuid(req.params.userId, 'Kullanıcı');
   const category = oneOf(req.body?.category, grantCats(), 'Kategori');
   const key = text(req.body?.itemKey, 'Öğe', { min: 1, max: 80, required: true });
   const days = req.body?.days ? positiveInt(req.body.days, 'Gün', 3650) : null;
-  await assertUser(userId);
+  await assertStaffTarget(req, userId);
   if (category === 'colored_id') {
     const color = /^cid:(bronz|gumus|altin)$/.exec(key)?.[1];
     if (!color) throw fail('Geçersiz renkli ID.');

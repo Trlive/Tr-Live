@@ -3,7 +3,7 @@ import express from 'express';
 import { query, tx } from '../database.js';
 import { requireAuth, checkPassword, hashPassword, passwordRules } from '../auth.js';
 import { fail, text, oneOf } from '../http.js';
-import { levelInfo } from '../levels.js';
+import { levelInfo, levelExp } from '../levels.js';
 import { loadProfile } from '../services/profile.js';
 import { activeWip, requireFeature } from '../services/wip.js';
 import { isAnimatedImage, mimeFor } from '../services/media.js';
@@ -443,11 +443,14 @@ router.get('/earnings/history', async (req, res) => {
   });
 });
 
-// Seviye Merkezi: kullanıcı seviyesi (gönderilen coin) ve yayıncı seviyesi (alınan elmas), 160 kademe.
+// Seviye Merkezi: kullanıcı seviyesi (gönderilen coin) ve yayıncı seviyesi (alınan elmas), 300 kademe.
 router.get('/levels', async (req, res) => {
-  const u = (await query(`SELECT total_sent_coins, total_received_diamonds FROM users WHERE id = $1`, [req.user.id])).rows[0];
-  const user = levelInfo(u.total_sent_coins);
-  const broadcaster = levelInfo(u.total_received_diamonds);
+  const u = (await query(
+    `SELECT total_sent_coins, total_received_diamonds, level_exp_bonus, host_level_exp_bonus FROM users WHERE id = $1`, [req.user.id],
+  )).rows[0];
+  // Yönetimin verdiği seviye farkı dahil.
+  const user = levelInfo(levelExp(u.total_sent_coins, u.level_exp_bonus));
+  const broadcaster = levelInfo(levelExp(u.total_received_diamonds, u.host_level_exp_bonus));
   // Eski kayıtlarla uyuşmazlık varsa kendini düzelt.
   await query(`UPDATE users SET coin_level = $2, gift_level = $3 WHERE id = $1 AND (coin_level <> $2 OR gift_level <> $3)`, [req.user.id, user.level, broadcaster.level]);
   res.json({ user, broadcaster });

@@ -1,4 +1,5 @@
 import { query } from '../database.js';
+import { levelFromExp, levelExp } from '../levels.js';
 import { USER_PUBLIC_COLUMNS, USER_PUBLIC_JOINS, publicUser } from '../views.js';
 import { hub } from '../realtime.js';
 import { isGhost } from './presence.js';
@@ -98,4 +99,25 @@ export async function equipIfNone(run, userId, itemType, itemId) {
          AND (o.expires_at IS NULL OR o.expires_at > NOW()) AND COALESCE(o.metadata->>'equipped' = 'true', FALSE))`,
     [itemId, userId, itemType],
   );
+}
+
+/**
+ * v2.72: Seviye sınırı 160 → 300. Kayıtlı seviyesi 160 olan kullanıcıların gerçek seviyesi (exp + verilen fark) yeniden
+ * hesaplanır; böylece sınırda takılı kalanlar bir sonraki hediyeyi beklemeden doğru görünür. Açılışta bir kez, zararsız.
+ */
+export async function refreshCappedLevels() {
+  const r = await query(
+    `SELECT id, total_sent_coins, total_received_diamonds, level_exp_bonus, host_level_exp_bonus, coin_level, gift_level
+     FROM users WHERE coin_level >= 160 OR gift_level >= 160`,
+  );
+  let n = 0;
+  for (const u of r.rows) {
+    const c = levelFromExp(levelExp(u.total_sent_coins, u.level_exp_bonus));
+    const g = levelFromExp(levelExp(u.total_received_diamonds, u.host_level_exp_bonus));
+    if (c !== u.coin_level || g !== u.gift_level) {
+      await query(`UPDATE users SET coin_level = $2, gift_level = $3 WHERE id = $1`, [u.id, c, g]);
+      n += 1;
+    }
+  }
+  return n;
 }

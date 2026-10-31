@@ -131,17 +131,22 @@ test('publicUser: bakiye sızdırmaz, gizli kullanıcıyı maskeler', () => {
   assert.equal(selfUser({ ...row, total_sent_coins: '1', total_received_diamonds: '2' }).coins, '999');
 });
 
-test('160 kademeli seviye eğrisi', () => {
+test('300 kademeli seviye eğrisi', () => {
   assert.equal(levelFromExp(0), 1);
   assert.equal(levelFromExp(expForLevel(2) - 1n), 1);
   assert.equal(levelFromExp(expForLevel(2)), 2);
   assert.equal(levelFromExp(expForLevel(57)), 57);
   assert.equal(levelFromExp(expForLevel(160)), 160);
-  assert.equal(levelFromExp('99999999999999999'), 160);
+  assert.equal(levelFromExp(expForLevel(160) - 1n), 159);
+  assert.equal(levelFromExp(expForLevel(300)), 300);
+  assert.equal(levelFromExp('99999999999999999'), 300);
   const i = levelInfo(expForLevel(10) + 5n);
   assert.equal(i.level, 10);
   assert.equal(i.nextLevelExp, expForLevel(11).toString());
-  assert.equal(levelInfo(expForLevel(160)).maxed, true);
+  assert.equal(levelInfo(expForLevel(160)).maxed, false);
+  assert.equal(levelInfo(expForLevel(300)).maxed, true);
+  // Formül değişmedi: 160'a kadar eşikler aynı (mevcut kullanıcıların seviyesi değişmez).
+  assert.equal(expForLevel(160), 637562561n);
 });
 
 test('yerleşik küfür filtresi hileleri yakalar, masum sözleri geçirir', async () => {

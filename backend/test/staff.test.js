@@ -16,7 +16,10 @@ test('yardımcı admin yalnızca dar yetkilere erişir', () => {
   for (const [m, p] of [['GET', '/users/abc/history'], ['GET', '/rooms'], ['GET', '/rooms/abc/detail'], ['POST', '/rooms/abc/close'],
     ['POST', '/rooms/abc/members/x/kick'], ['GET', '/gift-transactions'], ['GET', '/wallet-transactions'], ['GET', '/stats/daily'],
     ['GET', '/families'], ['POST', '/users/abc/detail'], ['GET', '/users/abc/devices']]) assert.equal(supportMayCall(m, p), false, `${m} ${p}`);
-  for (const [m, p] of [['POST', '/users/abc/coins'], ['POST', '/users/abc/wip'], ['POST', '/users/abc/staff-role'], ['GET', '/staff'],
+  // v2.71: Coin yükleme (sınırlı), WIP, öğe ve seviye verme yardımcı admine açık (sınırlar rota içinde denetlenir).
+  for (const [m, p] of [['POST', '/users/abc/coins'], ['POST', '/users/abc/wip'], ['DELETE', '/users/abc/wip'], ['GET', '/grantables'],
+    ['POST', '/users/abc/grant'], ['POST', '/users/abc/level']]) assert.ok(supportMayCall(m, p), `${m} ${p}`);
+  for (const [m, p] of [['POST', '/users/abc/staff-role'], ['GET', '/staff'], ['POST', '/users/abc/special-id'], ['POST', '/users/abc/host-badge'],
     ['POST', '/gifts'], ['PUT', '/agency-config'], ['POST', '/payouts/close'], ['GET', '/finance/audit'], ['POST', '/security/blocks'],
     ['POST', '/users/abc/kyc'], ['POST', '/dealers']]) assert.equal(supportMayCall(m, p), false, `${m} ${p}`);
 });

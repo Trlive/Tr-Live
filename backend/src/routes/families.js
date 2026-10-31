@@ -211,7 +211,7 @@ router.put('/:familyId/settings', async (req, res) => {
   const id = uuid(req.params.familyId, 'Aile');
   await requireRole(id, req.user.id, 'admin');
   const v = Number(req.body?.joinMinLevel);
-  if (!Number.isInteger(v) || v < 0 || v > 200) throw fail('Seviye 0 ile 200 arasında olmalı.');
+  if (!Number.isInteger(v) || v < 0 || v > 300) throw fail('Seviye 0 ile 300 arasında olmalı.');
   await query(`UPDATE families SET join_min_level = $2 WHERE id = $1`, [id, v]);
   res.json({ joinMinLevel: v });
 });

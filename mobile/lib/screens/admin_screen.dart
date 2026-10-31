@@ -559,12 +559,57 @@ class _UsersTabState extends State<_UsersTab> {
     } catch (_) {/* eski bilgi kalsın */}
   }
 
+  /// Yönetici: sınırsız ekler / düşer. Yardımcı admin: tek seferde en fazla 100.000 Coin yükler, düşemez.
   Future<void> _coins() async {
-    final f = await formDialog(context, 'Coin düzenle', ['Miktar (çıkarmak için - ile)', 'Neden']);
+    final admin = Session.isAdmin;
+    final lAmount = admin ? 'Miktar (çıkarmak için - ile)' : 'Miktar (en fazla 100.000)';
+    final f = await formDialog(context, admin ? 'Coin düzenle' : 'Coin yükle', [lAmount, 'Neden']);
     if (f == null || !mounted) return;
-    final amount = int.tryParse(f['Miktar (çıkarmak için - ile)'] ?? '');
+    final amount = int.tryParse((f[lAmount] ?? '').replaceAll('.', '').trim());
     if (amount == null || amount == 0) return toast(context, 'Geçerli bir miktar girin.', error: true);
+    if (!admin && (amount < 0 || amount > 100000)) return toast(context, 'Yardımcı admin tek seferde 1 ile 100.000 arası Coin yükleyebilir.', error: true);
     await _run(() => Api.postOnce('/api/admin/users/${_user!['id']}/coins', {'amount': amount, 'reason': f['Neden']}), 'Coin güncellendi.');
+  }
+
+  /// Seviye ver: yönetici 1-300 (düşürebilir de), yardımcı admin en fazla 100 ve yalnızca yükseltir.
+  Future<void> _level() async {
+    final admin = Session.isAdmin;
+    final max = admin ? 300 : 100;
+    var kind = 'user';
+    final ctl = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, setS) => AlertDialog(
+          title: const Text('Seviye ver'),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            DropdownButtonFormField<String>(
+              // ignore: deprecated_member_use
+              value: kind,
+              decoration: const InputDecoration(labelText: 'Tür'),
+              items: const [
+                DropdownMenuItem(value: 'user', child: Text('Kullanıcı seviyesi')),
+                DropdownMenuItem(value: 'host', child: Text('Yayıncı seviyesi')),
+              ],
+              onChanged: (v) => setS(() => kind = v ?? kind),
+            ),
+            TextField(controller: ctl, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: 'Seviye (1-$max)')),
+            const SizedBox(height: 8),
+            Text(admin ? 'Yönetici her seviyeyi verebilir.' : 'En fazla $max. seviye; seviye düşürülemez.', style: const TextStyle(fontSize: 12)),
+          ]),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Vazgeç')),
+            FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Ver')),
+          ],
+        ),
+      ),
+    );
+    final n = int.tryParse(ctl.text.trim());
+    // Pencerenin kapanış animasyonu bitince bırakılır (hemen bırakılırsa "kullanılan denetleyici" hatası olur).
+    WidgetsBinding.instance.addPostFrameCallback((_) => ctl.dispose());
+    if (ok != true || !mounted) return;
+    if (n == null || n < 1 || n > max) return toast(context, 'Seviye 1-$max arasında olmalı.', error: true);
+    await _run(() => Api.post('/api/admin/users/${_user!['id']}/level', {'kind': kind, 'level': n}), 'Seviye verildi.');
   }
 
   Future<void> _wip() async {
@@ -722,6 +767,8 @@ class _UsersTabState extends State<_UsersTab> {
   Widget build(BuildContext context) {
     final u = _user;
     final admin = Session.isAdmin;
+    // Yardımcı admin bu işlemleri yalnızca normal kullanıcılara yapabilir (sunucu da denetler).
+    final staffOk = admin || (u != null && u['systemRole'] == 'user');
     return ListView(padding: const EdgeInsets.all(16), children: [
       FilledButton.icon(onPressed: _pick, icon: const Icon(Icons.search), label: const Text('Kullanıcı bul (ID, ad)')),
       if (u != null) ...[
@@ -731,6 +778,7 @@ class _UsersTabState extends State<_UsersTab> {
             leading: UserAvatar(user: u),
             title: Text((u['displayName'] ?? '').toString()),
             subtitle: Text('ID: ${u['publicId'] ?? '-'} · @${u['username']} · ${u['systemRole']} · ${u['accountStatus']}'
+                '${u['coinLevel'] != null ? '\nSeviye: ${u['coinLevel']} · Yayıncı seviyesi: ${u['giftLevel'] ?? 1}' : ''}'
                 '${admin ? '\nCoin: ${fmtNumber(u['coins'])} · Diamond: ${fmtNumber(u['diamonds'])}' : ''}${_banLine(u)}${_restrictLine(u)}'),
             isThreeLine: true,
           ),
@@ -757,11 +805,13 @@ class _UsersTabState extends State<_UsersTab> {
           if (admin) OutlinedButton.icon(onPressed: _credentials, icon: const Icon(Icons.key), label: const Text('Giriş bilgileri / şifre')),
           if (admin) OutlinedButton.icon(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => UserDevicesScreen(user: u))), icon: const Icon(Icons.devices), label: const Text('Cihazlar')),
           if (admin) OutlinedButton.icon(style: OutlinedButton.styleFrom(foregroundColor: Colors.redAccent), onPressed: _revokeSessions, icon: const Icon(Icons.logout), label: const Text('Oturumları kapat')),
-          if (admin) OutlinedButton.icon(onPressed: _coins, icon: const Icon(Icons.monetization_on), label: const Text('Coin düzenle')),
-          if (admin) OutlinedButton.icon(onPressed: _wip, icon: const Icon(Icons.workspace_premium), label: const Text('WIP ver')),
-          if (admin) OutlinedButton.icon(onPressed: () => _run(() => Api.delete('/api/admin/users/${u['id']}/wip'), 'WIP kaldırıldı.'), icon: const Icon(Icons.remove_circle_outline), label: const Text('WIP al')),
-          if (admin) OutlinedButton.icon(onPressed: _inventory, icon: const Icon(Icons.inventory_2), label: const Text('Öğe ver (çerçeve, rozet…)')),
-          if (admin)
+          // Yönetici + yardımcı admin (yardımcı admin: yalnızca normal kullanıcıya; Coin en fazla 100.000, seviye en fazla 100).
+          if (staffOk) OutlinedButton.icon(onPressed: _coins, icon: const Icon(Icons.monetization_on), label: Text(admin ? 'Coin düzenle' : 'Coin yükle')),
+          if (staffOk) OutlinedButton.icon(onPressed: _level, icon: const Icon(Icons.trending_up), label: const Text('Seviye ver')),
+          if (staffOk) OutlinedButton.icon(onPressed: _wip, icon: const Icon(Icons.workspace_premium), label: const Text('WIP ver')),
+          if (staffOk) OutlinedButton.icon(onPressed: () => _run(() => Api.delete('/api/admin/users/${u['id']}/wip'), 'WIP kaldırıldı.'), icon: const Icon(Icons.remove_circle_outline), label: const Text('WIP al')),
+          if (staffOk) OutlinedButton.icon(onPressed: _inventory, icon: const Icon(Icons.inventory_2), label: const Text('Öğe ver (çerçeve, rozet…)')),
+          if (staffOk)
             OutlinedButton.icon(
               onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => GrantItemPage(user: u, initialCategory: 'colored_id'))),
               icon: const Icon(Icons.format_color_text),

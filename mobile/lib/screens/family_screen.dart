@@ -238,6 +238,7 @@ class _FamilyPageState extends State<FamilyPage> {
 
   Future<void> _settings(Map<String, dynamic> f) async {
     final role = f['myRole'];
+    final admin = role == 'owner' || role == 'admin';
     final a = await showModalBottomSheet<String>(
       context: context,
       backgroundColor: Pal.surface,
@@ -246,8 +247,9 @@ class _FamilyPageState extends State<FamilyPage> {
           padding: const EdgeInsets.fromLTRB(20, 18, 20, 12),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             for (final (key, label) in [
-              ('edit', 'Bilgileri Düzenle'),
-              ('requests', 'İstek Ayarları'),
+              // Normal üye yalnızca "Aileden Ayrıl"ı görür; düzenleme ve istek ayarları yöneticilere.
+              if (admin) ('edit', 'Bilgileri Düzenle'),
+              if (admin) ('requests', 'İstek Ayarları'),
               if (role == 'owner') ('notice', 'Üyelere Bildirim / Davet'),
               if (role == 'owner') ('disband', 'Aileyi Dağıt') else ('leave', 'Aileden Ayrıl'),
             ])
@@ -362,7 +364,7 @@ class _FamilyPageState extends State<FamilyPage> {
                 physics: const FixedExtentScrollPhysics(),
                 onSelectedItemChanged: (i) => value = i,
                 childDelegate: ListWheelChildBuilderDelegate(
-                  childCount: 201,
+                  childCount: 301,
                   builder: (_, i) => Center(child: Text(i == 0 ? 'Sınır yok' : '$i', style: const TextStyle(color: _ink, fontSize: 24, fontWeight: FontWeight.w600))),
                 ),
               ),
@@ -414,7 +416,8 @@ class _FamilyPageState extends State<FamilyPage> {
           return Scaffold(
             backgroundColor: Pal.bg,
             appBar: _appBar(context, '${f['name'] ?? ''}', actions: [
-              if (admin) IconButton(tooltip: 'Ayarlar', onPressed: () => _settings(f), icon: const Icon(Icons.settings_outlined, size: 28)),
+              // Her üye görür: normal üye buradan aileden ayrılır.
+              if (member) IconButton(tooltip: 'Ayarlar', onPressed: () => _settings(f), icon: const Icon(Icons.settings_outlined, size: 28)),
               IconButton(tooltip: 'Kurallar', onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const FamilyRulesPage())), icon: const Icon(Icons.help_outline, size: 28)),
             ]),
             body: Stack(children: [

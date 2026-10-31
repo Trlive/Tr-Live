@@ -65,6 +65,17 @@ async function syncProfile(r, run = query) {
 }
 
 /** Oda elması: bu sahibin bu türdeki odasına gelen tüm hediyeler (oda kapanınca sıfırlanmaz). */
+// Oda sahibinin ailesi (odanın üstündeki aile çipi). Ailesi yoksa null: çip görünmez.
+// Sahip "Gizli Kullanıcı" ise aile de gösterilmez (aile adı kimliğini ele vermesin).
+async function ownerFamily(ownerId) {
+  const f = (await query(
+    `SELECT f.id, f.name, f.logo_url, f.level FROM family_members fm JOIN families f ON f.id = fm.family_id AND f.is_active
+     JOIN users u ON u.id = fm.user_id AND NOT COALESCE(u.is_hidden, FALSE)
+     WHERE fm.user_id = $1 LIMIT 1`, [ownerId],
+  )).rows[0];
+  return f ? { id: f.id, name: f.name, logoUrl: f.logo_url ?? null, level: f.level } : null;
+}
+
 async function roomDiamonds(room) {
   const r = await query(`SELECT total_diamonds FROM room_profiles WHERE owner_id = $1 AND room_type = $2`, [room.owner_id, room.room_type]);
   return String(r.rows[0]?.total_diamonds ?? 0);
@@ -311,7 +322,7 @@ router.get('/:roomId', requireAuth, async (req, res) => {
       tags: r.tags ?? [], locked: r.locked, chatEnabled: r.chat_enabled !== false,
       hidden: r.room_hidden, theme: r.theme, themeImageUrl: r.theme_image_url, scoreboardEnabled: r.scoreboard_enabled, lockedSeats: r.locked_seats ?? [], mutedSeats: r.muted_seats ?? [], micRequest: r.mic_request === true,
       ...(canSeeCode && r.join_code ? { joinCode: r.join_code } : {}),
-      owner: publicUser(r, req.user.id),
+      owner: publicUser(r, req.user.id), ownerFamily: await ownerFamily(r.owner_id),
     },
     me: me ? { role: me.role, microphone: me.microphone, seatIndex: me.seat_index } : null,
   });
@@ -385,7 +396,10 @@ router.post('/:roomId/join', requireAuth, userLimit('room_join', 40, 60e3), asyn
   const me = await memberOf(roomId, userId);
   noteTask(userId, 'join_room');
   res.json({
-    room: { ...roomJson(room, { showCode: ['owner', 'cohost'].includes(me.role) }), totalDiamonds: await roomDiamonds(room) },
+    room: {
+      ...roomJson(room, { showCode: ['owner', 'cohost'].includes(me.role) }), totalDiamonds: await roomDiamonds(room),
+      ownerFamily: await ownerFamily(room.owner_id),
+    },
     me: { role: me.role, microphone: me.microphone, seatIndex: me.seat_index },
     joined: ins.rowCount > 0,
     entrance: myEntrance,

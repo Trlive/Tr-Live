@@ -8,7 +8,7 @@ import { publicUser } from '../views.js';
 import { hub } from '../realtime.js';
 import { config } from '../config.js';
 import { distributeGift } from '../gifts_logic.js';
-import { levelFromExp, giftDisplayLevel } from '../levels.js';
+import { levelFromExp, levelExp, giftDisplayLevel } from '../levels.js';
 import { scorePk, pkView } from '../services/pk.js';
 import { scoreboardOf } from '../services/scoreboard.js';
 import { loadPublicRows } from '../services/users.js';
@@ -145,10 +145,11 @@ router.post('/rooms/:roomId/gifts/send', userLimit('gift', 60, 60e3), idempotent
 
     const sent = (await c.query(
       `UPDATE users SET coins = coins - $1, total_sent_coins = total_sent_coins + $1, updated_at = NOW()
-       WHERE id = $2 RETURNING coins, total_sent_coins`,
+       WHERE id = $2 RETURNING coins, total_sent_coins, level_exp_bonus`,
       [totalCoins.toString(), senderId],
     )).rows[0];
-    await c.query(`UPDATE users SET coin_level = $1 WHERE id = $2`, [levelFromExp(sent.total_sent_coins), senderId]);
+    // Seviye = gönderilen Coin + yönetimin verdiği seviye farkı (level_exp_bonus).
+    await c.query(`UPDATE users SET coin_level = $1 WHERE id = $2`, [levelFromExp(levelExp(sent.total_sent_coins, sent.level_exp_bonus)), senderId]);
 
     const pkIds = new Set();
     const transactions = [];
@@ -160,10 +161,10 @@ router.post('/rooms/:roomId/gifts/send', userLimit('gift', 60, 60e3), idempotent
       const credit = creditOf(coinAmount); // alıcıya geçen Elmas (normal hediyede = coinAmount)
       const recv = (await c.query(
         `UPDATE users SET diamonds = diamonds + $1, total_received_diamonds = total_received_diamonds + $1, updated_at = NOW()
-         WHERE id = $2 RETURNING total_received_diamonds`,
+         WHERE id = $2 RETURNING total_received_diamonds, host_level_exp_bonus`,
         [credit.toString(), item.userId],
       )).rows[0];
-      await c.query(`UPDATE users SET gift_level = $1 WHERE id = $2`, [levelFromExp(recv.total_received_diamonds), item.userId]);
+      await c.query(`UPDATE users SET gift_level = $1 WHERE id = $2`, [levelFromExp(levelExp(recv.total_received_diamonds, recv.host_level_exp_bonus)), item.userId]);
 
       const gt = (await c.query(
         `INSERT INTO gift_transactions(room_id, sender_id, receiver_id, gift_id, quantity, coin_amount, diamond_amount, receiver_agency_id)

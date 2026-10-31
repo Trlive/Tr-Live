@@ -1,3 +1,4 @@
+import { refreshCappedLevels } from './services/users.js';
 import http from 'node:http';
 import express from 'express';
 import helmet from 'helmet';
@@ -244,6 +245,7 @@ const familyJanitor = startFamilyJanitor();
 const transferTicker = startTransferTicker();
 const privacySweeper = startPrivacySweeper();
 closeStaleMicSessions().catch((e) => console.error('Mikrofon oturumları temizlenemedi:', e.message));
+refreshCappedLevels().catch((e) => console.error('Seviye yenileme hatası:', e.message));
 const janitor = startFirewallJanitor();
 // Bir günden eski işlem (idempotency) anahtarları saatte bir silinir.
 const idemJanitor = setInterval(nonOverlapping(() => pruneIdempotencyKeys().catch((e) => console.error('İşlem anahtarı temizliği:', e.message))), 3600e3);

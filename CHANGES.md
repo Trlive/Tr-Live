@@ -1,3 +1,27 @@
+## v2.72.0 — Seviyeler 300'e çıktı, prestij tasarımları
+- Kullanıcı (gönderme) ve yayıncı (alma) seviyeleri 160 yerine 300'e kadar. Exp formülü aynı (2000 × (L-1)^2,5), bu yüzden
+  mevcut kullanıcıların seviyesi değişmez; 160'ta takılı kalanlar exp'leri yettikçe yükselmeye devam eder.
+- 151-300 arası üç "prestij" kademesi (en üst rozetin üstüne kodla çizilir, ek dosya yok):
+  151-200 Kraliyet (altın çerçeve, süzülen parıltı), 201-250 Elmas (buz-mavi ton, parıltı, dış ışıma),
+  251-300 Efsane (dönen gökkuşağı çerçeve, renkleri değişen ton, parıltı, ışıma). Seviye etiketlerinde ve büyük rozetlerde.
+  Animasyonlar tek ortak zamanlayıcıyla döner (≈30 kare/sn); üstüne başka sayfa açılınca ya da görünen etiket yoksa durur,
+  "animasyonları azalt" açıksa durağan çizilir.
+- 160'ta takılı kalan kullanıcıların seviyesi sunucu açılışında bir kez yeniden hesaplanır. Aile katılma alt seviyesi 300'e kadar seçilebilir.
+- Seviye Merkezi tablosu 300'e kadar; prestij satırlarında kademe adı.
+- Yönetici seviye verme sınırı 300 (yardımcı admin yine en fazla 100).
+
+## v2.71.0 — Yardımcı admin yetkileri, seviye verme, aile düzeltmeleri
+- Seviye verme (yönetim): kullanıcı seviyesi veya yayıncı seviyesi. Yönetici 1-160 arası her seviyeyi verebilir (düşürebilir
+  de); yardımcı admin en fazla 100. seviyeyi verir ve seviye düşüremez. Gerçek harcama / kazanç değişmez; verilen seviye için
+  gereken fark ayrı tutulur (052_level_bonus.sql), sonraki hediyeler bunun üstüne eklenir. İşlem kaydına "Seviye verildi".
+- Yardımcı admin artık: Coin yükleyebilir (tek seferde en fazla 100.000, düşemez), WIP verip alabilir, öğe (çerçeve, araç,
+  balon, madalya, renkli ID…) verebilir, seviye verebilir — yalnızca normal kullanıcılara (yönetici / yardımcı admin
+  hesaplarına değil). Uygulamadaki yönetim ekranında ve web panelinde. Kayıtlarda işlemi kimin (rolüyle) yaptığı görünür.
+- Aile: normal üye aileden ayrılamıyordu (ayarlar düğmesi yalnızca yöneticilere görünüyordu). Artık her üye ayarlardan
+  "Aileden Ayrıl"ı görür; bilgileri düzenleme ve istek ayarları yalnızca aile yöneticilerinde.
+- Oda: üst köşedeki aile çipi artık odaya girenin değil, ODA SAHİBİNİN ailesini gösterir; dokununca o ailenin sayfası açılır.
+  Oda sahibinin ailesi yoksa çip görünmez. (Sunucu: oda bilgisinde ownerFamily.)
+
 ## v2.70.0 — Tam teferruatlı web yönetim paneli (sunucu uçları)
 - Kullanıcı listesi: GET /api/admin/users/list — tüm üyeler sayfa sayfa (50'şer); arama (kullanıcı adı, görünen ad, ID,
   özel ID; yönetici için telefon), filtre (durum, rol / tüm yetkililer, cinsiyet, WIP, yayıncı, son 24 saatte aktif,

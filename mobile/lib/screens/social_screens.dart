@@ -102,7 +102,9 @@ class _LevelsScreenState extends State<LevelsScreen> {
   bool _broadcaster = false; // Figma'da önce Yayıncı, ama kullanıcı seviyesi öntanımlı
 
   static const _ranges = [
-    [1, 19], [20, 29], [30, 39], [40, 49], [50, 59], [60, 69], [70, 79], [80, 89], [90, 99], [100, 119], [120, 139], [140, 149], [150, 160],
+    [1, 19], [20, 29], [30, 39], [40, 49], [50, 59], [60, 69], [70, 79], [80, 89], [90, 99], [100, 119], [120, 139], [140, 150],
+    // Prestij kademeleri (efektli): Kraliyet, Elmas, Efsane.
+    [151, 200], [201, 250], [251, 300],
   ];
 
   String? _frame(Map<String, dynamic> p) {
@@ -209,7 +211,17 @@ class _LevelsScreenState extends State<LevelsScreen> {
                     TableRow(
                       decoration: BoxDecoration(color: level >= _ranges[i][0] && level <= _ranges[i][1] ? rowColor.withValues(alpha: 1) : rowColor.withValues(alpha: 0.75)),
                       children: [
-                        SizedBox(height: 64, child: Center(child: Text(_ranges[i][0] == _ranges[i][1] ? '${_ranges[i][0]}' : '${_ranges[i][0]}-${_ranges[i][1]}', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: level >= _ranges[i][0] && level <= _ranges[i][1] ? const Color(0xFFFFEB3B) : Colors.white)))),
+                        SizedBox(
+                          height: 64,
+                          child: Center(
+                            child: Column(mainAxisSize: MainAxisSize.min, children: [
+                              Text(_ranges[i][0] == _ranges[i][1] ? '${_ranges[i][0]}' : '${_ranges[i][0]}-${_ranges[i][1]}',
+                                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: level >= _ranges[i][0] && level <= _ranges[i][1] ? const Color(0xFFFFEB3B) : Colors.white)),
+                              if (prestigeTier(_ranges[i][0]) > 0)
+                                Text(prestigeNames[prestigeTier(_ranges[i][0])], style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Color(0xFFFFD36E))),
+                            ]),
+                          ),
+                        ),
                         // Etiket: yayıncı (alış) kalpli, kullanıcı (atış) taçlı.
                         Center(child: LevelPill(level: _ranges[i][0], send: !_broadcaster, height: 20)),
                         Center(child: Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: LevelBadgeImage(level: _ranges[i][0], send: !_broadcaster, size: 58))),

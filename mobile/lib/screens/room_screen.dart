@@ -66,7 +66,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   int _flightSeq = 0;
   // Mikte oynayan hediyeler (yumurta, domates): alıcının koltuk dairesinin içinde oynar.
   final List<_SeatFx> _seatFx = [];
-  Map<String, dynamic>? _myFamily; // ailesi olanlarda üst köşede kısayol
   Map<String, dynamic> _me = {};
   List<Map<String, dynamic>> _members = [];
   bool _loading = true;
@@ -138,9 +137,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     CallGuard.instance.start();
     WidgetsBinding.instance.addObserver(this);
     MediaCache.warmGifts();
-    Api.get('/api/families/mine').then((r) {
-      if (mounted) setState(() => _myFamily = mapOf(r['family']));
-    }).catchError((_) {});
     _enter();
   }
 
@@ -512,6 +508,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       _joined = true;
       final me = mapOf(r['me']);
       if (me != null) _me = me;
+      // Yeniden katılınca oda sahibinin ailesi de tazelenir (sahip bu arada aile değiştirmiş olabilir).
+      final fresh = mapOf(r['room']);
+      if (fresh != null) _room = {...?_room, 'ownerFamily': fresh['ownerFamily']};
       SocketService.instance.subscribeRoom(widget.roomId);
       await _loadMembers();
       if (!mounted) return;
@@ -3318,7 +3317,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
     final isOwnerHere = _room?['ownerId']?.toString() == Session.id;
     final fs = h * 0.6;
-    final logo = Api.absoluteUrl(_myFamily?['logoUrl'] as String?);
+    // Oda sahibinin ailesi (sunucu: room.ownerFamily). Sahibin ailesi yoksa çip görünmez.
+    final ownerFamily = mapOf(_room?['ownerFamily']);
+    final logo = Api.absoluteUrl(ownerFamily?['logoUrl'] as String?);
     // shrink: yalnızca Flexible içindeki çipte (aile adı daralabilsin); sınırsız genişlikte Flexible kullanılamaz.
     Widget chip(Widget child, {VoidCallback? onTap, Color? color, BoxBorder? border, bool shrink = false}) => InkWell(
           onTap: onTap,
@@ -3357,8 +3358,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           color: _fav ? Colors.orange.shade800 : Colors.orange,
         ),
       ],
-      // Aile kısayolu (yalnızca ailesi olanlarda); taç her durumda sağ kenarda kalır.
-      if (_myFamily != null)
+      // Oda sahibinin ailesi; dokununca o ailenin sayfası açılır. Taç her durumda sağ kenarda kalır.
+      if (ownerFamily != null && ownerFamily['id'] != null)
         Expanded(
           child: Align(
           alignment: Alignment.centerRight,
@@ -3374,11 +3375,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               Flexible(
                 child: ConstrainedBox(
                   constraints: BoxConstraints(maxWidth: g.w * 0.2),
-                  child: Text((_myFamily?['name'] ?? '').toString(), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: fs, fontWeight: FontWeight.w800, fontStyle: FontStyle.italic, height: 1.0)),
+                  child: Text((ownerFamily['name'] ?? '').toString(), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: fs, fontWeight: FontWeight.w800, fontStyle: FontStyle.italic, height: 1.0)),
                 ),
               ),
             ]),
-            onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const FamilyScreen())),
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => FamilyPage(familyId: ownerFamily['id'].toString()))),
             border: Border.all(color: Colors.amber.withValues(alpha: 0.6)),
             shrink: true,
           ),

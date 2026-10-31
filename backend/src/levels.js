@@ -44,9 +44,9 @@ export function giftDisplayLevel(coinAmount) {
   return n >= 10000n ? 3 : n >= 1000n ? 2 : 1;
 }
 
-// ---- 160 kademeli seviye sistemi (Seviye Merkezi) ----
+// ---- 300 kademeli seviye sistemi (Seviye Merkezi; v2.72'de 160'tan 300'e çıktı, formül aynı) ----
 // Kullanıcı seviyesi: gönderilen toplam coin; yayıncı seviyesi: alınan toplam elmas. L. seviyeye ulaşmak için gereken toplam exp: 2000 * (L-1)^2.5
-export const MAX_LEVEL = 160;
+export const MAX_LEVEL = 300;
 export const EXP_BASE = 2000;
 export function expForLevel(level) {
   const l = Math.min(Math.max(Math.floor(level), 1), MAX_LEVEL);
@@ -61,6 +61,12 @@ export function levelFromExp(total) {
   }
   return lo;
 }
+/** Seviye exp'i: gerçek toplam + yönetimin verdiği fark (eksi olabilir; sonuç 0'ın altına inmez). */
+export function levelExp(total, bonus = 0) {
+  const t = BigInt(total ?? 0) + BigInt(bonus ?? 0);
+  return t < 0n ? 0n : t;
+}
+
 export function levelInfo(total) {
   const exp = BigInt(total ?? 0);
   const level = levelFromExp(exp);
