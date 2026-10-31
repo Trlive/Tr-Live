@@ -111,6 +111,7 @@ export function selfUser(row) {
     showPresence: row.show_presence !== false,
     hideCountry: row.hide_country === true,
     hideVisits: row.hide_visits !== false,
+    termsVersion: row.terms_version ?? null,
     ghostMode: row.ghost_mode === true,
     chatRestrictedUntil: row.chat_restricted_until && new Date(row.chat_restricted_until) > new Date() ? row.chat_restricted_until : null,
     systemRole: row.system_role,

@@ -14,7 +14,7 @@ import { scoreboardOf } from '../services/scoreboard.js';
 import { loadPublicRows } from '../services/users.js';
 import { idempotent } from '../idempotency.js';
 import { nextCombo } from '../combo.js';
-import { drawLucky, LUCKY_BASE } from '../lucky.js';
+import { drawLucky, LUCKY_BASE, luckyTable } from '../lucky.js';
 import { getConfig } from '../services/app_config.js';
 import { featuresFor, minLevelFor, wipLabel } from '../services/wip.js';
 import { addGiftExp } from '../services/cp.js';
@@ -38,9 +38,17 @@ router.get('/gifts', async (req, res) => {
   const cfg = await getConfig();
   // Şanslı hediyeler kapalıyken sekme hiç görünmez.
   const rows = cfg.luckyEnabled ? r.rows : r.rows.filter((g) => g.category !== 'lucky');
+  // Şanslı hediye olasılıkları (uygulama mağazası kuralı: rastgele ödüllerin olasılıkları kullanıcıya gösterilir).
+  // Gönderim anındaki sınırlamanın aynısı uygulanır.
+  const recvBps = Math.min(Math.max(Math.trunc(Number(cfg.luckyReceiverBps)) || 0, 0), 5000);
+  const rtpBps = Math.min(Math.max(Math.trunc(Number(cfg.luckyRtpBps)) || 0, 0), 9500 - recvBps);
+  const odds = luckyTable(rtpBps).map(([m, p]) => ({ multiplier: m, probability: Number(p.toFixed(8)) }));
   res.json({
     gifts: rows.map(giftJson), globalMinCoins: String(config.globalGiftMinCoins),
-    lucky: { enabled: cfg.luckyEnabled, receiverBps: cfg.luckyReceiverBps, multipliers: LUCKY_BASE.map(([m]) => m) },
+    lucky: {
+      enabled: cfg.luckyEnabled, receiverBps: cfg.luckyReceiverBps, multipliers: LUCKY_BASE.map(([m]) => m),
+      odds, rtpBps, maxWin: String(Math.max(Math.trunc(Number(cfg.luckyMaxWin)) || 1, 1)),
+    },
   });
 });
 

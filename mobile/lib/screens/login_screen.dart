@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../widgets/common.dart';
 import 'home_screen.dart';
+import 'legal_screens.dart';
 
 /// Giriş / kayıt: Google, Facebook, telefon numarası ya da kullanıcı adı + şifre.
 enum _Mode { start, phone, username }
@@ -24,6 +25,9 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   bool _showPassword = false;
   Map<String, dynamic> _providers = const {'google': false, 'facebook': false, 'phone': true};
   bool _socialCancelled = false;
+  // Kayıt / sosyal giriş için yasal onay (18 yaş + Kullanıcı Sözleşmesi + Gizlilik Politikası).
+  bool _accepted = false;
+  bool _flash = false; // onaysız denenince kutu kısa süre kırmızı yanar
 
   // Arka plandaki ağır ağır süzülen altın tozları ve açılış animasyonu.
   late final AnimationController _anim = AnimationController(vsync: this, duration: const Duration(seconds: 24))..repeat();
@@ -46,6 +50,30 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   }
 
   void _goHome() => Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const HomeScreen()), (_) => false);
+
+  /// Onay kutusu işaretli değilse uyarır (true: devam edilebilir).
+  bool _needConsent() {
+    if (_accepted) return true;
+    toast(context, 'Devam etmek için 18 yaşından büyük olduğunu ve sözleşmeleri kabul ettiğini onayla.', error: true);
+    setState(() => _flash = true);
+    Future.delayed(const Duration(milliseconds: 1600), () {
+      if (mounted) setState(() => _flash = false);
+    });
+    return false;
+  }
+
+  /// Girişten sonra: kutu işaretliyse onay sunucuya kaydedilir (sürüm + zaman). Hata girişi engellemez.
+  Future<void> _saveConsent() async {
+    if (!_accepted) return;
+    try {
+      await recordTermsAcceptance();
+    } catch (_) {/* ana ekranda yeniden sorulur */}
+  }
+
+  Widget _consent() => Padding(
+        padding: const EdgeInsets.only(top: 14),
+        child: LegalConsent(value: _accepted, highlight: _flash, onChanged: (v) => setState(() => _accepted = v)),
+      );
 
   void _setMode(_Mode m, {bool register = false}) {
     setState(() {
@@ -80,6 +108,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
       toast(context, problem, error: true);
       return;
     }
+    if (_register && !_needConsent()) return;
     setState(() => _busy = true);
     try {
       final id = _id.text.trim();
@@ -92,6 +121,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
         // Sunucu girilen değerin telefon mu kullanıcı adı mı olduğunu kendisi ayırır.
         await AuthService.login(_mode == _Mode.username ? id.replaceAll('İ', 'i').toLowerCase() : id, _password.text);
       }
+      await _saveConsent();
       if (!mounted) return;
       _goHome();
     } catch (e) {
@@ -103,6 +133,8 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
 
   Future<void> _social(String provider, String label) async {
     if (_busy) return;
+    // Google/Facebook ile ilk girişte hesap açılır: onay gerekir.
+    if (!_needConsent()) return;
     setState(() {
       _busy = true;
       _socialCancelled = false;
@@ -148,6 +180,8 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
         setState(() => _busy = false);
         return;
       }
+      await _saveConsent();
+      if (!mounted) return;
       _goHome();
     } catch (e) {
       if (!mounted) return;
@@ -233,6 +267,8 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
             fg: Colors.white,
             onTap: _busy ? null : () => _social('facebook', 'Facebook'),
           ),
+        // Google/Facebook ile ilk girişte hesap açıldığı için onay kutusu burada da gösterilir.
+        if (_providers['google'] == true || _providers['facebook'] == true) _consent(),
       ]);
 
   InputDecoration _field(String label, IconData icon, {String? hint, Widget? suffix}) => InputDecoration(
@@ -319,6 +355,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
           ),
         ),
       ),
+      if (_register) _consent(),
       const SizedBox(height: 22),
       _goldButton(icon: _register ? Icons.how_to_reg_rounded : Icons.login_rounded, text: _register ? 'Kayıt ol' : 'Giriş yap', onTap: _busy ? null : _submit, busy: _busy),
       const SizedBox(height: 8),
@@ -410,8 +447,14 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                       child: _mode == _Mode.start ? _start() : _form(),
                     ),
                     const SizedBox(height: 18),
-                    const Text('Devam ederek Topluluk Kurallarımızı kabul etmiş olursun.',
-                        textAlign: TextAlign.center, style: TextStyle(color: Color(0xFF8C7F66), fontSize: 12)),
+                    // Topluluk Kuralları (Kullanıcı Sözleşmesi'nin parçası) ve Çocuk Güvenliği bağlantıları.
+                    Wrap(alignment: WrapAlignment.center, spacing: 14, children: [
+                      for (final (page, label) in const [('community.html', 'Topluluk Kuralları'), ('child-safety.html', 'Çocuk Güvenliği')])
+                        GestureDetector(
+                          onTap: () => openLegal(context, page),
+                          child: Text(label, style: const TextStyle(color: Color(0xFF8C7F66), fontSize: 12, decoration: TextDecoration.underline, decorationColor: Color(0xFF8C7F66))),
+                        ),
+                    ]),
                   ]),
                 ),
               ),

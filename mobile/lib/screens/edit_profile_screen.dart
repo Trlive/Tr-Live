@@ -83,8 +83,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   Future<void> _pickBirthDate() async {
     final now = DateTime.now();
-    final initial = DateTime.tryParse(_birthDate ?? '') ?? DateTime(now.year - 20, 1, 1);
-    final d = await showDatePicker(context: context, initialDate: initial, firstDate: DateTime(now.year - 100), lastDate: DateTime(now.year - 13, now.month, now.day));
+    // TR Live 18 yaş ve üzeri içindir: seçilebilecek en geç tarih 18 yıl önce.
+    final last = DateTime(now.year - 18, now.month, now.day);
+    final first = DateTime(now.year - 100);
+    var initial = DateTime.tryParse(_birthDate ?? '') ?? DateTime(now.year - 20, 1, 1);
+    if (initial.isAfter(last)) initial = last;
+    if (initial.isBefore(first)) initial = first;
+    final d = await showDatePicker(context: context, initialDate: initial, firstDate: first, lastDate: last);
     if (d != null) {
       setState(() => _birthDate = '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}');
     }
@@ -100,7 +105,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         'country': _country.text.trim(),
         'city': _city.text.trim(),
         'gender': _gender,
-        'birthDate': _birthDate,
+        // Doğum tarihi yalnızca değiştiyse gönderilir (eski kayıtlı tarih, diğer alanların kaydını engellemesin).
+        if (_birthDate != _me['birthDate']) 'birthDate': _birthDate,
         'whoCanDm': _whoCanDm,
       });
       await Session.refresh();

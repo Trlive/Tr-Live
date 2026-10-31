@@ -12,6 +12,7 @@ import '../widgets/drag_bubble.dart';
 import '../services/inbox_service.dart';
 import '../services/push_service.dart';
 import '../services/room_dock.dart';
+import '../services/session.dart';
 import '../services/socket_service.dart';
 import '../widgets/common.dart';
 import '../widgets/cp_widgets.dart';
@@ -19,6 +20,7 @@ import '../widgets/gift_ribbon.dart';
 import 'feed_screen.dart';
 import 'go_live_screen.dart';
 import 'leaderboard_screen.dart';
+import 'legal_screens.dart';
 import 'messages_screen.dart';
 import 'profile_screen.dart';
 import 'room_screen.dart';
@@ -38,9 +40,19 @@ class _HomeScreenState extends State<HomeScreen> {
 
   StreamSubscription? _cpSub;
 
+  /// Kullanıcı Sözleşmesi / Gizlilik Politikası onaylanmamışsa (ya da güncellendiyse) onay penceresi.
+  void _checkTerms() {
+    if (!mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) TermsGate.check(context);
+    });
+  }
+
   @override
   void initState() {
     super.initState();
+    Session.me.addListener(_checkTerms);
+    _checkTerms();
     Inbox.start();
     // CP sistemi: biri seni Arkadaş / CP olarak seçince kısa bildirim (yanıt: Mesajlar → Arkadaşlık isteği ya da profil kartı).
     // Telefon bildirimine dokununca: arkadaş oda açtı → odaya gir; istek / takip → kişinin profili.
@@ -91,6 +103,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    Session.me.removeListener(_checkTerms);
     _cpSub?.cancel();
     Inbox.stop();
     super.dispose();

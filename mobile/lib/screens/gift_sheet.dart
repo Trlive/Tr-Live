@@ -66,6 +66,9 @@ class _GiftSheetState extends State<_GiftSheet> with SingleTickerProviderStateMi
   // Şanslı hediye: alıcı payı (baz puan) ve son kazanç bildirimi.
   int _luckyReceiverBps = 1000;
   List<int> _luckyMultipliers = const [500, 100, 50, 10, 5, 2];
+  // Şanslı hediye olasılıkları (çarpan, olasılık 0–1) ve tek gönderimde en fazla kazanç (Coin). Kullanıcıya gösterilir.
+  List<(int, double)> _luckyOdds = const [];
+  String? _luckyMaxWin;
   Map<String, dynamic>? _luckyWin;
   int _luckySeq = 0;
   Timer? _luckyTimer;
@@ -107,6 +110,14 @@ class _GiftSheetState extends State<_GiftSheet> with SingleTickerProviderStateMi
         _luckyReceiverBps = (lucky?['receiverBps'] as num?)?.toInt() ?? _luckyReceiverBps;
         final mult = lucky?['multipliers'];
         if (mult is List && mult.isNotEmpty) _luckyMultipliers = [for (final m in mult) if (m is num) m.toInt()];
+        final odds = lucky?['odds'];
+        if (odds is List) {
+          _luckyOdds = [
+            for (final o in odds)
+              if (o is Map && o['multiplier'] is num && o['probability'] is num) ((o['multiplier'] as num).toInt(), (o['probability'] as num).toDouble()),
+          ];
+        }
+        _luckyMaxWin = lucky?['maxWin']?.toString();
         final shown = _tabGifts;
         if (shown.isEmpty) {
           // Boş sekmede takılı kalmamak için dolu ilk sekmeye geç.
@@ -301,6 +312,55 @@ class _GiftSheetState extends State<_GiftSheet> with SingleTickerProviderStateMi
     });
   }
 
+  String _pct(double p) {
+    final v = p * 100;
+    final txt = v >= 1 ? v.toStringAsFixed(2) : (v >= 0.01 ? v.toStringAsFixed(3) : v.toStringAsFixed(4));
+    return '%${txt.replaceAll('.', ',')}';
+  }
+
+  /// Şanslı hediye olasılık tablosu: her adet için çarpanların çıkma ihtimali ve hiçbir şey çıkmama ihtimali.
+  Future<void> _showLuckyOdds() async {
+    final odds = [..._luckyOdds]..sort((a, b) => b.$1.compareTo(a.$1));
+    final none = 1 - odds.fold<double>(0, (t, o) => t + o.$2);
+    await showDialog<void>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Şanslı hediye olasılıkları'),
+        content: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('Gönderdiğin her şanslı hediye adedi için ayrı bir çekiliş yapılır. Çıkan çarpan × hediye fiyatı kadar Coin hesabına eklenir.',
+                style: TextStyle(fontSize: 13, height: 1.35)),
+            const SizedBox(height: 12),
+            if (odds.isEmpty)
+              const Text('Olasılık bilgisi şu an alınamadı. Lütfen daha sonra tekrar dene.', style: TextStyle(fontSize: 13))
+            else ...[
+              for (final o in odds)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 3),
+                  child: Row(children: [
+                    Expanded(child: Text('x${o.$1} Coin', style: const TextStyle(fontWeight: FontWeight.w700))),
+                    Text(_pct(o.$2)),
+                  ]),
+                ),
+              const Divider(),
+              Row(children: [
+                const Expanded(child: Text('Ödül çıkmaması', style: TextStyle(fontWeight: FontWeight.w700))),
+                Text(_pct(none < 0 ? 0 : none)),
+              ]),
+            ],
+            const SizedBox(height: 12),
+            Text(
+              'Sonuçlar rastgeledir ve garanti edilmez. Kazanılan ödüller yalnızca Coin olarak verilir; nakde çevrilemez.'
+              '${_luckyMaxWin != null ? ' Tek gönderimde en fazla ${fmtNumber(_luckyMaxWin)} Coin kazanılabilir.' : ''}',
+              style: const TextStyle(fontSize: 12, color: Colors.white60, height: 1.35),
+            ),
+          ]),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(c), child: const Text('Tamam'))],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final mq = MediaQuery.of(context);
@@ -344,15 +404,30 @@ class _GiftSheetState extends State<_GiftSheet> with SingleTickerProviderStateMi
         // Şanslı sekmesinin açıklaması (yalnızca o sekmede yer kaplar).
         if (_tab == 'lucky') SizedBox(
           height: 30,
-          child: _tab == 'lucky'
-              ? Text(
-                  'Her adet bir şans: x${_luckyMultipliers.reversed.join(', x')} kat Coin geri kazanabilirsin. '
-                  'Alıcıya hediye değerinin %$_luckyShare kadarı Elmas olarak geçer.',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 11, color: Colors.white60, height: 1.25),
-                )
-              : null,
+          child: Row(children: [
+            Expanded(
+              child: Text(
+                'Her adet bir şans: x${_luckyMultipliers.reversed.join(', x')} kat Coin geri kazanabilirsin. '
+                'Alıcıya hediye değerinin %$_luckyShare kadarı Elmas olarak geçer.',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 11, color: Colors.white60, height: 1.25),
+              ),
+            ),
+            // Olasılıklar: rastgele ödüllerin ihtimalleri açıkça gösterilir.
+            InkWell(
+              borderRadius: BorderRadius.circular(14),
+              onTap: _showLuckyOdds,
+              child: const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(Icons.info_outline, size: 15, color: Color(0xFFFFD54F)),
+                  SizedBox(width: 3),
+                  Text('Olasılıklar', style: TextStyle(fontSize: 11, color: Color(0xFFFFD54F), fontWeight: FontWeight.w700)),
+                ]),
+              ),
+            ),
+          ]),
         ),
         // Şanslı hediye sonucu ızgaranın üstünde belirir (pencereyi büyütmez).
         Expanded(child: Stack(children: [

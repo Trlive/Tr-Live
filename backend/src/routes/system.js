@@ -4,6 +4,7 @@ import { optionalAuth } from '../auth.js';
 import { ipLimit } from '../firewall.js';
 import fs from 'node:fs';
 import { getConfig } from '../services/app_config.js';
+import { TERMS_VERSION, LEGAL_SITE } from '../legal.js';
 
 // Sunucunun sürümü (yönetim panelinde ve sorun ararken görünür).
 let SERVER_VERSION = null;
@@ -18,6 +19,7 @@ router.get('/app/config', async (_req, res) => {
   res.json({
     minAppVersion: c.minAppVersion, latestAppVersion: c.latestAppVersion, updateUrl: c.updateUrl || null, updateMessage: c.updateMessage,
     roomNotice: c.roomNotice || '', flyTextCoins: c.flyTextCoins, serverVersion: SERVER_VERSION,
+    termsVersion: TERMS_VERSION, legalSite: LEGAL_SITE,
   });
 });
 
@@ -69,40 +71,8 @@ router.post('/client-errors', ipLimit('client_errors', 30, 3600e3), optionalAuth
   res.json({ ok: true, saved: n });
 });
 
-// Google / Facebook giriş ayarlarında istenen herkese açık sayfalar: gizlilik politikası ve veri silme.
-function legalPage(res, title, body) {
-  res.set('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'");
-  res.type('html').send(`<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>TR Live – ${title}</title><style>body{max-width:760px;margin:0 auto;padding:24px 18px;font-family:system-ui,sans-serif;line-height:1.55;color:#111}
-h1{font-size:24px}h2{font-size:18px;margin-top:22px}</style></head><body><h1>TR Live – ${title}</h1>${body}</body></html>`);
-}
-
-router.get('/legal/privacy', (_req, res) => legalPage(res, 'Gizlilik Politikası', `
-<p>TR Live, sesli/görüntülü sohbet odaları sunan bir mobil uygulamadır. Bu sayfa hangi verileri neden işlediğimizi açıklar.</p>
-<h2>Topladığımız bilgiler</h2>
-<ul>
-<li><b>Hesap bilgileri:</b> görünen ad, profil fotoğrafı ve isteğe bağlı profil alanları. Telefonla kayıtta telefon numaranız.
-Google veya Facebook ile girişte yalnızca hesap kimliğiniz, adınız ve (varsa) e-posta adresiniz alınır; şifreniz bize gelmez.</li>
-<li><b>Kullanım bilgileri:</b> odalara giriş-çıkış, gönderdiğiniz mesajlar ve hediyeler, cihaz modeli ve uygulama sürümü
-(güvenlik ve hata ayıklama için).</li>
-<li>Sesli/görüntülü sohbet anlık iletilir; kaydedilmez.</li>
-</ul>
-<h2>Kullanım amacı</h2>
-<p>Hesabınızı oluşturmak ve korumak, uygulama özelliklerini sunmak, kötüye kullanımı (dolandırıcılık, taciz, spam) önlemek ve
-yasal yükümlülükleri yerine getirmek. Verileriniz satılmaz ve reklam amacıyla paylaşılmaz.</p>
-<h2>Saklama ve silme</h2>
-<p>Hesabınızı uygulamadan dilediğiniz zaman silebilirsiniz (Profil → Ayarlar → Hesabı sil). Silindiğinde kişisel bilgileriniz,
-gönderileriniz, fotoğraflarınız ve Google/Facebook bağlantınız kaldırılır; yasal zorunluluk gereği tutulması gereken işlem
-kayıtları (ör. ödeme kayıtları) süresi boyunca saklanır.</p>
-<h2>İletişim</h2>
-<p>Sorularınız ve KVKK kapsamındaki talepleriniz için uygulama içindeki Destek bölümünü kullanabilirsiniz.</p>`));
-
-router.get('/legal/data-deletion', (_req, res) => legalPage(res, 'Veri Silme', `
-<p>TR Live hesabınızı ve kişisel verilerinizi şu şekilde silebilirsiniz:</p>
-<ol>
-<li>TR Live uygulamasını açın ve giriş yapın.</li>
-<li><b>Profil → Ayarlar → Hesabı sil</b> adımlarını izleyin.</li>
-<li>Şifreniz varsa şifrenizi, Google/Facebook ile açılan hesaplarda onay için <b>SİL</b> yazın.</li>
-</ol>
-<p>Hesap silindiğinde profiliniz, gönderileriniz, yüklediğiniz fotoğraflar ve Facebook/Google bağlantınız kaldırılır.
-Uygulamaya erişemiyorsanız, uygulama içi Destek bölümünden ya da bu uygulamayı yayınlayan hesap üzerinden bize ulaşın.</p>`));
+// Google / Facebook giriş ayarlarında ve mağaza kaydında istenen herkese açık sayfalar: güncel yasal metinler sitede
+// (tek kaynak). Eski adresler bozulmasın diye bu adresler siteye yönlendirir.
+router.get('/legal/privacy', (_req, res) => res.redirect(302, `${LEGAL_SITE}/privacy.html`));
+router.get('/legal/data-deletion', (_req, res) => res.redirect(302, `${LEGAL_SITE}/privacy.html#hesap-silme`));
+router.get('/legal/terms', (_req, res) => res.redirect(302, `${LEGAL_SITE}/terms.html`));

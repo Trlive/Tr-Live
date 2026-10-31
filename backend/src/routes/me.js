@@ -7,18 +7,28 @@ import { levelInfo } from '../levels.js';
 import { loadProfile } from '../services/profile.js';
 import { activeWip, requireFeature } from '../services/wip.js';
 import { isAnimatedImage, mimeFor } from '../services/media.js';
-import { detectImage, storeImage, removeUpload, removeAnimatedAvatar, forgetMedia, IMAGE_TYPES } from '../services/images.js';
+import { detectImage, storeImage, removeUpload, removeAnimatedAvatar, IMAGE_TYPES } from '../services/images.js';
 import { publicUser, USER_PUBLIC_COLUMNS, USER_PUBLIC_JOINS } from '../views.js';
 import { announceUserChange } from '../services/users.js';
 import { cleanPublic } from '../safe_text.js';
 import { hub } from '../realtime.js';
 import { userLimit } from '../firewall.js';
-import { closeRoom, leaveRoom } from '../services/rooms.js';
 import { listSessions, revokeSession, revokeAllSessions, revokeOtherSessions, signAccess, ACCESS_TTL_SEC } from '../services/sessions.js';
 import { idempotent } from '../idempotency.js';
 import { ghostNow, refreshGhost } from '../services/ghost.js';
 
 import { familyDailyLogin } from '../services/family.js';
+import { TERMS_VERSION } from '../legal.js';
+import { deleteAccount } from '../services/account_delete.js';
+
+/** "YYYY-MM-DD" doğum tarihi bugün itibarıyla en az [years] yaşını doldurmuş mu (takvim günüyle, UTC). */
+export function isAdultBirthDate(iso, years = 18) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!m) return false;
+  const now = new Date();
+  const limit = Date.UTC(now.getUTCFullYear() - years, now.getUTCMonth(), now.getUTCDate());
+  return Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])) <= limit;
+}
 export const router = Router();
 router.use(requireAuth);
 
@@ -69,8 +79,9 @@ router.patch('/', async (req, res) => {
       const d = new Date(`${b.birthDate}T00:00:00Z`);
       // 2025-02-31 gibi takvimde olmayan günler reddedilir (JS bunu Mart'a kaydırır, veritabanı ise hata verir).
       const ok = /^\d{4}-\d{2}-\d{2}$/.test(String(b.birthDate)) && !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === String(b.birthDate);
-      const age = ok ? (Date.now() - d.getTime()) / (365.25 * 24 * 3600 * 1000) : 0;
-      if (!ok || age < 13 || age > 110) throw fail('Doğum tarihi geçersiz (en az 13 yaşında olmalısınız).');
+      if (!ok || !isAdultBirthDate(String(b.birthDate)) || isAdultBirthDate(String(b.birthDate), 110)) {
+        throw fail('Doğum tarihi geçersiz (TR Live 18 yaş ve üzeri içindir).');
+      }
       set('birth_date', b.birthDate);
     }
   }
@@ -250,41 +261,7 @@ router.delete('/', userLimit('acct_delete', 5, 15 * 60e3), async (req, res) => {
     // Şifresi olmayan (Google/Facebook) hesap: onay için "SİL" yazılır.
     throw fail('Onay için SİL yazın.', 403);
   }
-  const owned = await query(`SELECT 1 FROM families WHERE owner_id = $1 AND is_active = TRUE`, [req.user.id]);
-  if (owned.rowCount) throw fail('Önce ailenizin sahipliğini devredin veya aileyi dağıtın.', 409);
-  const agency = await query(`SELECT 1 FROM agencies WHERE owner_id = $1 AND status IN ('pending','active','suspended')`, [req.user.id]);
-  if (agency.rowCount) throw fail('Önce ajans sahipliği için destek ile iletişime geçin.', 409);
-  // Açık odaları kapat, bulunduğu odalardan çıkar (ses/görüntü bağlantısı da kesilir).
-  for (const r of (await query(`SELECT id FROM rooms WHERE owner_id = $1 AND is_active = TRUE`, [req.user.id])).rows) {
-    await closeRoom(r.id).catch((e) => console.error('Hesap silme oda kapatma:', e.message));
-  }
-  for (const r of (await query(`SELECT room_id FROM room_members WHERE user_id = $1`, [req.user.id])).rows) {
-    await leaveRoom(req.user.id, r.room_id).catch(() => {});
-  }
-  await tx(async (c) => {
-    // Kullanıcı adı tam kimlikten türetilir (8 karakterlik kısaltma çakışıp silmeyi engelleyebiliyordu).
-    await c.query(
-      `UPDATE users SET account_status = 'deleted', username = 'del_' || replace(id::text, '-', ''), display_name = 'Silinmiş Kullanıcı',
-         password_hash = NULL, phone = NULL, avatar_url = NULL, cover_url = NULL, bio = NULL, birth_date = NULL, country = NULL, city = NULL,
-         is_hidden = FALSE, token_version = token_version + 1, updated_at = NOW() WHERE id = $1`,
-      [req.user.id],
-    );
-    await c.query(`DELETE FROM room_members WHERE user_id = $1`, [req.user.id]);
-    // Google/Facebook bağlantısı kaldırılır: aynı hesapla yeniden kayıt olunabilir.
-    await c.query(`DELETE FROM user_identities WHERE user_id = $1`, [req.user.id]);
-    await c.query(`DELETE FROM family_members WHERE user_id = $1`, [req.user.id]);
-    await c.query(`DELETE FROM follows WHERE follower_id = $1 OR followed_id = $1`, [req.user.id]);
-    await c.query(`UPDATE broadcasters SET agency_id = NULL, status = 'suspended' WHERE user_id = $1`, [req.user.id]);
-    // Kişisel içerik de silinir: gönderiler gizlenir, yüklenen fotoğraflar veritabanından kaldırılır.
-    await c.query(`UPDATE posts SET is_removed = TRUE WHERE user_id = $1`, [req.user.id]);
-    const gone = await c.query(
-      `DELETE FROM media_files WHERE created_by = $1 AND (kind = 'upload' OR meta->>'purpose' = 'avatar_animated') RETURNING id`,
-      [req.user.id],
-    );
-    for (const row of gone.rows) forgetMedia(row.id); // sunucu önbelleğinden de çıkar
-  });
-  await revokeAllSessions(req.user.id, 'deleted');
-  hub.disconnectUser(req.user.id, 'deleted');
+  await deleteAccount(req.user.id);
   res.json({ ok: true });
 });
 
@@ -313,6 +290,17 @@ router.post('/sessions/revoke-others', userLimit('session_revoke', 30, 10 * 60e3
     return res.json({ ok: true, revoked: n, reloginRequired: true });
   }
   res.json({ ok: true, revoked: n, token: signAccess({ id: req.user.id, token_version: tv }, sid), expiresIn: ACCESS_TTL_SEC });
+});
+
+// Kullanıcı Sözleşmesi ve Gizlilik Politikası onayı (kayıtta ve metinler güncellenince). Sürüm ve zaman saklanır.
+router.post('/accept-terms', async (req, res) => {
+  if (req.body?.version !== TERMS_VERSION) throw fail('Sözleşme sürümü güncel değil. Uygulamayı güncelleyin.', 409);
+  if (req.body?.adult !== true) throw fail('TR Live 18 yaş ve üzeri içindir.', 403);
+  // Profilde 18 yaşından küçük doğum tarihi kayıtlıysa onay kabul edilmez.
+  const bd = req.user.birth_date ? new Date(req.user.birth_date).toISOString().slice(0, 10) : null;
+  if (bd && !isAdultBirthDate(bd)) throw fail('TR Live 18 yaş ve üzeri içindir. Doğum tarihin 18 yaşından küçük görünüyor; hata olduğunu düşünüyorsan destek ile iletişime geç.', 403);
+  await query(`UPDATE users SET terms_version = $2, terms_accepted_at = NOW() WHERE id = $1`, [req.user.id, TERMS_VERSION]);
+  res.json({ ok: true, termsVersion: TERMS_VERSION });
 });
 
 router.post('/kyc/request', async (req, res) => {

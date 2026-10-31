@@ -25,7 +25,7 @@ export const CONFIG_DEFAULTS = Object.freeze({
   luckyAnnounceMultiplier: 100,
   // Odaya girince sohbetin başında görünen uygulama uyarı duyurusu (boş = gösterilmez).
   roomNotice: 'TR Live\'a hoş geldiniz! Odalarda hakaret, küfür, siyaset, +18 içerik, reklam ve dolandırıcılık yasaktır. '
-    + 'Coin alım-satımını yalnızca uygulama içinden ve yetkili bayilerden yapın; şifrenizi kimseyle paylaşmayın. '
+    + 'Coin alım-satımını yalnızca uygulama içinden yapın; şifrenizi kimseyle paylaşmayın. '
     + 'Kurallara uymayan hesaplar uyarı yapılmadan kapatılır.',
   // Uçan yazı (odada ekranın üstünden geçen mesaj) ücreti, Coin. 0 = ücretsiz.
   flyTextCoins: 99,

@@ -8,6 +8,7 @@ import '../version.dart';
 import '../widgets/app_theme.dart';
 import '../widgets/common.dart';
 import 'edit_profile_screen.dart';
+import 'legal_screens.dart';
 import 'misc_screens.dart';
 import 'support_screens.dart';
 import 'wip_screen.dart';
@@ -172,6 +173,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _group([
           _row(Icons.help_outline_rounded, _cAmber, 'Yardım', onTap: () => _push(const CustomerServiceScreen())),
           _row(Icons.mail_outline_rounded, _cSky, 'Geri bildirim', onTap: () => _push(const SupportChatScreen(category: 'Diğer'))),
+          _row(Icons.gavel_rounded, _cViolet, 'Sözleşmeler ve politikalar', onTap: () => _push(const LegalHubScreen())),
           _row(Icons.sentiment_satisfied_alt_rounded, _cGreen, 'Hakkında', value: 'v$kAppVersion', onTap: () => _push(const AboutScreen())),
           _row(Icons.swap_horiz_rounded, _cCyan, 'Takas', value: 'Cüzdan · Elmas', onTap: () => _push(const WalletScreen())),
         ]),
@@ -283,7 +285,9 @@ class _AccountSecurityScreenState extends State<AccountSecurityScreen> {
           _row(Icons.devices_rounded, _cSky, 'Oturumlarım', value: 'Cihazlar', onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SessionsScreen()))),
         ]),
         _group([
-          _row(Icons.delete_forever_rounded, _cRed, 'Hesabı sil', onTap: widget.onDeleteAccount),
+          // Önce neler silinir / saklanır bilgisi, sonra onay.
+          _row(Icons.delete_forever_rounded, _cRed, 'Hesabı sil',
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AccountDeletionInfoScreen(onDelete: widget.onDeleteAccount)))),
         ]),
       ]),
     );

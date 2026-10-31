@@ -68,7 +68,7 @@ app.use(helmet({
 app.use(firewall()); // IP yasağı, WAF kuralları, IP başına hız sınırı (CORS ve gövde okumadan önce)
 app.use(cors({
   origin: config.corsOrigin.includes('*') ? true : config.corsOrigin,
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-App-Version', 'Idempotency-Key'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-App-Version', 'Idempotency-Key', 'X-Client'],
 }));
 app.use(express.json({ limit: '100kb' }));
 app.use(bodyGuard()); // derin/dev JSON ve prototype pollution anahtarlarını reddeder
@@ -114,9 +114,11 @@ app.use('/uploads', express.static(config.uploadDir, {
 // göndermeyen eski sürümler dahil) 426 alır ve uygulama "Güncelleme gerekli" ekranını gösterir.
 const UPDATE_EXEMPT = new Set(['/health', '/app/config', '/client-errors', '/auth/logout', '/push/latest',
   // Google/Facebook dönüşü tarayıcıdan gelir (uygulama sürümü başlığı yok).
-  '/auth/oauth/google/callback', '/auth/oauth/facebook/callback', '/legal/privacy', '/legal/data-deletion']);
+  '/auth/oauth/google/callback', '/auth/oauth/facebook/callback', '/legal/privacy', '/legal/data-deletion', '/legal/terms']);
 app.use('/api', async (req, res, next) => {
   if (UPDATE_EXEMPT.has(req.path)) return next();
+  // Web yönetim/ajans paneli bir uygulama sürümü değildir: zorunlu güncelleme ona uygulanmaz.
+  if (req.get('X-Client') === 'web-panel') return next();
   const c = await getConfig();
   if (compareVersions(c.minAppVersion, '0.0.0') === 0) return next();
   if (compareVersions(req.get('X-App-Version'), c.minAppVersion) >= 0) return next();

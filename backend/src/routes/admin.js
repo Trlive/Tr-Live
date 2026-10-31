@@ -30,6 +30,7 @@ import { banIpPersist, unbanIp, listBans, securityStats, userLimit } from '../fi
 import net from 'node:net';
 import { saveUpload, removeUpload, removeAnimatedAvatar, IMAGE_TYPES, OWN_IMAGE_RE } from '../services/images.js';
 import { revokeAllSessions } from '../services/sessions.js';
+import { deleteAccount } from '../services/account_delete.js';
 import { detectMedia, ensureVapc, mimeFor, MEDIA_MAX_BYTES } from '../services/media.js';
 import { mediaCacheStats } from '../services/images.js';
 import { getConfig, saveConfig, validateConfigPatch, compareVersions, CONFIG_DEFAULTS } from '../services/app_config.js';
@@ -119,6 +120,20 @@ router.post('/users/:userId/ban', async (req, res) => {
     await leaveRoom(userId, r.room_id).catch((e) => console.error('Ban sonrası odadan çıkarma:', e.message));
   }
   res.json({ ok: true, status: 'banned', bannedUntil: until });
+});
+
+// Hesabı sil (yalnızca yönetici): e-posta ile gelen silme talepleri, 18 yaşından küçük olduğu anlaşılan hesaplar vb.
+// Kişinin kendi silmesiyle aynı işlem yapılır; gerekçe kayıt altına alınır.
+router.post('/users/:userId/delete', requireSuperAdmin, async (req, res) => {
+  const userId = uuid(req.params.userId, 'Kullanıcı');
+  if (userId === req.user.id) throw fail('Kendi hesabınızı buradan silemezsiniz.');
+  const target = await assertUser(userId);
+  if (target.account_status === 'deleted') throw fail('Hesap zaten silinmiş.', 409);
+  if (target.system_role === 'admin') throw fail('Yönetici hesabı silinemez; önce yetkisini kaldırın.', 403);
+  const reason = text(req.body?.reason, 'Neden', { min: 3, max: 300, required: true });
+  await deleteAccount(userId);
+  await auditStaff({ query }, req.user.id, userId, 'account_delete', { reason, username: target.username });
+  res.json({ ok: true, status: 'deleted' });
 });
 
 router.post('/users/:userId/unban', async (req, res) => {
@@ -1831,7 +1846,8 @@ router.put('/app-config', requireSuperAdmin, async (req, res) => {
   // Kendi sürümünden yüksek bir "en düşük sürüm" yönetici dahil herkesi uygulamadan kilitlerdi.
   if (patch.minAppVersion && compareVersions(patch.minAppVersion, '0.0.0') > 0) {
     const mine = req.get('X-App-Version');
-    if (compareVersions(patch.minAppVersion, mine) > 0) {
+    // Web panelinden (uygulama sürümü başlığı yok) değiştirilirken bu denetim yapılmaz; panel ayrıca uyarır.
+    if (!(req.get('X-Client') === 'web-panel' && !mine) && compareVersions(patch.minAppVersion, mine) > 0) {
       throw fail(`En düşük sürüm, şu an kullandığınız sürümden (${mine || 'bilinmiyor'}) yüksek olamaz; yoksa siz de uygulamaya giremezsiniz.`);
     }
   }

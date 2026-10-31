@@ -1,3 +1,28 @@
+## v2.69.0 — Yasal metinler, kayıt onayı, web paneli bağlantısı, şanslı hediye olasılıkları
+- Kayıt ekranında onay kutusu: "18 yaşından büyük olduğumu; Kullanıcı Sözleşmesi ve Gizlilik Politikası'nı okuyup kabul
+  ettiğimi onaylıyorum. KVKK Aydınlatma Metni'ni okudum." (bağlantılar sitedeki metinleri açar). Kayıt olurken ve Google /
+  Facebook ile girerken zorunlu. Onay sunucuya sürüm ve zamanla kaydedilir.
+- Sözleşmeyi henüz onaylamamış (ya da metinler güncellenmiş) kullanıcıya girişten sonra bir kez onay penceresi çıkar;
+  onaylamayan çıkış yapabilir. Sürüm: 2026-10-31 (uygulama: legal_screens.dart, sunucu: src/legal.js).
+- Ayarlar → Sözleşmeler ve politikalar: Kullanıcı Sözleşmesi, Gizlilik, KVKK, Topluluk Kuralları, Çocuk Güvenliği (sitede);
+  Coin, Hediye ve Elmas Koşulları ve Hesap silme bilgisi (yalnızca uygulama içinde). Hesabı sil'e basınca önce neyin
+  silinip neyin saklandığı gösterilir. Yükleme Merkezi'nde Coin koşulları bağlantısı.
+- 18 yaş: doğum tarihi en az 18 yaş (önce 13).
+- Şanslı hediye: hediye panelinde "Olasılıklar" — her çarpanın çıkma ihtimali, ödül çıkmama ihtimali ve tek gönderimde en
+  fazla kazanç gösterilir (uygulama mağazası kuralı). Sunucu olasılıkları /api/gifts yanıtında yollar.
+- Sunucu: /legal/privacy, /legal/data-deletion, /legal/terms adresleri sitedeki güncel metinlere yönlendirir.
+- Web paneli (trlive.github.io/Trlive-Web) için: "X-Client: web-panel" başlığı CORS'ta izinli ve zorunlu güncelleme
+  denetiminden muaf. Oda giriş duyurusundaki bayi ifadesi kaldırıldı.
+- Kayıt onayında "Coin, Hediye ve Elmas Koşulları" (sözleşmenin eki, yalnızca uygulama içinde) kayıttan önce de açılabilir.
+  Onay penceresi onaylanmadan kapanırsa (üstüne sayfa açılırsa) yeniden gösterilir.
+- 18 yaş: doğum tarihi takvim günüyle denetlenir; profilinde 18 yaşından küçük doğum tarihi kayıtlı olan kişinin sözleşme
+  onayı kabul edilmez. Profil düzenlemede doğum tarihi yalnızca değiştiyse gönderilir.
+- Yönetim: kullanıcı hesabını silme (POST /api/admin/users/:id/delete, yalnızca yönetici, gerekçe zorunlu ve kayda geçer) —
+  e-posta ile gelen silme talepleri ve 18 yaş altı hesaplar için. Hesap silme işlemi tek bir serviste (account_delete.js);
+  silmede cinsiyet bilgisi de temizlenir.
+- Saklama: 2 yılı geçen güvenlik olayları ve 2 yıldan önce kapanmış oturum kayıtları (IP, cihaz) günde bir silinir.
+- Coin yükleme penceresinde ve sıralama kurallarında bayi ifadeleri kaldırıldı.
+
 ## v2.68.0 — Renkli oda araçları, yeni Ayarlar ve Gizlilik (WIP), konuşma silme, aile istek uyarısı
 - Oda → İnteraktif Özellikler / Temel Araçlar: düğmeler renkli (yeşil kilit, pembe temizle/tema/gizle, mavi sohbet,
   mor mikrofon modu, kırmızı kapat…); düzen aynı. Açık durumdaki araç (kilitli, gizli, sohbet yasağı, müzik çalıyor,

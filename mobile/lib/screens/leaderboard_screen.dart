@@ -395,7 +395,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     const text = {
       'receivers': 'Yayıncı sıralaması, seçilen dönemde alınan hediyelerin Elmas değerine göre hesaplanır. Kendine gönderilen hediyeler sayılmaz.',
       'senders': 'Destekçi sıralaması, seçilen dönemde gönderilen hediyelerin Coin değerine göre hesaplanır. Kendine gönderilen hediyeler sayılmaz.',
-      'topups': 'Yükleme sıralaması, seçilen dönemde bayiden yapılan Coin yüklemelerine göre hesaplanır.',
+      'topups': 'Yükleme sıralaması, seçilen dönemde yapılan Coin yüklemelerine göre hesaplanır.',
       'agencies': 'Ajans sıralaması, ajansa bağlı yayıncıların seçilen dönemde aldığı hediyelerin toplamına göre hesaplanır.',
       'families': 'Aile sıralaması, aile üyelerinin seçilen dönemde aldığı hediyelerin toplamına göre hesaplanır.',
       'cp': 'CP sıralaması, onaylı CP çiftlerinin toplam yakınlık puanına göre hesaplanır (dönemden bağımsız).',

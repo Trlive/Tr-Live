@@ -30,7 +30,19 @@ export async function sweepPrivacy(run = query) {
   return r.rowCount;
 }
 
-/** Açılışta ve 5 dakikada bir. */
+/**
+ * Saklama süresi dolan teknik kayıtları siler (Gizlilik Politikası → Saklama süreleri): 2 yılı geçen güvenlik/giriş
+ * olayları ve 2 yıldan uzun süre önce kapanmış ya da süresi dolmuş oturum kayıtları (IP, cihaz bilgisi).
+ */
+export async function purgeExpiredRecords(run = query) {
+  const ev = await run(`DELETE FROM security_events WHERE created_at < NOW() - INTERVAL '2 years'`);
+  const ss = await run(
+    `DELETE FROM user_sessions WHERE COALESCE(revoked_at, expires_at) < NOW() - INTERVAL '2 years'`,
+  );
+  return ev.rowCount + ss.rowCount;
+}
+
+/** Açılışta ve 5 dakikada bir (eski kayıt temizliği günde bir). */
 export function startPrivacySweeper() {
   let busy = false;
   const tick = async () => {
@@ -45,8 +57,19 @@ export function startPrivacySweeper() {
       busy = false;
     }
   };
-  setTimeout(tick, 5000).unref();
-  const t = setInterval(tick, 5 * 60e3);
+  let lastPurge = 0;
+  const purge = async () => {
+    if (Date.now() - lastPurge < 24 * 3600e3) return;
+    lastPurge = Date.now();
+    try {
+      const n = await purgeExpiredRecords();
+      if (n) console.log(`[gizlilik] saklama süresi dolan ${n} kayıt silindi.`);
+    } catch (e) {
+      console.error('[gizlilik] eski kayıt temizliği:', e.message);
+    }
+  };
+  setTimeout(() => { tick(); purge(); }, 5000).unref();
+  const t = setInterval(() => { tick(); purge(); }, 5 * 60e3);
   t.unref();
   return t;
 }

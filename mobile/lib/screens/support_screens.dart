@@ -6,6 +6,7 @@ import '../services/socket_service.dart';
 import '../widgets/app_theme.dart';
 import '../widgets/common.dart';
 import '../services/app_visibility.dart';
+import 'legal_screens.dart';
 
 String _tl(dynamic cents) {
   final c = BigInt.tryParse('$cents') ?? BigInt.zero;
@@ -48,7 +49,7 @@ class _CoinsCenterScreenState extends State<CoinsCenterScreen> {
                   context: context,
                   builder: (d) => AlertDialog(
                     title: Text(m),
-                    content: const Text('Bu ödeme yöntemi henüz bağlı değil. Coin yüklemek için Müşteri Hizmetleri\'ne yazabilir veya bayilerimizden yükleme isteyebilirsin.'),
+                    content: const Text('Bu ödeme yöntemi henüz bağlı değil. Coin yüklemek için Müşteri Hizmetleri\'ne yazabilirsin.'),
                     actions: [
                       TextButton(onPressed: () => Navigator.pop(d), child: const Text('Tamam')),
                       FilledButton(
@@ -141,6 +142,7 @@ class _CoinsCenterScreenState extends State<CoinsCenterScreen> {
               const SizedBox(height: 24),
               Center(child: TextButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CustomerServiceScreen())), child: const Text('Müşteri Hizmetleri Merkezi  ›', style: TextStyle(color: Pal.textDim, fontSize: 12)))),
               Center(child: TextButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SupportChatScreen(category: 'Diğer'))), child: const Text('Ödeme sonrası coins alamazsam ne yapmalıyım?  ›', style: TextStyle(color: Pal.textDim, fontSize: 12)))),
+              Center(child: TextButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CoinTermsScreen())), child: const Text('Coin, Hediye ve Elmas Koşulları  ›', style: TextStyle(color: Pal.textDim, fontSize: 12)))),
               const SizedBox(height: 24),
             ]),
           );
