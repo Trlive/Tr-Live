@@ -3,9 +3,10 @@ export const PK_MIN_SECONDS = 60;
 export const PK_MAX_SECONDS = 1800;
 export const PK_INVITE_TTL_SECONDS = 60;
 
+// Odalar arası (görüntülü) PK süreleri: 5, 10, 15, 30 dakika.
+export const PK_DURATIONS = [300, 600, 900, 1800];
 export function validDuration(value) {
-  const n = Number(value);
-  return Number.isInteger(n) && n >= PK_MIN_SECONDS && n <= PK_MAX_SECONDS;
+  return PK_DURATIONS.includes(Number(value));
 }
 
 export function decideWinner(scoreA, scoreB) {

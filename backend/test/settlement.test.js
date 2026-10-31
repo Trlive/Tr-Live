@@ -91,8 +91,9 @@ test('PK mantığı', () => {
   assert.equal(decideWinner(5n, 3n), 'a');
   assert.equal(decideWinner('3', '9'), 'b');
   assert.equal(decideWinner(4, 4), 'draw');
-  assert.ok(validDuration(60) && validDuration(1800));
-  assert.ok(!validDuration(59) && !validDuration(1801) && !validDuration(90.5) && !validDuration('x'));
+  // Görüntülü (odalar arası) PK: 5, 10, 15, 30 dk.
+  assert.ok(validDuration(300) && validDuration(600) && validDuration(900) && validDuration(1800));
+  assert.ok(!validDuration(60) && !validDuration(1801) && !validDuration(90.5) && !validDuration('x'));
   const now = new Date('2026-01-01T00:00:00Z');
   assert.equal(remainingSeconds(new Date(now.getTime() + 20500), now), 21);
   assert.equal(remainingSeconds(new Date(now.getTime() - 1000), now), 0);

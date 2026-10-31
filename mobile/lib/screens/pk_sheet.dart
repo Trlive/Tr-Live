@@ -4,7 +4,7 @@ import '../widgets/common.dart';
 
 /// Oda sahibi: PK için rakip oda ve süre seçer, davet gönderir.
 Future<void> showPkChallengeSheet(BuildContext context, {required String roomId}) async {
-  var seconds = 300;
+  var seconds = 300; // görüntülü PK: 5 / 10 / 15 / 30 dk
   await showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -20,7 +20,7 @@ Future<void> showPkChallengeSheet(BuildContext context, {required String roomId}
               const Spacer(),
               DropdownButton<int>(
                 value: seconds,
-                items: [for (final s in const [60, 180, 300, 600, 900, 1800]) DropdownMenuItem(value: s, child: Text('${s ~/ 60} dk'))],
+                items: [for (final s in const [300, 600, 900, 1800]) DropdownMenuItem(value: s, child: Text('${s ~/ 60} dk'))],
                 onChanged: (v) => setS(() => seconds = v ?? seconds),
               ),
             ]),

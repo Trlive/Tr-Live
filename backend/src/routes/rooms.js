@@ -426,6 +426,9 @@ router.patch('/:roomId', requireAuth, userLimit('room_settings', 20, 60e3), asyn
     if (before.layout === 'live') throw fail('Canlı yayında konuk sayısı sabittir.');
     newSeats = Number(b.seatCount);
     if (!SUPPORTED_SEATS.has(newSeats)) throw fail('Geçersiz koltuk sayısı.');
+    if (newSeats !== before.seat_count && (await query(`SELECT 1 FROM room_pk WHERE room_id = $1 AND status = 'active'`, [roomId])).rowCount) {
+      throw fail('Oda içi PK sürerken mikrofon modu değiştirilemez.', 409);
+    }
     set('seat_count', newSeats);
     set('locked_seats', (before.locked_seats ?? []).filter((i) => i < newSeats)); // kalkan koltukların kilidi de kalkar
     set('muted_seats', (before.muted_seats ?? []).filter((i) => i < newSeats));

@@ -4,6 +4,7 @@ import { decideWinner, remainingSeconds, PK_INVITE_TTL_SECONDS } from '../pk_log
 import { loadPublicRows } from './users.js';
 import { publicUser } from '../views.js';
 import { nonOverlapping } from '../ticker.js';
+import { tickRoomPk, endRoomPkForRoom } from './room_pk.js';
 
 const OPEN = `('pending','active')`;
 
@@ -64,6 +65,7 @@ export async function finishPk(battleId) {
 
 // Oda kapanırken: bekleyen davet iptal, süren karşılaşma o anki skorla biter.
 export async function endPkForRoom(roomId) {
+  await endRoomPkForRoom(roomId).catch((e) => console.error('Oda içi PK kapatma hatası:', e.message));
   const r = await query(`SELECT id, status FROM pk_battles WHERE (room_a = $1 OR room_b = $1) AND status IN ${OPEN}`, [roomId]);
   for (const b of r.rows) {
     if (b.status === 'active') await finishPk(b.id);
@@ -98,6 +100,7 @@ export async function scorePk(c, roomId, receiverId, senderId, coinAmount, suppo
 export function startPkTicker() {
   const timer = setInterval(nonOverlapping(async () => {
     try {
+      await tickRoomPk().catch((e) => console.error('Oda içi PK zamanlayıcı hatası:', e.message));
       const due = await query(`SELECT id FROM pk_battles WHERE status = 'active' AND ends_at <= NOW()`);
       for (const b of due.rows) await finishPk(b.id);
       const stale = await query(

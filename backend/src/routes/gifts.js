@@ -10,6 +10,7 @@ import { config } from '../config.js';
 import { distributeGift } from '../gifts_logic.js';
 import { levelFromExp, levelExp, giftDisplayLevel } from '../levels.js';
 import { scorePk, pkView } from '../services/pk.js';
+import { scoreRoomPk, broadcastRoomPk } from '../services/room_pk.js';
 import { scoreboardOf } from '../services/scoreboard.js';
 import { loadPublicRows } from '../services/users.js';
 import { idempotent } from '../idempotency.js';
@@ -152,6 +153,7 @@ router.post('/rooms/:roomId/gifts/send', userLimit('gift', 60, 60e3), idempotent
     await c.query(`UPDATE users SET coin_level = $1 WHERE id = $2`, [levelFromExp(levelExp(sent.total_sent_coins, sent.level_exp_bonus)), senderId]);
 
     const pkIds = new Set();
+    let roomPkId = null;
     const transactions = [];
     const qualifying = [];
     const familyContrib = [];
@@ -185,6 +187,8 @@ router.post('/rooms/:roomId/gifts/send', userLimit('gift', 60, 60e3), idempotent
       await addGuardianPoints((t, p) => c.query(t, p), senderId, item.userId, coinAmount);
       const pkId = await scorePk(c, roomId, item.userId, senderId, credit, coinAmount);
       if (pkId) pkIds.add(pkId);
+      // Oda içi PK: alıcı Kırmızı / Mavi takım koltuğundaysa takım puanı.
+      roomPkId = (await scoreRoomPk(c, roomId, item.userId, senderId, credit, coinAmount)) ?? roomPkId;
       await c.query(
         `INSERT INTO wallet_transactions(user_id, transaction_type, coin_amount, reference_id, description) VALUES($1,'gift_sent',$2,$3,$4)`,
         [senderId, (-coinAmount).toString(), gt.id, `Hediye: ${gift.name} x${item.quantity}`],
@@ -245,7 +249,7 @@ router.post('/rooms/:roomId/gifts/send', userLimit('gift', 60, 60e3), idempotent
       luckyResult = { win: win.toString(), best: draw.best, hits: draw.hits };
     }
     return {
-      gift, quantity, totalCoins, balance, transactions, qualifying, allocation, pkIds: [...pkIds], lucky: luckyResult,
+      gift, quantity, totalCoins, balance, transactions, qualifying, allocation, pkIds: [...pkIds], roomPkId, lucky: luckyResult,
       roomTotal: roomTotal === null ? null : String(roomTotal),
       // Duyuru: hem çarpan yüksek hem tek isabetin değeri global hediye eşiğinin üstünde olmalı (10 Coin'lik çanla toplu
       // gönderimde her seferinde x100 çıkıp tüm uygulamaya şerit düşmesin).
@@ -286,6 +290,7 @@ router.post('/rooms/:roomId/gifts/send', userLimit('gift', 60, 60e3), idempotent
   }
 
   scoreboardOf(roomId).then((scoreboard) => hub.broadcastRoom(roomId, { type: 'room_scoreboard', roomId, scoreboard })).catch(() => {});
+  if (result.roomPkId) broadcastRoomPk(result.roomPkId).catch(() => {});
   for (const id of result.pkIds) {
     pkView(id).then((pk) => {
       if (!pk) return;

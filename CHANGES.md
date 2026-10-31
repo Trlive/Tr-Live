@@ -1,3 +1,17 @@
+## v2.73.0 — Sesli oda içi PK (Kırmızı / Mavi takım)
+- Sesli odada oda sahibi veya yardımcı sahip "PK" ile oda içi PK başlatır: koltuk 2'den ortaya kadar Kırmızı, kalanı
+  Mavi takım. Takım koltuklarındaki kişilere gelen hediyelerin Elmas değeri takım puanı olur (kendine hediye sayılmaz).
+- Süre: 15, 30 ya da 60 dakika. Mod: Tarafsız (oda sahibi hakem, ona gelen hediye sayılmaz) ya da Taraflı (oda sahibi
+  seçtiği takımda). En az 4 koltuklu mikrofon modu gerekir. Yönetici erken bitirebilir (kazanan ve MVP belirlenir) ya da
+  iptal edebilir. Oda kapanınca PK o anki skorla biter. Oda sahibi hangi koltuğa geçerse geçsin tarafsızda hakem, taraflıda
+  seçtiği takımda sayılır. PK sürerken mikrofon modu değiştirilemez; oda içi PK ile odalar arası PK aynı anda olamaz.
+- Tasarım ve animasyonlar: PK başlarken iki yandan çarpışan Kırmızı / Mavi şeritler ve patlayan "VS"; odanın üstünde canlı
+  skor çubuğu (skorlar sayarak artar, takım çizgisi yumuşakça kayar, birleşim noktasında parlayan kıvılcım, kayan ışıltı,
+  son 10 saniyede yanıp sönen geri sayım, her takımın en çok destekleyen 3 kişisi); koltuklarda takım renginde dönen halka
+  ve K / M rozeti; bitişte konfetili kazanan kartı, skorlar ve MVP (kazanan takımın en çok destekleyeni, taçlı).
+- Görüntülü yayında rakip yayına PK daveti süreleri: 5, 10, 15, 30 dakika.
+- Veritabanı: 053_room_pk.sql.
+
 ## v2.72.0 — Seviyeler 300'e çıktı, prestij tasarımları
 - Kullanıcı (gönderme) ve yayıncı (alma) seviyeleri 160 yerine 300'e kadar. Exp formülü aynı (2000 × (L-1)^2,5), bu yüzden
   mevcut kullanıcıların seviyesi değişmez; 160'ta takılı kalanlar exp'leri yettikçe yükselmeye devam eder.
