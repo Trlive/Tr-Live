@@ -22,6 +22,13 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
+import java.lang.reflect.Constructor
+import java.lang.reflect.InvocationHandler
+import java.lang.reflect.Method
+import java.lang.reflect.Proxy
+import java.nio.ByteBuffer
+import java.util.concurrent.ConcurrentLinkedQueue
+import kotlin.math.roundToInt
 
 // TR Live ana ekranı (GitHub derlemesi bu dosyayı flutter create'in ürettiği MainActivity'nin yerine koyar).
 //  * Ekran yalnızca oda ekranı açıkken açık tutulur (Flutter "keepScreenOn" çağırır); diğer sayfalarda telefonun
@@ -178,7 +185,7 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
-        // Güzellik filtresi (BeautyFilter.java): kamera takibine bağlan, ayarları değiştir.
+        // Güzellik filtresi (aşağıdaki BeautyFilter): kamera takibine bağlan, ayarları değiştir.
         MethodChannel(messenger, "trlive/beauty").setMethodCallHandler { call, result ->
             try {
                 val args = call.arguments as? Map<*, *>
@@ -390,5 +397,338 @@ private class LegacyCallListener(private val onBusy: (Boolean) -> Unit) : PhoneS
     @Deprecated("Android 12 öncesi")
     override fun onCallStateChanged(state: Int, phoneNumber: String?) {
         onBusy(state != TelephonyManager.CALL_STATE_IDLE)
+    }
+}
+
+// ------------------------------------------------------------------ Güzellik filtresi
+
+private fun clampByte(x: Int): Byte = (if (x < 0) 0 else if (x > 255) 255 else x).toByte()
+
+/**
+ * TR Live güzellik filtresi (kendi filtremiz, ücretli SDK yok). Kameranın her karesini yayına ve önizlemeye gitmeden
+ * önce işler: cilt pürüzsüzleştirme (kenarları koruyan yumuşatma), aydınlatma, beyazlatma, pembelik, renk filtreleri.
+ *
+ * flutter_webrtc'nin yerel takip arayüzüne (LocalVideoTrack.ExternalVideoFrameProcessing) yansıtmayla (reflection)
+ * bağlanır; derleme hiçbir WebRTC sınıfına bağlı değildir. Bir şey uymazsa kare olduğu gibi geçer (yayın bozulmaz) ve
+ * attach() nedenini döner. (MainActivity.kt içinde: GitHub derlemesi yalnızca bu dosyayı uygulamaya kopyalar.)
+ */
+object BeautyFilter : InvocationHandler {
+    private var proxy: Any? = null
+    private var track: Any? = null
+    private var trackId: String? = null
+    private var removeMethod: Method? = null
+
+    /** Ayarlar tek parça olarak değiştirilir (kamera iş parçacığı yarım ayar görmez). */
+    private class Params(val smooth: Float, bright: Float, white: Float, rosy: Float, tone: Int) {
+        val on: Boolean = smooth > 0.01f || bright > 0.01f || white > 0.01f || rosy > 0.01f || tone != 0
+        val smoothK: Int = (smooth * 230f).roundToInt() // 0..230 (yumuşatma karışım oranı /256)
+        val y = ByteArray(256)
+        val u = ByteArray(256)
+        val v = ByteArray(256)
+
+        init {
+            val gamma = 1.0 / (1.0 + 0.55 * bright)
+            for (i in 0 until 256) {
+                var f = Math.pow(i / 255.0, gamma)
+                f += white * 0.24 * (1.0 - f) * (0.35 + f)
+                y[i] = clampByte((f * 255.0).roundToInt())
+            }
+            var sat = 1.0 - white * 0.18
+            var du = 0.0
+            var dv = 0.0
+            when (tone) {
+                1 -> { du = -7.0; dv = 9.0 } // sıcak
+                2 -> { du = 9.0; dv = -6.0 } // soğuk
+                3 -> sat *= 1.32 // canlı
+                4 -> { du = 4.0; dv = 11.0; sat *= 1.05 } // pembe
+                5 -> sat = 0.0 // siyah-beyaz
+                6 -> { sat *= 0.7; du = -4.0; dv = 5.0 } // nostalji
+            }
+            dv += rosy * 12
+            du += rosy * 2
+            for (i in 0 until 256) {
+                u[i] = clampByte((128 + (i - 128) * sat + du).roundToInt())
+                v[i] = clampByte((128 + (i - 128) * sat + dv).roundToInt())
+            }
+        }
+    }
+
+    @Volatile private var params = Params(0f, 0f, 0f, 0f, 0)
+    @Volatile private var failures = 0
+
+    private fun num(m: Map<String, *>, k: String): Float = ((m[k] as? Number)?.toFloat() ?: 0f).coerceIn(0f, 1f)
+
+    /** smooth, bright, white, rosy: 0..1; tone: 0 doğal, 1 sıcak, 2 soğuk, 3 canlı, 4 pembe, 5 siyah-beyaz, 6 nostalji. */
+    fun setParams(m: Map<String, *>?) {
+        if (m == null) return
+        var tone = (m["tone"] as? Number)?.toInt() ?: 0
+        if (tone < 0 || tone > 6) tone = 0
+        params = Params(num(m, "smooth"), num(m, "bright"), num(m, "white"), num(m, "rosy"), tone)
+        failures = 0
+    }
+
+    /**
+     * Kamera takibine bağlanır (aynı takipse bir şey yapmaz). "ok" ya da neden bağlanamadığı döner.
+     * [pluginInstance]: ana motorun FlutterWebRTCPlugin örneği (yüzen balonun ikinci motoru da bir örnek oluşturur);
+     * bulunamazsa sharedSingleton denenir.
+     */
+    @Synchronized
+    fun attach(id: String?, pluginInstance: Any?): String {
+        if (id.isNullOrEmpty()) {
+            detach()
+            return "no_track"
+        }
+        if (id == trackId && track != null) return "ok"
+        detach()
+        return try {
+            val plugin = Class.forName("com.cloudwebrtc.webrtc.FlutterWebRTCPlugin")
+            val get = plugin.getMethod("getLocalTrack", String::class.java)
+            var t: Any? = null
+            if (pluginInstance != null && plugin.isInstance(pluginInstance)) t = get.invoke(pluginInstance, id)
+            if (t == null) {
+                val single = plugin.getField("sharedSingleton").get(null)
+                if (single != null && single !== pluginInstance) t = get.invoke(single, id)
+            }
+            if (t == null) {
+                "no_track"
+            } else {
+                val lvt = Class.forName("com.cloudwebrtc.webrtc.video.LocalVideoTrack")
+                if (!lvt.isInstance(t)) {
+                    "not_video"
+                } else {
+                    val iface = Class.forName("com.cloudwebrtc.webrtc.video.LocalVideoTrack\$ExternalVideoFrameProcessing")
+                    val px = proxy ?: Proxy.newProxyInstance(iface.classLoader, arrayOf(iface), this).also { proxy = it }
+                    lvt.getMethod("addProcessor", iface).invoke(t, px)
+                    removeMethod = lvt.getMethod("removeProcessor", iface)
+                    track = t
+                    trackId = id
+                    "ok"
+                }
+            }
+        } catch (e: Throwable) {
+            "error: $e"
+        }
+    }
+
+    @Synchronized
+    fun detach() {
+        try {
+            val t = track
+            val rm = removeMethod
+            val px = proxy
+            if (t != null && rm != null && px != null) rm.invoke(t, px)
+        } catch (e: Throwable) {
+        }
+        track = null
+        trackId = null
+        removeMethod = null
+    }
+
+    override fun invoke(p: Any?, m: Method?, args: Array<out Any?>?): Any? {
+        val n = m?.name
+        if (n == "onFrame" && args != null && args.size == 1) {
+            val frame = args[0] ?: return null
+            return process(frame)
+        }
+        if (n == "hashCode") return System.identityHashCode(p)
+        if (n == "equals") return args != null && args.size == 1 && args[0] === p
+        if (n == "toString") return "TrLiveBeauty"
+        return null
+    }
+
+    // ---------------------------------------------------------------- WebRTC sınıflarına yansıtmayla erişim
+
+    private class Refl(val loader: ClassLoader?) {
+        private val frame: Class<*> = Class.forName("org.webrtc.VideoFrame", false, loader)
+        private val buffer: Class<*> = Class.forName("org.webrtc.VideoFrame\$Buffer", false, loader)
+        private val i420: Class<*> = Class.forName("org.webrtc.VideoFrame\$I420Buffer", false, loader)
+        private val javaBuf: Class<*> = Class.forName("org.webrtc.JavaI420Buffer", false, loader)
+        private val int: Class<*> = Integer.TYPE
+        val getBuffer: Method = frame.getMethod("getBuffer")
+        val getRotation: Method = frame.getMethod("getRotation")
+        val getTimestampNs: Method = frame.getMethod("getTimestampNs")
+        val toI420: Method = buffer.getMethod("toI420")
+        val width: Method = buffer.getMethod("getWidth")
+        val height: Method = buffer.getMethod("getHeight")
+        val release: Method = buffer.getMethod("release")
+        val dataY: Method = i420.getMethod("getDataY")
+        val dataU: Method = i420.getMethod("getDataU")
+        val dataV: Method = i420.getMethod("getDataV")
+        val strideY: Method = i420.getMethod("getStrideY")
+        val strideU: Method = i420.getMethod("getStrideU")
+        val strideV: Method = i420.getMethod("getStrideV")
+        val wrap: Method = javaBuf.getMethod(
+            "wrap", int, int, ByteBuffer::class.java, int, ByteBuffer::class.java, int, ByteBuffer::class.java, int, Runnable::class.java,
+        )
+        val frameCtor: Constructor<*> = frame.getConstructor(buffer, int, java.lang.Long.TYPE)
+    }
+
+    @Volatile private var refl: Refl? = null
+
+    /** Çıkış kareleri için yeniden kullanılan bellek (kare bırakılınca havuza döner). */
+    private class Planes(val w: Int, val h: Int) {
+        val cw = (w + 1) / 2
+        val ch = (h + 1) / 2
+        val y: ByteBuffer = ByteBuffer.allocateDirect(w * h)
+        val u: ByteBuffer = ByteBuffer.allocateDirect(cw * ch)
+        val v: ByteBuffer = ByteBuffer.allocateDirect(cw * ch)
+    }
+
+    private val pool = ConcurrentLinkedQueue<Planes>()
+
+    private fun takePlanes(w: Int, h: Int): Planes {
+        while (true) {
+            val p = pool.poll() ?: break
+            if (p.w == w && p.h == h) return p
+        }
+        return Planes(w, h)
+    }
+
+    // Kamera iş parçacığında yeniden kullanılan çalışma dizileri.
+    private var srcY = ByteArray(0)
+    private var outY = ByteArray(0)
+    private var srcU = ByteArray(0)
+    private var srcV = ByteArray(0)
+    private var integral = IntArray(0)
+
+    private fun process(frame: Any): Any {
+        val pr = params
+        if (!pr.on || failures > 20) return frame
+        return try {
+            build(frame, pr)
+        } catch (e: Throwable) {
+            failures++
+            frame
+        }
+    }
+
+    private fun build(frame: Any, pr: Params): Any {
+        var r = refl
+        val cl = frame.javaClass.classLoader
+        if (r == null || r.loader !== cl) {
+            r = Refl(cl)
+            refl = r
+        }
+        val buf = r.getBuffer.invoke(frame)
+        val i420 = r.toI420.invoke(buf) ?: return frame
+        try {
+            val w = r.width.invoke(i420) as Int
+            val h = r.height.invoke(i420) as Int
+            if (w <= 0 || h <= 0) return frame
+            val out = takePlanes(w, h)
+            synchronized(this) { filter(pr, r, i420, out, w, h) }
+            val onRelease = Runnable { if (pool.size < 4) pool.offer(out) }
+            val outBuf = r.wrap.invoke(null, w, h, out.y, w, out.u, out.cw, out.v, out.cw, onRelease)
+            val rot = r.getRotation.invoke(frame) as Int
+            val ts = r.getTimestampNs.invoke(frame) as Long
+            val result = r.frameCtor.newInstance(outBuf, rot, ts)
+            failures = 0
+            return result
+        } finally {
+            r.release.invoke(i420)
+        }
+    }
+
+    private fun readPlane(src: ByteBuffer, stride: Int, w: Int, h: Int, dst: ByteArray) {
+        val b = src.duplicate()
+        for (row in 0 until h) {
+            b.position(row * stride)
+            b.get(dst, row * w, w)
+        }
+    }
+
+    private fun filter(pr: Params, r: Refl, i420: Any, out: Planes, w: Int, h: Int) {
+        val n = w * h
+        val cw = out.cw
+        val ch = out.ch
+        val cn = cw * ch
+        if (srcY.size < n) {
+            srcY = ByteArray(n)
+            outY = ByteArray(n)
+        }
+        if (srcU.size < cn) {
+            srcU = ByteArray(cn)
+            srcV = ByteArray(cn)
+        }
+        val sY = srcY
+        val oY = outY
+        val sU = srcU
+        val sV = srcV
+        readPlane(r.dataY.invoke(i420) as ByteBuffer, r.strideY.invoke(i420) as Int, w, h, sY)
+        readPlane(r.dataU.invoke(i420) as ByteBuffer, r.strideU.invoke(i420) as Int, cw, ch, sU)
+        readPlane(r.dataV.invoke(i420) as ByteBuffer, r.strideV.invoke(i420) as Int, cw, ch, sV)
+        val lut = pr.y
+        if (pr.smoothK > 0) {
+            smooth(sY, oY, w, h, pr)
+            for (i in 0 until n) oY[i] = lut[oY[i].toInt() and 0xFF]
+        } else {
+            for (i in 0 until n) oY[i] = lut[sY[i].toInt() and 0xFF]
+        }
+        val lu = pr.u
+        val lv = pr.v
+        for (i in 0 until cn) {
+            sU[i] = lu[sU[i].toInt() and 0xFF]
+            sV[i] = lv[sV[i].toInt() and 0xFF]
+        }
+        out.y.clear()
+        out.y.put(oY, 0, n)
+        out.y.position(0)
+        out.u.clear()
+        out.u.put(sU, 0, cn)
+        out.u.position(0)
+        out.v.clear()
+        out.v.put(sV, 0, cn)
+        out.v.position(0)
+    }
+
+    /**
+     * Kenarı koruyan yumuşatma (yüzey bulanıklığı benzeri): her pikselin çevresindeki ortalama integral görüntüyle
+     * (yarıçaptan bağımsız hızda) alınır; ortalamaya yakın pikseller (cilt dokusu, gözenek) ona doğru çekilir, belirgin
+     * kenarlar (göz, kaş, dudak, saç) olduğu gibi kalır.
+     */
+    private fun smooth(src: ByteArray, dst: ByteArray, w: Int, h: Int, pr: Params) {
+        val iw = w + 1
+        val need = iw * (h + 1)
+        if (integral.size < need) integral = IntArray(need)
+        val ii = integral
+        for (x in 0..w) ii[x] = 0
+        for (y in 1..h) {
+            var rowSum = 0
+            val o = y * iw
+            val po = (y - 1) * iw
+            val so = (y - 1) * w
+            ii[o] = 0
+            for (x in 1..w) {
+                rowSum += src[so + x - 1].toInt() and 0xFF
+                ii[o + x] = ii[po + x] + rowSum
+            }
+        }
+        val rad = maxOf(2, (minOf(w, h) / 90f * (0.6f + pr.smooth)).roundToInt())
+        val k = pr.smoothK
+        val t1 = 10
+        val t2 = 30
+        // Kenar dışındaki tam kutular için bölme yerine sabit noktalı çarpma (hız).
+        val full = (2 * rad + 1) * (2 * rad + 1)
+        val inv = (65536 + full / 2) / full
+        for (y in 0 until h) {
+            val y1 = maxOf(0, y - rad)
+            val y2 = minOf(h, y + rad + 1)
+            val r1 = y1 * iw
+            val r2 = y2 * iw
+            val dh = y2 - y1
+            val row = y * w
+            for (x in 0 until w) {
+                val x1 = maxOf(0, x - rad)
+                val x2 = minOf(w, x + rad + 1)
+                val sum = ii[r2 + x2] - ii[r1 + x2] - ii[r2 + x1] + ii[r1 + x1]
+                val area = dh * (x2 - x1)
+                val mean = if (area == full) (sum * inv) ushr 16 else sum / area
+                val v = src[row + x].toInt() and 0xFF
+                val d = mean - v
+                val ad = if (d < 0) -d else d
+                val wgt = if (ad <= t1) k else if (ad >= t2) 0 else k * (t2 - ad) / (t2 - t1)
+                dst[row + x] = (v + ((d * wgt) shr 8)).toByte()
+            }
+        }
     }
 }

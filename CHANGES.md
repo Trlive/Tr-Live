@@ -1,3 +1,10 @@
+## v2.76.3 — APK derleme hatası (güzellik filtresi) düzeltildi
+- "Unresolved reference 'BeautyFilter'" hatası giderildi: güzellik filtresi ayrı bir Java dosyasındaydı ve onu uygulamaya
+  kopyalayacak iş akışı değişikliği zip ile güncellenemiyordu (.github klasörü zip'ten güncellenmez). Filtre artık
+  derlemenin zaten kopyaladığı mobile/native/MainActivity.kt içinde (Kotlin). İş akışı dosyası değişmedi.
+- Kotlin dosyası bu kez yerelde Kotlin 2.0 derleyicisiyle derlendi ve filtre sahte WebRTC sınıflarıyla çalıştırılarak
+  denendi (pürüzsüzleştirme, renk, kare döndürme/zaman damgası, bağlanma/ayrılma).
+
 ## v2.76.2 — APK derleme hatası düzeltildi
 - room_screen.dart: mikrofona çıkma yanıtı boş olabilir denetimi (flutter analyze "unchecked_use_of_nullable_value"
   hatası) düzeltildi. Başka değişiklik yok.
