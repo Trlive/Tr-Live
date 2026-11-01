@@ -1,3 +1,7 @@
+## v2.76.2 — APK derleme hatası düzeltildi
+- room_screen.dart: mikrofona çıkma yanıtı boş olabilir denetimi (flutter analyze "unchecked_use_of_nullable_value"
+  hatası) düzeltildi. Başka değişiklik yok.
+
 ## v2.76.1 — Uçtan uca (e2e) testler güncellendi
 - GitHub "e2e" testlerindeki 2 hata giderildi: testler eski kurallara göre yazılmıştı.
   - PK testi: odalar arası PK artık yalnızca görüntülü yayınlar arasında ve süreler 5/10/15/30 dk (v2.74).

@@ -1164,18 +1164,15 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final switching = _onSeat && seat != null && prevSeat != null && seat != prevSeat;
     if (switching) setState(() => _applySeat(Session.id, seat, true));
     _takingMic = true;
-    final Map<String, dynamic>? r;
-    try {
-      r = await guard(context, () => Api.post('/api/rooms/${widget.roomId}/mic/take', {if (seat != null) 'seatIndex': seat}));
-    } finally {
-      _takingMic = false;
-    }
+    final Future<Map<String, dynamic>?> call = guard(context, () => Api.post('/api/rooms/${widget.roomId}/mic/take', {if (seat != null) 'seatIndex': seat}));
+    final Map<String, dynamic>? res = await call.whenComplete(() => _takingMic = false);
     if (!mounted) return;
-    if (r == null) {
+    if (res == null) {
       if (switching) setState(() => _applySeat(Session.id, prevSeat, true));
       return;
     }
-    setState(() => _applySeat(Session.id, (r['seatIndex'] as num?)?.toInt(), true));
+    final seatIndex = (res['seatIndex'] as num?)?.toInt();
+    setState(() => _applySeat(Session.id, seatIndex, true));
   }
 
   bool _takingMic = false;
