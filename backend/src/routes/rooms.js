@@ -426,8 +426,8 @@ router.patch('/:roomId', requireAuth, userLimit('room_settings', 20, 60e3), asyn
     if (before.layout === 'live') throw fail('Canlı yayında konuk sayısı sabittir.');
     newSeats = Number(b.seatCount);
     if (!SUPPORTED_SEATS.has(newSeats)) throw fail('Geçersiz koltuk sayısı.');
-    if (newSeats !== before.seat_count && (await query(`SELECT 1 FROM room_pk WHERE room_id = $1 AND status = 'active'`, [roomId])).rowCount) {
-      throw fail('Oda içi PK sürerken mikrofon modu değiştirilemez.', 409);
+    if (newSeats !== before.seat_count && (await query(`SELECT 1 FROM room_pk WHERE room_id = $1 AND status IN ('preparing','active')`, [roomId])).rowCount) {
+      throw fail('PK modu açıkken mikrofon modu değiştirilemez; önce PK modunu kapatın.', 409);
     }
     set('seat_count', newSeats);
     set('locked_seats', (before.locked_seats ?? []).filter((i) => i < newSeats)); // kalkan koltukların kilidi de kalkar
@@ -461,7 +461,16 @@ router.patch('/:roomId', requireAuth, userLimit('room_settings', 20, 60e3), asyn
   }
   if (!sets.length) throw fail('Değiştirilecek alan yok.');
   values.push(roomId);
-  const r = (await query(`UPDATE rooms SET ${sets.join(', ')} WHERE id = $${values.length} RETURNING *`, values)).rows[0];
+  const r = await tx(async (c) => {
+    if (newSeats !== null && newSeats !== before.seat_count) {
+      // Oda satırı kilitlenip PK yeniden denetlenir: aynı anda açılan PK modu ile yarışmasın (PK 9'lu koltuk ister).
+      await c.query(`SELECT 1 FROM rooms WHERE id = $1 FOR UPDATE`, [roomId]);
+      if ((await c.query(`SELECT 1 FROM room_pk WHERE room_id = $1 AND status IN ('preparing','active')`, [roomId])).rowCount) {
+        throw fail('PK modu açıkken mikrofon modu değiştirilemez; önce PK modunu kapatın.', 409);
+      }
+    }
+    return (await c.query(`UPDATE rooms SET ${sets.join(', ')} WHERE id = $${values.length} RETURNING *`, values)).rows[0];
+  });
   // Kalıcı oda bilgisi: oda içindeki tüm ayarlar bir sonraki açılış için saklanır.
   await syncProfile(r);
   // Koltuk sayısı azaldıysa taşan koltuklardakiler dinleyiciye iner (mikrofonları kapanır).

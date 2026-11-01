@@ -1,3 +1,15 @@
+## v2.75.0 — Sesli oda PK: Figma tasarımı (9'lu koltuk, MVP tahtları, 3-2-1, emojiler)
+- PK modu yalnızca 9'lu koltukta açılır. Açılınca koltuklar PK sahnesine dizilir: üstte ortada oda sahibi, iki yanında
+  Kırmızı ve Mavi MVP tahtı (takımın o an en çok destekleyeni altın tahtta oturur, üstünde taç), altta solda Kırmızı 2×2,
+  sağda Mavi 2×2 koltuk (No.1–No.4). Arkada kırmızı | mavi zemin, ortada nabız atan ışık huzmesi ve süzülen kıvılcımlar.
+- Koltukların altında PK çubuğu: kırmızı | mavi skor çizgisi, "Hazırlanıyor" yazıları, ortada "Başla" (oda sahibi /
+  yardımcı sahip), tur sürerken VS + geri sayım; altında takımların en çok destekleyen 3 kişisi, "Takım Savaşı" ve X.
+- "Başla"ya basılınca odadaki herkeste 3 → 2 → 1 geri sayım, ardından VS çarpışma animasyonu; süre animasyondan sonra işler.
+- Tur bitince kazanan takımın mikrofonlarında gülen, kaybeden takımın mikrofonlarında ağlayan emoji kendiliğinden oynar
+  (~6 sn; berabere kalınca emoji yok). Sonuç penceresi (kazanan + MVP) açılır, sonuç ~4 sn çubukta kalır ve aynı ayarlarla yeni tur "Hazırlanıyor"
+  olarak gelir. X → "Turu şimdi bitir" ya da "PK modunu kapat" (koltuklar normale döner).
+- PK modu açıkken mikrofon modu değiştirilemez; PK modu açık odaya görüntülü PK daveti gönderilemez.
+
 ## v2.74.0 — Görüntülü PK: bölünmüş ekran (Bigo tarzı)
 - Tekli görüntülü yayında PK kabul edilince ekran ikiye bölünür: solda bizim yayıncı, sağda rakip yayıncı (canlı görüntü
   ve sesi). Rakip yayın, rakip odaya görünmeyen yalnızca izleme bağlantısıyla gelir (sunucu: POST /api/pk/:id/peer-token).

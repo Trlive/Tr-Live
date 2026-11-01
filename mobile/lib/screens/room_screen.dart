@@ -105,6 +105,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   final Map<String, String> _scores = {};
   Map<String, dynamic>? _pk;
   Map<String, dynamic>? _roomPk; // sesli oda içi PK (Kırmızı / Mavi takım)
+  DateTime? _pkResultUntil; // biten turun sonucu bu ana kadar sahnede kalır
   bool _inviteOpen = false;
 
   bool get _isManager => _myRole == 'owner' || _myRole == 'cohost' || _myRole == 'moderator';
@@ -115,6 +116,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   bool get _isLive => _isVideo && _room?['layout'] == 'live';
   bool get _isGrid => _isVideo && !_isLive;
   /// Tekli görüntülü yayında süren / yeni biten PK: ekran ikiye bölünür (solda biz, sağda rakip).
+  /// Sesli odada PK modu açık (9'lu koltuk): koltuklar Figma PK sahnesine dizilir.
+  bool get _pkStage => !_isVideo && _roomPk != null && _seatCount == kRoomPkSeats;
   bool get _pkLive => _isLive && _pk != null && (_pk!['status'] == 'active' || _pk!['status'] == 'finished');
   lk.CameraPosition _camPos = lk.CameraPosition.front;
   final EntranceQueue _entrance = EntranceQueue();
@@ -652,12 +655,26 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       final st = pk['status'];
       // Oda küçültülmüşken (başka ekrandayken) animasyon / sonuç penceresi açılmaz.
       final visible = mounted && !RoomDock.minimized.value;
-      if (st == 'active') {
+      if (st == 'preparing' || st == 'active') {
+        // Biten turun sonucu sahnede birkaç saniye kalır: hemen ardından gelen yeni "Hazırlanıyor" turu, sonuç süresi
+        // dolunca (aşağıdaki yeniden okuma ile) gelir. Tur başlatıldıysa beklemeden geçilir.
+        final holding = prev != null && prev['status'] == 'finished' && prev['id'] != pk['id'] && _pkResultUntil != null && DateTime.now().isBefore(_pkResultUntil!);
+        if (holding && e['started'] != true) return;
         setState(() => _roomPk = pk);
-        if (e['started'] == true && visible) showRoomPkStart(context);
-      } else {
+        // "Başla": herkeste 3-2-1 geri sayım, ardından VS çarpışması.
+        if (e['started'] == true && visible) showRoomPkCountdown(context, stillVisible: () => mounted && !RoomDock.minimized.value);
+      } else if (st == 'finished' && prev?['id'] == pk['id']) {
+        // Sonuç: ~4 sn sahnede kalır, sonra yeni tur gelir; kazananların mikrofonunda gülen, kaybedenlerin
+        // mikrofonunda ağlayan emoji oynar.
+        _pkResultUntil = DateTime.now().add(const Duration(seconds: 4));
+        setState(() => _roomPk = pk);
+        _pkResultEmojis(pk);
+        if (visible) showRoomPkResult(context, pk);
+        Future.delayed(const Duration(seconds: 4), () {
+          if (mounted && _roomPk?['id'] == pk['id']) _reloadRoomPk();
+        });
+      } else if (prev?['id'] == pk['id']) {
         setState(() => _roomPk = null);
-        if (st == 'finished' && prev?['id'] == pk['id'] && visible) showRoomPkResult(context, pk);
       }
       return;
     }
@@ -667,6 +684,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           _roomPk = {
             ..._roomPk!,
             'remainingSeconds': e['remainingSeconds'],
+            'introSeconds': e['introSeconds'] ?? 0,
             'red': {...?mapOf(_roomPk!['red']), 'score': e['red']},
             'blue': {...?mapOf(_roomPk!['blue']), 'score': e['blue']},
           };
@@ -1542,7 +1560,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         final chatOn = _room?['chatEnabled'] != false;
         final hidden = _room?['hidden'] == true;
         final locked = _room?['locked'] == true;
-        final pkFree = (_pk == null || !['pending', 'active'].contains(_pk!['status'])) && _roomPk == null;
+        final pkFree = (_pk == null || !['pending', 'active'].contains(_pk!['status'])) && (_roomPk == null || _roomPk!['status'] == 'finished');
         final queueMode = !_onSeat && !_canSeatManage && (_micRequest || _noFreeSeat);
         final tools = <Widget>[
           // Sıra: Odayı temizle, Sohbet yasağı, Oda kilitleme, Oda gizleme, Ses ve efektler, Müzik, Mikrofon Modu, Tema,
@@ -1596,8 +1614,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         const Text('VS', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic, color: Colors.white, shadows: [Shadow(color: Color(0xFFFF1744), blurRadius: 10), Shadow(color: Color(0xFF2979FF), blurRadius: 14, offset: Offset(-2, 0))])),
                         'PK',
                         () => !pkFree
-                            ? toast(context, 'Zaten bir PK sürüyor.', error: true)
-                            : run(() => _isVideo ? showPkChallengeSheet(context, roomId: widget.roomId) : showRoomPkSetup(context, roomId: widget.roomId, seatCount: _seatCount)),
+                            ? toast(context, _roomPk != null ? 'PK modu zaten açık. Kapatmak için PK çubuğundaki X\'e dokunun.' : 'Zaten bir PK sürüyor.', error: true)
+                            : (!_isVideo && _seatCount != kRoomPkSeats)
+                                ? toast(context, 'PK modu yalnızca 9\'lu koltukta açılır. Önce Mikrofon Modu\'ndan 9 koltuğu seçin.', error: true)
+                                : run(() => _isVideo ? showPkChallengeSheet(context, roomId: widget.roomId) : showRoomPkSetup(context, roomId: widget.roomId, seatCount: _seatCount)),
                         colors: const [Color(0xFF1A237E), Color(0xFF0D0D1A), Color(0xFFB71C1C)],
                       ),
                     tile(const Text('🎲', style: TextStyle(fontSize: 30)), 'Ludo', () => run(_openGames), colors: kGoldDeep),
@@ -2758,7 +2778,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             child: Icon(reserved ? Icons.star_border : (locked ? Icons.lock : Icons.add), size: plusSize ?? seatR * 0.95, color: locked ? Colors.orangeAccent : Colors.white),
           ),
         ),
-        name: Text('${index + 1}', style: TextStyle(color: Colors.white, fontSize: _seatCompact ? 11 : 12.5, fontWeight: FontWeight.w600)),
+        name: Text(_pkStage && index > 0 ? 'No.${pkSeatNo(index)}' : '${index + 1}', style: TextStyle(color: Colors.white, fontSize: _seatCompact ? 11 : 12.5, fontWeight: FontWeight.w600)),
       );
     }
     final userId = m['userId'].toString();
@@ -2817,7 +2837,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             child: FrameBox(url: frameUrl, avatarRadius: seatR),
           ),
         // Mikrofon emojisi: avatarın üstünde birkaç saniye oynar.
-        if (_micEmoji[userId] != null)
+        if (_micEmoji[userId] == kCryEmoji)
+          Positioned.fill(child: PkCryEmoji(key: ValueKey('emo-$userId-${_micEmojiSeq[userId]}')))
+        else if (_micEmoji[userId] != null)
           Positioned.fill(
             child: IgnorePointer(
               child: Image.asset(
@@ -2881,7 +2903,28 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         seatH = _seatAreaHeight(w, sc, score: scoreRow);
         seats = _seatGrid(w, sc);
       }
+      // PK sahnesi: koltukların arkasında kırmızı | mavi zemin, altında PK çubuğu (sohbet onun altından başlar).
+      final pkStage = _pkStage && !_isGrid;
+      final pkH = pkStage ? RoomPkPanel.height : 0.0;
+      final chatTop = seatH + pkH;
       return Stack(clipBehavior: Clip.hardEdge, children: [
+        if (pkStage) Positioned(left: 0, right: 0, top: 0, height: chatTop, child: const PkStageBackdrop()),
+        if (pkStage)
+          Positioned(
+            left: 0,
+            right: 0,
+            top: seatH,
+            height: pkH,
+            child: _fixedText(RoomPkPanel(
+              key: ValueKey('pkp-${_roomPk!['id']}'),
+              pk: _roomPk!,
+              canManage: _isOwnerOrCohost,
+              onStale: _reloadRoomPk,
+              onUpdate: (pk) {
+                if (mounted && _roomPk?['id'] == pk['id'] && _roomPk?['status'] == 'preparing') setState(() => _roomPk = pk);
+              },
+            )),
+          ),
         Positioned(
           left: 0,
           right: 0,
@@ -2898,7 +2941,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             child: _fixedText(seats),
           ),
         ),
-        if (!_inputOpen) Positioned(left: 0, right: 0, top: seatH, bottom: 0, child: _chatPanel(w)),
+        if (!_inputOpen) Positioned(left: 0, right: 0, top: chatTop, bottom: 0, child: _chatPanel(w)),
         if (_inputOpen) ...[
           Positioned.fill(child: GestureDetector(onTap: _closeInput, child: const ColoredBox(color: Color(0xB8000000)))),
           Positioned.fill(child: _chatPanel(w, overlay: true)),
@@ -2906,7 +2949,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         if (_canSeatManage && _micRequest && _queue.isNotEmpty && !_inputOpen)
           Positioned(
             right: 8,
-            top: seatH - 34,
+            top: pkStage ? chatTop + 4 : seatH - 34,
             child: InkWell(
               borderRadius: BorderRadius.circular(16),
               onTap: _micRequestsSheet,
@@ -3182,7 +3225,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final bodyH = _bodyH;
     if (bodyH <= 0) return 1.0;
     final g = RoomGeom(w);
-    final avail = bodyH - MediaQuery.paddingOf(context).top - g.headerH - g.barH - 110;
+    final avail = bodyH - MediaQuery.paddingOf(context).top - g.headerH - g.barH - 110 - (_pkStage ? RoomPkPanel.height : 0);
     final spec = seatLayoutFor(_seatCount);
     final need = _seatAreaHeight(w, 1, score: _scoreFits(spec, w));
     if (need <= avail) return 1.0;
@@ -3207,8 +3250,35 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         if (m['seatIndex'] != null) (m['seatIndex'] as num).toInt(): m,
     };
     final spec = seatLayoutFor(_seatCount);
+    final pkStage = _pkStage && spec.rows.length == 3;
     final tiles = <Widget>[];
     final centers = <int, (Offset, double, int)>{}; // koltuk → (avatar merkezi, yarıçap, satır)
+    if (pkStage) {
+      // MVP tahtları: oda sahibinin iki yanında; takımın o anki en çok destekleyeni oturur.
+      final cy0 = spec.topGap * w * sc + (spec.rows.first.dia * w * sc) / 2;
+      final tw = 0.17 * w * sc;
+      final th = tw * 1.18;
+      for (final (team, x) in const [('red', 0.15), ('blue', 0.85)]) {
+        final top = mapOf(listOf(mapOf(_roomPk![team])?['supporters']).firstOrNull);
+        final user = mapOf(top?['user']);
+        tiles.add(Positioned(
+          left: x * w - tw / 2,
+          top: math.max(0.0, cy0 - th / 2 - 4),
+          width: tw,
+          height: th + _seatNameH,
+          child: Column(children: [
+            PkThrone(team: team, user: user, width: tw, onTap: user?['id'] == null ? null : () => Navigator.push(context, MaterialPageRoute(builder: (_) => UserProfileScreen(userId: user!['id'].toString())))),
+            SizedBox(
+              height: _seatNameH,
+              child: Center(
+                child: Text(user == null ? (team == 'red' ? 'Kırmızı MVP' : 'Mavi MVP') : (user['displayName'] ?? '').toString(),
+                    maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: _seatCompact ? 9.5 : 10.5, color: Colors.white, fontWeight: FontWeight.w700)),
+              ),
+            ),
+          ]),
+        ));
+      }
+    }
     var i = 0;
     // topGap: başlığın altından ilk satırdaki DAİRENİN üst kenarına (Yoho ölçümü); +8 dp dokunma payı merkeze katılmaz.
     var cy = spec.topGap * w * sc + (spec.rows.first.dia * w * sc) / 2;
@@ -3226,7 +3296,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       final tileW = (row.xs.length == 1 ? slot * 1.9 : minDx * w - 2).clamp(slot, slot * 2.2).toDouble();
       for (final x in row.xs) {
         if (i >= _seatCount) break;
-        final idx = i++;
+        // PK sahnesi: solda Kırmızı 2×2, sağda Mavi 2×2 (konum → koltuk eşlemesi).
+        final idx = pkStage ? kPkSeatOrder[i++] : i++;
         centers[idx] = (Offset(x * w, cy), (slot - 8) / 2, r);
         tiles.add(Positioned(
           left: x * w - tileW / 2,
@@ -3586,17 +3657,32 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 
   // ---------- Mikrofon emojileri ----------
-  final Map<String, int> _micEmoji = {}; // kullanıcı → oynayan emoji (1–3)
+  final Map<String, int> _micEmoji = {}; // kullanıcı → oynayan emoji (1–3; kCryEmoji: PK kaybeden)
   final Map<String, int> _micEmojiSeq = {};
   final Map<String, Timer> _micEmojiTimers = {};
+  static const kCryEmoji = -1;
 
-  void _showMicEmoji(String userId, int emoji) {
+  /// PK sonucu: koltuktaki kazananlara gülen (1), kaybedenlere ağlayan emoji ~6 sn (beraberlikte yok).
+  void _pkResultEmojis(Map<String, dynamic> pk) {
+    final winner = pk['winner']?.toString();
+    if (winner != 'red' && winner != 'blue') return;
+    for (final m in _members) {
+      final seat = (m['seatIndex'] as num?)?.toInt();
+      if (seat == null) continue;
+      final uid = m['userId'].toString();
+      final team = pkTeamOfSeat(pk, seat, userId: uid);
+      if (team == null) continue;
+      _showMicEmoji(uid, team == winner ? 1 : kCryEmoji, ms: 6000);
+    }
+  }
+
+  void _showMicEmoji(String userId, int emoji, {int ms = 3200}) {
     _micEmojiTimers[userId]?.cancel();
     setState(() {
       _micEmoji[userId] = emoji;
       _micEmojiSeq[userId] = (_micEmojiSeq[userId] ?? 0) + 1;
     });
-    _micEmojiTimers[userId] = Timer(const Duration(milliseconds: 3200), () {
+    _micEmojiTimers[userId] = Timer(Duration(milliseconds: ms), () {
       _micEmojiTimers.remove(userId);
       if (mounted) setState(() => _micEmoji.remove(userId));
     });
@@ -3821,7 +3907,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                     _fixedText(_roomHeader(w)),
                     if (_inputOpen) Positioned.fill(child: GestureDetector(onTap: _closeInput, child: const ColoredBox(color: Color(0xB8000000)))),
                   ]),
-                  if (_roomPk != null && _roomPk!['status'] == 'active') RoomPkBar(pk: _roomPk!, canManage: _isOwnerOrCohost, onStale: _reloadRoomPk),
+                  if (_roomPk != null && _roomPk!['status'] != 'finished' && !_pkStage) RoomPkBar(pk: _roomPk!, canManage: _isOwnerOrCohost, onStale: _reloadRoomPk),
                   if (_pk != null && _pkLive)
                     VideoPkStage(
                       key: ValueKey('vpk-${_pk!['id']}'),

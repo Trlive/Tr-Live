@@ -10,7 +10,10 @@ import { fail } from '../http.js';
 
 // Sesli oda PK süreleri: 15, 30, 60 dakika.
 export const ROOM_PK_DURATIONS = [900, 1800, 3600];
-export const ROOM_PK_MIN_SEATS = 4;
+// PK modu yalnızca 9'lu koltuk düzeninde: oda sahibi + 4 Kırmızı + 4 Mavi.
+export const ROOM_PK_SEATS = 9;
+// "Başla"dan sonra 3-2-1 geri sayım ve VS animasyonu için süre (puan bu arada da sayılır, süre bundan sonra işler).
+export const ROOM_PK_INTRO_SECONDS = 5;
 
 /** Kırmızı takımın son koltuk indeksi: koltuk 1..split kırmızı, split+1..n-1 mavi (koltuk 0 = oda sahibi). */
 export const redSplit = (seatCount) => Math.ceil((Number(seatCount) - 1) / 2);
@@ -30,8 +33,16 @@ export function decideTeam(red, blue) {
   return r > b ? 'red' : b > r ? 'blue' : 'draw';
 }
 
+/** Açık tur (Hazırlanıyor ya da süren). */
 export async function activeRoomPk(roomId, run = query) {
-  return (await run(`SELECT * FROM room_pk WHERE room_id = $1 AND status = 'active' LIMIT 1`, [roomId])).rows[0] ?? null;
+  return (await run(`SELECT * FROM room_pk WHERE room_id = $1 AND status IN ('preparing','active') LIMIT 1`, [roomId])).rows[0] ?? null;
+}
+
+/** Kalan süre (giriş animasyonu hariç) ve girişten kalan saniye: "Başla"dan sonraki ilk 5 sn'de süre işlemez. */
+function clockOf(p) {
+  if (p.status !== 'active') return { remainingSeconds: 0, introSeconds: 0 };
+  const left = remainingSeconds(p.ends_at);
+  return { remainingSeconds: Math.min(left, p.duration_seconds), introSeconds: Math.max(0, left - p.duration_seconds) };
 }
 
 export async function roomPkView(id, run = query) {
@@ -54,48 +65,64 @@ export async function roomPkView(id, run = query) {
   return {
     id: p.id, roomId: p.room_id, ownerId, status: p.status, mode: p.mode, ownerTeam: p.owner_team ?? null,
     seatCount: p.seat_count, redSplit: redSplit(p.seat_count), durationSeconds: p.duration_seconds,
-    remainingSeconds: p.status === 'active' ? remainingSeconds(p.ends_at) : 0, startedAt: p.started_at, endsAt: p.ends_at,
+    ...clockOf(p), startedAt: p.started_at, endsAt: p.ends_at,
     red: side('red'), blue: side('blue'), winner: p.winner ?? null,
     mvp: p.mvp_user_id && users.get(p.mvp_user_id) ? publicUser(users.get(p.mvp_user_id)) : null,
   };
 }
 
-/** started: yalnızca PK yeni başladığında true (uygulama "PK BAŞLADI" animasyonunu buna göre oynatır). */
+/** started: yalnızca tur "Başla" ile yeni başladığında true (uygulama 3-2-1 ve VS animasyonunu buna göre oynatır). */
 export async function broadcastRoomPk(id, { started = false } = {}) {
   const view = await roomPkView(id);
   if (view) hub.broadcastRoom(view.roomId, { type: 'room_pk_state', pk: view, started });
   return view;
 }
 
-/** PK'yı başlatır (oda sahibi / yardımcı sahip). Oda başka bir (odalar arası) PK'dayken açılamaz. */
-export async function startRoomPk({ roomId, userId, durationSeconds, mode, ownerTeam }) {
+/** PK modunu açar (oda sahibi / yardımcı sahip): tur "Hazırlanıyor" durumunda bekler. 9'lu koltuk düzeni gerekir. */
+export async function openRoomPk({ roomId, userId, durationSeconds, mode, ownerTeam }) {
   const id = await tx(async (c) => {
     const room = (await c.query(`SELECT id, owner_id, room_type, seat_count FROM rooms WHERE id = $1 AND is_active = TRUE FOR UPDATE`, [roomId])).rows[0];
     if (!room) throw fail('Oda bulunamadı.', 404);
-    if (room.seat_count < ROOM_PK_MIN_SEATS) {
-      throw fail(`Oda içi PK için en az ${ROOM_PK_MIN_SEATS} koltuklu mikrofon modu gerekir.`, 409);
-    }
-    if ((await c.query(`SELECT 1 FROM room_pk WHERE room_id = $1 AND status = 'active'`, [roomId])).rowCount) {
-      throw fail('Odada zaten bir PK sürüyor.', 409);
+    if (room.seat_count !== ROOM_PK_SEATS) throw fail('PK modu yalnızca 9\'lu koltuk düzeninde açılır. Önce mikrofon modunu 9 yapın.', 409);
+    if ((await c.query(`SELECT 1 FROM room_pk WHERE room_id = $1 AND status IN ('preparing','active')`, [roomId])).rowCount) {
+      throw fail('Odada PK modu zaten açık.', 409);
     }
     if ((await c.query(`SELECT 1 FROM pk_battles WHERE (room_a = $1 OR room_b = $1) AND status IN ('pending','active')`, [roomId])).rowCount) {
       throw fail('Odada odalar arası bir PK var; önce onu bitirin.', 409);
     }
     return (await c.query(
-      `INSERT INTO room_pk(room_id, started_by, mode, owner_team, seat_count, duration_seconds, ends_at)
-       VALUES($1,$2,$3,$4,$5,$6,NOW() + ($6::int * INTERVAL '1 second')) RETURNING id`,
+      `INSERT INTO room_pk(room_id, started_by, mode, owner_team, seat_count, duration_seconds, status)
+       VALUES($1,$2,$3,$4,$5,$6,'preparing') RETURNING id`,
       [roomId, userId, mode, mode === 'partisan' ? ownerTeam : null, room.seat_count, durationSeconds],
     )).rows[0].id;
   });
+  return broadcastRoomPk(id);
+}
+
+/** "Başla": Hazırlanıyor → süren tur. Süre, 3-2-1 / VS girişinden sonra işlemeye başlar. */
+export async function beginRoomPk(id) {
+  const r = await query(
+    `UPDATE room_pk SET status = 'active', started_at = NOW(),
+       ends_at = NOW() + ((duration_seconds + $2::int) * INTERVAL '1 second')
+     WHERE id = $1 AND status = 'preparing'
+       AND EXISTS (SELECT 1 FROM rooms r WHERE r.id = room_pk.room_id AND r.is_active AND r.seat_count = ${ROOM_PK_SEATS})
+     RETURNING id`, [id, ROOM_PK_INTRO_SECONDS],
+  );
+  if (!r.rowCount) throw fail('Başlatılacak PK turu bulunamadı.', 404);
   return broadcastRoomPk(id, { started: true });
 }
 
-/** Bitirir: kazanan takım ve MVP (kazanan takımın en çok destekçisi; berabere ise genel en çok destekçi). */
-export async function finishRoomPk(id, { cancelled = false } = {}) {
+/**
+ * Bitirir: kazanan takım ve MVP (kazanan takımın en çok destekçisi; berabere ise genel en çok destekçi); ardından aynı
+ * ayarlarla yeni "Hazırlanıyor" turu açılır (PK modu sürer). cancelled: PK modunu kapatır (açık tur sonuçsuz kapanır).
+ * nextRound: false → yeni tur açılmaz (oda kapanırken).
+ */
+export async function finishRoomPk(id, { cancelled = false, nextRound = true } = {}) {
+  let next = null;
   const done = await tx(async (c) => {
-    const p = (await c.query(`SELECT * FROM room_pk WHERE id = $1 AND status = 'active' FOR UPDATE`, [id])).rows[0];
+    const p = (await c.query(`SELECT * FROM room_pk WHERE id = $1 AND status IN ('preparing','active') FOR UPDATE`, [id])).rows[0];
     if (!p) return false;
-    if (cancelled) {
+    if (cancelled || p.status === 'preparing') {
       await c.query(`UPDATE room_pk SET status = 'cancelled', finished_at = NOW() WHERE id = $1`, [id]);
       return true;
     }
@@ -105,9 +132,18 @@ export async function finishRoomPk(id, { cancelled = false } = {}) {
        ORDER BY points DESC LIMIT 1`, [id, winner],
     )).rows[0]?.user_id ?? null;
     await c.query(`UPDATE room_pk SET status = 'finished', finished_at = NOW(), winner = $2, mvp_user_id = $3 WHERE id = $1`, [id, winner, mvp]);
+    if (nextRound) {
+      next = (await c.query(
+        `INSERT INTO room_pk(room_id, started_by, mode, owner_team, seat_count, duration_seconds, status)
+         SELECT room_id, started_by, mode, owner_team, seat_count, duration_seconds, 'preparing' FROM room_pk WHERE id = $1
+           AND EXISTS (SELECT 1 FROM rooms r WHERE r.id = room_pk.room_id AND r.is_active AND r.seat_count = $2)
+         RETURNING id`, [id, ROOM_PK_SEATS],
+      )).rows[0]?.id ?? null;
+    }
     return true;
   });
   if (done) await broadcastRoomPk(id);
+  if (next) await broadcastRoomPk(next);
   return done;
 }
 
@@ -149,10 +185,10 @@ export async function scoreRoomPk(c, roomId, receiverId, senderId, points, suppo
 export async function tickRoomPk() {
   const due = await query(`SELECT id FROM room_pk WHERE status = 'active' AND ends_at <= NOW()`);
   for (const p of due.rows) await finishRoomPk(p.id);
-  const live = await query(`SELECT id, room_id, score_red, score_blue, ends_at FROM room_pk WHERE status = 'active'`);
+  const live = await query(`SELECT id, room_id, status, score_red, score_blue, ends_at, duration_seconds FROM room_pk WHERE status = 'active'`);
   for (const p of live.rows) {
     hub.broadcastRoom(p.room_id, {
-      type: 'room_pk_tick', pkId: p.id, remainingSeconds: remainingSeconds(p.ends_at), red: String(p.score_red), blue: String(p.score_blue),
+      type: 'room_pk_tick', pkId: p.id, ...clockOf(p), red: String(p.score_red), blue: String(p.score_blue),
     });
   }
 }
@@ -160,5 +196,5 @@ export async function tickRoomPk() {
 /** Oda kapanırken o anki skorla biter. */
 export async function endRoomPkForRoom(roomId) {
   const p = await activeRoomPk(roomId);
-  if (p) await finishRoomPk(p.id);
+  if (p) await finishRoomPk(p.id, { nextRound: false });
 }

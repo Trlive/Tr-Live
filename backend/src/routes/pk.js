@@ -7,7 +7,7 @@ import { hub } from '../realtime.js';
 import { token as livekitToken } from '../livekit.js';
 import { validDuration } from '../pk_logic.js';
 import { pkView, broadcastPk, activePkOfRoom, finishPk } from '../services/pk.js';
-import { ROOM_PK_DURATIONS, startRoomPk, finishRoomPk, roomPkView, activeRoomPk } from '../services/room_pk.js';
+import { ROOM_PK_DURATIONS, openRoomPk, beginRoomPk, finishRoomPk, roomPkView, activeRoomPk } from '../services/room_pk.js';
 
 export const router = Router();
 router.use(requireAuth);
@@ -35,7 +35,7 @@ router.post('/pk/challenge', userLimit('pk', 20, 60e3), async (req, res) => {
     if (mine.owner_id !== req.user.id) throw fail('PK başlatmak için oda sahibi olmalısınız.', 403);
     if (await activePkOfRoom(roomId, (t, p) => c.query(t, p))) throw fail('Odanızda zaten bir PK var.', 409);
     if (await activePkOfRoom(targetRoomId, (t, p) => c.query(t, p))) throw fail('Hedef odada zaten bir PK var.', 409);
-    if ((await c.query(`SELECT 1 FROM room_pk WHERE room_id = ANY($1::uuid[]) AND status = 'active'`, [[roomId, targetRoomId]])).rowCount) {
+    if ((await c.query(`SELECT 1 FROM room_pk WHERE room_id = ANY($1::uuid[]) AND status IN ('preparing','active')`, [[roomId, targetRoomId]])).rowCount) {
       throw fail('Odalardan birinde oda içi PK sürüyor.', 409);
     }
     const b = (await c.query(
@@ -57,7 +57,7 @@ router.post('/pk/:id/respond', userLimit('pk', 20, 60e3), async (req, res) => {
     const b = (await c.query(`SELECT * FROM pk_battles WHERE id = $1 FOR UPDATE`, [id])).rows[0];
     if (!b || b.status !== 'pending') throw fail('Davet bulunamadı veya süresi doldu.', 404);
     if (b.host_b !== req.user.id) throw fail('Bu daveti yanıtlama yetkiniz yok.', 403);
-    if (accept && (await c.query(`SELECT 1 FROM room_pk WHERE room_id = ANY($1::uuid[]) AND status = 'active'`, [[b.room_a, b.room_b]])).rowCount) {
+    if (accept && (await c.query(`SELECT 1 FROM room_pk WHERE room_id = ANY($1::uuid[]) AND status IN ('preparing','active')`, [[b.room_a, b.room_b]])).rowCount) {
       throw fail('Odalardan birinde oda içi PK sürüyor; önce onu bitirin.', 409);
     }
     if (accept) {
@@ -107,7 +107,7 @@ router.get('/pk/rooms', async (req, res) => {
      FROM rooms r JOIN users u ON u.id = r.owner_id
      WHERE r.is_active = TRUE AND r.is_hidden = FALSE AND r.owner_id <> $1 AND r.room_type = 'video'
        AND NOT EXISTS (SELECT 1 FROM pk_battles b WHERE (b.room_a = r.id OR b.room_b = r.id) AND b.status IN ('pending','active'))
-       AND NOT EXISTS (SELECT 1 FROM room_pk q WHERE q.room_id = r.id AND q.status = 'active')
+       AND NOT EXISTS (SELECT 1 FROM room_pk q WHERE q.room_id = r.id AND q.status IN ('preparing','active'))
      ORDER BY members DESC, r.created_at DESC LIMIT 50`,
     [req.user.id],
   );
@@ -156,18 +156,34 @@ router.post('/rooms/:roomId/room-pk', userLimit('pk', 20, 60e3), async (req, res
   if (!ROOM_PK_DURATIONS.includes(durationSeconds)) throw fail('PK süresi 15, 30 ya da 60 dakika olmalı.');
   const mode = req.body?.mode === 'partisan' ? 'partisan' : 'neutral';
   const ownerTeam = req.body?.ownerTeam === 'blue' ? 'blue' : 'red';
-  const pk = await startRoomPk({ roomId, userId: req.user.id, durationSeconds, mode, ownerTeam });
+  const pk = await openRoomPk({ roomId, userId: req.user.id, durationSeconds, mode, ownerTeam });
   res.status(201).json({ pk });
+});
+
+// "Başla": Hazırlanıyor durumundaki turu başlatır (3-2-1 ve VS animasyonu herkeste oynar).
+router.post('/room-pk/:id/start', userLimit('pk', 20, 60e3), async (req, res) => {
+  const id = uuid(req.params.id, 'PK');
+  const p = (await query(`SELECT room_id, status FROM room_pk WHERE id = $1`, [id])).rows[0];
+  if (!p || p.status !== 'preparing') throw fail('Başlatılacak PK turu bulunamadı.', 404);
+  const { ok } = await roomStaffRole(p.room_id, req.user.id);
+  if (!ok) throw fail('PK\'yı oda sahibi veya yardımcı sahip başlatabilir.', 403);
+  res.json({ pk: await beginRoomPk(id) });
 });
 
 router.post('/room-pk/:id/end', userLimit('pk', 20, 60e3), async (req, res) => {
   const id = uuid(req.params.id, 'PK');
   const p = (await query(`SELECT room_id, status FROM room_pk WHERE id = $1`, [id])).rows[0];
-  if (!p || p.status !== 'active') throw fail('Süren PK bulunamadı.', 404);
+  if (!p || !['preparing', 'active'].includes(p.status)) throw fail('Açık PK bulunamadı.', 404);
   const { ok } = await roomStaffRole(p.room_id, req.user.id);
   if (!ok) throw fail('PK\'yı oda sahibi veya yardımcı sahip bitirebilir.', 403);
-  // cancel: true → sonuçsuz iptal; yoksa o anki skorla biter (kazanan ve MVP belirlenir).
-  await finishRoomPk(id, { cancelled: req.body?.cancel === true });
+  // cancel: true → PK modu kapanır (açık tur sonuçsuz); yoksa tur o anki skorla biter, yeni tur "Hazırlanıyor" açılır.
+  const cancel = req.body?.cancel === true;
+  const done = await finishRoomPk(id, { cancelled: cancel });
+  // Tur tam bu anda süresi dolup bittiyse yeni tur açılmış olabilir: "PK modunu kapat" onu da kapatsın.
+  if (cancel && !done) {
+    const open = await activeRoomPk(p.room_id);
+    if (open) await finishRoomPk(open.id, { cancelled: true });
+  }
   res.json({ ok: true });
 });
 
