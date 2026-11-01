@@ -2,8 +2,10 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:livekit_client/livekit_client.dart' as lk;
 import '../services/api.dart';
+import '../services/beauty.dart';
 import '../services/session.dart';
 import '../widgets/app_theme.dart';
+import '../widgets/beauty_sheet.dart';
 import '../widgets/common.dart';
 import '../widgets/image_pick.dart';
 import '../widgets/room_categories.dart';
@@ -107,6 +109,7 @@ class _GoLiveScreenState extends State<GoLiveScreen> {
         return;
       }
       setState(() => _cam = t);
+      Beauty.attach(t); // kayıtlı güzellik ayarları önizlemede de uygulanır
     } catch (_) {
       if (mounted) setState(() => _camFailed = true);
     } finally {
@@ -684,7 +687,14 @@ class _GoLiveScreenState extends State<GoLiveScreen> {
           ),
         );
     return Row(children: [
-      side(Icons.face_retouching_natural, 'Güzellik', () => toast(context, 'Güzellik filtresi yakında eklenecek.')),
+      side(Icons.face_retouching_natural, 'Güzellik', () {
+        if (_voice) {
+          toast(context, 'Güzellik filtresi görüntülü yayında kullanılır.');
+          return;
+        }
+        if (_cam != null) Beauty.attach(_cam);
+        showBeautySheet(context);
+      }),
       SizedBox(width: gap),
       Expanded(
         child: GestureDetector(

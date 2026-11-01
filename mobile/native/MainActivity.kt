@@ -19,6 +19,7 @@ import android.telephony.TelephonyManager
 import android.view.WindowManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 
@@ -175,6 +176,39 @@ class MainActivity : FlutterActivity() {
                     }
                 }
                 else -> result.notImplemented()
+            }
+        }
+        // Güzellik filtresi (BeautyFilter.java): kamera takibine bağlan, ayarları değiştir.
+        MethodChannel(messenger, "trlive/beauty").setMethodCallHandler { call, result ->
+            try {
+                val args = call.arguments as? Map<*, *>
+                val params = HashMap<String, Any?>()
+                args?.forEach { (k, v) -> if (k is String) params[k] = v }
+                when (call.method) {
+                    "setParams" -> {
+                        BeautyFilter.setParams(params)
+                        result.success(null)
+                    }
+                    "attach" -> {
+                        BeautyFilter.setParams(params)
+                        // Bu (ana) motorun WebRTC eklentisi; yüzen balonun ikinci motorundaki örnek değil.
+                        val plugin: Any? = try {
+                            @Suppress("UNCHECKED_CAST")
+                            val cls = Class.forName("com.cloudwebrtc.webrtc.FlutterWebRTCPlugin") as Class<out FlutterPlugin>
+                            flutterEngine.plugins.get(cls)
+                        } catch (e: Throwable) {
+                            null
+                        }
+                        result.success(BeautyFilter.attach(params["trackId"] as? String, plugin))
+                    }
+                    "detach" -> {
+                        BeautyFilter.detach()
+                        result.success(null)
+                    }
+                    else -> result.notImplemented()
+                }
+            } catch (e: Throwable) {
+                result.error("beauty", e.toString(), null)
             }
         }
         // Kulaklık (kablolu / Bluetooth) takılınca / çıkarılınca true / false gönderilir.

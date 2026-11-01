@@ -17,6 +17,10 @@ export function consumeMicInvite(roomId, userId) {
   invites.delete(inviteKey(roomId, userId));
 }
 
+export async function isQueued(roomId, userId) {
+  return (await query(`SELECT 1 FROM room_mic_queue WHERE room_id = $1 AND user_id = $2`, [roomId, userId])).rowCount > 0;
+}
+
 export async function queueOf(roomId) {
   const r = await query(`SELECT user_id FROM room_mic_queue WHERE room_id = $1 ORDER BY created_at, user_id`, [roomId]);
   return r.rows.map((x) => x.user_id);
@@ -34,9 +38,10 @@ export async function removeFromQueue(roomId, userId) {
 
 // Koltuk boşalınca sıradaki uygun kişiyi mikrofona davet eder (otomatik oturtmaz; kişi kabul eder).
 export async function notifyNext(roomId) {
-  const room = (await query(`SELECT seat_count, locked_seats, mic_request FROM rooms WHERE id = $1 AND is_active = TRUE`, [roomId])).rows[0];
+  const room = (await query(`SELECT seat_count, locked_seats, mic_request, layout FROM rooms WHERE id = $1 AND is_active = TRUE`, [roomId])).rows[0];
   if (!room) return null;
-  if (room.mic_request) return null; // istek modunda sırayı yetkili onaylar; otomatik davet yok
+  // İstek modunda ve canlı (tekli) yayında konuk isteklerini yetkili onaylar; otomatik davet yok.
+  if (room.mic_request || room.layout === 'live') return null;
   const taken = (await query(`SELECT seat_index FROM room_members WHERE room_id = $1 AND seat_index IS NOT NULL`, [roomId])).rows.map((x) => x.seat_index);
   if (!hasFreeSeat(room.seat_count, room.locked_seats, taken)) return null;
   const queue = (await query(`SELECT user_id FROM room_mic_queue WHERE room_id = $1 ORDER BY created_at, user_id`, [roomId])).rows;

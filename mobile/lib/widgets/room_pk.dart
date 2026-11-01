@@ -120,7 +120,7 @@ class _RoomPkSetupState extends State<_RoomPkSetup> {
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)))),
             const SizedBox(height: 14),
-            const _VsEmblem(size: 74),
+            const Center(child: PkLogo(size: 96, animated: true)),
             const SizedBox(height: 6),
             const Text('Takım Savaşı', textAlign: TextAlign.center, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Colors.white)),
             const SizedBox(height: 4),
@@ -177,50 +177,21 @@ class _RoomPkSetupState extends State<_RoomPkSetup> {
   }
 }
 
-/// Kırmızı-mavi "VS" amblemi (yavaşça nabız atar).
-class _VsEmblem extends StatefulWidget {
+/// PK logosu (pembe P, mavi K). [animated]: hareketli sürüm (kurulum, başlangıç animasyonu, PK düğmeleri).
+class PkLogo extends StatelessWidget {
   final double size;
-  const _VsEmblem({required this.size});
+  final bool animated;
+  const PkLogo({super.key, required this.size, this.animated = false});
 
   @override
-  State<_VsEmblem> createState() => _VsEmblemState();
-}
-
-class _VsEmblemState extends State<_VsEmblem> with SingleTickerProviderStateMixin {
-  late final AnimationController _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 1400))..repeat(reverse: true);
-
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final s = widget.size;
-    return Center(
-      child: AnimatedBuilder(
-        animation: _c,
-        builder: (_, __) => Transform.scale(
-          scale: 1 + 0.08 * Curves.easeInOut.transform(_c.value),
-          child: Text(
-            'VS',
-            style: TextStyle(
-              fontSize: s * 0.62,
-              fontWeight: FontWeight.w900,
-              fontStyle: FontStyle.italic,
-              color: Colors.white,
-              height: 1,
-              shadows: [
-                Shadow(color: kPkRed, blurRadius: 10 + 8 * _c.value, offset: const Offset(-3, 0)),
-                Shadow(color: kPkBlue, blurRadius: 10 + 8 * (1 - _c.value), offset: const Offset(3, 0)),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Image.asset(
+        animated ? 'assets/images/pk_logo.webp' : 'assets/images/pk_logo_static.webp',
+        width: size,
+        height: size,
+        fit: BoxFit.contain,
+        gaplessPlayback: true,
+        filterQuality: FilterQuality.medium,
+      );
 }
 
 // ------------------------------------------------------------------ Canlı skor çubuğu
@@ -340,11 +311,7 @@ class _RoomPkBarState extends State<RoomPkBar> with SingleTickerProviderStateMix
             builder: (_, __) {
               final beat = urgent ? (0.5 + 0.5 * math.sin(_fx.value * 2 * math.pi * 2)).abs() : 0.0;
               return Column(mainAxisSize: MainAxisSize.min, children: [
-                Text('VS',
-                    style: TextStyle(fontSize: 16, height: 1, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic, color: Colors.white, shadows: const [
-                      Shadow(color: kPkRed, blurRadius: 8, offset: Offset(-2, 0)),
-                      Shadow(color: kPkBlue, blurRadius: 8, offset: Offset(2, 0)),
-                    ])),
+                const PkLogo(size: 26),
                 const SizedBox(height: 2),
                 Transform.scale(
                   scale: 1 + 0.18 * beat,
@@ -539,12 +506,7 @@ class _PkStartFxState extends State<_PkStartFx> with SingleTickerProviderStateMi
                 child: Center(
                   child: Transform.scale(
                     scale: 0.2 + 1.0 * vs,
-                    child: const Text('VS',
-                        style: TextStyle(fontSize: 86, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic, color: Colors.white, height: 1, shadows: [
-                          Shadow(color: Color(0xFFFFD54F), blurRadius: 24),
-                          Shadow(color: kPkRed, blurRadius: 12, offset: Offset(-5, 0)),
-                          Shadow(color: kPkBlue, blurRadius: 12, offset: Offset(5, 0)),
-                        ])),
+                    child: const PkLogo(size: 150, animated: true),
                   ),
                 ),
               ),
@@ -1229,7 +1191,8 @@ class _RoomPkPanelState extends State<RoomPkPanel> with SingleTickerProviderStat
               border: Border.all(color: Colors.white.withValues(alpha: 0.7), width: 1),
             ),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
-              const Text('VS ', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic, color: Colors.white)),
+              const PkLogo(size: 18),
+              const SizedBox(width: 3),
               Text(_clock(_left), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Colors.white)),
             ]),
           ),

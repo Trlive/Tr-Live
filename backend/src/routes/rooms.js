@@ -14,7 +14,7 @@ import { loadPublicRow, loadPublicRows, activeEntranceEffect } from '../services
 import { leaveRoom, closeRoom, SUPPORTED_SEATS } from '../services/rooms.js';
 import { openMicSession, closeMicSessions } from '../services/mic.js';
 import { scoreboardOf } from '../services/scoreboard.js';
-import { queueOf, broadcastQueue, removeFromQueue, notifyNext, grantMicInvite, hasMicInvite, consumeMicInvite } from '../services/micqueue.js';
+import { queueOf, broadcastQueue, removeFromQueue, notifyNext, grantMicInvite, hasMicInvite, consumeMicInvite, isQueued } from '../services/micqueue.js';
 import { cleanPublic } from '../safe_text.js';
 import crypto from 'node:crypto';
 import { noteTask } from '../services/daily.js';
@@ -596,9 +596,10 @@ router.post('/:roomId/mic/take', requireAuth, userLimit('mic', 60, 60e3), async 
   const room = await activeRoom(roomId);
   const member = await memberOf(roomId, userId);
   if (!member) throw fail('Önce odaya girin.', 403);
-  // İstek modu: yetkili olmayanlar mikrofona yalnızca davetle (yetkili onayı) çıkar.
-  if (room.mic_request && member.seat_index === null && !SEAT_MANAGERS.includes(member.role) && !hasMicInvite(roomId, userId)) {
-    throw fail('Bu odada mikrofona çıkmak için istek göndermelisiniz.', 409);
+  // İstek modu ve canlı (tekli) görüntülü yayın: yetkili olmayanlar koltuğa yalnızca davetle (yetkili onayı) çıkar.
+  const live = room.layout === 'live';
+  if ((room.mic_request || live) && member.seat_index === null && !SEAT_MANAGERS.includes(member.role) && !hasMicInvite(roomId, userId)) {
+    throw fail(live ? 'Konuk olmak için alttaki ∞ düğmesinden yayıncıya istek gönderin.' : 'Bu odada mikrofona çıkmak için istek göndermelisiniz.', 409);
   }
 
   const wasSeated = member.seat_index !== null;
@@ -707,7 +708,8 @@ router.delete('/:roomId/mic/queue/:userId', requireAuth, async (req, res) => {
   await activeRoom(roomId);
   const me = await memberOf(roomId, req.user.id);
   if (!me || !SEAT_MANAGERS.includes(me.role)) throw fail('Mikrofon isteklerini yalnızca oda yetkilileri yönetir.', 403);
-  await removeFromQueue(roomId, targetId);
+  consumeMicInvite(roomId, targetId); // kabul edip vazgeçtiyse verilen davet de geçersiz olur
+  if (await removeFromQueue(roomId, targetId)) hub.sendToUser(targetId, { type: 'mic_request_declined', roomId });
   res.json({ ok: true, queue: await queueOf(roomId) });
 });
 
@@ -876,9 +878,11 @@ router.post('/:roomId/members/:userId/mic-invite', requireAuth, userLimit('mic_i
     if (!Number.isInteger(seatIndex) || seatIndex < 1 || seatIndex >= room.seat_count) throw fail('Geçersiz koltuk.');
   }
   grantMicInvite(roomId, targetId);
+  // requested: kişi kendisi istek göndermişti (konuk isteği kabul edildi) → uygulama sormadan oturtur.
+  const requested = await isQueued(roomId, targetId);
   // Gizli kullanıcı olan yetkilinin gerçek adı açığa çıkmasın.
   const inviter = publicUser(req.user, targetId);
-  hub.sendToUser(targetId, { type: 'mic_invite', roomId, seatIndex, fromUserId: inviter?.id ?? null, fromName: inviter?.displayName ?? 'Oda yetkilisi' });
+  hub.sendToUser(targetId, { type: 'mic_invite', roomId, seatIndex, requested, fromUserId: inviter?.id ?? null, fromName: inviter?.displayName ?? 'Oda yetkilisi' });
   res.json({ ok: true });
 });
 

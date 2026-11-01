@@ -587,12 +587,15 @@ test('PK: davet, kabul, skor (kendine hediye sayılmaz), bitiş', { skip, timeou
   status(r2, 201);
   const room2 = r2.body.room.id;
   ok(await api('POST', `/api/rooms/${room2}/join`, { token: U.c.token }));
-  status(await api('POST', '/api/pk/challenge', { token: U.b.token, body: { roomId, targetRoomId: room2, durationSeconds: 60 } }), 403, 'sahip değil');
-  status(await api('POST', '/api/pk/challenge', { token: U.a.token, body: { roomId, targetRoomId: room2, durationSeconds: 10 } }), 400, 'kısa süre');
-  const ch = await api('POST', '/api/pk/challenge', { token: U.a.token, body: { roomId, targetRoomId: room2, durationSeconds: 60 } });
+  // Odalar arası PK yalnızca görüntülü yayınlar arasında (v2.74); süreler 5/10/15/30 dk.
+  status(await api('POST', '/api/pk/challenge', { token: U.a.token, body: { roomId, targetRoomId: room2, durationSeconds: 300 } }), 409, 'sesli odalar arası PK yok');
+  await sql(`UPDATE rooms SET room_type = 'video' WHERE id = ANY($1::uuid[])`, [[roomId, room2]]);
+  status(await api('POST', '/api/pk/challenge', { token: U.b.token, body: { roomId, targetRoomId: room2, durationSeconds: 300 } }), 403, 'sahip değil');
+  status(await api('POST', '/api/pk/challenge', { token: U.a.token, body: { roomId, targetRoomId: room2, durationSeconds: 60 } }), 400, 'geçersiz süre');
+  const ch = await api('POST', '/api/pk/challenge', { token: U.a.token, body: { roomId, targetRoomId: room2, durationSeconds: 300 } });
   status(ch, 201);
   const pkId = ch.body.pk.id;
-  status(await api('POST', '/api/pk/challenge', { token: U.a.token, body: { roomId, targetRoomId: room2, durationSeconds: 60 } }), 409, 'ikinci PK');
+  status(await api('POST', '/api/pk/challenge', { token: U.a.token, body: { roomId, targetRoomId: room2, durationSeconds: 300 } }), 409, 'ikinci PK');
   status(await api('POST', `/api/pk/${pkId}/respond`, { token: U.a.token, body: { accept: true } }), 403, 'davet eden kabul edemez');
   ok(await api('POST', `/api/pk/${pkId}/respond`, { token: U.h.token, body: { accept: true } }));
   // A'ya (oda sahibi) B hediye: 50 puan. A kendine: sayılmaz. C, H'ye 100.
@@ -608,6 +611,7 @@ test('PK: davet, kabul, skor (kendine hediye sayılmaz), bitiş', { skip, timeou
   const fin = await sql(`SELECT status, winner_room FROM pk_battles WHERE id = $1`, [pkId]);
   assert.equal(fin.rows[0].status, 'finished');
   assert.equal(fin.rows[0].winner_room, room2, 'yüksek skor kazanır');
+  await sql(`UPDATE rooms SET room_type = 'audio' WHERE id = $1`, [roomId]);
   ok(await api('POST', `/api/rooms/${room2}/close`, { token: U.h.token }));
 });
 
@@ -745,9 +749,13 @@ test('roller: yardımcı admin (dar yetki, süreli ban) ve oda moderatörü', { 
   await sql(`UPDATE users SET avatar_url = 'https://x.test/a.png' WHERE id = $1`, [v.id]);
   ok(await api('POST', `/api/admin/users/${v.id}/avatar`, { token: sup.token, body: { avatarUrl: null } }));
   assert.equal((await sql('SELECT avatar_url FROM users WHERE id=$1', [v.id])).rows[0].avatar_url, null);
+  // Coin: yalnızca yükleme, tek seferde en fazla 100.000 (v2.71); WIP verebilir.
+  ok(await api('POST', `/api/admin/users/${v.id}/coins`, { token: sup.token, body: { amount: 100 } }), 'coin yükleme');
+  status(await api('POST', `/api/admin/users/${v.id}/coins`, { token: sup.token, body: { amount: 100001 } }), 403, 'coin sınırı');
+  status(await api('POST', `/api/admin/users/${v.id}/coins`, { token: sup.token, body: { amount: -50 } }), 403, 'coin düşemez');
+  ok(await api('POST', `/api/admin/users/${v.id}/wip`, { token: sup.token, body: { level: 1, days: 1 } }), 'wip');
+  status(await api('POST', `/api/admin/users/${U.d.id}/wip`, { token: sup.token, body: { level: 1, days: 1 } }), 403, 'yöneticiye wip veremez');
   // yasak alanlar
-  status(await api('POST', `/api/admin/users/${v.id}/coins`, { token: sup.token, body: { amount: 100 } }), 403, 'coin');
-  status(await api('POST', `/api/admin/users/${v.id}/wip`, { token: sup.token, body: { level: 1, days: 1 } }), 403, 'wip');
   status(await api('POST', `/api/admin/users/${v.id}/staff-role`, { token: sup.token, body: { role: 'support' } }), 403, 'yetki dağıtamaz');
   status(await api('GET', '/api/admin/staff', { token: sup.token }), 403);
   status(await api('GET', '/api/admin/reports', { token: sup.token }), 403);

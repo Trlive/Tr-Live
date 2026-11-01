@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../widgets/anim_asset.dart';
+import '../widgets/beauty_sheet.dart';
 import 'family_screen.dart';
 import '../widgets/cosmetics.dart';
 import '../widgets/entrance_strip.dart';
@@ -14,6 +15,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api.dart';
 import '../widgets/music_bubble.dart';
 import '../services/background_service.dart';
+import '../services/beauty.dart';
 import '../services/call_guard.dart';
 import '../services/effect_prefs.dart';
 import '../services/inbox_service.dart';
@@ -241,6 +243,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _queueTick.dispose();
     _headsTimer?.cancel();
     CallGuard.instance.inCall.removeListener(_onPhoneCall);
     CallGuard.instance.stop();
@@ -373,6 +376,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         _queue = ((q['queue'] as List?) ?? const []).map((x) => x.toString()).toList();
         _fav = f?['favorite'] == true;
       });
+      _queueLoaded = true;
+      _queueTick.value++;
       // Yayıncıyı takip etmeyenlere bir dakika sonra sohbette "takip edin" kartı.
       if (ownerId != null && ownerId != Session.id && !_fav) {
         _followTimer?.cancel();
@@ -408,6 +413,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   // ---------- Sıra, favori, oda değiştirme ----------
   List<String> _queue = [];
+  bool _queueLoaded = false; // ilk sıra yüklendi (öncesinde gelen değişiklik için bildirim gösterilmez)
+  final ValueNotifier<int> _queueTick = ValueNotifier(0); // açık "Konuk istekleri" penceresi yenilensin
+  final Map<String, DateTime> _guestToastAt = {};
   bool _fav = false;
   bool _switching = false;
 
@@ -424,7 +432,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final r = await guard(context, () => _inQueue ? Api.delete('/api/rooms/${widget.roomId}/mic/queue') : Api.post('/api/rooms/${widget.roomId}/mic/queue'));
     if (r == null || !mounted) return;
     setState(() => _queue = ((r['queue'] as List?) ?? const []).map((x) => x.toString()).toList());
-    if (_inQueue) toast(context, _micRequest ? 'Mikrofon isteğin gönderildi. Yetkili onaylayınca mikrofona çıkabilirsin.' : 'Sıraya girdiniz. Sıra size gelince haber verilir.');
+    if (_inQueue) {
+      toast(
+        context,
+        _isLive
+            ? 'Konuk isteğin yayıncıya gönderildi. Kabul ederse kameran açılarak yayına bağlanacaksın.'
+            : (_micRequest ? 'Mikrofon isteğin gönderildi. Yetkili onaylayınca mikrofona çıkabilirsin.' : 'Sıraya girdiniz. Sıra size gelince haber verilir.'),
+      );
+    }
   }
 
   Future<void> _toggleFavorite() async {
@@ -617,6 +632,22 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       _rejoin();
       return;
     }
+    if (type == 'mic_request_declined' && e['roomId'] == widget.roomId) {
+      if (mounted) toast(context, _isLive ? 'Yayıncı konuk isteğini şimdilik kabul etmedi.' : 'Mikrofon isteğin kabul edilmedi.');
+      return;
+    }
+    // Konuk isteği kabul edildi: sormadan yayına bağlanır (kamera ve mikrofon açılır).
+    if (type == 'mic_invite' && e['roomId'] == widget.roomId && e['requested'] == true && _isLive && !_onSeat) {
+      if (mounted && !_takingMic) {
+        toast(context, 'Yayıncı konuk isteğini kabul etti, yayına bağlanıyorsun…');
+        setState(() {
+          _camOn = true;
+          _micOn = true;
+        });
+        _takeMic((e['seatIndex'] as num?)?.toInt(), true);
+      }
+      return;
+    }
     if (type == 'mic_invite' && e['roomId'] == widget.roomId) {
       if (mounted && !_micInviteOpen && _members.every((m) => m['userId'] != Session.id || m['seatIndex'] == null)) {
         _micInviteOpen = true;
@@ -795,7 +826,21 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         if (e['microphone'] == true && !_members.any((m) => m['userId'] == e['userId'])) _loadMembers().catchError((_) {});
         break;
       case 'room_mic_queue':
+        final before = _queue.toSet();
         setState(() => _queue = ((e['queue'] as List?) ?? const []).map((x) => x.toString()).toList());
+        _queueTick.value++;
+        // Yayıncı / yetkili: yeni konuk isteği geldiğinde kısa bildirim (ilk yüklemeden sonra; kişi başı 30 sn'de bir).
+        if (_isLive && _canSeatManage && _queueLoaded) {
+          final now = DateTime.now();
+          for (final id in _queue.where((x) => !before.contains(x))) {
+            final last = _guestToastAt[id];
+            if (last != null && now.difference(last).inSeconds < 30) continue;
+            _guestToastAt[id] = now;
+            final m = _members.where((x) => x['userId']?.toString() == id).firstOrNull;
+            final name = mapOf(m?['user'])?['displayName']?.toString();
+            toast(context, '${name ?? 'Bir izleyici'} konuk olmak istiyor. ∞ düğmesinden kabul edebilirsin.');
+          }
+        }
         break;
       case 'room_seats_locked':
         setState(() => _room = {...?_room, 'lockedSeats': e['lockedSeats']});
@@ -1028,7 +1073,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     for (var attempt = 0; attempt < 3; attempt++) {
       try {
         await room.localParticipant?.setMicrophoneEnabled(_onSeat && _micOn && !_seatMuted && !CallGuard.instance.inCall.value);
-        if (_isVideo) await room.localParticipant?.setCameraEnabled(_onSeat && _camOn && !_videoPaused);
+        if (_isVideo) {
+          await room.localParticipant?.setCameraEnabled(_onSeat && _camOn && !_videoPaused);
+          // Kayıtlı güzellik ayarları yayındaki kameraya uygulanır (kamera her açıldığında yeni takip gelir).
+          if (_onSeat && _camOn && !_videoPaused) unawaited(Beauty.attachParticipant(room.localParticipant));
+        }
         BackgroundService.instance.micChanged(_onSeat); // izin verildikten sonra servis "mikrofon" türüne geçer
         return;
       } catch (_) {
@@ -1067,6 +1116,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     return null;
   }
 
+  /// Güzellik / filtre penceresi (kendi kameramız açıkken).
+  Future<void> _openBeauty() async {
+    await Beauty.attachParticipant(_lk?.localParticipant);
+    if (mounted) await showBeautySheet(context);
+  }
+
   /// Görüntülü odada ön/arka kamera geçişi.
   Future<void> _flipCamera() async {
     final local = _lk?.localParticipant;
@@ -1078,6 +1133,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       try {
         await t.setCameraPosition(next);
         _camPos = next;
+        unawaited(Beauty.attach(t)); // kamera çevrilince takip yenilenir
       } catch (e) {
         if (mounted) toast(context, 'Kamera çevrilemedi: ${errorText(e)}', error: true);
       }
@@ -1090,6 +1146,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   Future<void> _takeMic([int? seat, bool invited = false]) async {
     // İstek modu: yetkili olmayan kullanıcı koltuğa dokununca istek gönderir (davetle gelirse doğrudan çıkar).
+    if (_isLive && !invited && !_onSeat && !_canSeatManage) {
+      _guestTap(); // canlı yayında konukluk yalnızca istekle
+      return;
+    }
     if (_micRequest && !invited && !_onSeat && !_canSeatManage) {
       if (_inQueue) {
         toast(context, 'İsteğin zaten gönderildi; yetkili onayını bekle.');
@@ -1098,11 +1158,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       }
       return;
     }
+    if (_takingMic) return; // aynı anda ikinci istek gitmesin (ör. iki kez gelen kabul)
     // Mikten mike geçiş: yeni koltuk hemen gösterilir (sunucu yanıtı beklenmez); olmazsa eski koltuğa döner.
     final prevSeat = _mySeatIndex;
     final switching = _onSeat && seat != null && prevSeat != null && seat != prevSeat;
     if (switching) setState(() => _applySeat(Session.id, seat, true));
-    final r = await guard(context, () => Api.post('/api/rooms/${widget.roomId}/mic/take', {if (seat != null) 'seatIndex': seat}));
+    _takingMic = true;
+    final Map<String, dynamic>? r;
+    try {
+      r = await guard(context, () => Api.post('/api/rooms/${widget.roomId}/mic/take', {if (seat != null) 'seatIndex': seat}));
+    } finally {
+      _takingMic = false;
+    }
     if (!mounted) return;
     if (r == null) {
       if (switching) setState(() => _applySeat(Session.id, prevSeat, true));
@@ -1110,6 +1177,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
     setState(() => _applySeat(Session.id, (r['seatIndex'] as num?)?.toInt(), true));
   }
+
+  bool _takingMic = false;
 
   int? get _mySeatIndex {
     for (final m in _members) {
@@ -1169,6 +1238,157 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         },
       ),
     );
+  }
+
+  // ---------- Canlı yayın: konuk (misafir) istekleri ----------
+  /// Alt bardaki ∞: izleyici istek gönderir / geri alır, konuk ayrılır, yayıncı istekleri yönetir.
+  void _guestTap() {
+    if (_canSeatManage) {
+      _guestRequestsSheet();
+      return;
+    }
+    if (_onSeat) {
+      confirm(context, 'Konukluktan ayrılıp izleyiciye dönülsün mü?', action: 'Ayrıl').then((ok) {
+        if (ok && mounted) _leaveMic();
+      });
+      return;
+    }
+    final host = mapOf(_bySeat[0]?['user']);
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: const Color(0xFF1C1C1F),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+      builder: (c) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              UserAvatar(user: mapOf(_members.where((m) => m['userId']?.toString() == Session.id).firstOrNull?['user']), radius: 28),
+              const Padding(padding: EdgeInsets.symmetric(horizontal: 10), child: Icon(Icons.all_inclusive, color: Color(0xFFFF4F9A), size: 30)),
+              UserAvatar(user: host, radius: 28),
+            ]),
+            const SizedBox(height: 12),
+            Text(_inQueue ? 'İsteğin yayıncıya iletildi' : 'Konuk olarak katıl',
+                style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: Colors.white)),
+            const SizedBox(height: 6),
+            Text(
+              _inQueue
+                  ? 'Yayıncı kabul edince kameran ve mikrofonun açılarak yayına bağlanacaksın.'
+                  : 'Yayıncıya konuk olma isteği gönder. Kabul ederse kameran ve mikrofonun açılarak yayında sağdaki pencerede görünürsün.'
+                      '${_noFreeSeat ? '\nŞu an konuk yerleri dolu; yer açılınca kabul edebilir.' : ''}',
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 13, color: Colors.white70),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              height: 46,
+              child: FilledButton(
+                style: FilledButton.styleFrom(backgroundColor: _inQueue ? Colors.white12 : const Color(0xFFFF4F9A), shape: const StadiumBorder()),
+                onPressed: () {
+                  Navigator.pop(c);
+                  _toggleQueue();
+                },
+                child: Text(_inQueue ? 'İsteği geri al' : 'İstek gönder', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+              ),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  /// Yayıncı / yetkili: konuk istekleri (kabul / reddet) ve yayındaki konuklar (çıkar).
+  void _guestRequestsSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: const Color(0xFF1C1C1F),
+      builder: (c) => ValueListenableBuilder<int>(
+        valueListenable: _queueTick,
+        builder: (c, _, __) => StatefulBuilder(
+        builder: (c, setS) {
+          final requests = [for (final id in _queue) _members.where((m) => m['userId'] == id).firstOrNull].whereType<Map<String, dynamic>>().toList();
+          final guests = [for (var i = 1; i < _seatCount; i++) if (_bySeat[i] != null) _bySeat[i]!];
+          final free = _freeGuestSeats;
+          return SafeArea(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Text('Konuk istekleri (${requests.length})', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 2),
+              Text(free > 0 ? '$free konuk yeri boş' : 'Konuk yerleri dolu', style: TextStyle(fontSize: 12, color: free > 0 ? Colors.white54 : Colors.orangeAccent)),
+              if (requests.isEmpty) const Padding(padding: EdgeInsets.all(20), child: Text('Bekleyen istek yok. İzleyiciler alttaki ∞ düğmesinden istek gönderir.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white54))),
+              Flexible(
+                child: ListView(shrinkWrap: true, children: [
+                  for (final m in requests)
+                    ListTile(
+                      leading: UserAvatar(user: mapOf(m['user']), radius: 20),
+                      title: UserName(user: mapOf(m['user'])),
+                      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                        IconButton(
+                          tooltip: 'Reddet',
+                          icon: const Icon(Icons.close, color: Colors.redAccent),
+                          onPressed: () async {
+                            final r = await guard(context, () => Api.delete('/api/rooms/${widget.roomId}/mic/queue/${m['userId']}'));
+                            if (r != null && mounted) setState(() => _queue = ((r['queue'] as List?) ?? const []).map((x) => x.toString()).toList());
+                            if (c.mounted) setS(() {});
+                          },
+                        ),
+                        FilledButton(
+                          style: FilledButton.styleFrom(backgroundColor: const Color(0xFFFF4F9A)),
+                          onPressed: _accepting.contains(m['userId'])
+                              ? null
+                              : () async {
+                                  if (_noFreeSeat) {
+                                    toast(context, 'Konuk yerleri dolu. Önce bir konuğu çıkarın.', error: true);
+                                    return;
+                                  }
+                                  final id = m['userId'].toString();
+                                  setS(() => _accepting.add(id));
+                                  final r = await guard(context, () => Api.post('/api/rooms/${widget.roomId}/members/$id/mic-invite', {}));
+                                  // Konuk oturana (ya da 20 sn) kadar ikinci kez kabul gönderilmez.
+                                  Future.delayed(const Duration(seconds: 20), () => _accepting.remove(id));
+                                  if (r == null) _accepting.remove(id);
+                                  if (r != null && mounted) toast(context, 'Kabul edildi; konuk yayına bağlanıyor.');
+                                  if (c.mounted) setS(() {});
+                                },
+                          child: Text(_accepting.contains(m['userId']) ? 'Bağlanıyor' : 'Kabul et'),
+                        ),
+                      ]),
+                    ),
+                  if (guests.isNotEmpty) const Padding(padding: EdgeInsets.fromLTRB(16, 10, 16, 2), child: Text('Yayındaki konuklar', style: TextStyle(fontWeight: FontWeight.w800, color: Colors.white70))),
+                  for (final g in guests)
+                    ListTile(
+                      leading: UserAvatar(user: mapOf(g['user']), radius: 20),
+                      title: UserName(user: mapOf(g['user'])),
+                      trailing: TextButton(
+                        onPressed: () async {
+                          Navigator.pop(c);
+                          await _moderate(g['userId'].toString(), 'mic-off');
+                        },
+                        child: const Text('Konukluktan çıkar', style: TextStyle(color: Colors.redAccent)),
+                      ),
+                    ),
+                ]),
+              ),
+              const SizedBox(height: 8),
+            ]),
+          );
+        },
+        ),
+      ),
+    );
+  }
+
+  final Set<String> _accepting = {};
+
+  /// Boş (kilitli olmayan) konuk yeri sayısı.
+  int get _freeGuestSeats {
+    final taken = <int>{for (final m in _members) if (m['seatIndex'] != null) (m['seatIndex'] as num).toInt()};
+    var n = 0;
+    for (var i = 1; i < _seatCount; i++) {
+      if (!taken.contains(i) && !_lockedSeats.contains(i)) n++;
+    }
+    return n;
   }
 
   bool _canModerate(String targetRole) =>
@@ -1561,7 +1781,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         final hidden = _room?['hidden'] == true;
         final locked = _room?['locked'] == true;
         final pkFree = (_pk == null || !['pending', 'active'].contains(_pk!['status'])) && (_roomPk == null || _roomPk!['status'] == 'finished');
-        final queueMode = !_onSeat && !_canSeatManage && (_micRequest || _noFreeSeat);
+        final queueMode = !_isLive && !_onSeat && !_canSeatManage && (_micRequest || _noFreeSeat);
         final tools = <Widget>[
           // Sıra: Odayı temizle, Sohbet yasağı, Oda kilitleme, Oda gizleme, Ses ve efektler, Müzik, Mikrofon Modu, Tema,
           // Odayı paylaş, Odayı kapat. (Oda sesini kapatma alt çubukta.)
@@ -1588,10 +1808,13 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                   _syncPublish();
                 }), tint: cOrange, active: _camOn),
           if (_onSeat && _isVideo && _camOn) feature(Icons.cameraswitch, 'Kamerayı\nÇevir', () => run(_flipCamera), tint: cTeal),
+          if (_onSeat && _isVideo && _camOn) feature(Icons.face_retouching_natural, 'Güzellik', () => run(_openBeauty), tint: cPink),
           if (queueMode)
             feature(_inQueue ? Icons.hourglass_bottom : Icons.front_hand, _inQueue ? (_micRequest ? 'İsteği\nGeri Al' : 'Sıradan\nÇık') : (_micRequest ? 'Mikrofon\nİste' : 'Sıraya\nGir'), () => run(_toggleQueue), tint: _inQueue ? cOrange : cGreen, active: _inQueue),
           if (_onSeat) feature(Icons.mic_off, 'Mikrofondan\nİn', () => run(_leaveMic), tint: cRed),
-          if (_canSeatManage && _micRequest) feature(Icons.how_to_reg, 'Mikrofon\nİstekleri', () => run(_micRequestsSheet), tint: cGreen),
+          if (_canSeatManage && _micRequest && !_isLive) feature(Icons.how_to_reg, 'Mikrofon\nİstekleri', () => run(_micRequestsSheet), tint: cGreen),
+          if (_canSeatManage && _isLive) feature(Icons.all_inclusive, 'Konuk\nİstekleri', () => run(_guestRequestsSheet), tint: cGreen),
+          if (_isLive && !_canSeatManage && !_onSeat) feature(Icons.all_inclusive, _inQueue ? 'İsteği\nGeri Al' : 'Konuk\nOl', () => run(_guestTap), tint: cPink, active: _inQueue),
         ];
         return ConstrainedBox(
           constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(sheet).height * 0.82),
@@ -1611,7 +1834,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                     // Sesli oda: oda içi PK (sahip / yardımcı sahip). Görüntülü: rakip yayına PK daveti (sahip).
                     if (_isVideo ? _myRole == 'owner' : _isOwnerOrCohost)
                       tile(
-                        const Text('VS', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic, color: Colors.white, shadows: [Shadow(color: Color(0xFFFF1744), blurRadius: 10), Shadow(color: Color(0xFF2979FF), blurRadius: 14, offset: Offset(-2, 0))])),
+                        const PkLogo(size: 46, animated: true),
                         'PK',
                         () => !pkFree
                             ? toast(context, _roomPk != null ? 'PK modu zaten açık. Kapatmak için PK çubuğundaki X\'e dokunun.' : 'Zaten bir PK sürüyor.', error: true)
@@ -2224,6 +2447,15 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               onTap: () {
                 Navigator.pop(c);
                 _flipCamera();
+              },
+            ),
+          if (_isVideo && _camOn)
+            ListTile(
+              leading: const Icon(Icons.face_retouching_natural, color: Color(0xFFFF4F9A)),
+              title: const Text('Güzellik ve filtre'),
+              onTap: () {
+                Navigator.pop(c);
+                _openBeauty();
               },
             ),
           ListTile(
@@ -3131,16 +3363,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   Widget _liveStage(double w, double h) {
     final by = _bySeat;
     final guests = [for (var i = 1; i < _seatCount; i++) if (by[i] != null) i];
-    int? free;
-    for (var i = 1; i < _seatCount; i++) {
-      if (by[i] == null && !_lockedSeats.contains(i)) {
-        free = i;
-        break;
-      }
-    }
     final pw = (w * 0.27).clamp(88.0, 132.0).toDouble();
     final ph = pw * 4 / 3;
-    final joinSeat = free;
     return Stack(clipBehavior: Clip.hardEdge, children: [
       // Yayıncıya dokununca kartı açılır; hızlı dikey kaydırma odayı değiştirir.
       Positioned.fill(
@@ -3154,33 +3378,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           },
         ),
       ),
+      // Konuk pencereleri (Figma): sağda, sohbetin hizasında alttan yukarı dizilir.
       Positioned(
         right: 8,
-        top: w * 0.06,
+        bottom: h * 0.12,
         width: pw,
         child: _fixedText(Column(mainAxisSize: MainAxisSize.min, children: [
           for (final i in guests)
             Padding(padding: const EdgeInsets.only(bottom: 6), child: SizedBox(width: pw, height: ph, child: _videoCell(i, by[i], Size(pw, ph), pip: true))),
-          if (!_onSeat && joinSeat != null && !_inputOpen)
-            Material(
-              color: Colors.black45,
-              shape: const StadiumBorder(),
-              child: InkWell(
-                customBorder: const StadiumBorder(),
-                onTap: () => _emptySeatTap(joinSeat, false, false),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      const Icon(Icons.add_circle_outline, size: 16, color: Colors.white),
-                      const SizedBox(width: 4),
-                      Text(_micRequest ? 'Konuk olmak iste' : 'Konuk ol', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
-                    ]),
-                  ),
-                ),
-              ),
-            ),
         ])),
       ),
       if (!_inputOpen) Positioned(left: 0, right: pw + 12, bottom: 0, height: h * 0.46, child: _chatPanel(w, rightPad: 8)),
@@ -3188,13 +3393,13 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         Positioned.fill(child: GestureDetector(onTap: _closeInput, child: const ColoredBox(color: Color(0xB8000000)))),
         Positioned.fill(child: _chatPanel(w, overlay: true)),
       ],
-      if (_canSeatManage && _micRequest && _queue.isNotEmpty && !_inputOpen)
+      if (_canSeatManage && _queue.isNotEmpty && !_inputOpen)
         Positioned(
           left: 8,
           top: 4,
           child: InkWell(
             borderRadius: BorderRadius.circular(16),
-            onTap: _micRequestsSheet,
+            onTap: _guestRequestsSheet,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(color: const Color(0xFF22C55E), borderRadius: BorderRadius.circular(16), boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 6)]),
@@ -3818,6 +4023,58 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       final sound = circle(_roomMuted ? Icons.volume_off : Icons.volume_up, _roomMuted ? 'Oda sesini aç' : 'Oda sesini kapat', _toggleRoomSound,
           color: _roomMuted ? Colors.redAccent : null);
       final menu = circle(Icons.grid_view_rounded, 'Oda araçları', _openTools);
+      final micBtn = GestureDetector(
+        // Canlı yayında yayıncı uzun basarak yanlışlıkla yayın koltuğundan inmesin.
+        onLongPress: _isLive && _myRole == 'owner' ? null : _leaveMic,
+        child: circle(_micOn && !_seatMuted ? Icons.mic : Icons.mic_off, 'Mikrofon (uzun bas: mikrofondan in)', () {
+          if (_seatMuted) {
+            toast(context, 'Koltuğun yetkili tarafından susturuldu; mikrofonu açamazsın.', error: true);
+            return;
+          }
+          setState(() => _micOn = !_micOn);
+          _syncPublish();
+        }, color: _micOn && !_seatMuted ? Colors.white : Colors.redAccent),
+      );
+
+      // Canlı (tekli) görüntülü yayın alt barı (Figma): sohbet · PK · mikrofon · ∞ konuk · hediye · menü.
+      if (_isLive) {
+        final pkFree = _pk == null || !['pending', 'active'].contains(_pk!['status']);
+        final guestBtn = Badge(
+          isLabelVisible: _canSeatManage && _queue.isNotEmpty,
+          label: Text('${_queue.length}'),
+          offset: const Offset(-2, 2),
+          child: circle(
+            Icons.all_inclusive,
+            _canSeatManage ? 'Konuk istekleri' : (_onSeat ? 'Konukluktan ayrıl' : (_inQueue ? 'Konuk isteğin gönderildi' : 'Konuk ol')),
+            _guestTap,
+            color: _inQueue || (_onSeat && !_canSeatManage) ? const Color(0xFFFF4F9A) : null,
+          ),
+        );
+        final pkBtn = Tooltip(
+          message: 'PK',
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: () => pkFree ? showPkChallengeSheet(context, roomId: widget.roomId) : toast(context, 'Zaten bir PK sürüyor.', error: true),
+            child: PkLogo(size: d * 1.3, animated: true),
+          ),
+        );
+        final chat = circle(Icons.chat_bubble_outline, 'Sohbet', _openInput);
+        final List<Widget> items;
+        if (_myRole == 'owner') {
+          items = [chat, pkBtn, micBtn, guestBtn, gift, menu];
+        } else if (_onSeat) {
+          items = [chat, micBtn, circle(Icons.sentiment_satisfied_alt, 'Emoji', _micEmojiSheet), guestBtn, gift, menu];
+        } else {
+          items = [chat, guestBtn, gift, mail, sound, menu];
+        }
+        return SizedBox(
+          height: barH,
+          child: Stack(clipBehavior: Clip.none, children: [
+            for (var i = 0; i < items.length; i++)
+              at((i + 0.5) / items.length, items[i], size: identical(items[i], gift) ? g.giftBtn : (identical(items[i], pkBtn) ? d * 1.3 : null)),
+          ]),
+        );
+      }
 
       const step = 0.1435;
       final right = <Widget>[
@@ -3830,17 +4087,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       if (_onSeat) {
         left = [
           at(0.5 - step * 3, circle(Icons.chat_bubble_outline, 'Sohbet', _openInput)),
-          at(0.5 - step * 2, GestureDetector(
-            onLongPress: _leaveMic,
-            child: circle(_micOn && !_seatMuted ? Icons.mic : Icons.mic_off, 'Mikrofon (uzun bas: mikrofondan in)', () {
-              if (_seatMuted) {
-                toast(context, 'Koltuğun yetkili tarafından susturuldu; mikrofonu açamazsın.', error: true);
-                return;
-              }
-              setState(() => _micOn = !_micOn);
-              _syncPublish();
-            }, color: _micOn && !_seatMuted ? Colors.white : Colors.redAccent),
-          )),
+          at(0.5 - step * 2, micBtn),
           at(0.5 - step, circle(Icons.sentiment_satisfied_alt, 'Emoji', _micEmojiSheet)),
         ];
       } else {

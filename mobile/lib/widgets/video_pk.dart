@@ -182,11 +182,7 @@ class _VideoPkStageState extends State<VideoPkStage> with SingleTickerProviderSt
                   return Column(mainAxisSize: MainAxisSize.min, children: [
                     Transform.scale(
                       scale: 1 + 0.06 * math.sin(_fx.value * 2 * math.pi),
-                      child: const Text('VS',
-                          style: TextStyle(fontSize: 30, height: 1, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic, color: Colors.white, shadows: [
-                            Shadow(color: kPkRed, blurRadius: 10, offset: Offset(-3, 0)),
-                            Shadow(color: kPkBlue, blurRadius: 10, offset: Offset(3, 0)),
-                          ])),
+                      child: const PkLogo(size: 44),
                     ),
                     const SizedBox(height: 3),
                     Transform.scale(

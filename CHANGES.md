@@ -1,3 +1,26 @@
+## v2.76.1 — Uçtan uca (e2e) testler güncellendi
+- GitHub "e2e" testlerindeki 2 hata giderildi: testler eski kurallara göre yazılmıştı.
+  - PK testi: odalar arası PK artık yalnızca görüntülü yayınlar arasında ve süreler 5/10/15/30 dk (v2.74).
+  - Yardımcı admin testi: yardımcı admin artık 100.000'e kadar Coin yükleyebilir ve WIP verebilir (v2.71);
+    sınır aşımı, Coin düşme ve yöneticiye işlem hâlâ reddedilir.
+- Uygulamada değişiklik yok (v2.76.0 ile aynı).
+
+## v2.76.0 — Canlı yayına konuk (misafir), Figma alt bar, PK logosu, güzellik filtresi
+- Tekli (canlı) görüntülü yayında konuk sistemi (Bigo tarzı): izleyici alt bardaki ∞ düğmesinden yayıncıya konuk olma
+  isteği gönderir (geri alabilir). İstek yayıncıya düşer: ∞ üzerinde sayı rozeti, kısa bildirim ve "Konuk istekleri"
+  penceresi (Kabul et / Reddet; yayındaki konukları "Konukluktan çıkar"). Kabul edilince konuk sormadan bağlanır,
+  kamerası ve mikrofonu açılır, sağdaki küçük pencerede görünür (en fazla 3 konuk). Reddedilene bildirim gider.
+  Canlı yayında koltuğa doğrudan çıkılamaz; yalnızca yayıncı onayıyla (sunucu da denetler).
+- Canlı yayın alt barı (Figma): yayıncı için sohbet · PK · mikrofon · ∞ · hediye · menü; konuk için sohbet · mikrofon ·
+  emoji · ∞ (konukluktan ayrıl) · hediye · menü; izleyici için sohbet · ∞ · hediye · mesajlar · ses · menü.
+- Hareketli PK logosu: sesli oda PK düğmesi ve kurulum penceresi, PK başlangıç animasyonu (sesli ve görüntülü), PK
+  çubukları ve görüntülü PK ekranı.
+- Güzellik filtresi (kendi filtremiz, ücretli SDK yok): pürüzsüzleştirme (kenarları koruyan cilt yumuşatma), aydınlatma,
+  beyazlatma, pembelik ve 7 renk filtresi (Doğal, Sıcak, Soğuk, Canlı, Pembe, S/B, Nostalji); "Doğal güzellik" tek
+  dokunuş ve "Sıfırla". Yayın açma ekranındaki "Güzellik" düğmesinden, odada kendi koltuk menünden ve araçlar
+  menüsünden açılır; önizlemede ve yayında aynı anda uygulanır, ayarlar telefonda saklanır, kamera çevrilince sürer.
+  Kamera kareleri telefonda işlenir (mobile/native/BeautyFilter.java); bağlanamazsa görüntü olduğu gibi yayınlanır.
+
 ## v2.75.0 — Sesli oda PK: Figma tasarımı (9'lu koltuk, MVP tahtları, 3-2-1, emojiler)
 - PK modu yalnızca 9'lu koltukta açılır. Açılınca koltuklar PK sahnesine dizilir: üstte ortada oda sahibi, iki yanında
   Kırmızı ve Mavi MVP tahtı (takımın o an en çok destekleyeni altın tahtta oturur, üstünde taç), altta solda Kırmızı 2×2,
