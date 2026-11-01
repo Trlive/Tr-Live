@@ -1831,7 +1831,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                     // Sesli oda: oda içi PK (sahip / yardımcı sahip). Görüntülü: rakip yayına PK daveti (sahip).
                     if (_isVideo ? _myRole == 'owner' : _isOwnerOrCohost)
                       tile(
-                        const PkLogo(size: 46, animated: true),
+                        const PkLogo(size: 46),
                         'PK',
                         () => !pkFree
                             ? toast(context, _roomPk != null ? 'PK modu zaten açık. Kapatmak için PK çubuğundaki X\'e dokunun.' : 'Zaten bir PK sürüyor.', error: true)
@@ -4052,7 +4052,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           child: InkWell(
             customBorder: const CircleBorder(),
             onTap: () => pkFree ? showPkChallengeSheet(context, roomId: widget.roomId) : toast(context, 'Zaten bir PK sürüyor.', error: true),
-            child: PkLogo(size: d * 1.3, animated: true),
+            child: PkLogo(size: d * 1.3),
           ),
         );
         final chat = circle(Icons.chat_bubble_outline, 'Sohbet', _openInput);

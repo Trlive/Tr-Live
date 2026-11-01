@@ -2,9 +2,9 @@
 
 > Otomatik üretildi: `node backend/scripts/gen_docs.mjs`. Elle düzenlemeyin.
 
-**75 tablo**, 29 migration dosyası (PostgreSQL 16).
+**103 tablo**, 54 migration dosyası (PostgreSQL 16).
 
-[agencies](#agencies) · [agency_commission_tiers](#agency_commission_tiers) · [agency_commissions](#agency_commissions) · [agency_requests](#agency_requests) · [agency_settings](#agency_settings) · [agency_statements](#agency_statements) · [announcements](#announcements) · [app_config](#app_config) · [banners](#banners) · [broadcast_sessions](#broadcast_sessions) · [broadcasters](#broadcasters) · [client_errors](#client_errors) · [coin_packages](#coin_packages) · [daily_progress](#daily_progress) · [daily_streak](#daily_streak) · [dealer_accounts](#dealer_accounts) · [dealer_transactions](#dealer_transactions) · [direct_messages](#direct_messages) · [entrance_effects](#entrance_effects) · [families](#families) · [family_members](#family_members) · [favorite_hosts](#favorite_hosts) · [financial_audit_logs](#financial_audit_logs) · [firewall_blocks](#firewall_blocks) · [follows](#follows) · [frames](#frames) · [friend_requests](#friend_requests) · [gift_transactions](#gift_transactions) · [gifts](#gifts) · [global_gift_events](#global_gift_events) · [host_salary_tiers](#host_salary_tiers) · [host_statements](#host_statements) · [idempotency_keys](#idempotency_keys) · [inventory_items](#inventory_items) · [lucky_bag_claims](#lucky_bag_claims) · [lucky_bags](#lucky_bags) · [media_files](#media_files) · [mic_sessions](#mic_sessions) · [moderation_strikes](#moderation_strikes) · [music_tracks](#music_tracks) · [official_event_attendance](#official_event_attendance) · [official_events](#official_events) · [payout_periods](#payout_periods) · [pk_battles](#pk_battles) · [pk_supporters](#pk_supporters) · [post_comments](#post_comments) · [post_likes](#post_likes) · [posts](#posts) · [profile_visitors](#profile_visitors) · [recent_rooms](#recent_rooms) · [reports](#reports) · [room_blocks](#room_blocks) · [room_game_players](#room_game_players) · [room_games](#room_games) · [room_gift_totals](#room_gift_totals) · [room_members](#room_members) · [room_messages](#room_messages) · [room_mic_queue](#room_mic_queue) · [room_music](#room_music) · [room_music_queue](#room_music_queue) · [room_mutes](#room_mutes) · [room_profiles](#room_profiles) · [room_staff](#room_staff) · [rooms](#rooms) · [security_events](#security_events) · [store_items](#store_items) · [support_messages](#support_messages) · [upload_owners](#upload_owners) · [user_blocks](#user_blocks) · [user_sessions](#user_sessions) · [user_wip](#user_wip) · [users](#users) · [wallet_transactions](#wallet_transactions) · [wip_plans](#wip_plans) · [wip_tiers](#wip_tiers)
+[agencies](#agencies) · [agency_applications](#agency_applications) · [agency_assistants](#agency_assistants) · [agency_commission_tiers](#agency_commission_tiers) · [agency_commissions](#agency_commissions) · [agency_requests](#agency_requests) · [agency_settings](#agency_settings) · [agency_statements](#agency_statements) · [agency_transfers](#agency_transfers) · [announcements](#announcements) · [app_config](#app_config) · [asset_items](#asset_items) · [asset_seeds](#asset_seeds) · [assistant_statements](#assistant_statements) · [banners](#banners) · [broadcast_sessions](#broadcast_sessions) · [broadcasters](#broadcasters) · [client_errors](#client_errors) · [coin_packages](#coin_packages) · [cp_pairs](#cp_pairs) · [daily_progress](#daily_progress) · [daily_streak](#daily_streak) · [dealer_accounts](#dealer_accounts) · [dealer_transactions](#dealer_transactions) · [direct_messages](#direct_messages) · [dm_cleared](#dm_cleared) · [entrance_effects](#entrance_effects) · [families](#families) · [family_contrib_weekly](#family_contrib_weekly) · [family_daily_login](#family_daily_login) · [family_join_requests](#family_join_requests) · [family_members](#family_members) · [family_messages](#family_messages) · [family_week_rewards](#family_week_rewards) · [favorite_hosts](#favorite_hosts) · [financial_audit_logs](#financial_audit_logs) · [firewall_blocks](#firewall_blocks) · [follows](#follows) · [frames](#frames) · [friend_requests](#friend_requests) · [gift_transactions](#gift_transactions) · [gifts](#gifts) · [global_gift_events](#global_gift_events) · [guardian_decay_runs](#guardian_decay_runs) · [guardians](#guardians) · [host_badges](#host_badges) · [host_pay_levels](#host_pay_levels) · [host_salary_tiers](#host_salary_tiers) · [host_statements](#host_statements) · [idempotency_keys](#idempotency_keys) · [inventory_items](#inventory_items) · [lucky_bag_claims](#lucky_bag_claims) · [lucky_bags](#lucky_bags) · [media_files](#media_files) · [mic_sessions](#mic_sessions) · [moderation_strikes](#moderation_strikes) · [music_tracks](#music_tracks) · [oauth_states](#oauth_states) · [official_event_attendance](#official_event_attendance) · [official_events](#official_events) · [payout_periods](#payout_periods) · [pk_battles](#pk_battles) · [pk_supporters](#pk_supporters) · [post_comments](#post_comments) · [post_likes](#post_likes) · [posts](#posts) · [profile_visitors](#profile_visitors) · [push_messages](#push_messages) · [recent_rooms](#recent_rooms) · [referral_statements](#referral_statements) · [reports](#reports) · [room_blocks](#room_blocks) · [room_game_players](#room_game_players) · [room_games](#room_games) · [room_gift_totals](#room_gift_totals) · [room_members](#room_members) · [room_messages](#room_messages) · [room_mic_queue](#room_mic_queue) · [room_music](#room_music) · [room_music_queue](#room_music_queue) · [room_mutes](#room_mutes) · [room_pk](#room_pk) · [room_pk_points](#room_pk_points) · [room_profiles](#room_profiles) · [room_staff](#room_staff) · [rooms](#rooms) · [security_events](#security_events) · [special_ids](#special_ids) · [store_items](#store_items) · [support_messages](#support_messages) · [upload_owners](#upload_owners) · [user_blocks](#user_blocks) · [user_identities](#user_identities) · [user_notifications](#user_notifications) · [user_sessions](#user_sessions) · [user_wip](#user_wip) · [users](#users) · [wallet_transactions](#wallet_transactions) · [weekly_event_config](#weekly_event_config) · [weekly_event_results](#weekly_event_results) · [weekly_event_settlements](#weekly_event_settlements) · [wip_plans](#wip_plans) · [wip_tiers](#wip_tiers)
 
 ## agencies
 
@@ -24,11 +24,59 @@ Oluşturan: `004_profile_wip_agency.sql`
 | created_at | `TIMESTAMPTZ NOT NULL DEFAULT NOW()` | 004 |
 | agency_code | `VARCHAR(8)` | 006 |
 | commission_override_bps | `INT CHECK (commission_override_bps IS NULL OR commission_override_bps BETWEEN 0 AND 10000)` | 006 |
+| announcement | `TEXT` | 047 |
+| announcement_at | `TIMESTAMPTZ` | 047 |
+| assistants_can_announce | `BOOLEAN NOT NULL DEFAULT FALSE` | 047 |
+| referrer_agency_id | `UUID REFERENCES agencies(id) ON DELETE SET NULL` | 047 |
 
 İndeksler:
 - `UNIQUE idx_agencies_name_lower (lower(name)) WHERE status <> 'rejected'`
 - `UNIQUE idx_agencies_owner (owner_id) WHERE status <> 'rejected'`
 - `UNIQUE idx_agencies_code (agency_code) WHERE agency_code IS NOT NULL`
+- `idx_agencies_referrer (referrer_agency_id) WHERE referrer_agency_id IS NOT NULL`
+
+## agency_applications
+
+Oluşturan: `047_agency_v2.sql`
+
+| Sütun | Tür / kural | Ekleyen |
+|---|---|---|
+| id | `UUID PRIMARY KEY DEFAULT gen_random_uuid()` | 047 |
+| user_id | `UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE` | 047 |
+| referrer_agency_id | `UUID REFERENCES agencies(id) ON DELETE SET NULL` | 047 |
+| name | `VARCHAR(60) NOT NULL` | 047 |
+| note | `TEXT` | 047 |
+| status | `VARCHAR(10) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected','cancelled'))` | 047 |
+| created_by | `UUID REFERENCES users(id) ON DELETE SET NULL` | 047 |
+| created_at | `TIMESTAMPTZ NOT NULL DEFAULT NOW()` | 047 |
+| decided_at | `TIMESTAMPTZ` | 047 |
+| decided_by | `UUID REFERENCES users(id) ON DELETE SET NULL` | 047 |
+| agency_id | `UUID REFERENCES agencies(id) ON DELETE SET NULL` | 047 |
+
+İndeksler:
+- `UNIQUE idx_agency_app_open (user_id) WHERE status = 'pending'`
+
+## agency_assistants
+
+Oluşturan: `047_agency_v2.sql`
+
+| Sütun | Tür / kural | Ekleyen |
+|---|---|---|
+| id | `UUID PRIMARY KEY DEFAULT gen_random_uuid()` | 047 |
+| agency_id | `UUID NOT NULL REFERENCES agencies(id) ON DELETE CASCADE` | 047 |
+| user_id | `UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE` | 047 |
+| share_bps | `INT NOT NULL DEFAULT 0 CHECK (share_bps BETWEEN 0 AND 10000)` | 047 |
+| status | `VARCHAR(10) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','active','rejected','removed','cancelled','resigned'))` | 047 |
+| invited_by | `UUID REFERENCES users(id) ON DELETE SET NULL` | 047 |
+| created_at | `TIMESTAMPTZ NOT NULL DEFAULT NOW()` | 047 |
+| responded_at | `TIMESTAMPTZ` | 047 |
+| ended_at | `TIMESTAMPTZ` | 047 |
+| ended_by | `UUID REFERENCES users(id) ON DELETE SET NULL` | 047 |
+
+İndeksler:
+- `UNIQUE idx_agency_assistant_open (agency_id, user_id) WHERE status IN ('pending','active')`
+- `UNIQUE idx_agency_assistant_one (user_id) WHERE status = 'active'`
+- `idx_agency_assistant_agency (agency_id, status)`
 
 ## agency_commission_tiers
 
@@ -74,6 +122,7 @@ Oluşturan: `004_profile_wip_agency.sql`
 | status | `VARCHAR(12) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','accepted','rejected','cancelled'))` | 004 |
 | created_at | `TIMESTAMPTZ NOT NULL DEFAULT NOW()` | 004 |
 | responded_at | `TIMESTAMPTZ` | 004 |
+| invited_by | `UUID REFERENCES users(id) ON DELETE SET NULL` | 047 |
 
 İndeksler:
 - `UNIQUE idx_agency_requests_one_pending (agency_id, user_id) WHERE status = 'pending'`
@@ -92,6 +141,14 @@ Oluşturan: `006_room_features_pk_games_agency.sql`
 | min_event_count | `INT NOT NULL DEFAULT 0 CHECK (min_event_count BETWEEN 0 AND 50)` | 006 |
 | currency | `VARCHAR(3) NOT NULL DEFAULT 'USD'` | 006 |
 | updated_at | `TIMESTAMPTZ NOT NULL DEFAULT NOW()` | 006 |
+| valid_day_minutes | `INT NOT NULL DEFAULT 60 CHECK (valid_day_minutes BETWEEN 1 AND 1440)` | 047 |
+| require_game_hours | `BOOLEAN NOT NULL DEFAULT FALSE` | 047 |
+| allow_balance_method | `BOOLEAN NOT NULL DEFAULT TRUE` | 047 |
+| max_assistants | `INT NOT NULL DEFAULT 7 CHECK (max_assistants BETWEEN 0 AND 50)` | 047 |
+| max_assistant_bps | `INT NOT NULL DEFAULT 5000 CHECK (max_assistant_bps BETWEEN 0 AND 10000)` | 047 |
+| referral_bps | `INT NOT NULL DEFAULT 500 CHECK (referral_bps BETWEEN 0 AND 10000)` | 047 |
+| transfer_wait_hours | `INT NOT NULL DEFAULT 72 CHECK (transfer_wait_hours BETWEEN 0 AND 720)` | 047 |
+| agency_grades | `JSONB NOT NULL DEFAULT '[{"name":"D","min":"0"},{"name":"C","min":"50000000"},{"name":"B","min":"200000000"},{"name":"A","min":"1000000000"},{"name":"S","min":"3000000000"}]'::jsonb` | 047 |
 
 ## agency_statements
 
@@ -109,11 +166,41 @@ Oluşturan: `006_room_features_pk_games_agency.sql`
 | status | `VARCHAR(10) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','paid','void'))` | 006 |
 | paid_at | `TIMESTAMPTZ` | 006 |
 | paid_by | `UUID REFERENCES users(id)` | 006 |
+| commission_cents | `BIGINT NOT NULL DEFAULT 0` | 047 |
+| assistant_cents | `BIGINT NOT NULL DEFAULT 0` | 047 |
+| owner_cents | `BIGINT NOT NULL DEFAULT 0` | 047 |
+| details | `JSONB NOT NULL DEFAULT '[]'::jsonb` | 047 |
+| pay_note | `TEXT` | 047 |
 
 Kısıtlar: `UNIQUE (period_id, agency_id)`
 
 İndeksler:
 - `idx_agency_statements_agency (agency_id)`
+
+## agency_transfers
+
+Oluşturan: `047_agency_v2.sql`
+
+| Sütun | Tür / kural | Ekleyen |
+|---|---|---|
+| id | `UUID PRIMARY KEY DEFAULT gen_random_uuid()` | 047 |
+| user_id | `UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE` | 047 |
+| from_agency_id | `UUID REFERENCES agencies(id) ON DELETE SET NULL` | 047 |
+| to_agency_id | `UUID REFERENCES agencies(id) ON DELETE SET NULL` | 047 |
+| kind | `VARCHAR(10) NOT NULL CHECK (kind IN ('join','transfer','leave','removed','admin'))` | 047 |
+| status | `VARCHAR(16) NOT NULL DEFAULT 'approved' CHECK (status IN ('pending_source','pending_platform','approved','rejected','cancelled'))` | 047 |
+| invited_by | `UUID REFERENCES users(id) ON DELETE SET NULL` | 047 |
+| note | `TEXT` | 047 |
+| created_at | `TIMESTAMPTZ NOT NULL DEFAULT NOW()` | 047 |
+| auto_at | `TIMESTAMPTZ` | 047 |
+| decided_at | `TIMESTAMPTZ` | 047 |
+| decided_by | `UUID REFERENCES users(id) ON DELETE SET NULL` | 047 |
+
+İndeksler:
+- `UNIQUE idx_agency_transfer_open (user_id) WHERE status IN ('pending_source','pending_platform')`
+- `idx_agency_transfer_from (from_agency_id, created_at DESC)`
+- `idx_agency_transfer_to (to_agency_id, created_at DESC)`
+- `idx_agency_transfer_auto (auto_at) WHERE status = 'pending_source'`
 
 ## announcements
 
@@ -127,6 +214,8 @@ Oluşturan: `009_feed_banners_announcements.sql`
 | body | `TEXT NOT NULL CHECK (char_length(body) BETWEEN 1 AND 2000)` | 009 |
 | created_by | `UUID REFERENCES users(id) ON DELETE SET NULL` | 009 |
 | created_at | `TIMESTAMPTZ NOT NULL DEFAULT NOW()` | 009 |
+| image_url | `TEXT` | 031 |
+| link_url | `TEXT` | 031 |
 
 İndeksler:
 - `announcements_idx (kind, created_at DESC)`
@@ -141,6 +230,51 @@ Oluşturan: `027_sessions_presence_moderation.sql`
 | value | `JSONB NOT NULL` | 027 |
 | updated_by | `UUID REFERENCES users(id) ON DELETE SET NULL` | 027 |
 | updated_at | `TIMESTAMPTZ NOT NULL DEFAULT NOW()` | 027 |
+
+## asset_items
+
+Oluşturan: `046_asset_items_play_mode.sql`
+
+| Sütun | Tür / kural | Ekleyen |
+|---|---|---|
+| key | `VARCHAR(80) PRIMARY KEY` | 046 |
+| kind | `VARCHAR(10) NOT NULL` | 046 |
+| ref_id | `UUID` | 046 |
+| version | `INT NOT NULL DEFAULT 1` | 046 |
+| updated_at | `TIMESTAMPTZ NOT NULL DEFAULT NOW()` | 046 |
+
+## asset_seeds
+
+Oluşturan: `045_asset_seeds.sql`
+
+| Sütun | Tür / kural | Ekleyen |
+|---|---|---|
+| key | `VARCHAR(80) PRIMARY KEY` | 045 |
+| created_at | `TIMESTAMPTZ NOT NULL DEFAULT NOW()` | 045 |
+
+## assistant_statements
+
+Oluşturan: `047_agency_v2.sql`
+
+| Sütun | Tür / kural | Ekleyen |
+|---|---|---|
+| id | `UUID PRIMARY KEY DEFAULT gen_random_uuid()` | 047 |
+| period_id | `UUID NOT NULL REFERENCES payout_periods(id) ON DELETE CASCADE` | 047 |
+| agency_id | `UUID NOT NULL REFERENCES agencies(id) ON DELETE CASCADE` | 047 |
+| user_id | `UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE` | 047 |
+| share_bps | `INT NOT NULL DEFAULT 0` | 047 |
+| host_count | `INT NOT NULL DEFAULT 0` | 047 |
+| base_cents | `BIGINT NOT NULL DEFAULT 0` | 047 |
+| amount_cents | `BIGINT NOT NULL DEFAULT 0` | 047 |
+| status | `VARCHAR(10) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','paid','void'))` | 047 |
+| paid_at | `TIMESTAMPTZ` | 047 |
+| paid_by | `UUID REFERENCES users(id)` | 047 |
+| pay_note | `TEXT` | 047 |
+
+Kısıtlar: `UNIQUE (period_id, agency_id, user_id)`
+
+İndeksler:
+- `idx_assistant_statements_user (user_id)`
 
 ## banners
 
@@ -187,6 +321,8 @@ Oluşturan: `004_profile_wip_agency.sql`
 | approved_at | `TIMESTAMPTZ` | 004 |
 | joined_agency_at | `TIMESTAMPTZ` | 004 |
 | contract_tier | `INT` | 006 |
+| invited_by | `UUID REFERENCES users(id) ON DELETE SET NULL` | 047 |
+| pay_method_pref | `SMALLINT NOT NULL DEFAULT 0` | 047 |
 
 İndeksler:
 - `idx_broadcasters_agency (agency_id)`
@@ -222,6 +358,34 @@ Oluşturan: `024_levels_packages_support.sql`
 | currency | `VARCHAR(3) NOT NULL DEFAULT 'TRY'` | 024 |
 | is_active | `BOOLEAN NOT NULL DEFAULT TRUE` | 024 |
 | sort_order | `INT NOT NULL DEFAULT 0` | 024 |
+
+## cp_pairs
+
+Oluşturan: `032_cp.sql`
+
+| Sütun | Tür / kural | Ekleyen |
+|---|---|---|
+| user_a | `UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE` | 032 |
+| user_b | `UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE` | 032 |
+| exp | `BIGINT NOT NULL DEFAULT 0` | 032 |
+| relation | `VARCHAR(8) NOT NULL DEFAULT 'none' CHECK (relation IN ('none', 'friend', 'cp'))` | 032 |
+| relation_since | `TIMESTAMPTZ` | 032 |
+| request_kind | `VARCHAR(8) CHECK (request_kind IN ('friend', 'cp'))` | 032 |
+| request_from | `UUID REFERENCES users(id) ON DELETE SET NULL` | 032 |
+| request_at | `TIMESTAMPTZ` | 032 |
+| msg_day | `DATE` | 032 |
+| msg_count | `INT NOT NULL DEFAULT 0` | 032 |
+| created_at | `TIMESTAMPTZ NOT NULL DEFAULT NOW()` | 032 |
+| updated_at | `TIMESTAMPTZ NOT NULL DEFAULT NOW()` | 032 |
+| request_cost | `BIGINT NOT NULL DEFAULT 0` | 040 |
+
+Kısıtlar: `PRIMARY KEY (user_a, user_b)`, `CHECK (user_a < user_b)`
+
+İndeksler:
+- `idx_cp_pairs_b (user_b)`
+- `idx_cp_pairs_request (request_at DESC) WHERE request_kind IS NOT NULL`
+- `idx_cp_pairs_rel_a (user_a, relation) WHERE relation <> 'none'`
+- `idx_cp_pairs_rel_b (user_b, relation) WHERE relation <> 'none'`
 
 ## daily_progress
 
@@ -291,6 +455,7 @@ Oluşturan: `005_music_chat_social_security.sql`
 | body | `VARCHAR(1000) NOT NULL` | 005 |
 | created_at | `TIMESTAMPTZ NOT NULL DEFAULT NOW()` | 005 |
 | read_at | `TIMESTAMPTZ` | 005 |
+| image_url | `TEXT` | 031 |
 
 Kısıtlar: `CHECK (sender_id <> receiver_id)`
 
@@ -299,6 +464,18 @@ Kısıtlar: `CHECK (sender_id <> receiver_id)`
 - `idx_dm_receiver (receiver_id, sender_id, created_at DESC)`
 - `idx_dm_unread (receiver_id) WHERE read_at IS NULL`
 - `idx_direct_messages_created (created_at)`
+
+## dm_cleared
+
+Oluşturan: `049_dm_cleared.sql`
+
+| Sütun | Tür / kural | Ekleyen |
+|---|---|---|
+| user_id | `UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE` | 049 |
+| peer_id | `UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE` | 049 |
+| cleared_at | `TIMESTAMPTZ NOT NULL DEFAULT NOW()` | 049 |
+
+Kısıtlar: `PRIMARY KEY (user_id, peer_id)`
 
 ## entrance_effects
 
@@ -327,9 +504,56 @@ Oluşturan: `002_social_inventory.sql`
 | is_active | `BOOLEAN NOT NULL DEFAULT TRUE` | 002 |
 | created_at | `TIMESTAMPTZ DEFAULT NOW()` | 002 |
 | description | `TEXT` | 004 |
+| join_min_level | `INT NOT NULL DEFAULT 0` | 041 |
+| public_id | `VARCHAR(12)` | 041 |
+| leader_cashback | `BIGINT NOT NULL DEFAULT 0` | 041 |
+| leader_spent | `BIGINT NOT NULL DEFAULT 0` | 041 |
 
 İndeksler:
 - `UNIQUE idx_families_name_active (lower(name)) WHERE is_active = TRUE`
+- `UNIQUE idx_families_public_id (public_id) WHERE public_id IS NOT NULL`
+
+## family_contrib_weekly
+
+Oluşturan: `041_family_v2.sql`
+
+| Sütun | Tür / kural | Ekleyen |
+|---|---|---|
+| family_id | `UUID NOT NULL REFERENCES families(id) ON DELETE CASCADE` | 041 |
+| user_id | `UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE` | 041 |
+| week_start | `DATE NOT NULL` | 041 |
+| points | `BIGINT NOT NULL DEFAULT 0` | 041 |
+
+Kısıtlar: `PRIMARY KEY (family_id, user_id, week_start)`
+
+İndeksler:
+- `idx_family_contrib_week (family_id, week_start)`
+
+## family_daily_login
+
+Oluşturan: `041_family_v2.sql`
+
+| Sütun | Tür / kural | Ekleyen |
+|---|---|---|
+| user_id | `UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE` | 041 |
+| day | `DATE NOT NULL` | 041 |
+
+Kısıtlar: `PRIMARY KEY (user_id, day)`
+
+## family_join_requests
+
+Oluşturan: `041_family_v2.sql`
+
+| Sütun | Tür / kural | Ekleyen |
+|---|---|---|
+| family_id | `UUID NOT NULL REFERENCES families(id) ON DELETE CASCADE` | 041 |
+| user_id | `UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE` | 041 |
+| created_at | `TIMESTAMPTZ NOT NULL DEFAULT NOW()` | 041 |
+
+Kısıtlar: `PRIMARY KEY (family_id, user_id)`
+
+İndeksler:
+- `idx_family_join_requests_user (user_id)`
 
 ## family_members
 
@@ -341,11 +565,43 @@ Oluşturan: `002_social_inventory.sql`
 | user_id | `UUID REFERENCES users(id) ON DELETE CASCADE` | 002 |
 | role | `VARCHAR(20) NOT NULL DEFAULT 'member'` | 002 |
 | joined_at | `TIMESTAMPTZ DEFAULT NOW()` | 002 |
+| total_contrib | `BIGINT NOT NULL DEFAULT 0` | 041 |
+| chat_seen_id | `BIGINT NOT NULL DEFAULT 0` | 044 |
 
 Kısıtlar: `PRIMARY KEY(family_id,user_id)`
 
 İndeksler:
 - `UNIQUE idx_family_members_one_family_per_user (user_id)`
+
+## family_messages
+
+Oluşturan: `044_family_chat_notifications.sql`
+
+| Sütun | Tür / kural | Ekleyen |
+|---|---|---|
+| id | `BIGSERIAL PRIMARY KEY` | 044 |
+| family_id | `UUID NOT NULL REFERENCES families(id) ON DELETE CASCADE` | 044 |
+| user_id | `UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE` | 044 |
+| body | `VARCHAR(500) NOT NULL` | 044 |
+| created_at | `TIMESTAMPTZ NOT NULL DEFAULT NOW()` | 044 |
+
+İndeksler:
+- `idx_family_messages_family (family_id, id DESC)`
+
+## family_week_rewards
+
+Oluşturan: `041_family_v2.sql`
+
+| Sütun | Tür / kural | Ekleyen |
+|---|---|---|
+| family_id | `UUID NOT NULL REFERENCES families(id) ON DELETE CASCADE` | 041 |
+| week_start | `DATE NOT NULL` | 041 |
+| tier | `INT NOT NULL` | 041 |
+| claimed_by | `UUID REFERENCES users(id) ON DELETE SET NULL` | 041 |
+| coins | `BIGINT NOT NULL` | 041 |
+| created_at | `TIMESTAMPTZ NOT NULL DEFAULT NOW()` | 041 |
+
+Kısıtlar: `PRIMARY KEY (family_id, week_start, tier)`
 
 ## favorite_hosts
 
@@ -381,6 +637,7 @@ Oluşturan: `001_core.sql`
 İndeksler:
 - `idx_financial_audit_user_created (user_id,created_at DESC)`
 - `idx_audit_created (created_at DESC)`
+- `idx_audit_admin_created (admin_id, created_at DESC) WHERE admin_id IS NOT NULL`
 
 ## firewall_blocks
 
@@ -438,6 +695,7 @@ Kısıtlar: `PRIMARY KEY(requester_id, target_id)`, `CHECK (requester_id <> targ
 İndeksler:
 - `idx_friend_requests_target (target_id, status)`
 - `idx_friend_requests_requester (requester_id, status)`
+- `idx_friend_requests_pending (target_id, created_at DESC) WHERE status = 'pending'`
 
 ## gift_transactions
 
@@ -461,6 +719,8 @@ Oluşturan: `001_core.sql`
 - `idx_gift_tx_receiver_time (receiver_id, created_at)`
 - `idx_gift_tx_agency_time (receiver_agency_id, created_at) WHERE receiver_agency_id IS NOT NULL`
 - `idx_gift_tx_created (created_at DESC)`
+- `idx_gift_tx_gift_time (gift_id, created_at)`
+- `idx_gift_tx_sender_time (sender_id, created_at DESC)`
 
 ## gifts
 
@@ -477,6 +737,7 @@ Oluşturan: `001_core.sql`
 | has_alpha | `BOOLEAN DEFAULT TRUE` | 001 |
 | is_active | `BOOLEAN NOT NULL DEFAULT TRUE` | 001 |
 | category | `VARCHAR(20) NOT NULL DEFAULT 'popular' CHECK (category IN ('event', 'popular', 'private', 'vip'))` | 012 |
+| play_mode | `VARCHAR(10) NOT NULL DEFAULT 'full'` | 046 |
 
 ## global_gift_events
 
@@ -495,6 +756,66 @@ Oluşturan: `002_social_inventory.sql`
 
 İndeksler:
 - `idx_global_gift_created (created_at DESC)`
+
+## guardian_decay_runs
+
+Oluşturan: `040_relations_guardian.sql`
+
+| Sütun | Tür / kural | Ekleyen |
+|---|---|---|
+| week_start | `TIMESTAMPTZ PRIMARY KEY` | 040 |
+| done_at | `TIMESTAMPTZ NOT NULL DEFAULT NOW()` | 040 |
+
+## guardians
+
+Oluşturan: `040_relations_guardian.sql`
+
+| Sütun | Tür / kural | Ekleyen |
+|---|---|---|
+| owner_id | `UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE` | 040 |
+| guardian_id | `UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE` | 040 |
+| points | `BIGINT NOT NULL DEFAULT 0` | 040 |
+| last_gift_at | `TIMESTAMPTZ` | 040 |
+| created_at | `TIMESTAMPTZ NOT NULL DEFAULT NOW()` | 040 |
+| updated_at | `TIMESTAMPTZ NOT NULL DEFAULT NOW()` | 040 |
+
+Kısıtlar: `PRIMARY KEY (owner_id, guardian_id)`, `CHECK (owner_id <> guardian_id)`
+
+İndeksler:
+- `idx_guardians_owner_points (owner_id, points DESC)`
+- `idx_guardians_guardian (guardian_id)`
+
+## host_badges
+
+Oluşturan: `047_agency_v2.sql`
+
+| Sütun | Tür / kural | Ekleyen |
+|---|---|---|
+| user_id | `UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE` | 047 |
+| badge | `VARCHAR(10) NOT NULL CHECK (badge IN ('bronz','gumus','altin','super','ozel'))` | 047 |
+| expires_at | `TIMESTAMPTZ NOT NULL` | 047 |
+| source | `VARCHAR(10) NOT NULL DEFAULT 'salary'` | 047 |
+| updated_at | `TIMESTAMPTZ NOT NULL DEFAULT NOW()` | 047 |
+
+## host_pay_levels
+
+Oluşturan: `047_agency_v2.sql`
+
+| Sütun | Tür / kural | Ekleyen |
+|---|---|---|
+| level | `INT PRIMARY KEY CHECK (level BETWEEN 1 AND 60)` | 047 |
+| required_days | `INT CHECK (required_days IS NULL OR required_days BETWEEN 0 AND 31)` | 047 |
+| required_hours | `INT CHECK (required_hours IS NULL OR required_hours BETWEEN 0 AND 744)` | 047 |
+| game_hours | `INT NOT NULL DEFAULT 0 CHECK (game_hours BETWEEN 0 AND 744)` | 047 |
+| diamonds | `BIGINT NOT NULL CHECK (diamonds >= 0)` | 047 |
+| salary1_cents | `BIGINT NOT NULL DEFAULT 0 CHECK (salary1_cents >= 0)` | 047 |
+| salary2_cents | `BIGINT NOT NULL DEFAULT 0 CHECK (salary2_cents >= 0)` | 047 |
+| agency_cents | `BIGINT NOT NULL DEFAULT 0 CHECK (agency_cents >= 0)` | 047 |
+| vip_level | `INT CHECK (vip_level IS NULL OR vip_level BETWEEN 1 AND 11)` | 047 |
+| vip_days | `INT NOT NULL DEFAULT 0 CHECK (vip_days BETWEEN 0 AND 365)` | 047 |
+| badge | `VARCHAR(10) CHECK (badge IS NULL OR badge IN ('bronz','gumus','altin','super','ozel'))` | 047 |
+| special_id_days | `INT NOT NULL DEFAULT 0 CHECK (special_id_days BETWEEN 0 AND 365)` | 047 |
+| special_id_count | `INT NOT NULL DEFAULT 1 CHECK (special_id_count BETWEEN 1 AND 5)` | 047 |
 
 ## host_salary_tiers
 
@@ -527,6 +848,14 @@ Oluşturan: `006_room_features_pk_games_agency.sql`
 | status | `VARCHAR(10) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','paid','void'))` | 006 |
 | paid_at | `TIMESTAMPTZ` | 006 |
 | paid_by | `UUID REFERENCES users(id)` | 006 |
+| valid_days | `INT NOT NULL DEFAULT 0` | 047 |
+| game_seconds | `BIGINT NOT NULL DEFAULT 0` | 047 |
+| balance_diamonds | `BIGINT NOT NULL DEFAULT 0` | 047 |
+| IF | `NOT EXISTS level1 INT` | 047 |
+| pay_method | `SMALLINT` | 047 |
+| consumed_diamonds | `BIGINT NOT NULL DEFAULT 0` | 047 |
+| rewards | `JSONB NOT NULL DEFAULT '{}'::jsonb` | 047 |
+| pay_note | `TEXT` | 047 |
 
 Kısıtlar: `UNIQUE (period_id, user_id)`
 
@@ -644,6 +973,7 @@ Oluşturan: `006_room_features_pk_games_agency.sql`
 İndeksler:
 - `UNIQUE idx_mic_sessions_open (user_id, room_id) WHERE ended_at IS NULL`
 - `idx_mic_sessions_user_time (user_id, started_at DESC)`
+- `idx_mic_sessions_user_started (user_id, started_at)`
 
 ## moderation_strikes
 
@@ -686,6 +1016,25 @@ Oluşturan: `005_music_chat_social_security.sql`
 İndeksler:
 - `idx_music_tracks_active (is_active, title)`
 - `idx_music_tracks_temp (is_temp, expires_at) WHERE is_temp`
+
+## oauth_states
+
+Oluşturan: `035_social_login.sql`
+
+| Sütun | Tür / kural | Ekleyen |
+|---|---|---|
+| state | `TEXT PRIMARY KEY` | 035 |
+| poll_hash | `TEXT NOT NULL` | 035 |
+| code_hash | `TEXT` | 035 |
+| provider | `VARCHAR(16) NOT NULL` | 035 |
+| status | `VARCHAR(10) NOT NULL DEFAULT 'pending'` | 035 |
+| user_id | `UUID REFERENCES users(id) ON DELETE CASCADE` | 035 |
+| error | `TEXT` | 035 |
+| created_at | `TIMESTAMPTZ NOT NULL DEFAULT NOW()` | 035 |
+| expires_at | `TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '10 minutes'` | 035 |
+
+İndeksler:
+- `idx_oauth_states_expires (expires_at)`
 
 ## official_event_attendance
 
@@ -831,6 +1180,21 @@ Kısıtlar: `PRIMARY KEY(profile_user_id, visitor_id)`, `CHECK (profile_user_id 
 İndeksler:
 - `idx_profile_visitors_recent (profile_user_id, last_visited_at DESC)`
 
+## push_messages
+
+Oluşturan: `034_push.sql`
+
+| Sütun | Tür / kural | Ekleyen |
+|---|---|---|
+| id | `BIGSERIAL PRIMARY KEY` | 034 |
+| title | `VARCHAR(80) NOT NULL` | 034 |
+| body | `VARCHAR(300) NOT NULL` | 034 |
+| created_by | `UUID REFERENCES users(id) ON DELETE SET NULL` | 034 |
+| created_at | `TIMESTAMPTZ NOT NULL DEFAULT NOW()` | 034 |
+
+İndeksler:
+- `idx_push_messages_created (created_at DESC)`
+
 ## recent_rooms
 
 Oluşturan: `008_favorites_recent_mic_queue.sql`
@@ -847,6 +1211,29 @@ Kısıtlar: `PRIMARY KEY(user_id, host_id)`
 
 İndeksler:
 - `idx_recent_rooms_user (user_id, visited_at DESC)`
+
+## referral_statements
+
+Oluşturan: `047_agency_v2.sql`
+
+| Sütun | Tür / kural | Ekleyen |
+|---|---|---|
+| id | `UUID PRIMARY KEY DEFAULT gen_random_uuid()` | 047 |
+| period_id | `UUID NOT NULL REFERENCES payout_periods(id) ON DELETE CASCADE` | 047 |
+| agency_id | `UUID NOT NULL REFERENCES agencies(id) ON DELETE CASCADE` | 047 |
+| invited_agency_id | `UUID NOT NULL REFERENCES agencies(id) ON DELETE CASCADE` | 047 |
+| base_cents | `BIGINT NOT NULL DEFAULT 0` | 047 |
+| bps | `INT NOT NULL DEFAULT 0` | 047 |
+| amount_cents | `BIGINT NOT NULL DEFAULT 0` | 047 |
+| status | `VARCHAR(10) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','paid','void'))` | 047 |
+| paid_at | `TIMESTAMPTZ` | 047 |
+| paid_by | `UUID REFERENCES users(id)` | 047 |
+| pay_note | `TEXT` | 047 |
+
+Kısıtlar: `UNIQUE (period_id, invited_agency_id)`
+
+İndeksler:
+- `idx_referral_statements_agency (agency_id)`
 
 ## reports
 
@@ -870,6 +1257,9 @@ Oluşturan: `005_music_chat_social_security.sql`
 
 İndeksler:
 - `idx_reports_status (status, created_at DESC)`
+- `idx_reports_target (target_user_id, created_at DESC) WHERE target_user_id IS NOT NULL`
+- `idx_reports_room (room_id, created_at DESC) WHERE room_id IS NOT NULL`
+- `idx_reports_created (created_at DESC)`
 
 ## room_blocks
 
@@ -896,6 +1286,9 @@ Oluşturan: `006_room_features_pk_games_agency.sql`
 | joined_at | `TIMESTAMPTZ NOT NULL DEFAULT NOW()` | 006 |
 
 Kısıtlar: `PRIMARY KEY (game_id, user_id)`, `UNIQUE (game_id, seat)`
+
+İndeksler:
+- `idx_room_game_players_user (user_id)`
 
 ## room_games
 
@@ -1023,6 +1416,47 @@ Oluşturan: `026_hardening.sql`
 
 Kısıtlar: `PRIMARY KEY (room_id, user_id)`
 
+## room_pk
+
+Oluşturan: `053_room_pk.sql`
+
+| Sütun | Tür / kural | Ekleyen |
+|---|---|---|
+| id | `UUID PRIMARY KEY DEFAULT gen_random_uuid()` | 053 |
+| room_id | `UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE` | 053 |
+| started_by | `UUID NOT NULL REFERENCES users(id)` | 053 |
+| mode | `VARCHAR(10) NOT NULL CHECK (mode IN ('neutral','partisan'))` | 053 |
+| owner_team | `VARCHAR(4) CHECK (owner_team IN ('red','blue'))` | 053 |
+| status | `VARCHAR(10) NOT NULL DEFAULT 'active' CHECK (status IN ('active','finished','cancelled'))` | 053 |
+| seat_count | `INT NOT NULL` | 053 |
+| duration_seconds | `INT NOT NULL CHECK (duration_seconds BETWEEN 60 AND 3600)` | 053 |
+| score_red | `BIGINT NOT NULL DEFAULT 0 CHECK (score_red >= 0)` | 053 |
+| score_blue | `BIGINT NOT NULL DEFAULT 0 CHECK (score_blue >= 0)` | 053 |
+| winner | `VARCHAR(5) CHECK (winner IN ('red','blue','draw'))` | 053 |
+| mvp_user_id | `UUID REFERENCES users(id) ON DELETE SET NULL` | 053 |
+| started_at | `TIMESTAMPTZ NOT NULL DEFAULT NOW()` | 053 |
+| ends_at | `TIMESTAMPTZ NOT NULL` | 053 |
+| finished_at | `TIMESTAMPTZ` | 053 |
+
+İndeksler:
+- `UNIQUE uq_room_pk_active (room_id) WHERE status = 'active'`
+- `idx_room_pk_room (room_id, started_at DESC)`
+- `UNIQUE uq_room_pk_open (room_id) WHERE status IN ('preparing','active')`
+
+## room_pk_points
+
+Oluşturan: `053_room_pk.sql`
+
+| Sütun | Tür / kural | Ekleyen |
+|---|---|---|
+| pk_id | `UUID NOT NULL REFERENCES room_pk(id) ON DELETE CASCADE` | 053 |
+| kind | `VARCHAR(8) NOT NULL CHECK (kind IN ('support','receive'))` | 053 |
+| team | `VARCHAR(4) NOT NULL CHECK (team IN ('red','blue'))` | 053 |
+| user_id | `UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE` | 053 |
+| points | `BIGINT NOT NULL DEFAULT 0` | 053 |
+
+Kısıtlar: `PRIMARY KEY (pk_id, kind, team, user_id)`
+
 ## room_profiles
 
 Oluşturan: `011_room_profiles_staff.sql`
@@ -1040,6 +1474,15 @@ Oluşturan: `011_room_profiles_staff.sql`
 | room_number | `VARCHAR(12)` | 015 |
 | announcement | `VARCHAR(200)` | 017 |
 | cover_url | `TEXT` | 017 |
+| layout | `VARCHAR(8) NOT NULL DEFAULT 'grid'` | 030 |
+| chat_enabled | `BOOLEAN NOT NULL DEFAULT TRUE` | 033 |
+| theme_image_url | `TEXT` | 033 |
+| scoreboard_enabled | `BOOLEAN NOT NULL DEFAULT TRUE` | 033 |
+| mic_request | `BOOLEAN NOT NULL DEFAULT FALSE` | 033 |
+| locked_seats | `INT[] NOT NULL DEFAULT '{}'` | 033 |
+| password_hash | `TEXT` | 033 |
+| is_hidden | `BOOLEAN NOT NULL DEFAULT FALSE` | 033 |
+| total_diamonds | `BIGINT NOT NULL DEFAULT 0` | 033 |
 
 Kısıtlar: `PRIMARY KEY (owner_id, room_type)`
 
@@ -1087,10 +1530,15 @@ Oluşturan: `001_core.sql`
 | announcement | `VARCHAR(200)` | 017 |
 | cover_url | `TEXT` | 017 |
 | mic_request | `BOOLEAN NOT NULL DEFAULT FALSE` | 025 |
+| layout | `VARCHAR(8) NOT NULL DEFAULT 'grid'` | 030 |
+| muted_seats | `INT[] NOT NULL DEFAULT '{}'` | 043 |
 
 İndeksler:
 - `UNIQUE idx_rooms_join_code (join_code) WHERE join_code IS NOT NULL AND is_active = TRUE`
 - `idx_rooms_number (room_number)`
+- `idx_rooms_owner_type (owner_id, room_type)`
+- `idx_rooms_owner_created (owner_id, created_at DESC)`
+- `idx_rooms_created (created_at DESC)`
 
 ## security_events
 
@@ -1108,6 +1556,21 @@ Oluşturan: `005_music_chat_social_security.sql`
 İndeksler:
 - `idx_security_events_time (created_at DESC)`
 - `idx_security_events_type (event_type, created_at DESC)`
+
+## special_ids
+
+Oluşturan: `047_agency_v2.sql`
+
+| Sütun | Tür / kural | Ekleyen |
+|---|---|---|
+| user_id | `UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE` | 047 |
+| special_id | `VARCHAR(10) NOT NULL` | 047 |
+| expires_at | `TIMESTAMPTZ NOT NULL` | 047 |
+| source | `VARCHAR(10) NOT NULL DEFAULT 'salary'` | 047 |
+| updated_at | `TIMESTAMPTZ NOT NULL DEFAULT NOW()` | 047 |
+
+İndeksler:
+- `UNIQUE idx_special_ids_value (special_id)`
 
 ## store_items
 
@@ -1172,6 +1635,41 @@ Kısıtlar: `PRIMARY KEY (blocker_id, blocked_id)`, `CHECK (blocker_id <> blocke
 
 İndeksler:
 - `idx_user_blocks_blocked (blocked_id)`
+
+## user_identities
+
+Oluşturan: `035_social_login.sql`
+
+| Sütun | Tür / kural | Ekleyen |
+|---|---|---|
+| provider | `VARCHAR(16) NOT NULL` | 035 |
+| subject | `TEXT NOT NULL` | 035 |
+| user_id | `UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE` | 035 |
+| email | `TEXT` | 035 |
+| created_at | `TIMESTAMPTZ NOT NULL DEFAULT NOW()` | 035 |
+
+Kısıtlar: `PRIMARY KEY (provider, subject)`
+
+İndeksler:
+- `idx_user_identities_user (user_id)`
+
+## user_notifications
+
+Oluşturan: `039_user_notifications.sql`
+
+| Sütun | Tür / kural | Ekleyen |
+|---|---|---|
+| id | `BIGSERIAL PRIMARY KEY` | 039 |
+| user_id | `UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE` | 039 |
+| kind | `VARCHAR(20) NOT NULL` | 039 |
+| title | `VARCHAR(80) NOT NULL` | 039 |
+| body | `VARCHAR(300) NOT NULL` | 039 |
+| data | `JSONB NOT NULL DEFAULT '{}'::jsonb` | 039 |
+| created_at | `TIMESTAMPTZ NOT NULL DEFAULT NOW()` | 039 |
+
+İndeksler:
+- `idx_user_notifications_user (user_id, id)`
+- `idx_user_notifications_created (created_at)`
 
 ## user_sessions
 
@@ -1266,6 +1764,20 @@ Oluşturan: `001_core.sql`
 | show_presence | `BOOLEAN NOT NULL DEFAULT TRUE` | 027 |
 | chat_restricted_until | `TIMESTAMPTZ` | 027 |
 | ghost_mode | `BOOLEAN NOT NULL DEFAULT FALSE` | 029 |
+| inbox_seen | `JSONB NOT NULL DEFAULT '{}'::jsonb` | 031 |
+| cp_partner_id | `UUID REFERENCES users(id) ON DELETE SET NULL` | 032 |
+| phone | `VARCHAR(20)` | 035 |
+| wip_hidden | `JSONB NOT NULL DEFAULT '{}'::jsonb` | 037 |
+| notify_prefs | `JSONB NOT NULL DEFAULT '{}'::jsonb` | 039 |
+| guardian_enabled | `BOOLEAN NOT NULL DEFAULT TRUE` | 040 |
+| guardian_shown_id | `UUID REFERENCES users(id) ON DELETE SET NULL` | 040 |
+| notify_seen_id | `BIGINT NOT NULL DEFAULT 0` | 044 |
+| hide_country | `BOOLEAN NOT NULL DEFAULT FALSE` | 048 |
+| hide_visits | `BOOLEAN NOT NULL DEFAULT TRUE` | 048 |
+| terms_version | `VARCHAR(20)` | 050 |
+| terms_accepted_at | `TIMESTAMPTZ` | 050 |
+| level_exp_bonus | `BIGINT NOT NULL DEFAULT 0` | 052 |
+| host_level_exp_bonus | `BIGINT NOT NULL DEFAULT 0` | 052 |
 
 İndeksler:
 - `UNIQUE idx_users_username_lower (lower(username))`
@@ -1274,6 +1786,7 @@ Oluşturan: `001_core.sql`
 - `idx_users_created (created_at DESC)`
 - `idx_users_last_seen (last_seen_at DESC) WHERE last_seen_at IS NOT NULL`
 - `idx_users_ghost (id) WHERE ghost_mode`
+- `UNIQUE uq_users_phone (phone) WHERE phone IS NOT NULL`
 
 ## wallet_transactions
 
@@ -1292,6 +1805,51 @@ Oluşturan: `001_core.sql`
 
 İndeksler:
 - `idx_wallet_user_created (user_id, created_at DESC)`
+- `idx_wallet_type_created (transaction_type, created_at)`
+- `idx_wallet_created (created_at DESC)`
+
+## weekly_event_config
+
+Oluşturan: `038_weekly_events.sql`
+
+| Sütun | Tür / kural | Ekleyen |
+|---|---|---|
+| kind | `VARCHAR(10) PRIMARY KEY CHECK (kind IN ('couple', 'king', 'queen', 'star1', 'star2', 'star3', 'star4'))` | 038 |
+| enabled | `BOOLEAN NOT NULL DEFAULT TRUE` | 038 |
+| gift_id | `UUID REFERENCES gifts(id) ON DELETE SET NULL` | 038 |
+| rewards | `JSONB NOT NULL DEFAULT '{}'::jsonb` | 038 |
+| rules | `TEXT` | 038 |
+| updated_at | `TIMESTAMPTZ NOT NULL DEFAULT NOW()` | 038 |
+
+## weekly_event_results
+
+Oluşturan: `038_weekly_events.sql`
+
+| Sütun | Tür / kural | Ekleyen |
+|---|---|---|
+| week_start | `TIMESTAMPTZ NOT NULL` | 038 |
+| kind | `VARCHAR(10) NOT NULL` | 038 |
+| rank | `INT NOT NULL CHECK (rank BETWEEN 1 AND 3)` | 038 |
+| user_id | `UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE` | 038 |
+| partner_id | `UUID REFERENCES users(id) ON DELETE SET NULL` | 038 |
+| score | `BIGINT NOT NULL` | 038 |
+| gift_id | `UUID REFERENCES gifts(id) ON DELETE SET NULL` | 038 |
+| rewards | `JSONB NOT NULL DEFAULT '[]'::jsonb` | 038 |
+| created_at | `TIMESTAMPTZ NOT NULL DEFAULT NOW()` | 038 |
+
+Kısıtlar: `PRIMARY KEY (week_start, kind, rank)`
+
+İndeksler:
+- `idx_weekly_event_results_user (user_id)`
+
+## weekly_event_settlements
+
+Oluşturan: `038_weekly_events.sql`
+
+| Sütun | Tür / kural | Ekleyen |
+|---|---|---|
+| week_start | `TIMESTAMPTZ PRIMARY KEY` | 038 |
+| settled_at | `TIMESTAMPTZ NOT NULL DEFAULT NOW()` | 038 |
 
 ## wip_plans
 

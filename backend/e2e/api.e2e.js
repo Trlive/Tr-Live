@@ -582,7 +582,7 @@ test('oda: gizli oda + davet kodu, tema, WIP özel tema, sayı tahtası, sohbet 
   assert.equal(ms2.rows[0].n, 0, 'oda kapanınca oturumlar kapanır');
 });
 
-test('PK: davet, kabul, skor (kendine hediye sayılmaz), bitiş', { skip, timeout: 60000 }, async () => {
+test('PK: davet, kabul, skor (kendine hediye ve koltuktaki konuk da sayılır), bitiş', { skip, timeout: 60000 }, async () => {
   const r2 = await api('POST', '/api/rooms', { token: U.h.token, body: { name: 'PK Rakip' } });
   status(r2, 201);
   const room2 = r2.body.room.id;
@@ -598,14 +598,22 @@ test('PK: davet, kabul, skor (kendine hediye sayılmaz), bitiş', { skip, timeou
   status(await api('POST', '/api/pk/challenge', { token: U.a.token, body: { roomId, targetRoomId: room2, durationSeconds: 300 } }), 409, 'ikinci PK');
   status(await api('POST', `/api/pk/${pkId}/respond`, { token: U.a.token, body: { accept: true } }), 403, 'davet eden kabul edemez');
   ok(await api('POST', `/api/pk/${pkId}/respond`, { token: U.h.token, body: { accept: true } }));
-  // A'ya (oda sahibi) B hediye: 50 puan. A kendine: sayılmaz. C, H'ye 100.
+  // Micolive gibi: A'ya (oda sahibi) B hediye 50 + A kendine 100 = 150. C, H'ye 100; C koltuğa çıkıp kendine 100 → 200.
   await sql(`UPDATE users SET coins = coins + 10000 WHERE id = ANY($1::uuid[])`, [[U.a.id, U.b.id, U.c.id]]);
   ok(await api('POST', `/api/rooms/${roomId}/gifts/send`, { token: U.b.token, body: { giftId: heart.id, quantity: 1, distribution: 'single', recipientId: U.a.id } }));
   ok(await api('POST', `/api/rooms/${roomId}/gifts/send`, { token: U.a.token, body: { giftId: heart.id, quantity: 2, distribution: 'single', recipientId: U.a.id } }));
   ok(await api('POST', `/api/rooms/${room2}/gifts/send`, { token: U.c.token, body: { giftId: heart.id, quantity: 2, distribution: 'single', recipientId: U.h.id } }));
-  const st = await api('GET', `/api/rooms/${roomId}/pk`, { token: U.b.token });
-  assert.equal(st.body.pk.a.score, '50');
+  let st = await api('GET', `/api/rooms/${roomId}/pk`, { token: U.b.token });
+  assert.equal(st.body.pk.a.score, '150', 'kendine hediye de sayılır');
   assert.equal(st.body.pk.b.score, '100');
+  // Dinleyiciye (koltukta olmayan) gelen hediye sayılmaz; koltuktaki konuğa gelen (kendine bile) sayılır.
+  ok(await api('POST', `/api/rooms/${room2}/gifts/send`, { token: U.c.token, body: { giftId: heart.id, quantity: 1, distribution: 'single', recipientId: U.c.id } }));
+  st = await api('GET', `/api/rooms/${roomId}/pk`, { token: U.b.token });
+  assert.equal(st.body.pk.b.score, '100', 'dinleyiciye gelen hediye sayılmaz');
+  ok(await api('POST', `/api/rooms/${room2}/mic/take`, { token: U.c.token, body: {} }), 'konuk koltuğa çıkar');
+  ok(await api('POST', `/api/rooms/${room2}/gifts/send`, { token: U.c.token, body: { giftId: heart.id, quantity: 2, distribution: 'single', recipientId: U.c.id } }));
+  st = await api('GET', `/api/rooms/${roomId}/pk`, { token: U.b.token });
+  assert.equal(st.body.pk.b.score, '200', 'koltuktaki konuğa (kendine) gelen hediye sayılır');
   assert.equal(st.body.pk.status, 'active');
   ok(await api('POST', `/api/pk/${pkId}/cancel`, { token: U.a.token }));
   const fin = await sql(`SELECT status, winner_room FROM pk_battles WHERE id = $1`, [pkId]);

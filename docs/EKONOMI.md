@@ -29,7 +29,7 @@ Kullanıcı bakiyesi başkalarına gösterilmez (`views.js`).
 * Dağıtım: `single`, `each` (seçilenlerin her birine), `all_mic`, `all_room`, `equal`, `random`, `selected`.
 * Toplam = hediye fiyatı × dağıtılan toplam adet. Gönderenden düşer; her alıcıya kendi payı kadar Elmas eklenir.
 * Gönderenin `total_sent_coins` → kullanıcı seviyesi, alıcının `total_received_diamonds` → yayıncı seviyesi (160 kademe).
-* Kendine hediye serbesttir, ama **ajans/maaş, PK puanı ve liderlik tablolarına sayılmaz**.
+* Kendine hediye serbesttir, ama **ajans/maaş ve liderlik tablolarına sayılmaz**. PK puanına sayılır (Micolive gibi).
 * Değeri `GLOBAL_GIFT_MIN_COINS` (varsayılan 1000) ve üstü hediyeler tüm kullanıcılara global şerit olarak gider.
 
 ## Elmas bozdurma

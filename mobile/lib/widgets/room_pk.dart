@@ -120,12 +120,12 @@ class _RoomPkSetupState extends State<_RoomPkSetup> {
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)))),
             const SizedBox(height: 14),
-            const Center(child: PkLogo(size: 96, animated: true)),
+            const Center(child: PkLogo(size: 96)),
             const SizedBox(height: 6),
             const Text('Takım Savaşı', textAlign: TextAlign.center, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Colors.white)),
             const SizedBox(height: 4),
             Text('Soldaki 4 koltuk Kırmızı, sağdaki 4 koltuk Mavi takım (koltuk 2-${split + 1} / ${split + 2}-$last). PK modu açılınca '
-                '"Başla"ya basınca tur başlar; takım koltuklarına gelen hediyeler puan olur, her tur sonunda yeni tur hazırlanır.',
+                '"Başla"ya basınca tur başlar; takım koltuklarına gelen hediyeler (kişinin kendine gönderdiği de) puan olur, her tur sonunda yeni tur hazırlanır.',
                 textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: Colors.white60)),
             const SizedBox(height: 18),
             const Text('Süre', style: TextStyle(fontWeight: FontWeight.w800, color: Colors.white)),
@@ -177,7 +177,8 @@ class _RoomPkSetupState extends State<_RoomPkSetup> {
   }
 }
 
-/// PK logosu (pembe P, mavi K). [animated]: hareketli sürüm (kurulum, başlangıç animasyonu, PK düğmeleri).
+/// PK logosu (pembe P, mavi K). Düğmelerde ve kurulumda durağan PNG; [animated]: hareketli sürüm, yalnızca PK
+/// sürerken (PK modu çubuğu, görüntülü PK ekranı, başlangıç animasyonu).
 class PkLogo extends StatelessWidget {
   final double size;
   final bool animated;
@@ -185,7 +186,7 @@ class PkLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Image.asset(
-        animated ? 'assets/images/pk_logo.webp' : 'assets/images/pk_logo_static.webp',
+        animated ? 'assets/images/pk_logo.webp' : 'assets/images/pk_logo.png',
         width: size,
         height: size,
         fit: BoxFit.contain,
@@ -311,7 +312,7 @@ class _RoomPkBarState extends State<RoomPkBar> with SingleTickerProviderStateMix
             builder: (_, __) {
               final beat = urgent ? (0.5 + 0.5 * math.sin(_fx.value * 2 * math.pi * 2)).abs() : 0.0;
               return Column(mainAxisSize: MainAxisSize.min, children: [
-                const PkLogo(size: 26),
+                const PkLogo(size: 26, animated: true),
                 const SizedBox(height: 2),
                 Transform.scale(
                   scale: 1 + 0.18 * beat,
@@ -416,8 +417,10 @@ class PkBarPainter extends CustomPainter {
 
 // ------------------------------------------------------------------ Başlangıç / bitiş animasyonları
 
-/// "PK BAŞLADI": kırmızı ve mavi yarılar iki yandan çarpışır, ortada VS patlar (~1,8 sn).
-/// [left] / [right]: iki yanın adı (sesli oda: KIRMIZI / MAVİ, görüntülü PK: BİZ / RAKİP).
+/// "PK BAŞLADI!" (~2 sn): kırmızı ve mavi şeritler iki yandan hızlanarak gelip ortada çarpışır. Çarpışmada beyaz
+/// parlama, genişleyen iki şok dalgası, saçılan kıvılcımlar ve ekran sarsıntısı; arkada dönen kırmızı / mavi ışık
+/// hüzmeleri. Hareketli PK logosu yaylanarak belirir, altında altın harfli "PK BAŞLADI!" harf harf düşer ve üzerinden
+/// parıltı geçer. [left] / [right]: iki yanın adı (sesli oda: KIRMIZI / MAVİ, görüntülü PK: BİZ / RAKİP).
 Future<void> showRoomPkStart(BuildContext context, {String left = 'KIRMIZI', String right = 'MAVİ'}) async {
   final overlay = Overlay.maybeOf(context);
   if (overlay == null) return;
@@ -443,10 +446,12 @@ class _PkStartFx extends StatefulWidget {
 }
 
 class _PkStartFxState extends State<_PkStartFx> with SingleTickerProviderStateMixin {
-  late final AnimationController _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 1900))
+  static const _hit = 0.16; // şeritlerin çarpıştığı an (animasyon süresinin oranı)
+  late final AnimationController _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 2000))
     ..forward().whenComplete(() {
       if (mounted) widget.onDone();
     });
+  late final List<_Spark> _sparks = _Spark.burst(32, math.Random());
 
   @override
   void dispose() {
@@ -457,74 +462,302 @@ class _PkStartFxState extends State<_PkStartFx> with SingleTickerProviderStateMi
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
+    final w = size.width;
+    final cy = size.height * 0.40;
+    const slabH = 104.0;
+    final half = w * 0.5 + 42; // dış kenarda ekran dışına taşar (eğik köşede boşluk kalmasın)
+    final textSize = math.min(w * 0.12, 52.0);
     return IgnorePointer(
-      child: AnimatedBuilder(
-        animation: _c,
-        builder: (_, __) {
-          final t = _c.value;
-          final slide = Curves.easeOutBack.transform((t / 0.35).clamp(0.0, 1.0));
-          final fade = t < 0.8 ? 1.0 : (1 - (t - 0.8) / 0.2);
-          final vs = Curves.elasticOut.transform(((t - 0.25) / 0.5).clamp(0.0, 1.0));
-          final h = 120.0;
-          final top = size.height * 0.36;
-          return Opacity(
-            opacity: fade.clamp(0.0, 1.0),
-            child: Stack(children: [
-              Positioned(
-                top: top,
-                left: -size.width + size.width * 0.5 * slide + size.width * 0.5,
-                width: size.width * 0.5 + 24,
-                height: h,
-                child: Transform(
-                  transform: Matrix4.skewX(-0.25),
-                  child: Container(
-                    decoration: const BoxDecoration(gradient: LinearGradient(colors: [kPkRedDeep, kPkRed])),
-                    alignment: Alignment.center,
-                    child: Text(widget.left, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic, color: Colors.white)),
+      child: Material(
+        type: MaterialType.transparency,
+        child: AnimatedBuilder(
+          animation: _c,
+          builder: (_, __) {
+            final t = _c.value;
+            final slide = Curves.easeInCubic.transform((t / _hit).clamp(0.0, 1.0));
+            final since = t - _hit;
+            final fade = t < 0.86 ? 1.0 : (1 - (t - 0.86) / 0.14).clamp(0.0, 1.0);
+            final shake = since > 0 && since < 0.22 ? math.sin(since * 120) * 8 * (1 - since / 0.22) : 0.0;
+            final recoil = since > 0 && since < 0.14 ? 16 * math.sin(since / 0.14 * math.pi) : 0.0;
+            final logo = Curves.elasticOut.transform(((since - 0.02) / 0.4).clamp(0.0, 1.0));
+            return Opacity(
+              opacity: fade,
+              child: Stack(fit: StackFit.expand, children: [
+                // Karartma ve parlama sarsıntının dışında (kenarlarda boşluk görünmesin).
+                ColoredBox(color: Colors.black.withValues(alpha: 0.55 * (t / 0.08).clamp(0.0, 1.0))),
+                CustomPaint(painter: _BurstPainter(t: t, hit: _hit, center: Offset(w / 2, cy), sparks: _sparks)),
+                Transform.translate(
+                offset: Offset(shake, shake * 0.4),
+                child: Stack(fit: StackFit.expand, children: [
+                  Positioned(
+                    top: cy - slabH / 2,
+                    left: -24 - half * (1 - slide) - recoil,
+                    width: half,
+                    height: slabH,
+                    child: _PkSlab(label: widget.left, colors: const [kPkRedDeep, kPkRed], left: true),
                   ),
-                ),
-              ),
-              Positioned(
-                top: top,
-                left: size.width - size.width * 0.5 * slide - 24,
-                width: size.width * 0.5 + 24,
-                height: h,
-                child: Transform(
-                  transform: Matrix4.skewX(-0.25),
-                  child: Container(
-                    decoration: const BoxDecoration(gradient: LinearGradient(colors: [kPkBlue, kPkBlueDeep])),
-                    alignment: Alignment.center,
-                    child: Text(widget.right, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic, color: Colors.white)),
+                  Positioned(
+                    top: cy - slabH / 2,
+                    left: w + 24 - half + half * (1 - slide) + recoil,
+                    width: half,
+                    height: slabH,
+                    child: _PkSlab(label: widget.right, colors: const [kPkBlue, kPkBlueDeep], left: false),
                   ),
-                ),
-              ),
-              Positioned(
-                top: top - 10,
-                left: 0,
-                right: 0,
-                height: h + 20,
-                child: Center(
-                  child: Transform.scale(
-                    scale: 0.2 + 1.0 * vs,
-                    child: const PkLogo(size: 150, animated: true),
+                  if (since > 0)
+                    Positioned(
+                      top: cy - 95,
+                      left: 0,
+                      right: 0,
+                      height: 190,
+                      child: Center(child: Transform.scale(scale: 0.3 + 0.7 * logo, child: const PkLogo(size: 170, animated: true))),
+                    ),
+                  Positioned(
+                    top: cy + slabH / 2 + 18,
+                    left: 12,
+                    right: 12,
+                    child: _DropText(text: 'PK BAŞLADI!', t: t, start: _hit + 0.12, size: textSize),
                   ),
-                ),
+                ]),
               ),
-              Positioned(
-                top: top + h + 18,
-                left: 0,
-                right: 0,
-                child: Opacity(
-                  opacity: ((t - 0.4) / 0.2).clamp(0.0, 1.0),
-                  child: const Text('PK BAŞLADI!', textAlign: TextAlign.center, style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: 2, shadows: [Shadow(color: Colors.black, blurRadius: 8)])),
-                ),
-              ),
-            ]),
-          );
-        },
+              ]),
+            );
+          },
+        ),
       ),
     );
   }
+}
+
+/// Başlangıç animasyonundaki eğik takım şeridi (cam parlaklığı, beyaz kenarlar, takım renginde ışıma).
+class _PkSlab extends StatelessWidget {
+  final String label;
+  final List<Color> colors;
+  final bool left;
+  const _PkSlab({required this.label, required this.colors, required this.left});
+
+  @override
+  Widget build(BuildContext context) {
+    return Transform(
+      alignment: Alignment.center,
+      transform: Matrix4.skewX(-0.22),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(colors: colors),
+          border: const Border.symmetric(horizontal: BorderSide(color: Color(0xCCFFFFFF), width: 2)),
+          boxShadow: [BoxShadow(color: colors.last.withValues(alpha: 0.7), blurRadius: 24)],
+        ),
+        child: Stack(fit: StackFit.expand, children: [
+          const Align(
+            alignment: Alignment.topCenter,
+            child: FractionallySizedBox(
+              widthFactor: 1,
+              heightFactor: 0.45,
+              child: DecoratedBox(
+                decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0x55FFFFFF), Color(0x00FFFFFF)])),
+              ),
+            ),
+          ),
+          Align(
+            alignment: Alignment(left ? -0.5 : 0.5, 0),
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontSize: 26,
+                fontWeight: FontWeight.w900,
+                fontStyle: FontStyle.italic,
+                color: Colors.white,
+                letterSpacing: 1.5,
+                shadows: [Shadow(color: Colors.black54, blurRadius: 6, offset: Offset(0, 2))],
+              ),
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+/// Altın yazı: koyu kontur + kırmızı / mavi ışıma, yukarıdan aşağı altın dolgu, üzerinden geçen beyaz parıltı.
+/// [shine]: parıltı bandının yazı genişliğine göre konumu (yalnızca -0,2..1,2 arasında görünür).
+class _GoldText extends StatelessWidget {
+  final String text;
+  final double size;
+  final double shine;
+  const _GoldText(this.text, {required this.size, this.shine = -1});
+
+  @override
+  Widget build(BuildContext context) {
+    final style = TextStyle(fontSize: size, height: 1.15, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic, decoration: TextDecoration.none);
+    final a = (shine - 0.18).clamp(0.0, 1.0);
+    final b = shine.clamp(0.0, 1.0);
+    final c = (shine + 0.18).clamp(0.0, 1.0);
+    return Stack(children: [
+      Text(
+        text,
+        style: style.copyWith(
+          foreground: Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = size * 0.14
+            ..strokeJoin = StrokeJoin.round
+            ..color = const Color(0xFF4A1C00),
+          shadows: const [Shadow(color: kPkRed, blurRadius: 14, offset: Offset(-3, 1)), Shadow(color: kPkBlue, blurRadius: 14, offset: Offset(3, 1))],
+        ),
+      ),
+      ShaderMask(
+        blendMode: BlendMode.srcIn,
+        shaderCallback: (r) => const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFFFFFDE7), Color(0xFFFFE082), Color(0xFFFFB300), Color(0xFFFF8F00)],
+          stops: [0, 0.35, 0.65, 1],
+        ).createShader(r),
+        child: Text(text, style: style.copyWith(color: Colors.white)),
+      ),
+      if (shine > -0.2 && shine < 1.2)
+        ShaderMask(
+          blendMode: BlendMode.srcIn,
+          shaderCallback: (r) => LinearGradient(
+            colors: [
+              Colors.white.withValues(alpha: 0),
+              Colors.white.withValues(alpha: 0),
+              Colors.white.withValues(alpha: 0.95),
+              Colors.white.withValues(alpha: 0),
+              Colors.white.withValues(alpha: 0),
+            ],
+            stops: [0, a, b, c, 1],
+          ).createShader(r),
+          child: Text(text, style: style.copyWith(color: Colors.white)),
+        ),
+    ]);
+  }
+}
+
+/// Harfleri sırayla yukarıdan büyükten küçülerek düşen altın yazı; harfler oturunca soldan sağa parıltı geçer.
+class _DropText extends StatelessWidget {
+  final String text;
+  final double t;
+  final double start;
+  final double size;
+  const _DropText({required this.text, required this.t, required this.start, required this.size});
+
+  Widget _letter(String ch, int i, int n) {
+    if (ch == ' ') return SizedBox(width: size * 0.32);
+    final lt = ((t - start - i * 0.03) / 0.16).clamp(0.0, 1.0);
+    final e = Curves.easeOutBack.transform(lt);
+    final shine = ((t - start - 0.3) / 0.32) * 1.4 - 0.2; // bandın yazı boyunca konumu
+    return Opacity(
+      opacity: lt,
+      child: Transform.translate(
+        offset: Offset(0, -size * 0.8 * (1 - e)),
+        child: Transform.scale(scale: 1.9 - 0.9 * e, child: _GoldText(ch, size: size, shine: (shine - i / n) * n)),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final chars = text.split('');
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        for (var i = 0; i < chars.length; i++) _letter(chars[i], i, chars.length),
+      ]),
+    );
+  }
+}
+
+/// Çarpışma kıvılcımı: yön, hız (ekran genişliğinin oranı), kalınlık, renk.
+class _Spark {
+  final double angle;
+  final double speed;
+  final double size;
+  final Color color;
+  const _Spark(this.angle, this.speed, this.size, this.color);
+
+  static const _colors = [kPkRed, kPkBlue, Color(0xFFFFD54F), Colors.white];
+
+  static List<_Spark> burst(int n, math.Random r) => [
+        for (var i = 0; i < n; i++)
+          _Spark(i / n * 2 * math.pi + r.nextDouble() * 0.3, 0.3 + r.nextDouble() * 0.45, 2 + r.nextDouble() * 3, _colors[i % _colors.length]),
+      ];
+}
+
+/// Dönen ışık hüzmeleri, şok dalgaları, kıvılcımlar ve çarpışma parlaması.
+class _BurstPainter extends CustomPainter {
+  final double t;
+  final double hit;
+  final Offset center;
+  final List<_Spark> sparks;
+  _BurstPainter({required this.t, required this.hit, required this.center, required this.sparks});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final since = t - hit;
+    if (since <= 0) return;
+    // Dönen kırmızı / mavi hüzmeler
+    final rays = (since / 0.15).clamp(0.0, 1.0) * (t < 0.8 ? 1.0 : (1 - (t - 0.8) / 0.2).clamp(0.0, 1.0));
+    if (rays > 0) {
+      final rect = Rect.fromCircle(center: center, radius: w * 0.9);
+      final rot = since * 1.6;
+      for (var i = 0; i < 16; i++) {
+        final path = Path()
+          ..moveTo(center.dx, center.dy)
+          ..arcTo(rect, rot + i * math.pi / 8, math.pi / 16, false)
+          ..close();
+        final color = i.isEven ? kPkRed : kPkBlue;
+        canvas.drawPath(path, Paint()..shader = RadialGradient(colors: [color.withValues(alpha: 0.45 * rays), color.withValues(alpha: 0)]).createShader(rect));
+      }
+    }
+    // Şok dalgaları (beyaz, ardından altın)
+    for (final (delay, color) in const [(0.0, Colors.white), (0.07, Color(0xFFFFD54F))]) {
+      final p = ((since - delay) / 0.32).clamp(0.0, 1.0);
+      if (p <= 0 || p >= 1) continue;
+      final e = Curves.easeOutCubic.transform(p);
+      canvas.drawCircle(
+        center,
+        20 + e * w * 0.75,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2 + 12 * (1 - p)
+          ..color = color.withValues(alpha: 0.85 * (1 - p))
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
+      );
+    }
+    // Kıvılcımlar (kuyruklu, hafif yerçekimiyle)
+    final sp = (since / 0.55).clamp(0.0, 1.0);
+    if (sp > 0 && sp < 1) {
+      final e = Curves.easeOutCubic.transform(sp);
+      for (final s in sparks) {
+        final dir = Offset(math.cos(s.angle), math.sin(s.angle));
+        final pos = center + dir * (s.speed * w * e) + Offset(0, sp * sp * 60);
+        final tail = pos - dir * (14 + 26 * (1 - sp));
+        canvas.drawLine(
+          tail,
+          pos,
+          Paint()
+            ..strokeWidth = s.size
+            ..strokeCap = StrokeCap.round
+            ..color = s.color.withValues(alpha: 1 - sp),
+        );
+      }
+    }
+    // Çarpışma parlaması
+    final flash = (1 - since / 0.12).clamp(0.0, 1.0);
+    if (flash > 0) {
+      canvas.drawRect(Offset.zero & size, Paint()..color = Colors.white.withValues(alpha: 0.7 * flash));
+      canvas.drawCircle(
+        center,
+        w * 0.25 * (1 + since * 4),
+        Paint()
+          ..color = Colors.white.withValues(alpha: flash)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 30),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_BurstPainter old) => old.t != t;
 }
 
 /// Bitiş: kazanan takım, skorlar ve MVP; arkada uçuşan konfeti. Dokununca ya da 7 sn sonra kapanır.
@@ -1191,7 +1424,7 @@ class _RoomPkPanelState extends State<RoomPkPanel> with SingleTickerProviderStat
               border: Border.all(color: Colors.white.withValues(alpha: 0.7), width: 1),
             ),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
-              const PkLogo(size: 18),
+              const PkLogo(size: 20, animated: true),
               const SizedBox(width: 3),
               Text(_clock(_left), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Colors.white)),
             ]),
@@ -1225,6 +1458,7 @@ class _RoomPkPanelState extends State<RoomPkPanel> with SingleTickerProviderStat
         padding: const EdgeInsets.symmetric(horizontal: 10),
         child: Column(children: [
           SizedBox(
+            width: double.infinity,
             height: 32,
             child: Stack(alignment: Alignment.center, children: [
               // Skor çizgisi; skorlar (ya da "Hazırlanıyor") çizginin içinde.
@@ -1303,7 +1537,7 @@ class _RoomPkPanelState extends State<RoomPkPanel> with SingleTickerProviderStat
 
 // ------------------------------------------------------------------ 3-2-1 geri sayım
 
-/// "Başla"ya basılınca: büyük 3 → 2 → 1 (her biri çarparak gelir, halka dolar), ardından VS çarpışma animasyonu.
+/// "Başla"ya basılınca: "PK BAŞLIYOR" ve büyük altın 3 → 2 → 1, ardından "PK BAŞLADI!" çarpışma animasyonu.
 /// [stillVisible]: geri sayım bitince oda hâlâ ekrandaysa VS oynar (çıkıldıysa / küçültüldüyse oynamaz).
 Future<void> showRoomPkCountdown(BuildContext context, {String left = 'KIRMIZI', String right = 'MAVİ', bool Function()? stillVisible}) async {
   final overlay = Overlay.maybeOf(context);
@@ -1328,11 +1562,14 @@ class _PkCountdownFx extends StatefulWidget {
   State<_PkCountdownFx> createState() => _PkCountdownFxState();
 }
 
+/// Üstte parıldayan altın "PK BAŞLIYOR"; ortada her saniye çarparak gelen altın 3 → 2 → 1, çevresinde dolan halka,
+/// her sayıda şok dalgası ve kıvılcımlar, arkada dönen ışık hüzmeleri.
 class _PkCountdownFxState extends State<_PkCountdownFx> with SingleTickerProviderStateMixin {
   late final AnimationController _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 3000))
     ..forward().whenComplete(() {
       if (mounted) widget.onDone();
     });
+  late final List<_Spark> _sparks = _Spark.burst(20, math.Random());
 
   @override
   void dispose() {
@@ -1342,60 +1579,89 @@ class _PkCountdownFxState extends State<_PkCountdownFx> with SingleTickerProvide
 
   @override
   Widget build(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    final center = Offset(size.width / 2, size.height * 0.40);
+    final titleSize = math.min(size.width * 0.1, 40.0);
     return IgnorePointer(
-      child: AnimatedBuilder(
-        animation: _c,
-        builder: (_, __) {
-          final t = _c.value * 3;
-          final n = math.max(1, 3 - t.floor());
-          final p = t - t.floor();
-          final scale = 1.9 - 0.9 * Curves.easeOutBack.transform((p / 0.35).clamp(0.0, 1.0));
-          final fade = p < 0.75 ? 1.0 : 1 - (p - 0.75) / 0.25;
-          final color = n == 3 ? kPkRed : (n == 2 ? const Color(0xFFB0127A) : kPkBlue);
-          final bg = _c.value < 0.9 ? 0.35 : 0.35 * (1 - (_c.value - 0.9) / 0.1);
-          return ColoredBox(
-            color: Colors.black.withValues(alpha: bg.clamp(0.0, 1.0)),
-            child: Center(
-              child: SizedBox(
-                width: 170,
-                height: 170,
-                child: Stack(alignment: Alignment.center, children: [
-                  CustomPaint(size: const Size(170, 170), painter: _CountRingPainter(progress: p, color: color)),
-                  Opacity(
-                    opacity: fade.clamp(0.0, 1.0),
-                    child: Transform.scale(
-                      scale: scale,
-                      child: Text('$n',
-                          style: TextStyle(fontSize: 96, height: 1, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic, color: Colors.white, shadows: [
-                            Shadow(color: color, blurRadius: 24),
-                            const Shadow(color: Color(0xFFFFD54F), blurRadius: 8),
-                          ])),
+      child: Material(
+        type: MaterialType.transparency,
+        child: AnimatedBuilder(
+          animation: _c,
+          builder: (_, __) {
+            final t = _c.value * 3;
+            final n = math.max(1, 3 - t.floor());
+            final p = (t - t.floor()).clamp(0.0, 1.0);
+            final pop = Curves.easeOutBack.transform((p / 0.3).clamp(0.0, 1.0));
+            final fade = p < 0.78 ? 1.0 : (1 - (p - 0.78) / 0.22).clamp(0.0, 1.0);
+            final color = n == 3 ? kPkRed : (n == 2 ? const Color(0xFFB0127A) : kPkBlue);
+            final bg = (_c.value < 0.92 ? 0.5 : 0.5 * (1 - (_c.value - 0.92) / 0.08)).clamp(0.0, 1.0);
+            final titleIn = Curves.easeOutBack.transform((_c.value / 0.12).clamp(0.0, 1.0));
+            return Stack(fit: StackFit.expand, children: [
+              ColoredBox(color: Colors.black.withValues(alpha: bg)),
+              CustomPaint(painter: _TickPainter(p: p, spin: _c.value, color: color, center: center, sparks: _sparks)),
+              Positioned(
+                top: center.dy - 160,
+                left: 12,
+                right: 12,
+                child: Opacity(
+                  opacity: (_c.value / 0.08).clamp(0.0, 1.0),
+                  child: Transform.scale(
+                    scale: 0.6 + 0.4 * titleIn,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: _GoldText('PK BAŞLIYOR', size: titleSize, shine: ((_c.value * 1.5) % 1.0) * 1.4 - 0.2),
                     ),
                   ),
-                ]),
+                ),
               ),
-            ),
-          );
-        },
+              Positioned(
+                top: center.dy - 90,
+                left: 0,
+                right: 0,
+                height: 180,
+                child: Center(
+                  child: Opacity(
+                    opacity: fade,
+                    child: Transform.scale(scale: 2.2 - 1.2 * pop, child: _GoldText('$n', size: 112, shine: p * 1.6 - 0.3)),
+                  ),
+                ),
+              ),
+            ]);
+          },
+        ),
       ),
     );
   }
 }
 
-class _CountRingPainter extends CustomPainter {
-  final double progress;
+/// Geri sayım arka planı: dönen hüzmeler, sayının çevresinde dolan halka, her sayıda şok dalgası ve kıvılcımlar.
+class _TickPainter extends CustomPainter {
+  final double p; // bu sayının ilerleyişi (0..1)
+  final double spin; // tüm geri sayımın ilerleyişi (0..1)
   final Color color;
-  _CountRingPainter({required this.progress, required this.color});
+  final Offset center;
+  final List<_Spark> sparks;
+  _TickPainter({required this.p, required this.spin, required this.color, required this.center, required this.sparks});
 
   @override
   void paint(Canvas canvas, Size size) {
-    final c = size.center(Offset.zero);
-    final r = size.width / 2 - 8;
-    canvas.drawCircle(c, r, Paint()..style = PaintingStyle.stroke..strokeWidth = 5..color = Colors.white.withValues(alpha: 0.15));
+    final w = size.width;
+    // Dönen hüzmeler (sayının renginde)
+    final rect = Rect.fromCircle(center: center, radius: w * 0.8);
+    for (var i = 0; i < 12; i++) {
+      final path = Path()
+        ..moveTo(center.dx, center.dy)
+        ..arcTo(rect, spin * 2.4 + i * math.pi / 6, math.pi / 14, false)
+        ..close();
+      canvas.drawPath(path, Paint()..shader = RadialGradient(colors: [color.withValues(alpha: 0.32), color.withValues(alpha: 0)]).createShader(rect));
+    }
+    // Dolan halka
+    const r = 84.0;
+    canvas.drawCircle(center, r, Paint()..style = PaintingStyle.stroke..strokeWidth = 5..color = Colors.white.withValues(alpha: 0.15));
     canvas.drawArc(
-      Rect.fromCircle(center: c, radius: r),
+      Rect.fromCircle(center: center, radius: r),
       -math.pi / 2,
-      2 * math.pi * progress,
+      2 * math.pi * p,
       false,
       Paint()
         ..style = PaintingStyle.stroke
@@ -1404,10 +1670,36 @@ class _CountRingPainter extends CustomPainter {
         ..color = color
         ..maskFilter = const MaskFilter.blur(BlurStyle.solid, 3),
     );
+    // Sayı çarptığında şok dalgası ve kıvılcımlar
+    final wave = (p / 0.35).clamp(0.0, 1.0);
+    if (wave > 0 && wave < 1) {
+      final e = Curves.easeOutCubic.transform(wave);
+      canvas.drawCircle(
+        center,
+        40 + e * w * 0.55,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2 + 9 * (1 - wave)
+          ..color = color.withValues(alpha: 0.8 * (1 - wave))
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
+      );
+      for (final s in sparks) {
+        final dir = Offset(math.cos(s.angle), math.sin(s.angle));
+        final pos = center + dir * (60 + s.speed * w * 0.6 * e);
+        canvas.drawLine(
+          pos - dir * (10 + 16 * (1 - wave)),
+          pos,
+          Paint()
+            ..strokeWidth = s.size * 0.8
+            ..strokeCap = StrokeCap.round
+            ..color = s.color.withValues(alpha: 1 - wave),
+        );
+      }
+    }
   }
 
   @override
-  bool shouldRepaint(_CountRingPainter old) => old.progress != progress || old.color != color;
+  bool shouldRepaint(_TickPainter old) => old.p != p || old.spin != spin || old.color != color;
 }
 
 // ------------------------------------------------------------------ Kaybeden takımın ağlayan emojisi

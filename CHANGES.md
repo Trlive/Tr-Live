@@ -1,3 +1,20 @@
+## v2.77.0 — PK puanları (Micolive gibi), yeni "PK BAŞLIYOR / PK BAŞLADI" animasyonu, PK logosu
+- PK puanı artık Micolive gibi sayılıyor; kişinin kendine gönderdiği hediye de sayılır.
+  - Sesli oda PK: takım koltuğundaki kişiye gelen her hediye (kendine gönderdiği dahil) takım puanı olur. Tarafsız
+    moddaki oda sahibi hakemdir (ona gelen sayılmaz); taraflıda seçtiği takıma sayılır. Puan "Başla"dan sonra sayılır.
+  - Görüntülü PK: yayıncıya ya da o odada koltuktaki konuğa gelen her hediye (kendine dahil) o tarafın puanı olur;
+    koltukta olmayan izleyiciye gelen hediye sayılmaz.
+- Görüntülü PK ekranı Micolive düzeninde: üstte ortada "PK 02:13" hapı (hareketli logo + süre), her yarının altında o
+  tarafın puanı (yıldız rozetiyle) ve yayıncı adı, altta ince pembe | mavi oran çizgisi, iki tarafın puanı ve en çok
+  destekleyen 3 kişinin numaralı koltukları (solda 3-2-1, sağda 1-2-3; boşken koltuk simgesi, 1. altın).
+- "PK BAŞLIYOR" geri sayımı yenilendi: parıldayan altın başlık, çarparak gelen altın 3 → 2 → 1, dolan halka, her sayıda
+  şok dalgası ve kıvılcımlar, dönen ışık hüzmeleri.
+- "PK BAŞLADI!" animasyonu yenilendi: kırmızı ve mavi şeritler hızlanarak gelip çarpışır; beyaz parlama, iki şok
+  dalgası, saçılan kıvılcımlar, ekran sarsıntısı, dönen hüzmeler; hareketli PK logosu yaylanarak belirir; altın harfler
+  tek tek düşer ve üzerinden parıltı geçer. (Önceki animasyondaki yazıların altında çıkabilen sarı çizgi de giderildi.)
+- PK logosu: odadaki PK düğmesi, canlı yayın alt barı ve kurulum penceresinde durağan PNG; hareketli logo yalnızca PK
+  sürerken (PK modu çubuğu, görüntülü PK ekranı, başlangıç animasyonu) oynar.
+
 ## v2.76.3 — APK derleme hatası (güzellik filtresi) düzeltildi
 - "Unresolved reference 'BeautyFilter'" hatası giderildi: güzellik filtresi ayrı bir Java dosyasındaydı ve onu uygulamaya
   kopyalayacak iş akışı değişikliği zip ile güncellenemiyordu (.github klasörü zip'ten güncellenmez). Filtre artık

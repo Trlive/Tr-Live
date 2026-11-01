@@ -76,10 +76,11 @@ export async function endPkForRoom(roomId) {
   }
 }
 
-// Hediye işlemi içinde çağrılır (aynı transaction). Kendine hediye puan getirmez; yalnızca oda sahibine (ev sahibi) gelen hediyeler sayılır.
+// Hediye işlemi içinde çağrılır (aynı transaction). Micolive gibi: PK sürerken o odada yayıncıya ya da koltuktaki
+// konuğa gelen her hediye o tarafın puanıdır; kişinin kendine gönderdiği hediye de sayılır.
 // coinAmount: PK puanı (alıcıya geçen Elmas) · supportCoins: gönderenin harcadığı Coin (destekçi sıralaması).
 export async function scorePk(c, roomId, receiverId, senderId, coinAmount, supportCoins = coinAmount) {
-  if (receiverId === senderId) return null;
+  if (BigInt(coinAmount) <= 0n) return null;
   const b = (await c.query(
     `SELECT id, room_a, room_b, host_a, host_b FROM pk_battles
      WHERE status = 'active' AND ends_at > NOW() AND (room_a = $1 OR room_b = $1) FOR UPDATE`, [roomId],
@@ -87,7 +88,13 @@ export async function scorePk(c, roomId, receiverId, senderId, coinAmount, suppo
   if (!b) return null;
   const side = b.room_a === roomId ? 'a' : 'b';
   const host = side === 'a' ? b.host_a : b.host_b;
-  if (host !== receiverId) return null;
+  if (host !== receiverId) {
+    // Yayıncı değilse: yalnızca o odada koltukta (konuk) olan kişiye gelen hediye sayılır (dinleyiciye değil).
+    const seated = await c.query(
+      `SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2 AND seat_index IS NOT NULL`, [roomId, receiverId],
+    );
+    if (!seated.rowCount) return null;
+  }
   await c.query(`UPDATE pk_battles SET score_${side} = score_${side} + $2 WHERE id = $1`, [b.id, coinAmount.toString()]);
   await c.query(
     `INSERT INTO pk_supporters(battle_id, room_id, user_id, coins) VALUES($1,$2,$3,$4)

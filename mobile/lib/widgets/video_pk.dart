@@ -69,24 +69,66 @@ class _VideoPkStageState extends State<VideoPkStage> with SingleTickerProviderSt
 
   String _clock(int s) => '${(s ~/ 60).toString().padLeft(2, '0')}:${(s % 60).toString().padLeft(2, '0')}';
 
-  Widget _supporters(List<dynamic> list, bool left, Color color) {
-    final items = [for (final x in list.take(3)) mapOf(mapOf(x)?['user'])];
-    return Row(
-      mainAxisAlignment: left ? MainAxisAlignment.start : MainAxisAlignment.end,
-      children: [
-        for (var i = 0; i < 3; i++)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 2),
-            child: Container(
-              padding: const EdgeInsets.all(1.5),
-              decoration: BoxDecoration(shape: BoxShape.circle, color: i == 0 ? const Color(0xFFFFD54F) : color.withValues(alpha: 0.7)),
-              child: i < items.length && items[i] != null
-                  ? UserAvatar(user: items[i], radius: 10)
-                  : CircleAvatar(radius: 10, backgroundColor: Colors.black38, child: Text('${i + 1}', style: const TextStyle(fontSize: 9, color: Colors.white54))),
+  /// Micolive gibi en çok destekleyen 3 kişinin "koltuğu": doluysa fotoğraf, boşsa koltuk simgesi; köşede sıra numarası
+  /// (1. altın). Solda 3-2-1 (1. ortaya yakın), sağda 1-2-3.
+  Widget _seats(List<dynamic> list, Color color, {required bool left}) {
+    final users = [for (final x in list.take(3)) mapOf(mapOf(x)?['user'])];
+    Widget seat(int rank) {
+      final user = rank <= users.length ? users[rank - 1] : null;
+      const d = 28.0;
+      final ring = rank == 1 ? const [Color(0xFFFFE082), Color(0xFFFF8F00)] : [color, Color.lerp(color, Colors.black, 0.35)!];
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 3),
+        child: SizedBox(
+          width: d + 4,
+          height: d + 4,
+          child: Stack(clipBehavior: Clip.none, children: [
+            Container(
+              width: d + 4,
+              height: d + 4,
+              padding: const EdgeInsets.all(2),
+              decoration: BoxDecoration(shape: BoxShape.circle, gradient: LinearGradient(colors: ring)),
+              child: user != null
+                  ? UserAvatar(user: user, radius: d / 2)
+                  : DecoratedBox(
+                      decoration: BoxDecoration(shape: BoxShape.circle, color: Color.lerp(color, Colors.black, 0.3)),
+                      child: const Icon(Icons.event_seat, size: 15, color: Colors.white70),
+                    ),
             ),
-          ),
-      ],
+            Positioned(
+              right: -3,
+              bottom: -3,
+              child: Container(
+                width: 15,
+                height: 15,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(shape: BoxShape.circle, color: rank == 1 ? const Color(0xFFFFB300) : color, border: Border.all(color: Colors.white, width: 1)),
+                child: Text('$rank', style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: Colors.white, height: 1)),
+              ),
+            ),
+          ]),
+        ),
+      );
+    }
+
+    final order = left ? const [3, 2, 1] : const [1, 2, 3];
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: left ? Alignment.centerRight : Alignment.centerLeft,
+      child: Row(mainAxisSize: MainAxisSize.min, children: [for (final r in order) seat(r)]),
     );
+  }
+
+  /// Takım puanı: renkli yıldız rozeti + sayarak artan puan (Micolive gibi).
+  Widget _scoreTag(BigInt value, Color color, {required bool left}) {
+    final star = Container(
+      width: 18,
+      height: 18,
+      decoration: BoxDecoration(shape: BoxShape.circle, gradient: LinearGradient(colors: [Color.lerp(color, Colors.white, 0.25)!, color]), border: Border.all(color: Colors.white70, width: 1)),
+      child: const Icon(Icons.star_rounded, size: 13, color: Colors.white),
+    );
+    final text = PkScoreText(value: value, color: color, alignLeft: left);
+    return Row(mainAxisSize: MainAxisSize.min, children: left ? [star, const SizedBox(width: 4), text] : [text, const SizedBox(width: 4), star]);
   }
 
   @override
@@ -112,7 +154,7 @@ class _VideoPkStageState extends State<VideoPkStage> with SingleTickerProviderSt
     return LayoutBuilder(builder: (context, box) {
       final w = box.maxWidth;
       final h = w * 0.66; // iki dikey yarım (3:4'e yakın)
-      Widget half({required Widget child, required bool left, required Map<String, dynamic>? host, String? stamp}) => Expanded(
+      Widget half({required Widget child, required bool left, required Map<String, dynamic>? host, required BigInt score, String? stamp}) => Expanded(
             child: Container(
               height: h,
               decoration: BoxDecoration(
@@ -123,19 +165,27 @@ class _VideoPkStageState extends State<VideoPkStage> with SingleTickerProviderSt
               ),
               child: Stack(fit: StackFit.expand, children: [
                 ColoredBox(color: Colors.black, child: child),
-                // İsim şeridi
+                // Micolive gibi: tarafın puanı (yıldız rozetiyle) ve altında yayıncının adı.
                 Positioned(
                   left: 6,
                   right: 6,
                   bottom: 6,
-                  child: Row(mainAxisAlignment: left ? MainAxisAlignment.start : MainAxisAlignment.end, children: [
-                    Flexible(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(color: (left ? kPkRed : kPkBlue).withValues(alpha: 0.8), borderRadius: BorderRadius.circular(10)),
-                        child: Text((host?['displayName'] ?? '').toString(), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Colors.white)),
-                      ),
+                  child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: left ? CrossAxisAlignment.start : CrossAxisAlignment.end, children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(color: Colors.black38, borderRadius: BorderRadius.circular(12)),
+                      child: FittedBox(fit: BoxFit.scaleDown, child: _scoreTag(score, left ? kPkRed : kPkBlue, left: left)),
                     ),
+                    const SizedBox(height: 4),
+                    Row(mainAxisAlignment: left ? MainAxisAlignment.start : MainAxisAlignment.end, children: [
+                      Flexible(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(color: (left ? kPkRed : kPkBlue).withValues(alpha: 0.8), borderRadius: BorderRadius.circular(10)),
+                          child: Text((host?['displayName'] ?? '').toString(), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Colors.white)),
+                        ),
+                      ),
+                    ]),
                   ]),
                 ),
                 if (stamp != null) Center(child: _ResultStamp(kind: stamp)),
@@ -150,6 +200,7 @@ class _VideoPkStageState extends State<VideoPkStage> with SingleTickerProviderSt
               half(
                 left: true,
                 host: myHost,
+                score: sMe,
                 stamp: myResult,
                 child: widget.hostVideo ?? Center(child: UserAvatar(user: myHost, radius: 34)),
               ),
@@ -157,6 +208,7 @@ class _VideoPkStageState extends State<VideoPkStage> with SingleTickerProviderSt
               half(
                 left: false,
                 host: theirHost,
+                score: sThem,
                 stamp: myResult == null ? null : (myResult == 'draw' ? 'draw' : (myResult == 'win' ? 'lose' : 'win')),
                 // Yalnızca PK sürerken bağlanılır; bittiğinde (sonuç ekranı) yalnızca profil fotoğrafı.
                 child: status == 'active'
@@ -172,28 +224,31 @@ class _VideoPkStageState extends State<VideoPkStage> with SingleTickerProviderSt
                     : Center(child: UserAvatar(user: theirHost, radius: 34)),
               ),
             ]),
-            // Ortada VS ve süre
+            // Üstte ortada Micolive gibi "PK 02:13" hapı (hareketli PK logosu + geri sayım; son 10 sn yanıp söner).
             Align(
-              alignment: const Alignment(0, -0.9),
+              alignment: Alignment.topCenter,
               child: AnimatedBuilder(
                 animation: _fx,
                 builder: (_, __) {
                   final beat = urgent ? (0.5 + 0.5 * math.sin(_fx.value * 4 * math.pi)).abs() : 0.0;
-                  return Column(mainAxisSize: MainAxisSize.min, children: [
-                    Transform.scale(
-                      scale: 1 + 0.06 * math.sin(_fx.value * 2 * math.pi),
-                      child: const PkLogo(size: 44),
-                    ),
-                    const SizedBox(height: 3),
-                    Transform.scale(
-                      scale: 1 + 0.18 * beat,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(color: Color.lerp(Colors.black54, Colors.red, beat), borderRadius: BorderRadius.circular(9)),
-                        child: Text(finished ? 'BİTTİ' : _clock(_left), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Colors.white)),
+                  return Transform.scale(
+                    scale: 1 + 0.12 * beat,
+                    child: Container(
+                      margin: const EdgeInsets.only(top: 4),
+                      padding: const EdgeInsets.fromLTRB(6, 2, 12, 2),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(16),
+                        gradient: LinearGradient(colors: [Color.lerp(const Color(0xFF3A0D4F), Colors.red, beat)!, Color.lerp(const Color(0xFF0D1E5C), Colors.red, beat)!]),
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.55), width: 1),
+                        boxShadow: const [BoxShadow(color: Color(0x66FF2D95), blurRadius: 10, offset: Offset(-3, 0)), BoxShadow(color: Color(0x662F80FF), blurRadius: 10, offset: Offset(3, 0))],
                       ),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        const PkLogo(size: 30, animated: true),
+                        const SizedBox(width: 4),
+                        Text(finished ? 'BİTTİ' : _clock(_left), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: 0.5)),
+                      ]),
                     ),
-                  ]);
+                  );
                 },
               ),
             ),
@@ -213,38 +268,39 @@ class _VideoPkStageState extends State<VideoPkStage> with SingleTickerProviderSt
               ),
           ]),
         ),
-        // Skor çubuğu
-        Container(
-          padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
-          decoration: const BoxDecoration(gradient: LinearGradient(colors: [Color(0xE65A0A1E), Color(0xE614102A), Color(0xE60A2160)])),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Row(children: [
-              Expanded(child: PkScoreText(value: sMe, color: kPkRed, alignLeft: true)),
-              const Text('PK', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic, color: Color(0xFFFFD54F))),
-              Expanded(child: PkScoreText(value: sThem, color: kPkBlue, alignLeft: false)),
-            ]),
-            const SizedBox(height: 4),
-            RepaintBoundary(
-              child: SizedBox(
-                height: 12,
-                child: LayoutBuilder(
-                  builder: (context, bx) => TweenAnimationBuilder<double>(
-                    tween: Tween(end: ratio),
-                    duration: const Duration(milliseconds: 700),
-                    curve: Curves.easeOutCubic,
-                    builder: (_, r, __) => AnimatedBuilder(
-                      animation: _fx,
-                      builder: (_, __) => CustomPaint(size: Size(bx.maxWidth, 12), painter: PkBarPainter(ratio: r, t: _fx.value)),
-                    ),
-                  ),
+        // Micolive gibi: ince pembe | mavi oran çizgisi (birleşimde parlayan kıvılcım), altında iki tarafın puanı ve
+        // en çok destekleyen 3 kişinin koltukları.
+        RepaintBoundary(
+          child: SizedBox(
+            height: 8,
+            child: LayoutBuilder(
+              builder: (context, bx) => TweenAnimationBuilder<double>(
+                tween: Tween(end: ratio),
+                duration: const Duration(milliseconds: 700),
+                curve: Curves.easeOutCubic,
+                builder: (_, r, __) => AnimatedBuilder(
+                  animation: _fx,
+                  builder: (_, __) => CustomPaint(size: Size(bx.maxWidth, 8), painter: PkBarPainter(ratio: r, t: _fx.value)),
                 ),
               ),
             ),
-            const SizedBox(height: 4),
-            Row(children: [
-              Expanded(child: _supporters(listOf(me['top']), true, kPkRed)),
-              Expanded(child: _supporters(listOf(them['top']), false, kPkBlue)),
-            ]),
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+          decoration: const BoxDecoration(gradient: LinearGradient(colors: [Color(0xE63A0A2E), Color(0xE614102A), Color(0xE60A1E5A)])),
+          child: Row(children: [
+            ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: w * 0.24),
+              child: FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: _scoreTag(sMe, kPkRed, left: true)),
+            ),
+            Expanded(child: _seats(listOf(me['top']), kPkRed, left: true)),
+            const SizedBox(width: 14),
+            Expanded(child: _seats(listOf(them['top']), kPkBlue, left: false)),
+            ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: w * 0.24),
+              child: FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerRight, child: _scoreTag(sThem, kPkBlue, left: false)),
+            ),
           ]),
         ),
       ]);

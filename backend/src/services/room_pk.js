@@ -149,10 +149,11 @@ export async function finishRoomPk(id, { cancelled = false, nextRound = true } =
 
 /**
  * Hediye işlemi içinde (aynı transaction): alıcı PK takımındaki bir koltuktaysa puan yazılır.
- * points: alıcıya geçen Elmas · supportCoins: gönderenin harcadığı Coin. Kendine hediye sayılmaz.
+ * points: alıcıya geçen Elmas · supportCoins: gönderenin harcadığı Coin. Kişinin kendine gönderdiği hediye de sayılır
+ * (Micolive gibi); tarafsız moddaki oda sahibi (hakem) takımsızdır.
  */
 export async function scoreRoomPk(c, roomId, receiverId, senderId, points, supportCoins = points) {
-  if (receiverId === senderId || BigInt(points) <= 0n) return null;
+  if (BigInt(points) <= 0n) return null;
   // Kilitsiz okuma: takımsız alıcıda (dinleyici, hakem) PK satırı kilitlenmez, odadaki diğer hediyeler beklemez.
   const p = (await c.query(
     `SELECT p.*, r.owner_id FROM room_pk p JOIN rooms r ON r.id = p.room_id
@@ -161,7 +162,7 @@ export async function scoreRoomPk(c, roomId, receiverId, senderId, points, suppo
   if (!p) return null;
   const isOwner = p.owner_id === receiverId;
   const seat = isOwner ? null : (await c.query(
-    `SELECT seat_index FROM room_members WHERE room_id = $1 AND user_id = $2 AND microphone = TRUE`, [roomId, receiverId],
+    `SELECT seat_index FROM room_members WHERE room_id = $1 AND user_id = $2 AND seat_index IS NOT NULL`, [roomId, receiverId],
   )).rows[0]?.seat_index;
   const team = teamOfSeat(seat, p, { isOwner });
   if (!team) return null;
