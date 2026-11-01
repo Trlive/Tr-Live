@@ -4,6 +4,7 @@ import { requireAuth } from '../auth.js';
 import { userLimit } from '../firewall.js';
 import { fail, uuid } from '../http.js';
 import { hub } from '../realtime.js';
+import { token as livekitToken } from '../livekit.js';
 import { validDuration } from '../pk_logic.js';
 import { pkView, broadcastPk, activePkOfRoom, finishPk } from '../services/pk.js';
 import { ROOM_PK_DURATIONS, startRoomPk, finishRoomPk, roomPkView, activeRoomPk } from '../services/room_pk.js';
@@ -26,9 +27,11 @@ router.post('/pk/challenge', userLimit('pk', 20, 60e3), async (req, res) => {
   if (roomId === targetRoomId) throw fail('Kendi odanıza meydan okuyamazsınız.');
   const id = await tx(async (c) => {
     // Kilit sırası sabit (id sıralı) → deadlock yok.
-    const rooms = (await c.query(`SELECT id, owner_id FROM rooms WHERE id = ANY($1::uuid[]) AND is_active = TRUE ORDER BY id FOR UPDATE`, [[roomId, targetRoomId]])).rows;
+    const rooms = (await c.query(`SELECT id, owner_id, room_type FROM rooms WHERE id = ANY($1::uuid[]) AND is_active = TRUE ORDER BY id FOR UPDATE`, [[roomId, targetRoomId]])).rows;
     const mine = rooms.find((r) => r.id === roomId); const theirs = rooms.find((r) => r.id === targetRoomId);
     if (!mine || !theirs) throw fail('Oda bulunamadı.', 404);
+    // Odalar arası PK görüntülü yayınlar arasındadır; sesli odada oda içi PK kullanılır.
+    if (mine.room_type !== 'video' || theirs.room_type !== 'video') throw fail('PK daveti yalnızca görüntülü yayınlar arasında gönderilir.', 409);
     if (mine.owner_id !== req.user.id) throw fail('PK başlatmak için oda sahibi olmalısınız.', 403);
     if (await activePkOfRoom(roomId, (t, p) => c.query(t, p))) throw fail('Odanızda zaten bir PK var.', 409);
     if (await activePkOfRoom(targetRoomId, (t, p) => c.query(t, p))) throw fail('Hedef odada zaten bir PK var.', 409);
@@ -109,6 +112,27 @@ router.get('/pk/rooms', async (req, res) => {
     [req.user.id],
   );
   res.json({ rooms: r.rows.map((x) => ({ id: x.id, name: x.name, ownerId: x.owner_id, ownerName: x.display_name || x.username, memberCount: x.members })) });
+});
+
+// ---------------- Görüntülü PK: rakip yayının görüntüsü ----------------
+// Süren PK'daki iki odadan birinin üyesine, KARŞI odanın yayınını izlemek için yalnızca izleme (yayın yok, görünmez) anahtarı.
+// Uygulama bununla rakip yayına ikinci bir bağlantı açar; bölünmüş ekranın sağında rakip yayıncı görünür ve sesi duyulur.
+router.post('/pk/:id/peer-token', userLimit('pk_peer', 30, 60e3), async (req, res) => {
+  const id = uuid(req.params.id, 'PK');
+  const b = (await query(`SELECT room_a, room_b, host_a, host_b, status FROM pk_battles WHERE id = $1`, [id])).rows[0];
+  if (!b || b.status !== 'active') throw fail('Süren PK bulunamadı.', 404);
+  // Uygulama kendi odasını bildirir (iki PK odasının da üyesi görünebilir: odalar arası geçişte üyelik birkaç dakika kalır).
+  const mine = req.body?.roomId ? uuid(req.body.roomId, 'Oda') : null;
+  if (!mine || ![b.room_a, b.room_b].includes(mine)) throw fail('Bu PK sizin odanızda değil.', 403);
+  if (!(await query(`SELECT 1 FROM room_members WHERE user_id = $1 AND room_id = $2`, [req.user.id, mine])).rowCount) {
+    throw fail('Önce odaya girin.', 403);
+  }
+  const other = mine === b.room_a ? b.room_b : b.room_a;
+  if ((await query(`SELECT 1 FROM room_blocks WHERE room_id = $1 AND blocked_user_id = $2`, [other, req.user.id])).rowCount) {
+    throw fail('Rakip odadan engellendiğiniz için rakip yayını izleyemezsiniz.', 403);
+  }
+  const jwt = await livekitToken({ identity: `pk-${req.user.id}`, name: 'PK izleyici', room: other, canPublish: false, hidden: true, ttl: '1h' });
+  res.json({ token: jwt, url: process.env.LIVEKIT_URL, roomId: other, hostId: mine === b.room_a ? b.host_b : b.host_a });
 });
 
 // ---------------- Sesli oda içi PK ----------------

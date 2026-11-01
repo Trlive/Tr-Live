@@ -1,3 +1,13 @@
+## v2.74.0 — Görüntülü PK: bölünmüş ekran (Bigo tarzı)
+- Tekli görüntülü yayında PK kabul edilince ekran ikiye bölünür: solda bizim yayıncı, sağda rakip yayıncı (canlı görüntü
+  ve sesi). Rakip yayın, rakip odaya görünmeyen yalnızca izleme bağlantısıyla gelir (sunucu: POST /api/pk/:id/peer-token).
+- Ortada nabız atan VS ve geri sayım (son 10 sn yanıp söner); altta sayarak artan skorlar, kayan skor çizgisi ve iki tarafın
+  en çok destekleyen 3 kişisi; başlarken "BİZ / RAKİP" çarpışma animasyonu; bitince yarıların üstüne KAZANDI / KAYBETTİ /
+  BERABERE damgası. Oda sahibi PK'yı bitirebilir.
+- Oda sesi kapatılınca ya da telefon aramasında rakibin sesi de kapanır; oda küçültülünce rakip görüntüsü indirilmez.
+  Yalnızca rakip yayıncının görüntü / sesi alınır. Bağlantı koparsa kendiliğinden yeniden bağlanır.
+- PK daveti yalnızca görüntülü yayınlar arasında (sesli odada oda içi PK). Rakip odadan engellenen kişi rakip yayını izleyemez.
+
 ## v2.73.0 — Sesli oda içi PK (Kırmızı / Mavi takım)
 - Sesli odada oda sahibi veya yardımcı sahip "PK" ile oda içi PK başlatır: koltuk 2'den ortaya kadar Kırmızı, kalanı
   Mavi takım. Takım koltuklarındaki kişilere gelen hediyelerin Elmas değeri takım puanı olur (kendine hediye sayılmaz).

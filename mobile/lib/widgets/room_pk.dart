@@ -321,7 +321,7 @@ class _RoomPkBarState extends State<RoomPkBar> with SingleTickerProviderStateMix
       ),
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         Row(children: [
-          Expanded(child: _ScoreText(value: sr, color: kPkRed, alignLeft: true)),
+          Expanded(child: PkScoreText(value: sr, color: kPkRed, alignLeft: true)),
           // Ortada VS + süre; son 10 saniye kırmızı yanıp söner.
           AnimatedBuilder(
             animation: _fx,
@@ -345,7 +345,7 @@ class _RoomPkBarState extends State<RoomPkBar> with SingleTickerProviderStateMix
               ]);
             },
           ),
-          Expanded(child: _ScoreText(value: sb, color: kPkBlue, alignLeft: false)),
+          Expanded(child: PkScoreText(value: sb, color: kPkBlue, alignLeft: false)),
           if (widget.canManage)
             InkResponse(onTap: _manage, radius: 16, child: const Padding(padding: EdgeInsets.only(left: 4), child: Icon(Icons.more_vert, size: 18, color: Colors.white70))),
         ]),
@@ -361,7 +361,7 @@ class _RoomPkBarState extends State<RoomPkBar> with SingleTickerProviderStateMix
               curve: Curves.easeOutCubic,
               builder: (_, r, __) => AnimatedBuilder(
                 animation: _fx,
-                builder: (_, __) => CustomPaint(size: Size(box.maxWidth, 12), painter: _BarPainter(ratio: r, t: _fx.value)),
+                builder: (_, __) => CustomPaint(size: Size(box.maxWidth, 12), painter: PkBarPainter(ratio: r, t: _fx.value)),
               ),
             );
           }),
@@ -380,11 +380,11 @@ class _RoomPkBarState extends State<RoomPkBar> with SingleTickerProviderStateMix
 }
 
 /// Skor: yeni değere sayarak ilerler.
-class _ScoreText extends StatelessWidget {
+class PkScoreText extends StatelessWidget {
   final BigInt value;
   final Color color;
   final bool alignLeft;
-  const _ScoreText({required this.value, required this.color, required this.alignLeft});
+  const PkScoreText({super.key, required this.value, required this.color, required this.alignLeft});
 
   @override
   Widget build(BuildContext context) {
@@ -401,10 +401,10 @@ class _ScoreText extends StatelessWidget {
   }
 }
 
-class _BarPainter extends CustomPainter {
+class PkBarPainter extends CustomPainter {
   final double ratio;
   final double t;
-  _BarPainter({required this.ratio, required this.t});
+  PkBarPainter({required this.ratio, required this.t});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -432,17 +432,18 @@ class _BarPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_BarPainter old) => old.ratio != ratio || old.t != t;
+  bool shouldRepaint(PkBarPainter old) => old.ratio != ratio || old.t != t;
 }
 
 // ------------------------------------------------------------------ Başlangıç / bitiş animasyonları
 
 /// "PK BAŞLADI": kırmızı ve mavi yarılar iki yandan çarpışır, ortada VS patlar (~1,8 sn).
-Future<void> showRoomPkStart(BuildContext context) async {
+/// [left] / [right]: iki yanın adı (sesli oda: KIRMIZI / MAVİ, görüntülü PK: BİZ / RAKİP).
+Future<void> showRoomPkStart(BuildContext context, {String left = 'KIRMIZI', String right = 'MAVİ'}) async {
   final overlay = Overlay.maybeOf(context);
   if (overlay == null) return;
   late OverlayEntry entry;
-  entry = OverlayEntry(builder: (_) => _PkStartFx(onDone: () => entry
+  entry = OverlayEntry(builder: (_) => _PkStartFx(left: left, right: right, onDone: () => entry
     ..remove()
     ..dispose()));
   overlay.insert(entry);
@@ -450,7 +451,9 @@ Future<void> showRoomPkStart(BuildContext context) async {
 
 class _PkStartFx extends StatefulWidget {
   final VoidCallback onDone;
-  const _PkStartFx({required this.onDone});
+  final String left;
+  final String right;
+  const _PkStartFx({required this.onDone, required this.left, required this.right});
 
   @override
   State<_PkStartFx> createState() => _PkStartFxState();
@@ -494,7 +497,7 @@ class _PkStartFxState extends State<_PkStartFx> with SingleTickerProviderStateMi
                   child: Container(
                     decoration: const BoxDecoration(gradient: LinearGradient(colors: [kPkRedDeep, kPkRed])),
                     alignment: Alignment.center,
-                    child: const Text('KIRMIZI', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic, color: Colors.white)),
+                    child: Text(widget.left, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic, color: Colors.white)),
                   ),
                 ),
               ),
@@ -508,7 +511,7 @@ class _PkStartFxState extends State<_PkStartFx> with SingleTickerProviderStateMi
                   child: Container(
                     decoration: const BoxDecoration(gradient: LinearGradient(colors: [kPkBlue, kPkBlueDeep])),
                     alignment: Alignment.center,
-                    child: const Text('MAVİ', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic, color: Colors.white)),
+                    child: Text(widget.right, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic, color: Colors.white)),
                   ),
                 ),
               ),

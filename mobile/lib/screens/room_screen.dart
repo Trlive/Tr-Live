@@ -39,6 +39,7 @@ import 'gift_sheet.dart';
 import 'ludo_screen.dart';
 import 'pk_sheet.dart';
 import '../widgets/room_pk.dart';
+import '../widgets/video_pk.dart';
 import 'music_screens.dart';
 import 'inbox_screens.dart';
 import '../widgets/level_badge.dart';
@@ -113,6 +114,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   /// Canlı yayın: yayıncı tam ekran, konuklar sağda küçük pencerelerde. Değilse görüntülü oda çoklu (ızgara) yayındır.
   bool get _isLive => _isVideo && _room?['layout'] == 'live';
   bool get _isGrid => _isVideo && !_isLive;
+  /// Tekli görüntülü yayında süren / yeni biten PK: ekran ikiye bölünür (solda biz, sağda rakip).
+  bool get _pkLive => _isLive && _pk != null && (_pk!['status'] == 'active' || _pk!['status'] == 'finished');
   lk.CameraPosition _camPos = lk.CameraPosition.front;
   final EntranceQueue _entrance = EntranceQueue();
   // Uçan yazı (ücretli mesaj ve "Hoş geldin" selamı) ve uygulama uyarı duyurusu.
@@ -685,7 +688,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       final pk = mapOf(e['pk']);
       if (pk != null && (mapOf(pk['a'])?['roomId'] == widget.roomId || mapOf(pk['b'])?['roomId'] == widget.roomId)) {
         final st = pk['status'];
+        final wasActive = _pk?['id'] == pk['id'] && _pk?['status'] == 'active';
         setState(() => _pk = pk);
+        // Davet kabul edilip PK başladı: çarpışma animasyonu (oda küçültülmüşken değil).
+        if (st == 'active' && !wasActive && mounted && !RoomDock.minimized.value) showRoomPkStart(context, left: 'BİZ', right: 'RAKİP');
         if (st == 'finished' || st == 'declined' || st == 'cancelled') {
           Future.delayed(const Duration(seconds: 8), () {
             if (mounted && _pk?['id'] == pk['id'] && _pk?['status'] != 'active') setState(() => _pk = null);
@@ -991,7 +997,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         _syncPublish();
       }
     }
-    if (mounted) toast(context, call ? '📞 Arama: oda sesi kapatıldı' : 'Arama bitti, oda sesi açıldı');
+    if (mounted) {
+      setState(() {}); // görüntülü PK'da rakibin sesi de aramaya göre kapanır / açılır
+      toast(context, call ? '📞 Arama: oda sesi kapatıldı' : 'Arama bitti, oda sesi açıldı');
+    }
   }
 
   /// Koltuktaysak mikrofonu (görüntülü odada kamerayı) yayına aç, değilsek kapat.
@@ -3013,11 +3022,22 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   /// Canlı yayın zemini: yayıncının (0. koltuk) kamerası tam ekran. Kamera kapalıysa büyük avatar, yayıncı koltukta
   /// değilse tema zemini üstünde bilgi yazısı. Dokunma alanı değildir (dokunmalar sahne katmanında).
+  /// Görüntülü PK'da bölünmüş ekranın sol yarısı: bizim yayıncı (hediye animasyonları için aynı koltuk anahtarıyla).
+  Widget? _pkHostVideo() {
+    final host = _bySeat[0];
+    if (host == null) return null;
+    final uid = host['userId'].toString();
+    final v = _videoFor(uid, cover: true);
+    return KeyedSubtree(key: _seatKeys.putIfAbsent(uid, () => GlobalKey()), child: v ?? Center(child: UserAvatar(user: mapOf(host['user']), radius: 34)));
+  }
+
   Widget _liveBackdrop() {
     final host = _bySeat[0];
     final t = themeOf(_room?['theme']?.toString());
     final Widget content;
-    if (host == null) {
+    if (_pkLive) {
+      content = const SizedBox.shrink(); // yayıncı PK bölünmüş ekranında görünür
+    } else if (host == null) {
       content = const Center(child: Text('Yayıncı şu an kamerada değil', style: TextStyle(color: Colors.white70, fontSize: 15)));
     } else {
       final uid = host['userId'].toString();
@@ -3802,7 +3822,17 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                     if (_inputOpen) Positioned.fill(child: GestureDetector(onTap: _closeInput, child: const ColoredBox(color: Color(0xB8000000)))),
                   ]),
                   if (_roomPk != null && _roomPk!['status'] == 'active') RoomPkBar(pk: _roomPk!, canManage: _isOwnerOrCohost, onStale: _reloadRoomPk),
-                  if (_pk != null)
+                  if (_pk != null && _pkLive)
+                    VideoPkStage(
+                      key: ValueKey('vpk-${_pk!['id']}'),
+                      pk: _pk!,
+                      roomId: widget.roomId,
+                      hostVideo: _pkHostVideo(),
+                      canManage: _myRole == 'owner',
+                      muted: _roomMuted || CallGuard.instance.inCall.value,
+                      paused: _videoPaused || RoomDock.minimized.value,
+                    )
+                  else if (_pk != null)
                     PkBanner(
                       pk: _pk!,
                       roomId: widget.roomId,

@@ -6,10 +6,11 @@ const configured = () => Boolean(process.env.LIVEKIT_API_KEY && process.env.LIVE
 const httpUrl = () => (process.env.LIVEKIT_API_URL || (process.env.LIVEKIT_URL || '').replace(/^wss:/, 'https:').replace(/^ws:/, 'http:'));
 const client = () => new RoomServiceClient(httpUrl(), process.env.LIVEKIT_API_KEY, process.env.LIVEKIT_API_SECRET);
 
-export async function token({ identity, name, room, canPublish = true, metadata = '' }) {
+// hidden: katılımcı odadakilere görünmez (görüntülü PK'da rakip yayını izleyenler). ttlSeconds: anahtar ömrü.
+export async function token({ identity, name, room, canPublish = true, metadata = '', hidden = false, ttl = '2h' }) {
   if (!configured()) throw Object.assign(new Error('LiveKit yapılandırılmamış.'), { status: 503 });
-  const t = new AccessToken(process.env.LIVEKIT_API_KEY, process.env.LIVEKIT_API_SECRET, { identity, name, metadata, ttl: '2h' });
-  t.addGrant({ roomJoin: true, room, canPublish, canSubscribe: true, canPublishData: true });
+  const t = new AccessToken(process.env.LIVEKIT_API_KEY, process.env.LIVEKIT_API_SECRET, { identity, name, metadata, ttl });
+  t.addGrant({ roomJoin: true, room, canPublish, canSubscribe: true, canPublishData: !hidden, ...(hidden ? { hidden: true } : {}) });
   return t.toJwt();
 }
 
