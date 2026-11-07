@@ -136,6 +136,32 @@ router.post('/rooms/:roomId/music/upload',
     res.status(201).json({ track: trackJson(t) });
   });
 
+// Aynı kişi aynı şarkıyı bu odaya son saatlerde yüklediyse dosya yeniden gönderilmez (süresi uzatılıp kullanılır).
+router.post('/rooms/:roomId/music/reuse', userLimit('music_reuse', 120, 10 * 60e3), async (req, res) => {
+  const roomId = uuid(req.params.roomId, 'Oda');
+  const member = await context(roomId, req.user.id);
+  if (!MUSIC_MANAGERS.includes(member.role) && member.microphone !== true) throw fail('Müzik çalmak için mikrofonda olmalısınız.', 403);
+  const size = Math.floor(Number(req.body?.sizeBytes));
+  const dur = Math.floor(Number(req.body?.durationMs));
+  const title = String(req.body?.title ?? '').replace(/[\u0000-\u001f]/g, '').trim().slice(0, 120) || 'Adsız parça';
+  if (!Number.isFinite(size) || size <= 0 || !Number.isFinite(dur) || dur <= 0) throw fail('Geçersiz şarkı bilgisi.');
+  const t = (await query(
+    `SELECT id, title, artist, url, cover_url, duration_ms FROM music_tracks
+     WHERE is_temp AND is_active = TRUE AND created_by = $1 AND owner_room_id = $2 AND size_bytes = $3 AND duration_ms = $4 AND title = $5
+       AND expires_at > NOW() + INTERVAL '10 minutes'
+     ORDER BY created_at DESC LIMIT 1`,
+    [req.user.id, roomId, size, dur, title],
+  )).rows[0];
+  if (!t) throw fail('Şarkı daha önce yüklenmemiş.', 404);
+  try {
+    await fs.access(path.join(config.uploadDir, 'music', path.basename(t.url)));
+  } catch (_) {
+    throw fail('Şarkı daha önce yüklenmemiş.', 404);
+  }
+  await keepTemp(query, t.id);
+  res.json({ track: trackJson(t) });
+});
+
 router.get('/rooms/:roomId/music', async (req, res) => {
   const roomId = uuid(req.params.roomId, 'Oda');
   await context(roomId, req.user.id);
@@ -187,13 +213,16 @@ router.post('/rooms/:roomId/music/play', userLimit('music_ctl', 40, 60e3), async
   const trackId = req.body?.trackId ? uuid(req.body.trackId, 'Şarkı') : null;
 
   if (trackId) {
-    const t = (await query(`SELECT id FROM music_tracks WHERE id = $1 AND is_active = TRUE AND (owner_room_id IS NULL OR owner_room_id = $2)`, [trackId, roomId])).rows[0];
+    const t = (await query(`SELECT id, duration_ms FROM music_tracks WHERE id = $1 AND is_active = TRUE AND (owner_room_id IS NULL OR owner_room_id = $2)`, [trackId, roomId])).rows[0];
     if (!t) throw fail('Şarkı bulunamadı.', 404);
     await keepTemp(query, trackId);
+    // DJ şarkıyı yükleme sürerken telefonundan dinlemeye başladıysa odadakiler onun konumundan başlar.
+    const p = Math.floor(Number(req.body?.positionMs ?? 0));
+    const pos = Number.isFinite(p) && p > 0 ? Math.min(p, Math.max(0, (t.duration_ms ?? 0) - 1000)) : 0;
     await query(
-      `INSERT INTO room_music(room_id, track_id, status, position_ms, updated_at, controlled_by) VALUES($1,$2,'playing',0,NOW(),$3)
-       ON CONFLICT (room_id) DO UPDATE SET track_id = EXCLUDED.track_id, status = 'playing', position_ms = 0, updated_at = NOW(), controlled_by = EXCLUDED.controlled_by`,
-      [roomId, trackId, req.user.id],
+      `INSERT INTO room_music(room_id, track_id, status, position_ms, updated_at, controlled_by) VALUES($1,$2,'playing',$4,NOW(),$3)
+       ON CONFLICT (room_id) DO UPDATE SET track_id = EXCLUDED.track_id, status = 'playing', position_ms = EXCLUDED.position_ms, updated_at = NOW(), controlled_by = EXCLUDED.controlled_by`,
+      [roomId, trackId, req.user.id, pos],
     );
   } else {
     const r = await query(

@@ -107,6 +107,8 @@ class _MusicLibraryPageState extends State<MusicLibraryPage> {
 
   /// Çalan şarkıya dokununca duraklat / devam; başka şarkıya dokununca o çalar.
   Future<void> _tap(LocalTrack t, bool active) async {
+    // Şarkı odaya gönderilirken dokunmalar beklesin.
+    if (RoomPlaylist.instance.busy.value) return;
     if (active) {
       final playing = MusicService.instance.state.value?['status'] == 'playing';
       await guard(context, () => Api.post('/api/rooms/${widget.roomId}/music/${playing ? 'pause' : 'play'}'));
@@ -185,10 +187,16 @@ class _MusicLibraryPageState extends State<MusicLibraryPage> {
                                   active: active,
                                   onTap: () => _tap(t, active),
                                   onLongPress: () => _remove(t),
-                                  trailing: Icon(
-                                    active && playing ? Icons.pause_circle_outline_rounded : Icons.play_circle_outline_rounded,
-                                    color: active ? _green : const Color(0xFFC5CAD6),
-                                    size: 34,
+                                  trailing: ValueListenableBuilder<String?>(
+                                    valueListenable: RoomPlaylist.instance.loadingPath,
+                                    builder: (context, loading, _) => loading == t.path
+                                        // Şarkı odaya gönderiliyor (DJ zaten telefondan dinliyor).
+                                        ? const SizedBox(width: 34, height: 34, child: Padding(padding: EdgeInsets.all(6), child: CircularProgressIndicator(strokeWidth: 2.6, color: _green)))
+                                        : Icon(
+                                            (active || cur == t.path) && (playing || loading == t.path) ? Icons.pause_circle_outline_rounded : Icons.play_circle_outline_rounded,
+                                            color: active || cur == t.path ? _green : const Color(0xFFC5CAD6),
+                                            size: 34,
+                                          ),
                                   ),
                                 );
                               },

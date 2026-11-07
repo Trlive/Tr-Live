@@ -25,6 +25,66 @@ class MusicService {
 
   AudioPlayer get _p => _player ??= AudioPlayer();
 
+  /// DJ telefonunda şarkı sunucudan indirilmez, telefondaki dosyadan çalar (sunucu kimliği → dosya yolu).
+  final Map<String, String> _localFiles = {};
+
+  /// Yükleme sürerken DJ telefonunda şarkı hemen yerelden başlar; bu sırada gelen eski sunucu durumları çaları ellemez.
+  String? _pendingLocal;
+
+  /// Çalarda şu an yerel önizlemesi açık olan dosya (başarısızlıkta durdurmak için).
+  String? _previewPath;
+
+  /// DJ: seçilen şarkıyı yükleme beklemeden telefondaki dosyadan hemen çalmaya başlar. Açılamazsa false.
+  Future<bool> startLocalPreview(String path) async {
+    _gen++; // yolda olan eski durum işlemleri önizlemeyi bozmasın
+    _pendingLocal = path;
+    _previewPath = path;
+    _trackId = null;
+    try {
+      await _p.setFilePath(path);
+      if (_pendingLocal != path) return false;
+      await _p.setVolume(_vol);
+      unawaited(_p.play().catchError((_) {}));
+      return true;
+    } catch (_) {
+      // Yerel dosya açılamadı: yükleme sonrası sunucudan çalınır.
+      if (_pendingLocal == path) {
+        _pendingLocal = null;
+        _previewPath = null;
+      }
+      return false;
+    }
+  }
+
+  /// Yerel önizlemenin şu anki konumu (yükleme bitince odadakiler buradan başlar).
+  int get localPositionMs => _pendingLocal == null ? 0 : _p.position.inMilliseconds;
+
+  /// Sunucudaki şarkı [trackId] bu telefondaki [path] dosyasıdır: DJ telefonu onu indirmeden yerelden çalar.
+  void registerLocalFile(String trackId, String path) => _localFiles[trackId] = path;
+
+  /// Oda şarkıya geçti: çalar yeniden yüklenmeden devam eder. [restart]: odadakiler baştan başladıysa DJ de başa döner.
+  void finishLocalPreview(String path, String trackId, {bool restart = false}) {
+    _localFiles[trackId] = path;
+    if (_pendingLocal != path) return;
+    _pendingLocal = null;
+    _previewPath = null;
+    _trackId = trackId;
+    if (restart) _p.seek(Duration.zero).catchError((_) {});
+  }
+
+  /// Yükleme / başlatma başarısız: yerel önizleme durur, odadaki duruma dönülür.
+  Future<void> cancelLocalPreview(String path) async {
+    final mine = _pendingLocal == path || _previewPath == path;
+    if (_pendingLocal == path) _pendingLocal = null;
+    if (_previewPath == path) _previewPath = null;
+    if (!mine) return;
+    _trackId = null;
+    try {
+      await _player?.stop();
+    } catch (_) {}
+    await refresh();
+  }
+
   /// Müziği dinlenen oda.
   String? get roomId => _roomId;
   bool _callHooked = false;
@@ -105,6 +165,7 @@ class MusicService {
     state.value = s;
     final track = mapOf(s['track']);
     final status = s['status'];
+    if (_pendingLocal != null) return; // DJ yerel önizlemede; yükleme bitince sunucu durumuna geçilir
     try {
       if (track == null || status == 'stopped') {
         _trackId = null;
@@ -116,7 +177,19 @@ class MusicService {
       var fresh = false;
       if (track['id'] != _trackId) {
         _trackId = null; // yükleme başarısız olursa sonraki durumda yeniden denensin
-        await _p.setUrl(url);
+        final local = _localFiles[track['id']];
+        // DJ telefonu: dosya telefonda varsa indirmeden yerelden çalar.
+        if (local != null) {
+          try {
+            await _p.setFilePath(local);
+          } catch (_) {
+            if (stale()) return;
+            _localFiles.remove(track['id']);
+            await _p.setUrl(url);
+          }
+        } else {
+          await _p.setUrl(url);
+        }
         if (stale()) return;
         _trackId = track['id'] as String?;
         fresh = true;
@@ -154,6 +227,8 @@ class MusicService {
 
   Future<void> unbind() async {
     _gen++;
+    _pendingLocal = null;
+    _previewPath = null;
     _volSend?.cancel();
     _pendingVol = null;
     _resync?.cancel();

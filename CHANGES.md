@@ -1,3 +1,18 @@
+## v2.85.0 — Global şeritler (ışık / altın), hızlı müzik, yeni emojiler
+- Global hediye şeridi: var olan altın-kırmızı tasarım korunarak geliştirildi.
+  - 400 bin+: şeridin biçimini izleyen atan sıcak ışık halesi, şeridin (süsler dahil) üzerinden kayan parlak ışık,
+    süslerin üzerinde patlayan dört köşeli yıldız parıltıları, banttan yükselen ışık taneleri, amblemde parlama.
+  - 1 milyon+: kırmızı bant altın sarısı (süsler aynı), güçlü altın hale, altın parıltı iki kez geçer, amblemin
+    arkasında dönen altın ışınlar, bant kenarında dolaşan kuyruklu altın ışıklar, yağan altın tozları, toplam Coin.
+- Müzik daha hızlı: DJ şarkıyı seçince yükleme beklenmeden telefondaki dosyadan hemen çalar; yükleme bitince odadakiler
+  DJ'nin o anki yerinden dinler (sunucu: play'de positionMs). DJ telefonu şarkıyı sunucudan yeniden indirmez.
+  Aynı şarkı son saatlerde bu odaya yüklendiyse (uygulama kapanıp açılsa bile) yeniden yüklenmez (yeni uç
+  POST /api/rooms/:id/music/reuse). Listede gönderilen şarkıda küçük yükleniyor simgesi.
+- Mikrofon emojileri: kendi çizdiğimiz 19 emoji kaldırıldı. İlk 3 emoji aynı; yerine Google'ın hareketli Noto
+  emojileri (CC BY 4.0) geldi: 😘 ve aynalanmış (öbür yöne) öpücük, 😍 🥰 😂 🤣 😎 🤩 🥳 😜 🤔 😭 😡 😱 😴 👏 🙏 👋 ❤️ 🔥 💯
+  (toplam 24). Sunucu her emojiyi bir kez indirip saklar (GET /api/emoji/noto/:kod), telefon da önbelleğe alır;
+  alınamazsa düz emoji gösterilir. Hakkında → Lisanslar sayfası eklendi (atıf).
+
 ## v2.84.0 — Düzeltmeler (WIP rozeti, hediye şeritleri, emojiler, çanta)
 - Oda içi oda adı kutusu kısaltıldı: en fazla ekranın ~%36'sı, ad kısaysa yalnızca ad kadar; uzun ad kayar.
 - WIP rozeti her yerde yeni görünüm (Yoho VIP3 gibi): koyu parlak hap, ince altın çerçeve, eğik altın "WIP3";

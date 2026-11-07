@@ -321,6 +321,12 @@ class LocalMusic {
     });
   }
 
+  /// Bu şarkı bu odaya daha önce yüklendi mi (yükleme beklemeden hemen çalınabilir).
+  bool isUploaded(String roomId, LocalTrack t) {
+    final c = _uploaded[_key(roomId, t)];
+    return c != null && DateTime.now().difference(c.at) < const Duration(hours: 10);
+  }
+
   /// Sunucu kaydı silinmişse (süresi doldu) önbellekten düşer; sonraki deneme yeniden yükler.
   void forgetUpload(String roomId, LocalTrack t) => _uploaded.remove(_key(roomId, t));
 
@@ -329,6 +335,12 @@ class LocalMusic {
     if (!await file.exists()) throw ApiException('Dosya telefonda bulunamadı. Listeden kaldırıp yeniden ekleyin.');
     final size = await file.length();
     if (size > maxBytes) throw ApiException('Dosya çok büyük (en fazla 25 MB). Daha küçük bir dosya seçin.');
+    // Aynı şarkı bu odaya son saatlerde yüklendiyse (uygulama kapanıp açılmış olsa bile) yeniden gönderilmez.
+    try {
+      final r = await Api.post('/api/rooms/$roomId/music/reuse', {'title': t.title, 'durationMs': t.durationMs, 'sizeBytes': size});
+      final id = (r['track'] as Map?)?['id'];
+      if (id != null) return id.toString();
+    } catch (_) {/* yoksa yüklenir */}
     final bytes = await file.readAsBytes();
     final up = await Api.postBytes('/api/rooms/$roomId/music/upload', bytes, contentTypeOf(t.path), query: {
       'title': t.title,

@@ -6,6 +6,8 @@ import fs from 'node:fs';
 import { getConfig } from '../services/app_config.js';
 import { TERMS_VERSION, LEGAL_SITE } from '../legal.js';
 import { PRIVACY_EN, COMPANY, privacyHtml } from '../legal_texts.js';
+import path from 'node:path';
+import { config } from '../config.js';
 
 // Sunucunun sürümü (yönetim panelinde ve sorun ararken görünür).
 let SERVER_VERSION = null;
@@ -70,6 +72,51 @@ router.post('/client-errors', ipLimit('client_errors', 30, 3600e3), optionalAuth
     ).catch(() => {});
   }
   res.json({ ok: true, saved: n });
+});
+
+// ---- Hareketli mikrofon emojileri (Google Noto Emoji Animation, CC BY 4.0) ----
+// Uygulama emojiyi bu adresten ister; sunucu ilk istekte Google'dan bir kez indirip diskte saklar, sonra kendisi verir.
+// Yalnızca aşağıdaki liste (uygulamadaki mikrofon emojileri) istenebilir.
+export const NOTO_MIC_EMOJIS = new Set(['1f602', '1f60d', '1f618', '1f970', '1f60e', '1f973', '1f929', '1f923', '1f62d', '1f621',
+  '1f631', '1f914', '1f634', '1f61c', '1f44f', '1f525', '2764_fe0f', '1f64f', '1f4af', '1f44b']);
+const emojiInflight = new Map();
+async function fetchNotoEmoji(code) {
+  const dir = path.join(config.uploadDir, 'emoji');
+  await fs.promises.mkdir(dir, { recursive: true });
+  const variants = [code, code.split('_')[0]].filter((v, i, a) => a.indexOf(v) === i);
+  for (const v of variants) {
+    for (const ext of ['webp', 'gif']) {
+      try {
+        const r = await fetch(`https://fonts.gstatic.com/s/e/notoemoji/latest/${v}/512.${ext}`, { signal: AbortSignal.timeout(20000) });
+        const type = r.headers.get('content-type') ?? '';
+        if (!r.ok || !type.startsWith('image/')) continue;
+        const buf = Buffer.from(await r.arrayBuffer());
+        if (!buf.length || buf.length > 5 * 1024 * 1024) continue;
+        const file = path.join(dir, `${code}.${ext}`);
+        await fs.promises.writeFile(`${file}.tmp`, buf);
+        await fs.promises.rename(`${file}.tmp`, file);
+        return file;
+      } catch (_) { /* sıradaki biçim / adres */ }
+    }
+  }
+  return null;
+}
+router.get('/emoji/noto/:code', ipLimit('emoji', 600, 60e3), async (req, res) => {
+  const code = String(req.params.code ?? '').toLowerCase().replace(/\.(webp|gif)$/, '');
+  if (!NOTO_MIC_EMOJIS.has(code)) return res.status(404).json({ message: 'Emoji bulunamadı.' });
+  const dir = path.join(config.uploadDir, 'emoji');
+  let file = null;
+  for (const ext of ['webp', 'gif']) {
+    const f = path.join(dir, `${code}.${ext}`);
+    if (fs.existsSync(f)) { file = f; break; }
+  }
+  if (!file) {
+    if (!emojiInflight.has(code)) emojiInflight.set(code, fetchNotoEmoji(code).finally(() => emojiInflight.delete(code)));
+    file = await emojiInflight.get(code);
+  }
+  if (!file) return res.status(502).json({ message: 'Emoji şu an alınamadı.' });
+  res.set('Cache-Control', 'public, max-age=2592000, immutable');
+  res.sendFile(path.basename(file), { root: path.resolve(dir) });
 });
 
 // Gizlilik Politikası tek kaynaktan (legal_texts.js): uygulama JSON'u okur; Google Play, Google ve Facebook giriş

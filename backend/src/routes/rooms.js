@@ -672,7 +672,7 @@ router.post('/:roomId/mic/take', requireAuth, userLimit('mic', 60, 60e3), async 
 
 // Mikrofon emojisi: koltuktaki kişi 3 hareketli emojiden birini gönderir, koltuğunda birkaç saniye oynar.
 /** Mikrofon emojisi sayısı (uygulamadaki assets/images/mic_emoji_1..N.webp). */
-const MIC_EMOJI_COUNT = 22;
+const MIC_EMOJI_COUNT = 24;
 
 router.post('/:roomId/mic-emoji', requireAuth, userLimit('mic_emoji', 20, 60e3), async (req, res) => {
   const roomId = uuid(req.params.roomId, 'Oda');

@@ -4,7 +4,7 @@
 
 Kimlik: **🔒** giriş gerekli · **👑** yalnızca yönetici · **🛠** yönetici + yardımcı admin (destek) · **⏱** hız sınırı adı
 
-**Toplam 371 uç.**
+**Toplam 373 uç.**
 
 ## system.js  (`/api`)
 
@@ -13,6 +13,7 @@ Kimlik: **🔒** giriş gerekli · **👑** yalnızca yönetici · **🛠** yön
 | GET | `/api/app/config` | açık |  | Uygulama açılışında okunur: zorunlu/isteğe bağlı güncelleme bilgisi. Giriş gerektirmez. |
 | GET | `/api/push/latest` | açık | push_poll | Herkese açık duyuru olduğu için giriş gerektirmez. [after]: telefonda gösterilen son bildirimin numarası. |
 | POST | `/api/client-errors` | (isteğe bağlı) | client_errors | Giriş ekranındaki hatalar da gönderilebilsin diye oturum zorunlu değildir; IP başına sınırlıdır. |
+| GET | `/api/emoji/noto/:code` | açık | emoji |  |
 | GET | `/api/legal/privacy.json` | açık |  | ayarlarında istenen herkese açık adres aynı metnin HTML sayfasıdır. Diğer sayfalar sitede. |
 | GET | `/api/legal/privacy` | açık |  |  |
 | GET | `/api/legal/data-deletion` | açık |  |  |
@@ -460,6 +461,7 @@ Kimlik: **🔒** giriş gerekli · **👑** yalnızca yönetici · **🛠** yön
 |---|---|---|---|---|
 | GET | `/api/music/tracks` | 🔒 |  | Müzik kütüphanesi (yalnızca yönetici tarafından eklenen, lisansı kayıtlı parçalar). |
 | POST | `/api/rooms/:roomId/music/upload` | 🔒 |  |  |
+| POST | `/api/rooms/:roomId/music/reuse` | 🔒 | music_reuse | Aynı kişi aynı şarkıyı bu odaya son saatlerde yüklediyse dosya yeniden gönderilmez (süresi uzatılıp kullanılır). |
 | GET | `/api/rooms/:roomId/music` | 🔒 |  |  |
 | POST | `/api/rooms/:roomId/music/queue` | 🔒 | music_queue |  |
 | DELETE | `/api/rooms/:roomId/music/queue/:itemId` | 🔒 |  |  |

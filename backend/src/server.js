@@ -117,7 +117,7 @@ const UPDATE_EXEMPT = new Set(['/health', '/app/config', '/client-errors', '/aut
   // Google/Facebook dönüşü tarayıcıdan gelir (uygulama sürümü başlığı yok).
   '/auth/oauth/google/callback', '/auth/oauth/facebook/callback', '/legal/privacy', '/legal/privacy.json', '/legal/data-deletion', '/legal/terms']);
 app.use('/api', async (req, res, next) => {
-  if (UPDATE_EXEMPT.has(req.path)) return next();
+  if (UPDATE_EXEMPT.has(req.path) || req.path.startsWith('/emoji/')) return next(); // emoji görselleri sürüm başlığı göndermez
   // Web yönetim/ajans paneli bir uygulama sürümü değildir: zorunlu güncelleme ona uygulanmaz.
   if (req.get('X-Client') === 'web-panel') return next();
   const c = await getConfig();

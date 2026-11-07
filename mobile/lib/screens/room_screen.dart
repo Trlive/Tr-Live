@@ -9,6 +9,7 @@ import '../widgets/entrance_strip.dart';
 import '../widgets/fly_text.dart';
 import '../widgets/lucky_bag.dart';
 import '../widgets/marquee.dart';
+import '../widgets/mic_emoji.dart';
 import '../widgets/room_sheets.dart';
 import 'package:flutter/services.dart';
 import 'package:livekit_client/livekit_client.dart' as lk;
@@ -50,9 +51,6 @@ import 'user_screens.dart';
 const _roleLabels = {'owner': 'Oda sahibi', 'cohost': 'Yardımcı sahip', 'moderator': 'Moderatör', 'user': 'Üye'};
 const _roleLevel = {'user': 1, 'moderator': 2, 'cohost': 3, 'owner': 4};
 
-
-/// Mikrofon emojisi sayısı (assets/images/mic_emoji_1..N.webp; sunucudaki MIC_EMOJI_COUNT ile aynı).
-const kMicEmojiCount = 22;
 class RoomScreen extends StatefulWidget {
   final String roomId;
   final String initialName;
@@ -3191,15 +3189,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       ),
                     ),
                     OverflowBox(
-                      maxWidth: seatR * 2 * (_micEmoji[userId]! <= 3 ? 1.06 : 1.22),
-                      maxHeight: seatR * 2 * (_micEmoji[userId]! <= 3 ? 1.06 : 1.22),
-                      child: Image.asset(
-                        'assets/images/mic_emoji_${_micEmoji[userId]}.webp',
-                        key: ValueKey('emo-$userId-${_micEmojiSeq[userId]}'),
-                        fit: BoxFit.contain,
-                        errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-                        gaplessPlayback: false,
-                      ),
+                      maxWidth: seatR * 2 * micEmojiScale(_micEmoji[userId]!),
+                      maxHeight: seatR * 2 * micEmojiScale(_micEmoji[userId]!),
+                      child: MicEmojiImage(key: ValueKey('emo-$userId-${_micEmojiSeq[userId]}'), id: _micEmoji[userId]!),
                     ),
                   ]),
                 ),
@@ -4058,7 +4050,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                   child: Container(
                     padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(14)),
-                    child: Image.asset('assets/images/mic_emoji_$i.webp', fit: BoxFit.contain, errorBuilder: (_, __, ___) => const SizedBox.shrink()),
+                    child: MicEmojiImage(id: i),
                   ),
                 ),
             ]),

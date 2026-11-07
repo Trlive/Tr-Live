@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
@@ -120,23 +121,27 @@ class _GlobalGiftStripState extends State<GlobalGiftStrip> with SingleTickerProv
         child: UserAvatar(user: mapOf(e['sender']), radius: r),
       );
 
-  Widget _texts(double fs, {Color name = const Color(0xFFFFE082), Color to = Colors.white}) {
+  Widget _texts(double fs, {Color name = const Color(0xFFFFE082), Color to = Colors.white, bool strong = false}) {
     final sender = mapOf(e['sender']);
+    // Altın zeminde okunsun diye daha koyu gölge.
+    final sh = strong
+        ? const [Shadow(color: Color(0xFF3A1A00), blurRadius: 3, offset: Offset(0, 1)), Shadow(color: Color(0xAA000000), blurRadius: 6)]
+        : const [Shadow(color: Colors.black54, blurRadius: 3)];
     return Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
       Text(
         '${sender?['displayName'] ?? 'Biri'}',
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: TextStyle(color: name, fontWeight: FontWeight.w900, fontSize: fs, height: 1.15, shadows: const [Shadow(color: Colors.black54, blurRadius: 3)]),
+        style: TextStyle(color: name, fontWeight: FontWeight.w900, fontSize: fs, height: 1.15, shadows: sh),
       ),
       Text.rich(
         TextSpan(children: [
-          TextSpan(text: 'gönderdi → ', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w600, fontSize: fs * 0.82)),
+          TextSpan(text: 'gönderdi → ', style: TextStyle(color: strong ? Colors.white : Colors.white70, fontWeight: FontWeight.w600, fontSize: fs * 0.82)),
           TextSpan(text: _to, style: TextStyle(color: to, fontWeight: FontWeight.w800, fontSize: fs * 0.88)),
         ]),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: const TextStyle(height: 1.15, shadows: [Shadow(color: Colors.black54, blurRadius: 3)]),
+        style: TextStyle(height: 1.15, shadows: sh),
       ),
     ]);
   }
@@ -216,12 +221,36 @@ class _GlobalGiftStripState extends State<GlobalGiftStrip> with SingleTickerProv
   /// dolaşan altın ışık, atan amblem, yağan altın tozları, toplam Coin.
   Widget _legendStrip(double sw) => _ribbon(sw, legend: true);
 
+  /// 400K+ ve 1M+ şerit: var olan altın-kırmızı şerit korunur, üzerine ışık ve parıltı eklenir.
+  /// 400K+: şeridin biçimini izleyen sıcak ışık halesi, şerit (süsler dahil) üzerinden kayan parlak ışık, süslerin
+  /// üstünde patlayan yıldız parıltıları, banttan yükselen ışık taneleri, amblemde parlama.
+  /// 1M+: kırmızı bant altın sarısına döner; altın hale daha güçlü, altın parıltı iki kez geçer, amblemin arkasında dönen
+  /// altın ışınlar, bandın kenarında dolaşan altın ışık, yağan altın tozları, toplam Coin.
   Widget _ribbon(double sw, {required bool legend}) {
-    final w = legend ? (sw * 0.98).clamp(0.0, 410.0).toDouble() : (sw * 0.86).clamp(0.0, 350.0).toDouble();
+    final w = legend ? (sw * 0.9).clamp(0.0, 370.0).toDouble() : (sw * 0.8).clamp(0.0, 330.0).toDouble();
     final h = w / 3;
-    final fs = (h * (legend ? 0.15 : 0.155)).clamp(10.0, 17.0).toDouble();
-    // Görseldeki kırmızı bant: genişliğin ~%3–%97'si, yüksekliğin ~%34–%84'ü.
-    final bandL = w * 0.03, bandT = h * 0.34, bandW = w * 0.94, bandH = h * 0.5;
+    final fs = (h * 0.155).clamp(10.0, 16.0).toDouble();
+    // Görseldeki bant: genişliğin ~%2–%98'i, yüksekliğin ~%35,5–%83'ü.
+    final bandL = w * 0.02, bandT = h * 0.355, bandW = w * 0.96, bandH = h * 0.475;
+    final band = RRect.fromRectAndRadius(Rect.fromLTWH(bandL, bandT, bandW, bandH), Radius.circular(bandH / 2));
+    final glow = legend ? const Color(0xFFFFD54F) : const Color(0xFFFFA94D);
+    final star = legend ? const Color(0xFFFFE57F) : const Color(0xFFFFF3E0);
+    Widget ribbon() => Image.asset('assets/images/gift_ribbon_gold.webp', width: w, height: h, fit: BoxFit.fill);
+    // 1M+: yalnızca kırmızı bant altın sarısı (süsler olduğu gibi kalır).
+    Widget visual() => legend
+        ? Stack(children: [
+            ribbon(),
+            ClipRRect(
+              clipper: _RRectClip(band),
+              child: ColorFiltered(colorFilter: const ColorFilter.matrix(_kGoldBand), child: ribbon()),
+            ),
+          ])
+        : ribbon();
+    // Süslerin üzerindeki parıltı noktaları (genişlik/yükseklik oranı).
+    const glints = [
+      Offset(0.5, 0.12), Offset(0.36, 0.24), Offset(0.64, 0.24), Offset(0.2, 0.3), Offset(0.8, 0.3),
+      Offset(0.5, 0.9), Offset(0.06, 0.58), Offset(0.94, 0.58), Offset(0.3, 0.86), Offset(0.7, 0.86),
+    ];
     return Center(
       child: SizedBox(
         width: w,
@@ -231,158 +260,204 @@ class _GlobalGiftStripState extends State<GlobalGiftStrip> with SingleTickerProv
           builder: (context, _) {
             final t = _c.value;
             final pulse = 0.5 + 0.5 * math.sin(t * math.pi * 2);
+            // Parlak ışık: 400K döngüde bir, 1M iki kez geçer (geçiş arasında kısa bekleme).
+            final sweepT = ((t * (legend ? 2 : 1)) % 1.0) / 0.7;
+            final sx = -2.2 + 4.4 * sweepT.clamp(0.0, 1.0);
             return Stack(clipBehavior: Clip.none, children: [
-              // Arkada dönen dev ışınlar (yalnızca 1M+)
+              // 1M+: amblemin arkasında dönen altın ışınlar
               if (legend)
                 Positioned(
-                  left: w / 2 - w * 0.42,
-                  top: h * 0.2 - w * 0.42,
-                  width: w * 0.84,
-                  height: w * 0.84,
-                  child: Opacity(
-                    opacity: 0.55 + 0.25 * pulse,
-                    child: Transform.rotate(angle: t * math.pi * 2 / 4, child: CustomPaint(painter: _RaysPainter(color: const Color(0xAAFFC93C)))),
+                  left: w / 2 - w * 0.4,
+                  top: h * 0.14 - w * 0.4,
+                  width: w * 0.8,
+                  height: w * 0.8,
+                  child: IgnorePointer(
+                    child: Opacity(
+                      opacity: 0.45 + 0.35 * pulse,
+                      child: Transform.rotate(angle: t * math.pi * 2 / 3, child: CustomPaint(painter: _RaysPainter(color: const Color(0xCCFFC93C)))),
+                    ),
                   ),
                 ),
-              // Bandın arkasında atan ışık
-              Positioned(
-                left: bandL,
-                top: bandT,
-                width: bandW,
-                height: bandH,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(bandH / 2),
-                    boxShadow: [
-                      BoxShadow(color: const Color(0xFFFFC93C).withValues(alpha: 0.35 + 0.4 * pulse), blurRadius: legend ? 26 : 16, spreadRadius: legend ? 4 : 1),
-                      if (legend) BoxShadow(color: const Color(0xFFFF5722).withValues(alpha: 0.35 + 0.3 * pulse), blurRadius: 40, spreadRadius: 6),
-                    ],
+              // Şeridin biçimini izleyen ışık halesi (atar)
+              Positioned.fill(
+                child: Opacity(
+                  opacity: (legend ? 0.55 : 0.45) + (legend ? 0.4 : 0.35) * pulse,
+                  child: Transform.scale(
+                    scale: 1.03 + 0.02 * pulse,
+                    child: ImageFiltered(
+                      imageFilter: ui.ImageFilter.blur(sigmaX: legend ? 14 : 9, sigmaY: legend ? 14 : 9),
+                      child: ColorFiltered(colorFilter: ColorFilter.mode(glow, BlendMode.srcIn), child: ribbon()),
+                    ),
                   ),
                 ),
               ),
-              Positioned.fill(child: Image.asset('assets/images/gift_ribbon_gold.webp', fit: BoxFit.fill)),
-              // Bandın üzerinde parıltı ve yıldızlar
+              // Şerit + üzerinden kayan parlak ışık (yalnızca şeridin dolu yerlerinde görünür)
+              Positioned.fill(
+                child: ShaderMask(
+                  blendMode: BlendMode.srcATop,
+                  shaderCallback: (r) => LinearGradient(
+                    begin: Alignment(sx - 0.6, -1),
+                    end: Alignment(sx + 0.6, 1),
+                    colors: [
+                      Colors.white.withValues(alpha: 0),
+                      (legend ? const Color(0xFFFFF3C4) : Colors.white).withValues(alpha: 0.55),
+                      Colors.white.withValues(alpha: legend ? 0.95 : 0.85),
+                      (legend ? const Color(0xFFFFF3C4) : Colors.white).withValues(alpha: 0.55),
+                      Colors.white.withValues(alpha: 0),
+                    ],
+                    stops: const [0.38, 0.46, 0.5, 0.54, 0.62],
+                  ).createShader(r),
+                  child: visual(),
+                ),
+              ),
+              // Amblemde parlama
               Positioned(
-                left: bandL + bandH * 0.3,
-                top: bandT,
-                width: bandW - bandH * 0.6,
-                height: bandH,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(bandH / 2),
-                  child: Stack(children: [
-                    Positioned(
-                      left: ((t * (legend ? 1.5 : 1.0)) % 1.0) * (bandW + bandH * 2) - bandH * 2,
-                      top: 0,
-                      bottom: 0,
-                      width: bandH * 1.3,
-                      child: Transform(
-                        transform: Matrix4.skewX(-0.45),
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(colors: [
-                              Colors.white.withValues(alpha: 0),
-                              Colors.white.withValues(alpha: legend ? 0.45 : 0.32),
-                              Colors.white.withValues(alpha: 0),
-                            ]),
+                left: w / 2 - h * 0.35,
+                top: h * 0.12 - h * 0.35,
+                width: h * 0.7,
+                height: h * 0.7,
+                child: IgnorePointer(
+                  child: Opacity(
+                    opacity: (math.sin(t * math.pi * 2 * (legend ? 2 : 1)) * 0.5 + 0.5) * (legend ? 0.95 : 0.75),
+                    child: const DecoratedBox(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: RadialGradient(colors: [Color(0xFFFFFFFF), Color(0x99FFE082), Color(0x00FFC107)], stops: [0, 0.25, 1]),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              // Süslerin üzerinde patlayan yıldız parıltıları
+              for (var i = 0; i < glints.length; i++)
+                () {
+                  final ph = (t * (legend ? 1.6 : 1.2) + i * 0.37) % 1.0;
+                  final v = ph < 0.5 ? math.sin(ph / 0.5 * math.pi) : 0.0; // yarı sürede parlar, yarısında söner
+                  final size = h * (legend ? 0.3 : 0.26) * (0.7 + 0.3 * ((i * 7) % 3) / 2);
+                  return Positioned(
+                    left: glints[i].dx * w - size / 2,
+                    top: glints[i].dy * h - size / 2,
+                    width: size,
+                    height: size,
+                    child: IgnorePointer(
+                      child: Opacity(
+                        opacity: v.clamp(0.0, 1.0),
+                        child: Transform.rotate(
+                          angle: ph * math.pi,
+                          child: Transform.scale(scale: 0.4 + 0.8 * v, child: CustomPaint(painter: _GlintPainter(star))),
+                        ),
+                      ),
+                    ),
+                  );
+                }(),
+              // Banttan yükselen ışık taneleri
+              for (var i = 0; i < (legend ? 14 : 9); i++)
+                () {
+                  final ph = (t + i / (legend ? 14 : 9)) % 1.0;
+                  final x = bandL + ((i * 0.618 + 0.11) % 1.0) * bandW;
+                  final d = h * (0.035 + 0.02 * (i % 3));
+                  return Positioned(
+                    left: x,
+                    top: bandT + bandH * 0.9 - ph * h * 0.75,
+                    child: IgnorePointer(
+                      child: Opacity(
+                        opacity: math.sin(ph * math.pi).clamp(0.0, 1.0),
+                        child: Container(
+                          width: d,
+                          height: d,
+                          decoration: BoxDecoration(shape: BoxShape.circle, color: star, boxShadow: [BoxShadow(color: glow, blurRadius: d * 1.6, spreadRadius: d * 0.2)]),
+                        ),
+                      ),
+                    ),
+                  );
+                }(),
+              // 1M+: bandın kenarında dolaşan altın ışık (kuyruklu)
+              if (legend)
+                for (final off in [0.0, 0.5])
+                  for (var k = 0; k < 4; k++)
+                    () {
+                      final p = _perimeter((t * 0.6 + off - k * 0.012 + 1) % 1, bandW, bandH);
+                      final d = bandH * (0.34 - k * 0.07);
+                      return Positioned(
+                        left: bandL + p.dx - d / 2,
+                        top: bandT + p.dy - d / 2,
+                        child: IgnorePointer(
+                          child: Opacity(
+                            opacity: 1 - k * 0.22,
+                            child: Container(
+                              width: d,
+                              height: d,
+                              decoration: const BoxDecoration(
+                                shape: BoxShape.circle,
+                                gradient: RadialGradient(colors: [Color(0xFFFFFFFF), Color(0xFFFFE57F), Color(0x00FFC93C)], stops: [0, 0.35, 1]),
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    }(),
+              // 1M+: yağan altın tozları
+              if (legend)
+                for (var i = 0; i < 12; i++)
+                  () {
+                    final ph = (t * 1.2 + i / 12) % 1.0;
+                    final x = ((i * 0.37 + 0.04) % 1.0) * w;
+                    return Positioned(
+                      left: x,
+                      top: -h * 0.1 + ph * h * 1.25,
+                      child: IgnorePointer(
+                        child: Opacity(
+                          opacity: math.sin(ph * math.pi).clamp(0.0, 1.0),
+                          child: Transform.rotate(
+                            angle: ph * math.pi * 2,
+                            child: SizedBox(width: h * 0.12, height: h * 0.12, child: CustomPaint(painter: _GlintPainter(const Color(0xFFFFD54F)))),
                           ),
                         ),
                       ),
-                    ),
-                    for (var i = 0; i < (legend ? 12 : 8); i++) _twinkle(i, t, bandW - bandH * 0.6, bandH, legend ? const Color(0xFFFFE57F) : Colors.white),
-                  ]),
-                ),
-              ),
-              // 1M+: bandın kenarında dolaşan iki altın ışık
-              if (legend)
-                for (final off in [0.0, 0.5])
-                  () {
-                    final p = _perimeter((t * 0.5 + off) % 1, bandW, bandH);
-                    final d = bandH * 0.32;
-                    return Positioned(
-                      left: bandL + p.dx - d / 2,
-                      top: bandT + p.dy - d / 2,
-                      child: Container(
-                        width: d,
-                        height: d,
-                        decoration: const BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: RadialGradient(colors: [Color(0xFFFFFFFF), Color(0xFFFFE57F), Color(0x00FFC93C)], stops: [0, 0.35, 1]),
-                        ),
-                      ),
                     );
                   }(),
-              // 1M+: amblemin üstünde atan taç
-              if (legend)
-                Positioned(
-                  left: w / 2 - h * 0.13,
-                  top: -h * 0.2 - 2 * pulse,
-                  child: Transform.scale(
-                    scale: 0.92 + 0.12 * pulse,
-                    child: Text('👑', style: TextStyle(fontSize: h * 0.24, height: 1, shadows: const [Shadow(color: Color(0xFFFFC93C), blurRadius: 12)])),
-                  ),
-                ),
-              // 1M+: yağan altın tozları
-              if (legend)
-                for (var i = 0; i < 10; i++)
-                  () {
-                    final ph = (t + i / 10) % 1.0;
-                    final x = ((i * 0.37 + 0.05) % 1.0) * w;
-                    return Positioned(
-                      left: x,
-                      top: -h * 0.15 + ph * h * 1.3,
-                      child: Opacity(
-                        opacity: math.sin(ph * math.pi).clamp(0.0, 1.0),
-                        child: Icon(i.isEven ? Icons.star_rounded : Icons.circle, size: (i.isEven ? 0.09 : 0.045) * h, color: const Color(0xFFFFD54F)),
-                      ),
-                    );
-                  }(),
-              // İçerik: gönderen, alıcı, hediye, adet (ve 1M+ toplam Coin)
+              // İçerik: gönderen, alıcı, hediye, adet (1M+: toplam Coin)
               Positioned(
-                left: bandL + bandH * 0.35,
-                right: w - bandL - bandW + bandH * 0.3,
+                left: bandL + bandH * 0.32,
+                right: w - bandL - bandW + bandH * 0.28,
                 top: bandT,
                 height: bandH,
                 child: Row(children: [
-                  _avatar(bandH * 0.36, legend ? const [Color(0xFFFFF6C2), Color(0xFFFFC300), Color(0xFFB8860B)] : const [Color(0xFFFFF1A8), Color(0xFFFFB300)]),
+                  _avatar(bandH * 0.37, legend ? const [Color(0xFFFFFFFF), Color(0xFFFFD54F), Color(0xFFB8860B)] : const [Color(0xFFFFF1A8), Color(0xFFFFB300)]),
                   SizedBox(width: w * 0.02),
-                  Expanded(child: _texts(fs)),
-                  // Hediye bandın dışına taşar (büyük görünsün).
+                  Expanded(child: legend ? _texts(fs, name: Colors.white, to: const Color(0xFFFFF8E1), strong: true) : _texts(fs)),
                   SizedBox(
-                    width: bandH * (legend ? 1.15 : 1.0),
+                    width: bandH * 1.05,
                     height: bandH,
                     child: OverflowBox(
-                      maxWidth: bandH * (legend ? 1.5 : 1.3),
-                      maxHeight: bandH * (legend ? 1.5 : 1.3),
-                      child: _giftIcon(bandH * (legend ? 1.5 : 1.3), rays: true, glow: legend ? const Color(0xCCFFD54F) : const Color(0xAAFFE082)),
+                      maxWidth: bandH * 1.35,
+                      maxHeight: bandH * 1.35,
+                      child: _giftIcon(bandH * 1.35, rays: true, glow: legend ? const Color(0xCCFFF59D) : const Color(0xAAFFE082)),
                     ),
                   ),
-                  SizedBox(width: w * 0.01),
+                  SizedBox(width: w * 0.008),
                   Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
-                    Transform.scale(scale: 1 + 0.08 * pulse, child: _qty(fs * (legend ? 1.7 : 1.55), color: const Color(0xFFFFE57F), glow: const Color(0xFFFF6D00))),
+                    Transform.scale(
+                      scale: 1 + 0.1 * pulse,
+                      child: legend
+                          ? _qty(fs * 1.6, color: Colors.white, glow: const Color(0xFFB8860B))
+                          : _qty(fs * 1.5, color: const Color(0xFFFFE57F), glow: const Color(0xFFFF6D00)),
+                    ),
                     if (legend)
                       Text('${fmtNumber(e['totalCoins'])} Coin',
-                          style: TextStyle(color: const Color(0xFFFFF6C2), fontWeight: FontWeight.w800, fontSize: fs * 0.72, height: 1, shadows: const [Shadow(color: Colors.black, blurRadius: 3)])),
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w900,
+                            fontSize: fs * 0.7,
+                            height: 1,
+                            shadows: const [Shadow(color: Color(0xFF3A1A00), blurRadius: 3, offset: Offset(0, 1))],
+                          )),
                   ]),
                 ]),
               ),
             ]);
           },
         ),
-      ),
-    );
-  }
-
-  /// Bant üzerinde sırayla parıldayan küçük yıldız.
-  Widget _twinkle(int i, double t, double w, double h, Color color) {
-    final ph = (t * 1.3 + i * 0.29) % 1.0;
-    final v = math.sin(ph * math.pi);
-    final size = h * (0.16 + (i % 3) * 0.05);
-    return Positioned(
-      left: ((i * 0.618 + 0.07) % 1.0) * (w - size),
-      top: (i.isEven ? 0.12 : 0.58) * h,
-      child: Opacity(
-        opacity: (v * v).clamp(0.0, 1.0),
-        child: Transform.scale(scale: 0.5 + 0.7 * v, child: Icon(Icons.auto_awesome, size: size, color: color)),
       ),
     );
   }
@@ -509,4 +584,47 @@ class _RaysPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _RaysPainter old) => old.color != color;
+}
+
+/// Kırmızı bandı koyu altın sarısına çevirir (değerler 0–255 ölçeğinde).
+const List<double> _kGoldBand = [
+  0.9, 0.35, 0, 0, 25.5, //
+  0.62, 0.45, 0, 0, 10.2,
+  0.05, 0.15, 0.2, 0, 0,
+  0, 0, 0, 1, 0,
+];
+
+/// Yalnızca bandı (yuvarlak köşeli dikdörtgen) bırakan kırpma.
+class _RRectClip extends CustomClipper<RRect> {
+  final RRect r;
+  _RRectClip(this.r);
+  @override
+  RRect getClip(Size size) => r;
+  @override
+  bool shouldReclip(covariant _RRectClip old) => old.r != r;
+}
+
+/// Dört köşeli yıldız parıltısı (ortası beyaz, çevresi renkli ışık).
+class _GlintPainter extends CustomPainter {
+  final Color color;
+  _GlintPainter(this.color);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final c = size.center(Offset.zero);
+    final r = size.width / 2;
+    canvas.drawCircle(c, r * 0.55, Paint()..shader = RadialGradient(colors: [color.withValues(alpha: 0.7), color.withValues(alpha: 0)]).createShader(Rect.fromCircle(center: c, radius: r * 0.55)));
+    final p = Path()
+      ..moveTo(c.dx, c.dy - r)
+      ..quadraticBezierTo(c.dx + r * 0.1, c.dy - r * 0.1, c.dx + r, c.dy)
+      ..quadraticBezierTo(c.dx + r * 0.1, c.dy + r * 0.1, c.dx, c.dy + r)
+      ..quadraticBezierTo(c.dx - r * 0.1, c.dy + r * 0.1, c.dx - r, c.dy)
+      ..quadraticBezierTo(c.dx - r * 0.1, c.dy - r * 0.1, c.dx, c.dy - r)
+      ..close();
+    canvas.drawPath(p, Paint()..shader = RadialGradient(colors: [Colors.white, color]).createShader(Rect.fromCircle(center: c, radius: r)));
+    canvas.drawCircle(c, r * 0.14, Paint()..color = Colors.white);
+  }
+
+  @override
+  bool shouldRepaint(covariant _GlintPainter old) => old.color != color;
 }

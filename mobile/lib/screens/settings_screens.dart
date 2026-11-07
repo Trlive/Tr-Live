@@ -578,6 +578,8 @@ class AboutScreen extends StatelessWidget {
           ]),
           _group([
             _row(Icons.bug_report_outlined, _cOrange, 'Hata kaydı', onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ErrorLogScreen()))),
+            // Kullanılan açık kaynak yazılım ve görsellerin lisansları (ör. hareketli emojiler, CC BY 4.0).
+            _row(Icons.description_outlined, _cSky, 'Lisanslar', onTap: () => showLicensePage(context: context, applicationName: 'TR Live', applicationVersion: kAppVersion)),
           ]),
         ]),
       ),

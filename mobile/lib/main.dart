@@ -39,6 +39,14 @@ Future<void> main() async {
 
 Future<void> _boot() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Hareketli mikrofon emojileri: Google Noto Emoji Animation (CC BY 4.0) — lisans sayfasında görünür.
+  LicenseRegistry.addLicense(() => Stream.value(const LicenseEntryWithLineBreaks(
+        ['Noto Emoji Animation'],
+        'Animated emoji © Google LLC, from the Noto Emoji Animation project '
+        '(https://googlefonts.github.io/noto-emoji-animation/). Licensed under the Creative Commons Attribution 4.0 '
+        'International License (CC BY 4.0): https://creativecommons.org/licenses/by/4.0/. One emoji is also shown '
+        'mirrored (horizontally flipped).',
+      )));
   // Uygulama yalnızca dikey çalışır (telefon yan çevrilince ekran dönüp yarım görünmesin).
   unawaited(SystemChrome.setPreferredOrientations(const [DeviceOrientation.portraitUp]).catchError((_) {}));
   // Google/Facebook girişinden dönüş bağlantısı (sayfa yönlendirmesinden önce yakalansın diye en başta).
