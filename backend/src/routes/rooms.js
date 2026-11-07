@@ -4,12 +4,13 @@ import { requireAuth, optionalAuth, hashPassword, checkPassword } from '../auth.
 import { userLimit, hitLimit, noteViolation, clientIp } from '../firewall.js';
 import { cleanTags } from '../text_safety.js';
 import { fail, uuid, text, oneOf } from '../http.js';
-import { publicUser, USER_PUBLIC_COLUMNS, USER_PUBLIC_JOINS } from '../views.js';
+import { publicUser, USER_PUBLIC_COLUMNS, USER_PUBLIC_JOINS, roomUser } from '../views.js';
 import { hub } from '../realtime.js';
 import { token as livekitToken, setCanPublish, removeParticipant } from '../livekit.js';
 import { canManage } from '../room_permissions.js';
 import { roomStaffShield } from '../staff_logic.js';
 import { featuresFor, requireFeature } from '../services/wip.js';
+import { refreshGhost } from '../services/ghost.js';
 import { loadPublicRow, loadPublicRows, activeEntranceEffect } from '../services/users.js';
 import { leaveRoom, closeRoom, SUPPORTED_SEATS } from '../services/rooms.js';
 import { openMicSession, closeMicSessions } from '../services/mic.js';
@@ -81,6 +82,12 @@ async function roomDiamonds(room) {
   return String(r.rows[0]?.total_diamonds ?? 0);
 }
 
+/** Oda sahibinin herkese açık bilgisi (kimlik, ad, fotoğraf); bulunamazsa null. */
+async function ownerPublic(ownerId, viewerId) {
+  const row = await loadPublicRow(ownerId);
+  return row ? roomUser(row, viewerId) : null;
+}
+
 async function activeRoom(roomId) {
   const room = (await query(`SELECT * FROM rooms WHERE id = $1 AND is_active = TRUE`, [roomId])).rows[0];
   if (!room) throw fail('Oda bulunamadı.', 404);
@@ -100,6 +107,8 @@ router.get('/', optionalAuth, async (req, res) => {
   const tag = req.query.tag ? String(req.query.tag).trim().toLocaleLowerCase('tr').slice(0, 20) : null;
   const q = String(req.query.q ?? '').trim().toLowerCase().slice(0, 40);
   const like = q ? `%${q.replace(/[\\%_]/g, (m) => `\\${m}`)}%` : null;
+  // Yoho gibi: oda kimliği = sahibinin kimliği. Rakamla aranınca sahibin normal / özel ID'si (veya eski oda numarası) tam eşleşir.
+  const idq = /^\d{3,12}$/.test(q) ? q : null;
   const region = ['tr', 'other', 'friends', 'near'].includes(req.query.region) ? req.query.region : null;
   if ((region === 'friends' || region === 'near') && !req.user) throw fail('Arkadaşları görmek için giriş yapın.', 401);
   // "Yeni yayıncı" süzgeci (Yoho): hesabı son 30 günde açılmış kişilerin odaları.
@@ -126,7 +135,11 @@ router.get('/', optionalAuth, async (req, res) => {
      WHERE r.is_active = TRUE AND ($1::text IS NULL OR r.room_type = $1) AND ($2::text IS NULL OR $2 = ANY(r.tags))
        AND (r.is_hidden = FALSE OR r.owner_id = $3::uuid OR EXISTS (SELECT 1 FROM room_members hm WHERE hm.room_id = r.id AND hm.user_id = $3::uuid))
        AND ($4::text IS NULL OR lower(r.name) LIKE $4 ESCAPE '\\' OR lower(u.display_name) LIKE $4 ESCAPE '\\' OR lower(u.username) LIKE $4 ESCAPE '\\'
-            OR EXISTS (SELECT 1 FROM unnest(r.tags) t WHERE lower(t) LIKE $4 ESCAPE '\\'))
+            OR EXISTS (SELECT 1 FROM unnest(r.tags) t WHERE lower(t) LIKE $4 ESCAPE '\\')
+            OR ($7::text IS NOT NULL AND (r.room_number = $7
+              -- Gizli kullanıcının kimliği odasıyla eşleştirilmez.
+              OR (u.is_hidden = FALSE AND (u.public_id = $7
+                OR EXISTS (SELECT 1 FROM special_ids si WHERE si.user_id = u.id AND si.special_id = $7 AND si.expires_at > NOW()))))))
        AND ($5::text IS NULL
             OR ($5 = 'tr' AND lower(COALESCE(u.country, '')) IN ('türkiye', 'turkiye', 'turkey', 'tr', 'türkiye cumhuriyeti'))
             OR ($5 = 'other' AND lower(COALESCE(u.country, '')) NOT IN ('türkiye', 'turkiye', 'turkey', 'tr', 'türkiye cumhuriyeti'))
@@ -134,7 +147,7 @@ router.get('/', optionalAuth, async (req, res) => {
             OR ($5 = 'near' AND EXISTS (SELECT 1 FROM users me WHERE me.id = $3::uuid AND me.city IS NOT NULL AND lower(me.city) = lower(COALESCE(u.city, '')))))
        AND ($6::boolean IS FALSE OR u.created_at > NOW() - INTERVAL '30 days')
      ORDER BY member_count DESC, r.created_at DESC LIMIT 300`,
-    [type, tag, req.user?.id ?? null, like, region, fresh],
+    [type, tag, req.user?.id ?? null, like, region, fresh, idq],
   );
   // Odalar puana göre sıralanır: kişi sayısı, mikrofondakiler, son 30 dakikadaki hediyeler ve PK; son 5 dakikada büyük
   // hediye atılan oda "yükseliyor" olur ve anında en üste çıkar.
@@ -262,8 +275,8 @@ router.get('/:roomId/managers', requireAuth, async (req, res) => {
   const owner = (await loadPublicRows([room.owner_id]))[0];
   res.json({
     managers: [
-      ...(owner ? [{ role: 'owner', user: publicUser(owner, req.user.id) }] : []),
-      ...r.rows.map((m) => ({ role: m.role, user: publicUser(m, req.user.id) })),
+      ...(owner ? [{ role: 'owner', user: roomUser(owner, req.user.id) }] : []),
+      ...r.rows.map((m) => ({ role: m.role, user: roomUser(m, req.user.id) })),
     ],
   });
 });
@@ -340,7 +353,7 @@ router.get('/:roomId', requireAuth, async (req, res) => {
       tags: r.tags ?? [], locked: r.locked, chatEnabled: r.chat_enabled !== false,
       hidden: r.room_hidden, theme: r.theme, themeImageUrl: r.theme_image_url, scoreboardEnabled: r.scoreboard_enabled, lockedSeats: r.locked_seats ?? [], mutedSeats: r.muted_seats ?? [], micRequest: r.mic_request === true,
       ...(canSeeCode && r.join_code ? { joinCode: r.join_code } : {}),
-      owner: publicUser(r, req.user.id), ownerFamily: await ownerFamily(r.owner_id),
+      owner: roomUser(r, req.user.id), ownerFamily: await ownerFamily(r.owner_id),
     },
     me: me ? { role: me.role, microphone: me.microphone, seatIndex: me.seat_index } : null,
   });
@@ -380,6 +393,20 @@ router.post('/:roomId/join', requireAuth, userLimit('room_join', 40, 60e3), asyn
     if (!pw || !(await checkPassword(pw, room.password_hash))) throw fail('Oda şifresi hatalı.', 403);
   }
 
+  // WIP ayrıcalığı bitmiş gizli kullanıcı: hiçbir odada değilken (kimse eşleştiremez) gizlilik odaya girmeden kapanır;
+  // böylece odadan odaya geçerek gizli kalınamaz.
+  if (req.user.is_hidden && req.user.system_role !== 'admin' && !(await featuresFor(userId)).hiddenUser) {
+    const off = await query(
+      `UPDATE users SET is_hidden = FALSE, updated_at = NOW() WHERE id = $1 AND is_hidden = TRUE
+         AND NOT EXISTS (SELECT 1 FROM room_members WHERE user_id = $1)
+         AND NOT EXISTS (SELECT 1 FROM rooms WHERE owner_id = $1 AND is_active = TRUE)`,
+      [userId],
+    );
+    if (off.rowCount) {
+      req.user.is_hidden = false;
+      await refreshGhost(userId);
+    }
+  }
   const staffRole = room.owner_id === userId ? null
     : (await query(`SELECT role FROM room_staff WHERE owner_id = $1 AND room_type = $2 AND user_id = $3`, [room.owner_id, room.room_type, userId])).rows[0]?.role ?? null;
   const ins = await query(
@@ -392,13 +419,13 @@ router.post('/:roomId/join', requireAuth, userLimit('room_join', 40, 60e3), asyn
     const row = await loadPublicRow(userId);
     // Gizli kullanıcı odaya giriş efektiyle duyurulmaz. Hayalet (SWIP) kullanıcı hiç duyurulmaz.
     const effect = row.is_hidden ? null : await activeEntranceEffect(userId);
-    hub.broadcastRoom(roomId, { type: 'room_member_joined', roomId, user: publicUser(row, null), entranceEffect: effect });
-    if (effect) myEntrance = { user: publicUser(row, userId), effect };
+    hub.broadcastRoom(roomId, { type: 'room_member_joined', roomId, user: roomUser(row, null), entranceEffect: effect });
+    if (effect) myEntrance = { user: roomUser(row, userId), effect };
   } else if (!(await isGhost(userId))) {
     // Zaten üyeydi (ör. uygulama kapanıp açıldı): başkalarına tekrar duyurulmaz ama kişi kendi aracını görür.
     const row = await loadPublicRow(userId);
     const effect = row && !row.is_hidden ? await activeEntranceEffect(userId) : null;
-    if (effect) myEntrance = { user: publicUser(row, userId), effect };
+    if (effect) myEntrance = { user: roomUser(row, userId), effect };
   }
   if (room.owner_id !== userId && !room.is_hidden) {
     await query(
@@ -417,6 +444,8 @@ router.post('/:roomId/join', requireAuth, userLimit('room_join', 40, 60e3), asyn
     room: {
       ...roomJson(room, { showCode: ['owner', 'cohost'].includes(me.role) }), totalDiamonds: await roomDiamonds(room),
       ownerFamily: await ownerFamily(room.owner_id),
+      // Oda kimliği = sahibin güncel kimliği (Yoho): sahip odada olmasa da başlıkta onun ID'si görünsün.
+      owner: await ownerPublic(room.owner_id, userId),
     },
     me: { role: me.role, microphone: me.microphone, seatIndex: me.seat_index },
     joined: ins.rowCount > 0,
@@ -593,7 +622,7 @@ router.get('/:roomId/members', requireAuth, async (req, res) => {
   res.json({
     members: r.rows.map((m) => ({
       userId: m.id, role: m.role, microphone: m.microphone, seatIndex: m.seat_index, joinedAt: m.joined_at,
-      user: publicUser(m, req.user.id),
+      user: roomUser(m, req.user.id),
     })),
   });
 });
@@ -660,7 +689,7 @@ router.post('/:roomId/mic/take', requireAuth, userLimit('mic', 60, 60e3), async 
   // Hayalet kullanıcı mikrofona çıkınca görünür olur: önce odaya "girmiş" gibi duyurulur (giriş efekti olmadan).
   if (await isGhost(userId)) {
     const row = await loadPublicRow(userId);
-    hub.broadcastRoom(roomId, { type: 'room_member_joined', roomId, user: publicUser(row, null), entranceEffect: null, silent: true });
+    hub.broadcastRoom(roomId, { type: 'room_member_joined', roomId, user: roomUser(row, null), entranceEffect: null, silent: true });
   }
   hub.broadcastRoom(roomId, { type: 'room_seat_changed', roomId, userId, seatIndex, microphone: true });
   await setCanPublish(roomId, userId, true);
@@ -902,7 +931,7 @@ router.post('/:roomId/members/:userId/mic-invite', requireAuth, userLimit('mic_i
   // requested: kişi kendisi istek göndermişti (konuk isteği kabul edildi) → uygulama sormadan oturtur.
   const requested = await isQueued(roomId, targetId);
   // Gizli kullanıcı olan yetkilinin gerçek adı açığa çıkmasın.
-  const inviter = publicUser(req.user, targetId);
+  const inviter = roomUser(req.user, targetId);
   hub.sendToUser(targetId, { type: 'mic_invite', roomId, seatIndex, requested, fromUserId: inviter?.id ?? null, fromName: inviter?.displayName ?? 'Oda yetkilisi' });
   res.json({ ok: true });
 });

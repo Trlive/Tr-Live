@@ -5,6 +5,7 @@ import '../services/socket_service.dart';
 import 'common.dart';
 import 'fig.dart';
 import 'level_badge.dart';
+import 'id_badge.dart';
 import 'marquee.dart';
 
 /// Şanslı çanta kademeleri (sunucudaki ayarla aynı; sunucu doğrular).
@@ -463,11 +464,14 @@ class _ClaimDialogState extends State<_ClaimDialog> {
         const SizedBox(height: 4),
         Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 19)),
         const SizedBox(height: 3),
-        Row(mainAxisSize: MainAxisSize.min, children: [
-          LevelPill(level: sender?['coinLevel'] ?? 1, send: true, height: 16),
-          const SizedBox(width: 5),
-          LevelPill(level: sender?['giftLevel'] ?? 1, send: false, height: 16),
-        ]),
+        if (sender?['isHidden'] == true)
+          HiddenIdPill(alias: sender?['hiddenId']?.toString() ?? '', height: 16)
+        else
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            LevelPill(level: sender?['coinLevel'] ?? 1, send: true, height: 16),
+            const SizedBox(width: 5),
+            LevelPill(level: sender?['giftLevel'] ?? 1, send: false, height: 16),
+          ]),
         const SizedBox(height: 4),
         Text(_super ? 'Süper şanslı çanta gönderdi' : 'Şanslı çanta gönderdi', style: const TextStyle(color: Color(0xFFFFF3B0), fontSize: 14.5, fontWeight: FontWeight.w700)),
         const SizedBox(height: 8),

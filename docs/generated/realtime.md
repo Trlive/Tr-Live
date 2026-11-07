@@ -12,7 +12,7 @@ Bağlantı: `wss://SUNUCU/ws?token=JWT`. Mesajlar JSON, her mesajda `type` alan�
 - `typing`
 - `room_subscribe`
 
-## Sunucudan istemciye (54 tür)
+## Sunucudan istemciye (55 tür)
 
 | Tür | Kime | Gönderen dosya |
 |---|---|---|
@@ -54,6 +54,7 @@ Bağlantı: `wss://SUNUCU/ws?token=JWT`. Mesajlar JSON, her mesajda `type` alan�
 | `room_kicked` | kişiye | routes/admin_panel.js |
 | `room_member_joined` | odaya | routes/rooms.js, services/ghost.js |
 | `room_member_left` | odaya | routes/rooms.js, services/ghost.js, services/rooms.js |
+| `room_member_updated` | odaya | services/users.js |
 | `room_message` | odaya | routes/chat.js |
 | `room_message_deleted` | odaya | routes/admin_panel.js, routes/chat.js |
 | `room_mic_emoji` | odaya | routes/rooms.js |

@@ -7,6 +7,7 @@ import '../services/room_dock.dart';
 import '../widgets/anim_asset.dart';
 import '../widgets/app_theme.dart';
 import '../widgets/common.dart';
+import '../widgets/id_badge.dart';
 import 'messages_screen.dart';
 import '../widgets/level_badge.dart';
 import 'home_screen.dart' show openRoom;
@@ -387,7 +388,9 @@ class SocialUserTile extends StatelessWidget {
     if (u == null) return const SizedBox.shrink();
     final room = mapOf(u['currentRoom']);
     final hidden = u['isHidden'] == true;
-    final sub = subtitle ?? (hidden ? null : 'ID: ${u['publicId'] ?? u['username'] ?? ''}');
+    final sub = subtitle;
+    // Alt yazı verilmediyse kişinin kimliği: özel / renkli / normal ID tasarımıyla.
+    final showId = sub == null && !hidden && displayIdOf(u).isNotEmpty;
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(color: Pal.surface, borderRadius: BorderRadius.circular(16), border: Border.all(color: Pal.outline)),
@@ -410,6 +413,9 @@ class SocialUserTile extends StatelessWidget {
                 if (sub != null && sub.isNotEmpty) ...[
                   const SizedBox(height: 3),
                   Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white54, fontSize: 12.5)),
+                ] else if (showId) ...[
+                  const SizedBox(height: 4),
+                  IdBadge(user: u, fontSize: 12, color: Colors.white54, copyable: false),
                 ],
               ]),
             ),

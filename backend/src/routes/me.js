@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import crypto from 'node:crypto';
 import express from 'express';
 import { query, tx } from '../database.js';
 import { requireAuth, checkPassword, hashPassword, passwordRules } from '../auth.js';
@@ -41,6 +42,16 @@ router.get('/', async (req, res) => {
   res.json({ user: profile, wip });
 });
 
+/** 6 haneli yeni gizli ID; şu an başka bir gizli kullanıcıda olmayan. */
+async function newHiddenAlias(userId) {
+  for (let i = 0; i < 20; i++) {
+    const cand = String(100000 + crypto.randomInt(900000));
+    const used = await query(`SELECT 1 FROM users WHERE hidden_alias = $1 AND is_hidden = TRUE AND id <> $2`, [cand, userId]);
+    if (!used.rowCount) return cand;
+  }
+  return String(100000 + crypto.randomInt(900000));
+}
+
 router.patch('/', async (req, res) => {
   const b = req.body ?? {};
   const sets = [];
@@ -58,8 +69,19 @@ router.patch('/', async (req, res) => {
   const needFeature = async (on, feature, what) => { if (on && !isAdmin) await requireFeature(req.user.id, feature, what); };
   if (b.isHidden !== undefined) {
     if (typeof b.isHidden !== 'boolean') throw fail('Gizli kullanıcı değeri geçersiz.');
-    await needFeature(b.isHidden, 'hiddenUser', 'Gizli kullanıcı modu');
-    set('is_hidden', b.isHidden);
+    if (b.isHidden !== Boolean(req.user.is_hidden)) {
+      await needFeature(b.isHidden, 'hiddenUser', 'Gizli kullanıcı modu');
+      // Yoho gibi: odadayken gizlenilemez / gizlilik kaldırılamaz (odadakiler kim olduğunu eşleştiremesin).
+      // Sahibi olduğu açık oda da sayılır: oda kimliği sahibin kimliği olduğundan değişim odadakilere görünür.
+      const inRoom = await query(
+        `SELECT 1 FROM room_members WHERE user_id = $1 UNION ALL SELECT 1 FROM rooms WHERE owner_id = $1 AND is_active = TRUE LIMIT 1`,
+        [req.user.id],
+      );
+      if (inRoom.rowCount) throw fail('Gizli kullanıcı modunu açıp kapatmak için önce bulunduğun odadan çık (açık odan varsa kapat).', 409);
+      set('is_hidden', b.isHidden);
+      // Her açılışta yeni gizli kimlik verilir (önceki gizli oturumlarla eşleştirilemesin).
+      if (b.isHidden) set('hidden_alias', await newHiddenAlias(req.user.id));
+    }
   }
   if (b.hideCountry !== undefined) {
     if (typeof b.hideCountry !== 'boolean') throw fail('Ülke gizleme değeri geçersiz.');

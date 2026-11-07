@@ -90,6 +90,11 @@ router.get('/posts', optionalAuth, async (req, res) => {
   const scope = req.query.scope === 'following' ? 'following' : 'all';
   if (scope === 'following' && !req.user) throw fail('Takip ettiklerinizi görmek için giriş yapın.', 401);
   const author = req.query.userId ? uuid(req.query.userId, 'Kullanıcı') : null;
+  // Gizli kullanıcının paylaşımları kişiye göre listelenmez (gizli profilden kim olduğu anlaşılmasın).
+  if (author && author !== req.user?.id) {
+    const a = (await query(`SELECT is_hidden FROM users WHERE id = $1`, [author])).rows[0];
+    if (a?.is_hidden) return res.json({ posts: [], hasMore: false });
+  }
   const before = req.query.before ? new Date(String(req.query.before)) : null;
   if (before && Number.isNaN(before.getTime())) throw fail('Geçersiz tarih.');
   const r = await query(

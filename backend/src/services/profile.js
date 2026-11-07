@@ -45,9 +45,10 @@ export async function loadProfile(viewerId, targetId) {
   const isSelf = viewerId === targetId;
 
   if (u.is_hidden && !isSelf) {
+    // Gizli kimlik: gerçek profil hiçbir yerden açılmaz; yalnızca gizli ad ve gizli ID.
     return {
-      id: u.id, isHidden: true, username: HIDDEN_NAME, displayName: HIDDEN_NAME, avatarUrl: null,
-      coinLevel: u.coin_level, giftLevel: u.gift_level,
+      id: u.id, isHidden: true, hiddenId: u.hidden_alias ?? null, username: HIDDEN_NAME, displayName: HIDDEN_NAME, avatarUrl: null,
+      coinLevel: null, giftLevel: null,
     };
   }
 
@@ -129,6 +130,8 @@ export async function loadProfile(viewerId, targetId) {
     giftLevel: u.gift_level,
     createdAt: u.created_at,
     isHidden: Boolean(u.is_hidden),
+    // Gizli moddayken odalarda görünen gizli ID: yalnızca kişinin kendisine (Ayarlar'da gösterilir).
+    ...(isSelf ? { hiddenId: u.is_hidden ? (u.hidden_alias ?? null) : null } : {}),
     // Hayalet mod şu an gerçekten etkin mi (tercih açık + SWIP üyeliği sürüyor). Yalnızca kişinin kendisine.
     ...(isSelf ? { ghostActive: u.ghost === true } : {}),
     followers: counts.rows[0].followers,

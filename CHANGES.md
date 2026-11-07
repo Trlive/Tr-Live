@@ -1,3 +1,34 @@
+## v2.87.0 — Gizli kullanıcı (Yoho gizemli kişi gibi)
+- Gizli kullanıcı modu odadayken açılıp kapatılamaz (sahibi olduğun açık oda da sayılır): "önce odadan çık" uyarısı çıkar.
+  Böylece odadakiler gizli kişinin kim olduğunu eşleştiremez. WIP bitince gizlilik de kişi odadan çıktıktan sonra kapanır.
+- Gizli kimlik: gizli mod her açılışta kişiye 6 haneli yeni bir gizli ID verilir. Odalarda, sohbette, listelerde, katkı
+  sıralamasında ve şanslı çantada "Gizli Kullanıcı" + gizli ID kapsülü (koyu mor, gözü kapalı madalyon) görünür;
+  gerçek ID, fotoğraf ve seviyeler gösterilmez (gizemli kişi görseli). Ayarlar'da kişinin kendi gizli ID'si yazar.
+- Gizli kullanıcıya dokununca profili açılmaz: odadaki mini kartta yalnızca gizli kimlik, hediye, etiketleme, şikâyet ve
+  oda yönetimi; takip, CP/ilişkiler, rozetler, takipçi sayıları yok. Paylaşımlarda ve PK tahtında da profil açılmaz.
+  Başka bir yoldan açılsa bile sunucu gerçek profili vermez (gizli sayfa görünür); takipçi / takip listeleri de boş döner.
+- Gizli ID yalnızca oda içinde görünür (üyeler, sohbet, hediye, çanta, PK); takip / arkadaş / ziyaretçi / paylaşım /
+  mesaj listelerinde gönderilmez, böylece tanıdıklar gizli ID'yi kişiyle eşleştiremez. Katkı sıralamasında da gizli ID yok.
+- Oda sohbeti geçmişi: mesaj gizliyken yazıldıysa sonradan gizlilik kapansa da o mesaj "Gizli Kullanıcı" olarak kalır;
+  kişi şu an gizliyse eski mesajları da maskeli görünür.
+- Gizli kullanıcının paylaşımları kişiye göre listelenmez; paylaşım kartında takip düğmesi ve seviye görünmez.
+- WIP'i biten gizli kullanıcı odadan odaya geçerek gizli kalamaz: hiçbir odada değilken yeni odaya girerken gizlilik kapanır.
+- Sunucu: users.hidden_alias, room_messages.sender_hidden/sender_alias (057), PATCH /api/me isHidden 409 (odadayken),
+  publicUser gizli kişide seviye yok; roomUser (oda içi) gizli ID'yi ekler.
+
+## v2.86.0 — Kimlik (ID) sistemi: oda kimliği = sahibin kimliği, yeni ID tasarımları
+- Oda kimliği artık oda sahibinin güncel kimliği (Yoho gibi): odanın üst başlığında ve oda bilgisi penceresinde ayrı
+  "oda numarası" yerine sahibin ID'si görünür; özel ID'si varsa özel ID, yoksa normal ID — kendi tasarımıyla.
+  Sahibin kimliği değişince (özel ID verildi/alındı, renkli ID takıldı) odadakilerin ekranında hemen değişir;
+  sahip o an odada olmasa da (sunucu sahibin açık odalarına da duyurur). Gizli kullanıcının odasında eski oda numarası görünür.
+- Oda arama: rakamla aranınca sahibin normal ID'si, özel ID'si veya eski oda numarası tam eşleşir (gizli kullanıcı hariç).
+- Yeni ID tasarımları:
+  - Normal ID: küçük "ID" etiketi + numara.
+  - Renkli ID (bronz/gümüş/altın): metalik "ID" etiketi, numara metalik renkte akar, ara ara üzerinden parlak ışık geçer.
+  - Özel ID: zemin rengi akar (3 hane gökkuşağı, 4–5 hane mor-pembe, 6+ altın-ateş), çevresinde dönen altın çerçeve,
+    taçlı altın madalyon, eğik beyaz numara, üzerinden parıltı ve sırayla parlayan yıldızlar.
+- Takipçi / takip / arkadaş / ziyaretçi listelerinde kimlik de bu tasarımla görünür.
+
 ## v2.85.0 — Global şeritler (ışık / altın), hızlı müzik, yeni emojiler
 - Global hediye şeridi: var olan altın-kırmızı tasarım korunarak geliştirildi.
   - 400 bin+: şeridin biçimini izleyen atan sıcak ışık halesi, şeridin (süsler dahil) üzerinden kayan parlak ışık,

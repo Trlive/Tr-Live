@@ -223,17 +223,59 @@ class UserAvatar extends StatelessWidget {
     final name = (user?['displayName'] ?? '?').toString();
     // Görsel, gösterileceği boyutta çözülür ve telefonda saklanır (her açılışta yeniden indirilmez).
     final px = NetImage.px(radius * 2, MediaQuery.devicePixelRatioOf(context));
-    final avatar = CircleAvatar(
-      radius: radius,
-      backgroundImage: url == null ? null : NetImage(url, targetW: px, targetH: px),
-      onBackgroundImageError: url == null ? null : (_, __) {},
-      child: url == null ? Text(name.isEmpty ? '?' : trUpper(name.characters.first)) : null,
-    );
+    // Gizli kullanıcı: gerçek fotoğraf yerine gizemli kişi görseli.
+    final Widget avatar = user?['isHidden'] == true && url == null
+        ? HiddenAvatar(radius: radius)
+        : CircleAvatar(
+            radius: radius,
+            backgroundImage: url == null ? null : NetImage(url, targetW: px, targetH: px),
+            onBackgroundImageError: url == null ? null : (_, __) {},
+            child: url == null ? Text(name.isEmpty ? '?' : trUpper(name.characters.first)) : null,
+          );
     if (!speaking) return avatar;
     return Container(
       padding: const EdgeInsets.all(2),
       decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Colors.greenAccent, width: 2.5)),
       child: avatar,
+    );
+  }
+}
+
+/// Gizli kullanıcının görseli (gizemli kişi): koyu mor küre, silik siluet ve ortada parlayan soru işareti.
+class HiddenAvatar extends StatelessWidget {
+  final double radius;
+  const HiddenAvatar({super.key, this.radius = 22});
+
+  @override
+  Widget build(BuildContext context) {
+    final r = radius;
+    return Container(
+      width: r * 2,
+      height: r * 2,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: const RadialGradient(
+          center: Alignment(0, -0.35),
+          radius: 0.95,
+          colors: [Color(0xFF5B3FA8), Color(0xFF2A1C5C), Color(0xFF120C2A)],
+          stops: [0, 0.55, 1],
+        ),
+        border: Border.all(color: const Color(0xAAC4B5FD), width: r * 0.05 < 1 ? 1 : r * 0.05),
+      ),
+      child: Stack(alignment: Alignment.center, children: [
+        Positioned(bottom: -r * 0.3, child: Icon(Icons.person_rounded, size: r * 1.9, color: const Color(0x38E9D8FD))),
+        Text(
+          '?',
+          style: TextStyle(
+            fontSize: r * 0.95,
+            height: 1.0,
+            fontWeight: FontWeight.w900,
+            color: const Color(0xFFE9D8FD),
+            shadows: [Shadow(color: const Color(0xFF8B5CF6), blurRadius: r * 0.3)],
+          ),
+        ),
+      ]),
     );
   }
 }

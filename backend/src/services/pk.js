@@ -2,7 +2,7 @@ import { query, tx } from '../database.js';
 import { hub } from '../realtime.js';
 import { decideWinner, remainingSeconds, PK_INVITE_TTL_SECONDS } from '../pk_logic.js';
 import { loadPublicRows } from './users.js';
-import { publicUser } from '../views.js';
+import { roomUser } from '../views.js';
 import { nonOverlapping } from '../ticker.js';
 import { tickRoomPk, endRoomPkForRoom } from './room_pk.js';
 
@@ -20,14 +20,14 @@ export async function pkView(battleId, run = query) {
   const top = async (roomId) => {
     const rows = sup.filter((x) => x.room_id === roomId).slice(0, 3);
     const u = new Map((await loadPublicRows(rows.map((x) => x.user_id), run)).map((x) => [x.id, x]));
-    return rows.map((x) => ({ user: publicUser(u.get(x.user_id)), coins: String(x.coins) }));
+    return rows.map((x) => ({ user: roomUser(u.get(x.user_id)), coins: String(x.coins) }));
   };
   return {
     id: b.id, status: b.status, durationSeconds: b.duration_seconds,
     remainingSeconds: b.status === 'active' ? remainingSeconds(b.ends_at) : 0,
     startedAt: b.started_at, endsAt: b.ends_at,
-    a: { roomId: b.room_a, roomName: nameOf(b.room_a), host: publicUser(users.get(b.host_a)), score: String(b.score_a), top: await top(b.room_a) },
-    b: { roomId: b.room_b, roomName: nameOf(b.room_b), host: publicUser(users.get(b.host_b)), score: String(b.score_b), top: await top(b.room_b) },
+    a: { roomId: b.room_a, roomName: nameOf(b.room_a), host: roomUser(users.get(b.host_a)), score: String(b.score_a), top: await top(b.room_a) },
+    b: { roomId: b.room_b, roomName: nameOf(b.room_b), host: roomUser(users.get(b.host_b)), score: String(b.score_b), top: await top(b.room_b) },
     winnerRoomId: b.winner_room,
     result: b.status === 'finished' ? (b.winner_room === null ? 'draw' : b.winner_room === b.room_a ? 'a' : 'b') : null,
   };

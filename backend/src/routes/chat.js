@@ -12,7 +12,7 @@ import { featuresFor } from '../services/wip.js';
 import { noteTask } from '../services/daily.js';
 import { loadPublicRow } from '../services/users.js';
 import { roomStaffShield } from '../staff_logic.js';
-import { publicUser, USER_PUBLIC_COLUMNS, USER_PUBLIC_JOINS } from '../views.js';
+import { publicUser, USER_PUBLIC_COLUMNS, USER_PUBLIC_JOINS, roomUser } from '../views.js';
 
 export const router = Router();
 router.use(requireAuth);
@@ -47,12 +47,15 @@ router.post('/:roomId/messages', userLimit('chat10s', 8, 10e3), userLimit('chat1
     if (wid === req.user.id) throw fail('Kendinize hoş geldin diyemezsiniz.');
     const w = await loadPublicRow(wid);
     if (!w) throw fail('Kullanıcı bulunamadı.', 404);
-    welcomeTo = publicUser(w, null);
+    welcomeTo = roomUser(w, null);
   }
   await screenText(req.user, body, 'room_chat');
 
   let balance = null;
-  const insert = async (run) => (await run(`INSERT INTO room_messages(room_id, user_id, body) VALUES($1,$2,$3) RETURNING id, created_at`, [roomId, req.user.id, body])).rows[0];
+  const insert = async (run) => (await run(
+    `INSERT INTO room_messages(room_id, user_id, body, sender_hidden, sender_alias) VALUES($1,$2,$3,$4,$5) RETURNING id, created_at`,
+    [roomId, req.user.id, body, Boolean(req.user.is_hidden), req.user.is_hidden ? (req.user.hidden_alias ?? null) : null],
+  )).rows[0];
   let m;
   if (fly) {
     // Uçan yazı ücretli: Coin düşülür ve kayda geçer; mesaj aynı işlemde yazılır (yarım kalmaz).
@@ -73,7 +76,7 @@ router.post('/:roomId/messages', userLimit('chat10s', 8, 10e3), userLimit('chat1
     m = await insert(query);
   }
   const row = await loadPublicRow(req.user.id);
-  const message = { id: m.id, roomId, user: publicUser(row, null), text: body, createdAt: m.created_at, fly, welcomeTo };
+  const message = { id: m.id, roomId, user: roomUser(row, null), text: body, createdAt: m.created_at, fly, welcomeTo };
   hub.broadcastRoom(roomId, { type: 'room_message', ...message });
   noteTask(req.user.id, 'chat');
   res.status(201).json({ message, balance });
@@ -84,13 +87,17 @@ router.get('/:roomId/messages', async (req, res) => {
   await roomAndMember(roomId, req.user.id);
   const limit = req.query.limit ? positiveInt(req.query.limit, 'Limit', 100) : 50;
   const r = await query(
-    `SELECT m.id AS message_id, m.body, m.created_at AS message_at, ${USER_PUBLIC_COLUMNS}
+    `SELECT m.id AS message_id, m.body, m.created_at AS message_at, m.sender_hidden, m.sender_alias, ${USER_PUBLIC_COLUMNS}
      FROM room_messages m JOIN users u ON u.id = m.user_id ${USER_PUBLIC_JOINS}
      WHERE m.room_id = $1 AND m.deleted = FALSE ORDER BY m.created_at DESC LIMIT $2`,
     [roomId, limit],
   );
   res.json({
-    messages: r.rows.reverse().map((x) => ({ id: x.message_id, roomId, user: publicUser(x, req.user.id), text: x.body, createdAt: x.message_at })),
+    // Gönderirken gizliyse o anki gizli kimliğiyle; şu an gizliyse de maskeli (eski mesajlardan kim olduğu çıkarılamasın).
+    messages: r.rows.reverse().map((x) => ({
+      id: x.message_id, roomId, text: x.body, createdAt: x.message_at,
+      user: roomUser(x.sender_hidden ? { ...x, is_hidden: true, hidden_alias: x.sender_alias } : x, req.user.id),
+    })),
   });
 });
 

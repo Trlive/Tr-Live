@@ -1,6 +1,6 @@
 import { query } from '../database.js';
 import { levelFromExp, levelExp } from '../levels.js';
-import { USER_PUBLIC_COLUMNS, USER_PUBLIC_JOINS, publicUser } from '../views.js';
+import { USER_PUBLIC_COLUMNS, USER_PUBLIC_JOINS, publicUser, roomUser } from '../views.js';
 import { hub } from '../realtime.js';
 import { isGhost } from './presence.js';
 import { wipVehicleGift } from './wip.js';
@@ -68,23 +68,30 @@ export async function activeEntranceEffect(userId, run = query) {
 }
 
 /**
- * Kullanıcının görünümü değişince (çerçeve, balon, mikrofon dalgası, fotoğraf…) bulunduğu odalara anında bildirir;
- * odadakiler çıkıp girmeden yeni görünümü görür. Hata olursa sessizce geçer (asıl işlemi bozmaz).
+ * Kullanıcının görünümü değişince (çerçeve, balon, mikrofon dalgası, fotoğraf, kimlik…) bulunduğu ve sahibi olduğu odalara
+ * anında bildirir; odadakiler çıkıp girmeden yeni görünümü (ve oda kimliğini) görür. Hata olursa sessizce geçer (asıl işlemi bozmaz).
  */
 export async function announceUserChange(userId) {
   try {
     const ghost = await isGhost(userId);
     const rooms = (await query(`SELECT room_id, microphone FROM room_members WHERE user_id = $1`, [userId])).rows;
-    if (!rooms.length) return;
+    // Sahibi olduğu açık odalar da duyulur: oda kimliği sahibin kimliğidir (Yoho), sahip odada olmasa da başlık yenilenir.
+    const owned = (await query(
+      `SELECT id FROM rooms WHERE owner_id = $1 AND is_active = TRUE AND id NOT IN (SELECT room_id FROM room_members WHERE user_id = $1)`,
+      [userId],
+    )).rows;
+    if (!rooms.length && !owned.length) return;
     const row = await loadPublicRow(userId);
     if (!row) return;
-    const user = publicUser(row, null);
+    const user = roomUser(row, null);
     for (const r of rooms) {
       const payload = { type: 'room_member_updated', roomId: r.room_id, user };
       // Hayalet (SWIP) üye yalnızca mikrofondayken görünür: o zaman odaya duyurulur; değilse yalnızca kendisi yeniler.
       if (!ghost || r.microphone) hub.broadcastRoom(r.room_id, payload);
       else hub.sendToUser(userId, payload);
     }
+    // Sahip odada değil: yalnızca sahip bilgisi (kimlik, ad, fotoğraf) güncellenir; hayalet de olsa sahip zaten odada görünür.
+    for (const r of owned) hub.broadcastRoom(r.id, { type: 'room_member_updated', roomId: r.id, user, owner: true });
   } catch (error) {
     console.error('[görünüm] odalara bildirilemedi:', error.message);
   }

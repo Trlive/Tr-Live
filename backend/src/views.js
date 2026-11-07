@@ -5,7 +5,7 @@ import { cpLevelFor } from './levels.js';
 export const HIDDEN_NAME = 'Gizli Kullanıcı';
 
 // "u" takma adlı users tablosu ile kullanılır.
-export const USER_PUBLIC_COLUMNS = `u.id, u.username, u.public_id, u.display_name, u.avatar_url, u.is_hidden, u.wip_hidden,
+export const USER_PUBLIC_COLUMNS = `u.id, u.username, u.public_id, u.display_name, u.avatar_url, u.is_hidden, u.hidden_alias, u.wip_hidden,
   u.coin_level, u.gift_level, u.created_at AS u_created_at, u.kyc_status AS u_kyc_status, uw.level AS wip_level, wt.features AS wip_features,
   (SELECT COALESCE(fr.image_url, fi.metadata->>'assetUrl') FROM inventory_items fi
      LEFT JOIN frames fr ON fr.id::text = fi.item_key
@@ -35,16 +35,22 @@ export const USER_PUBLIC_JOINS = `LEFT JOIN user_wip uw ON uw.user_id = u.id AND
 /** Takılı (ayrıca verilmiş) WIP öğesi; yoksa üyelik öğesi kapatıldıysa 0, değilse null (uygulama üyelik kademesini kullanır). */
 const wipItem = (row, type) => row.wip_items?.[type] ?? (row.wip_hidden?.[type] === true ? 0 : null);
 
-export function publicUser(row, viewerId = null) {
+/**
+ * opts.alias: gizli kullanıcının gizli ID'si (hiddenId) yalnızca oda içi verilerde (üyeler, sohbet, hediye, çanta…) gönderilir;
+ * takip / arkadaş / ziyaretçi / paylaşım / mesaj gibi listelerde gönderilmez (gizli kimlik tanıdıklarıyla eşleştirilemesin).
+ */
+export function publicUser(row, viewerId = null, { alias = false } = {}) {
   if (!row) return null;
   // Gizli kullanıcı herkese — kendisine de — "Gizli Kullanıcı" görünür (odada, sohbette, listelerde tutarlı olsun;
   // kişi gizli modda olduğunu kendi koltuğundan da görür). Profil düzenleme kendi profil sayfasından yapılır.
   void viewerId;
   const hidden = Boolean(row.is_hidden);
   if (hidden) {
+    // Gizli kimlik: ad "Gizli Kullanıcı", gerçek ID yerine gizli ID (hiddenId); seviyeler de gösterilmez (kim olduğu
+    // seviyesinden tahmin edilmesin).
     return {
-      id: row.id, publicId: null, username: HIDDEN_NAME, displayName: HIDDEN_NAME, avatarUrl: null,
-      coinLevel: row.coin_level, giftLevel: row.gift_level, wipLevel: null, nameColor: null, frameUrl: null, isHidden: true,
+      id: row.id, publicId: null, hiddenId: alias ? (row.hidden_alias ?? null) : null, username: HIDDEN_NAME, displayName: HIDDEN_NAME, avatarUrl: null,
+      coinLevel: null, giftLevel: null, wipLevel: null, nameColor: null, frameUrl: null, isHidden: true,
       chatBubbleUrl: null, micWaveUrl: null, profileCardUrl: null, roomCardUrl: null, specialId: null, hostBadge: null, idColor: null,
     };
   }
@@ -86,6 +92,9 @@ export function publicUser(row, viewerId = null) {
   };
 }
 
+/** Oda içi gösterim: gizli kullanıcı gizli ID'siyle görünür. */
+export const roomUser = (row, viewerId = null) => publicUser(row, viewerId, { alias: true });
+
 export function selfUser(row) {
   return {
     id: row.id,
@@ -107,6 +116,8 @@ export function selfUser(row) {
     coinLevel: row.coin_level,
     giftLevel: row.gift_level,
     isHidden: Boolean(row.is_hidden),
+    // Gizli moddayken odalarda görünen gizli ID (Ayarlar'da kişiye gösterilir).
+    hiddenId: row.is_hidden ? (row.hidden_alias ?? null) : null,
     whoCanDm: row.who_can_dm ?? 'everyone',
     showPresence: row.show_presence !== false,
     hideCountry: row.hide_country === true,

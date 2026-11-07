@@ -117,7 +117,16 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           height: coverH,
           child: cover != null && !hidden
               ? NetImg(cover, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(color: Pal.surface))
-              : Container(decoration: const BoxDecoration(gradient: LinearGradient(colors: [Color(0xFFFF9AD5), Color(0xFF9C7BFF)], begin: Alignment.topLeft, end: Alignment.bottomRight))),
+              : Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      // Gizli kullanıcı: koyu gizemli mor kapak.
+                      colors: hidden ? const [Color(0xFF120C2A), Color(0xFF3B2378), Color(0xFF1B1036)] : const [Color(0xFFFF9AD5), Color(0xFF9C7BFF)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                  ),
+                ),
         ),
         // Avatar + çerçeve (kapağın alt kenarında)
         Positioned(
@@ -195,6 +204,10 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         user: {'displayName': p['displayName'], 'wipLevel': wip?['level'], 'nameColor': features?['nameColor']},
         style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w600, color: _ink),
       ),
+      if (hidden) ...[
+        const SizedBox(height: 6),
+        HiddenIdPill(alias: p['hiddenId']?.toString() ?? '', height: 22),
+      ],
       if (!hidden) ...[
         const SizedBox(height: 6),
         Wrap(alignment: WrapAlignment.center, crossAxisAlignment: WrapCrossAlignment.center, spacing: 6, runSpacing: 4, children: [
@@ -503,7 +516,15 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   _header(p, hidden),
                   _nameBlock(p, hidden),
                   if (hidden)
-                    const Padding(padding: EdgeInsets.all(24), child: Text('Bu kullanıcı profilini gizlemiş.', textAlign: TextAlign.center, style: TextStyle(color: _dim)))
+                    const Padding(
+                      padding: EdgeInsets.all(24),
+                      child: Column(children: [
+                        Icon(Icons.visibility_off_rounded, color: Color(0xFF9F7AEA), size: 34),
+                        SizedBox(height: 8),
+                        Text('Bu kullanıcı kimliğini gizliyor.\nProfili, takipçileri ve paylaşımları görüntülenemez.',
+                            textAlign: TextAlign.center, style: TextStyle(color: _dim, height: 1.4)),
+                      ]),
+                    )
                   else ...[
                     _medalRow(card),
                     if (!isSelf) _actions(p),

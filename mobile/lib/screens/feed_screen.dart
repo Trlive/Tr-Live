@@ -252,7 +252,8 @@ class _PostCardState extends State<PostCard> {
     final staff = Session.isStaff;
     final gift = (u?['giftLevel'] as num?)?.toInt() ?? 1;
     void openProfile() {
-      if (u == null) return;
+      // Gizli kullanıcının profili açılmaz.
+      if (u == null || u['isHidden'] == true) return;
       Navigator.push(context, MaterialPageRoute(builder: (_) => UserProfileScreen(userId: u['id'] as String)));
     }
 
@@ -282,13 +283,14 @@ class _PostCardState extends State<PostCard> {
                       Wrap(spacing: 4, runSpacing: 3, crossAxisAlignment: WrapCrossAlignment.center, children: [
                         if (wipLevelOf(u?['wipBadge'] ?? u?['wipLevel']) != null)
                           Transform.translate(offset: const Offset(-6, 0), child: WipChip(level: u?['wipBadge'] ?? u?['wipLevel'], colorHex: u?['nameColor'] as String?)),
-                        LevelPill(level: u?['coinLevel'] ?? 1, send: true, height: 16),
-                        if (gift > 1) LevelPill(level: gift, send: false, height: 16),
+                        // Gizli kullanıcıda seviye gösterilmez.
+                        if (u?['isHidden'] != true) LevelPill(level: u?['coinLevel'] ?? 1, send: true, height: 16),
+                        if (gift > 1 && u?['isHidden'] != true) LevelPill(level: gift, send: false, height: 16),
                       ]),
                     ]),
                   ),
                 ),
-                if (!mine && !_following)
+                if (!mine && !_following && u?['isHidden'] != true)
                   Padding(
                     padding: const EdgeInsets.only(left: 6, right: 4),
                     child: Material(

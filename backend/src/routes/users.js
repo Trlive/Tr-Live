@@ -103,6 +103,11 @@ router.delete('/:userId/follow', async (req, res) => {
 
 async function followList(req, res, column, otherColumn) {
   const targetId = uuid(req.params.userId, 'Kullanıcı');
+  // Gizli kullanıcının takip listeleri başkasına verilmez (kim olduğu çevresinden anlaşılmasın).
+  if (targetId !== req.user.id) {
+    const t = (await query(`SELECT is_hidden FROM users WHERE id = $1`, [targetId])).rows[0];
+    if (t?.is_hidden) return res.json({ users: [] });
+  }
   const { limit, offset } = paging(req);
   const r = await query(
     `SELECT ${USER_PUBLIC_COLUMNS} FROM follows f JOIN users u ON u.id = f.${otherColumn} ${USER_PUBLIC_JOINS}

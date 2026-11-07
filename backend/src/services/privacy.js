@@ -10,15 +10,18 @@ const has = (feature) => `(u.system_role = 'admin' OR EXISTS (
   SELECT 1 FROM user_wip uw JOIN wip_tiers wt ON wt.level = uw.level
   WHERE uw.user_id = u.id AND uw.is_active = TRUE AND uw.expires_at > NOW() AND COALESCE((wt.features->>'${feature}')::boolean, FALSE)))`;
 
+const inRoom = `(EXISTS (SELECT 1 FROM room_members rm WHERE rm.user_id = u.id) OR EXISTS (SELECT 1 FROM rooms ro WHERE ro.owner_id = u.id AND ro.is_active = TRUE))`;
+
 /** Ayrıcalığı kalmayan kişilerin gizlilik ayarlarını kapatır; görünürlükleri hemen güncellenir. */
 export async function sweepPrivacy(run = query) {
   const r = await run(
     `UPDATE users u SET
-       is_hidden = u.is_hidden AND ${has('hiddenUser')},
+       -- Odadayken gizlilik kaldırılmaz (odadakiler kim olduğunu öğrenmesin); odadan çıkınca bir sonraki temizlikte kapanır.
+       is_hidden = u.is_hidden AND (${has('hiddenUser')} OR ${inRoom}),
        show_presence = (u.show_presence IS NOT FALSE) OR NOT ${has('hideOnline')},
        hide_country = u.hide_country AND ${has('hideCountry')},
        updated_at = NOW()
-     WHERE (u.is_hidden AND NOT ${has('hiddenUser')})
+     WHERE (u.is_hidden AND NOT ${has('hiddenUser')} AND NOT ${inRoom})
         OR (u.show_presence = FALSE AND NOT ${has('hideOnline')})
         OR (u.hide_country AND NOT ${has('hideCountry')})
      RETURNING u.id`,

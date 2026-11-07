@@ -8,7 +8,7 @@ import { hub } from '../realtime.js';
 import { cleanLine } from '../text_safety.js';
 import { screenText } from '../services/moderation.js';
 import { loadPublicRow, loadPublicRows } from '../services/users.js';
-import { publicUser } from '../views.js';
+import { roomUser } from '../views.js';
 import { BAG_TIERS, SUPER_BAG_SLOTS } from '../services/rewards_config.js';
 import { noteTask, dailyState } from '../services/daily.js';
 import { idempotent } from '../idempotency.js';
@@ -33,7 +33,7 @@ export async function bagClaims(bagId, c = { query }, limit = 30) {
     `SELECT user_id, amount FROM lucky_bag_claims WHERE bag_id = $1 ORDER BY amount DESC, created_at LIMIT $2`, [bagId, limit],
   )).rows;
   const users = new Map((await loadPublicRows(rows.map((x) => x.user_id), c.query.bind(c))).map((u) => [u.id, u]));
-  return rows.filter((x) => users.has(x.user_id)).map((x) => ({ user: publicUser(users.get(x.user_id), null), amount: String(x.amount) }));
+  return rows.filter((x) => users.has(x.user_id)).map((x) => ({ user: roomUser(users.get(x.user_id), null), amount: String(x.amount) }));
 }
 
 /** Süper çantada izleyici notu sohbete yazmış mı (bir kez yazması yeter). */
@@ -54,7 +54,7 @@ async function bagJson(b, viewerId, c = { query }) {
   const mine = (await c.query(`SELECT amount FROM lucky_bag_claims WHERE bag_id = $1 AND user_id = $2`, [b.id, viewerId])).rows[0];
   return {
     id: b.id, roomId: b.room_id, kind: b.kind, tier: b.tier, totalCoins: String(b.total_coins), slots: b.slots, claimed: b.claimed_count,
-    status: b.status, note: b.kind === 'super' ? b.note : null, expiresAt: b.expires_at, opensAt: b.opens_at ?? b.created_at, sender: publicUser(sender, null),
+    status: b.status, note: b.kind === 'super' ? b.note : null, expiresAt: b.expires_at, opensAt: b.opens_at ?? b.created_at, sender: roomUser(sender, null),
     mine: mine ? String(mine.amount) : null,
     noteSaid: await noteSaid(b, viewerId, c),
     claims: mine ? await bagClaims(b.id, c) : [],
@@ -149,7 +149,7 @@ router.post('/lucky-bags/:id/claim', userLimit('lucky_claim', 30, 60e3), async (
   });
   // Kim ne kadar aldı: odanın ortasından geçen şeritte gösterilir.
   let who = null;
-  try { who = publicUser(await loadPublicRow(userId), null); } catch (_) { /* şerit isimsiz gösterilir */ }
+  try { who = roomUser(await loadPublicRow(userId), null); } catch (_) { /* şerit isimsiz gösterilir */ }
   hub.broadcastRoom(result.roomId, {
     type: 'lucky_bag_claimed', roomId: result.roomId, bagId: id, claimed: result.claimed, slots: result.slots, done: result.done,
     user: who, amount: result.amount.toString(),

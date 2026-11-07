@@ -2,7 +2,7 @@ import { query, tx } from '../database.js';
 import { hub } from '../realtime.js';
 import * as ludo from '../ludo.js';
 import { loadPublicRows } from './users.js';
-import { publicUser } from '../views.js';
+import { roomUser } from '../views.js';
 import { fail } from '../http.js';
 import { nonOverlapping } from '../ticker.js';
 
@@ -14,8 +14,8 @@ export async function gameView(gameId, run = query) {
   const ids = st ? st.players.map((p) => p.userId) : waiting.map((p) => p.user_id);
   const users = new Map((await loadPublicRows(ids, run)).map((u) => [u.id, u]));
   const players = st
-    ? st.players.map((p) => ({ user: publicUser(users.get(p.userId)), seat: p.seat, color: ludo.COLORS[p.seat], auto: p.auto }))
-    : waiting.map((p) => ({ user: publicUser(users.get(p.user_id)), seat: p.seat, color: ludo.COLORS[p.seat], auto: 0 }));
+    ? st.players.map((p) => ({ user: roomUser(users.get(p.userId)), seat: p.seat, color: ludo.COLORS[p.seat], auto: p.auto }))
+    : waiting.map((p) => ({ user: roomUser(users.get(p.user_id)), seat: p.seat, color: ludo.COLORS[p.seat], auto: 0 }));
   const turnSeat = st && g.status === 'playing' ? st.turn : null;
   return {
     id: g.id, roomId: g.room_id, type: g.game_type, status: g.status, createdBy: g.created_by, winnerId: g.winner_id,

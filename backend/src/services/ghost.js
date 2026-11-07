@@ -1,6 +1,6 @@
 import { query } from '../database.js';
 import { hub } from '../realtime.js';
-import { publicUser } from '../views.js';
+import { roomUser } from '../views.js';
 import { isGhost } from './presence.js';
 import { loadPublicRow } from './users.js';
 
@@ -19,7 +19,7 @@ export async function refreshGhost(userId, wasGhost) {
     if (wasGhost === null || wasGhost === undefined || wasGhost === u.ghost) return;
     const rooms = (await query(`SELECT room_id FROM room_members WHERE user_id = $1 AND microphone = FALSE`, [userId])).rows;
     if (!rooms.length) return;
-    const user = u.ghost ? null : publicUser(await loadPublicRow(userId), null);
+    const user = u.ghost ? null : roomUser(await loadPublicRow(userId), null);
     for (const { room_id: roomId } of rooms) {
       if (u.ghost) hub.broadcastRoom(roomId, { type: 'room_member_left', roomId, userId, ghost: true });
       else hub.broadcastRoom(roomId, { type: 'room_member_joined', roomId, user, entranceEffect: null, silent: true });

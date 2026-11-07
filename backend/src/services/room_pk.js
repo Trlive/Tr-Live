@@ -4,7 +4,7 @@
 import { query, tx } from '../database.js';
 import { hub } from '../realtime.js';
 import { loadPublicRows } from './users.js';
-import { publicUser } from '../views.js';
+import { roomUser } from '../views.js';
 import { remainingSeconds } from '../pk_logic.js';
 import { fail } from '../http.js';
 
@@ -56,7 +56,7 @@ export async function roomPkView(id, run = query) {
   if (p.mvp_user_id) ids.add(p.mvp_user_id);
   const users = new Map((await loadPublicRows([...ids], run)).map((u) => [u.id, u]));
   const list = (kind, team, n) => pts.filter((x) => x.kind === kind && x.team === team).slice(0, n)
-    .map((x) => ({ user: publicUser(users.get(x.user_id)), points: String(x.points) }));
+    .map((x) => ({ user: roomUser(users.get(x.user_id)), points: String(x.points) }));
   const side = (team) => ({
     score: String(team === 'red' ? p.score_red : p.score_blue),
     supporters: list('support', team, 3),
@@ -67,7 +67,7 @@ export async function roomPkView(id, run = query) {
     seatCount: p.seat_count, redSplit: redSplit(p.seat_count), durationSeconds: p.duration_seconds,
     ...clockOf(p), startedAt: p.started_at, endsAt: p.ends_at,
     red: side('red'), blue: side('blue'), winner: p.winner ?? null,
-    mvp: p.mvp_user_id && users.get(p.mvp_user_id) ? publicUser(users.get(p.mvp_user_id)) : null,
+    mvp: p.mvp_user_id && users.get(p.mvp_user_id) ? roomUser(users.get(p.mvp_user_id)) : null,
   };
 }
 

@@ -570,9 +570,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       _joined = true;
       final me = mapOf(r['me']);
       if (me != null) _me = me;
-      // Yeniden katılınca oda sahibinin ailesi de tazelenir (sahip bu arada aile değiştirmiş olabilir).
+      // Yeniden katılınca oda sahibinin ailesi ve kimliği de tazelenir (sahip bu arada değiştirmiş olabilir).
       final fresh = mapOf(r['room']);
-      if (fresh != null) _room = {...?_room, 'ownerFamily': fresh['ownerFamily']};
+      if (fresh != null) _room = {...?_room, 'ownerFamily': fresh['ownerFamily'], if (fresh['owner'] != null) 'owner': fresh['owner']};
       SocketService.instance.subscribeRoom(widget.roomId);
       await _loadMembers();
       if (!mounted) return;
@@ -841,6 +841,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           setState(() {
             final i = _members.indexWhere((m) => m['userId']?.toString() == nu['id']?.toString());
             if (i >= 0) _members[i] = {..._members[i], 'user': nu};
+            // Oda sahibi: oda kimliği sahibin kimliği olduğundan başlıktaki ID de yenilenir (sahip odada olmasa da).
+            final r = _room;
+            if (r != null && r['ownerId']?.toString() == nu['id']?.toString()) _room = {...r, 'owner': nu};
           });
         }
         break;
@@ -2003,6 +2006,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   /// Sohbetteki rozet sırası: WIP, gönderme (taç) ve alma (kalp) seviyesi, CP ve doğrulanmış hesap.
   Widget _badgeRow(Map<String, dynamic>? u, {double h = 16}) {
+    // Gizli kullanıcı: seviye / rozet yerine gizli kimliği (kim olduğu seviyesinden anlaşılmasın).
+    if (u?['isHidden'] == true) return HiddenIdPill(alias: u?['hiddenId']?.toString() ?? '', height: h);
     final wip = wipLevelOf(u?['wipBadge'] ?? u?['wipLevel']);
     final gift = (u?['giftLevel'] as num?)?.toInt() ?? 1;
     final cp = (u?['cpLevel'] as num?)?.toInt();
@@ -2540,6 +2545,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     // Yetkiler: kendi rolüm hedefin rolünden yüksek olmalı (oda sahibine dokunulamaz).
     final canMod = !isSelf && _canModerate(role);
     final canRole = !isSelf && (_myRole == 'owner' || _myRole == 'cohost') && role != 'owner' && (_myRole == 'owner' || role != 'cohost');
+    // Gizli kullanıcı (Yoho gizemli kişi): profili, ilişkileri, seviyesi gösterilmez; dokununca profil açılmaz.
+    // Hediye, etiketleme, şikâyet ve oda yönetimi çalışır.
+    final hiddenUser = !isSelf && user?['isHidden'] == true;
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -2574,11 +2582,13 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               ),
             );
         return FutureBuilder<List<Map<String, dynamic>?>>(
-          future: Future.wait([
-            Api.get('/api/users/$userId').then<Map<String, dynamic>?>((r) => mapOf(r['profile'])).catchError((_) => null),
-            Api.get('/api/users/$userId/card').then<Map<String, dynamic>?>((r) => r).catchError((_) => null),
-            Api.get('/api/cp/wall/$userId').then<Map<String, dynamic>?>((r) => r).catchError((_) => null),
-          ]),
+          future: hiddenUser
+              ? Future.value(const <Map<String, dynamic>?>[null, null, null])
+              : Future.wait([
+                  Api.get('/api/users/$userId').then<Map<String, dynamic>?>((r) => mapOf(r['profile'])).catchError((_) => null),
+                  Api.get('/api/users/$userId/card').then<Map<String, dynamic>?>((r) => r).catchError((_) => null),
+                  Api.get('/api/cp/wall/$userId').then<Map<String, dynamic>?>((r) => r).catchError((_) => null),
+                ]),
           builder: (context, snap) {
             final profile = snap.data?[0];
             final card = snap.data?[1];
@@ -2621,8 +2631,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                           Text((user?['displayName'] ?? '').toString(), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
                           const SizedBox(height: 6),
                           Wrap(alignment: WrapAlignment.center, spacing: 6, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
-                            LevelPill(level: user?['coinLevel'] ?? 1, send: true, height: 20),
-                            LevelPill(level: user?['giftLevel'] ?? 1, send: false, height: 20),
+                            if (user?['isHidden'] != true) ...[
+                              LevelPill(level: user?['coinLevel'] ?? 1, send: true, height: 20),
+                              LevelPill(level: user?['giftLevel'] ?? 1, send: false, height: 20),
+                            ],
                             if (user?['wipLevel'] != null) _pill(wipLabel(wipLevelOf(user?['wipLevel'])), WipStyle.of(wipLevelOf(user?['wipLevel']))?.color ?? Pal.amber),
                             if (role != 'user') _pill(_roleLabels[role] ?? role, Pal.cyan),
                             if (family != null) _pill('${family['name']}', Pal.red),
@@ -2641,7 +2653,15 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                               ),
                           ]),
                           const SizedBox(height: 8),
-                          if ((profile?['specialId'] ?? user?['specialId'] ?? profile?['publicId'] ?? user?['publicId']) != null)
+                          if (user?['isHidden'] == true) ...[
+                            IdBadge(user: user, fontSize: 13),
+                            if (hiddenUser)
+                              const Padding(
+                                padding: EdgeInsets.only(top: 8),
+                                child: Text('Bu kullanıcı kimliğini gizliyor; profili görüntülenemez.',
+                                    textAlign: TextAlign.center, style: TextStyle(color: Colors.white54, fontSize: 12.5)),
+                              ),
+                          ] else if ((profile?['specialId'] ?? user?['specialId'] ?? profile?['publicId'] ?? user?['publicId']) != null)
                             IdBadge(
                               user: {
                                 'publicId': profile?['publicId'] ?? user?['publicId'],
@@ -2765,7 +2785,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                           ],
                           const SizedBox(height: 4),
                           // CP / yakınlık: iki kişi arasındaki seviye ve ilişki seçimi (3. kademeden itibaren).
-                          if (!isSelf) CpPanel(userId: userId, displayName: (user?['displayName'] ?? '').toString(), user: user),
+                          if (!isSelf && !hiddenUser) CpPanel(userId: userId, displayName: (user?['displayName'] ?? '').toString(), user: user),
                           // Yönetim düğmeleri: yalnızca yetkili olana görünür.
                           if (canMod || canRole) ...[
                             const SizedBox(height: 10),
@@ -2802,7 +2822,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                               close();
                               _openGifts(userId);
                             }),
-                            if (!isSelf)
+                            if (hiddenUser)
+                              const SizedBox.shrink()
+                            else if (!isSelf)
                               bigAction(following ? Icons.check : Icons.add, following ? 'Takipte' : 'Takip Et', () async {
                                 final ok = await guard<bool>(this.context, () async {
                                   if (following) {
@@ -2827,10 +2849,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                     Positioned(
                       top: -48,
                       child: GestureDetector(
-                        onTap: () {
-                          close();
-                          Navigator.push(this.context, MaterialPageRoute(builder: (_) => UserProfileScreen(userId: userId)));
-                        },
+                        onTap: hiddenUser
+                            ? null
+                            : () {
+                                close();
+                                Navigator.push(this.context, MaterialPageRoute(builder: (_) => UserProfileScreen(userId: userId)));
+                              },
                         child: UserAvatar(user: user, radius: 48),
                       ),
                     ),
@@ -3588,7 +3612,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           width: tw,
           height: th + _seatNameH,
           child: Column(children: [
-            PkThrone(team: team, user: user, width: tw, onTap: user?['id'] == null ? null : () => Navigator.push(context, MaterialPageRoute(builder: (_) => UserProfileScreen(userId: user!['id'].toString())))),
+            PkThrone(team: team, user: user, width: tw, onTap: user?['id'] == null || user?['isHidden'] == true ? null : () => Navigator.push(context, MaterialPageRoute(builder: (_) => UserProfileScreen(userId: user!['id'].toString())))),
             SizedBox(
               height: _seatNameH,
               child: Center(
@@ -3686,6 +3710,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final h = g.row1H;
     final owner = _members.where((m) => m['role'] == 'owner');
     final ownerUser = owner.isEmpty ? null : mapOf(owner.first['user']);
+    final idUser = ownerUser ?? mapOf(_room?['owner']);
     final name = (_room?['name'] ?? widget.initialName).toString();
     final cover = Api.absoluteUrl(_room?['coverUrl'] as String?);
     _syncDockCover(cover ?? Api.absoluteUrl(ownerUser?['avatarUrl'] as String?));
@@ -3735,11 +3760,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                             ),
                           ),
                         ]),
-                        Text(
-                          'ID:${(_room?['roomNumber'] ?? ownerUser?['publicId'] ?? '').toString()}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(fontSize: h * 0.27, height: 1.15, color: Colors.white70),
+                        // Oda kimliği = sahibinin güncel kimliği (Yoho): özel ID varsa o, yoksa normal ID; renkli/özel tasarımıyla.
+                        // Sahip kimliğini değiştirince başlık da hemen değişir (room_member_updated).
+                        // Ad satırı (0.468h) + ID en fazla 0.34h: h-6 yüksekliğe sığar (taşma olmaz).
+                        ConstrainedBox(
+                          constraints: BoxConstraints(maxHeight: h * 0.34),
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: displayIdOf(idUser).isNotEmpty
+                                ? IdBadge(user: idUser, fontSize: h * 0.25, copyable: false)
+                                : PlainIdText(id: (_room?['roomNumber'] ?? '').toString(), fontSize: h * 0.25),
+                          ),
                         ),
                       ]),
                     ),

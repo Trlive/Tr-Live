@@ -4,7 +4,7 @@ import { requireAuth } from '../auth.js';
 import { noteTask } from '../services/daily.js';
 import { userLimit } from '../firewall.js';
 import { fail, uuid, uuidArray, positiveInt, oneOf } from '../http.js';
-import { publicUser } from '../views.js';
+import { publicUser, roomUser } from '../views.js';
 import { hub } from '../realtime.js';
 import { config } from '../config.js';
 import { distributeGift } from '../gifts_logic.js';
@@ -271,9 +271,11 @@ router.post('/rooms/:roomId/gifts/send', userLimit('gift', 60, 60e3), idempotent
     id: result.gift.id, name: result.gift.name, iconUrl: result.gift.icon_url, animationUrl: result.gift.animation_url,
     animationFormat: result.gift.animation_format, category: result.gift.category, playMode: result.gift.play_mode ?? 'full',
   };
-  const sender = publicUser(byId.get(senderId));
+  // Odadakilere gizli kullanıcı gizli ID'siyle; tüm uygulamaya giden şeritlerde gizli ID gönderilmez.
+  const sender = roomUser(byId.get(senderId));
+  const senderGlobal = publicUser(byId.get(senderId));
   const receivers = result.transactions.map((t) => ({
-    user: publicUser(byId.get(t.receiverId)), quantity: t.quantity, coinAmount: t.coinAmount,
+    user: roomUser(byId.get(t.receiverId)), quantity: t.quantity, coinAmount: t.coinAmount,
   }));
 
   // Combo (Yoho): aynı kişiye aynı hediye birkaç saniye içinde tekrar gönderilirse sayaç artar (x2, x3 ...).
@@ -285,7 +287,7 @@ router.post('/rooms/:roomId/gifts/send', userLimit('gift', 60, 60e3), idempotent
   // Büyük şanslı kazanç tüm uygulamaya duyurulur (Yoho "çan" şeridi).
   if (result.announce) {
     hub.broadcastGlobal({
-      type: 'lucky_gift_win', roomId, gift: giftInfo, sender, multiplier: result.lucky.best, win: result.lucky.win,
+      type: 'lucky_gift_win', roomId, gift: giftInfo, sender: senderGlobal, multiplier: result.lucky.best, win: result.lucky.win,
     });
   }
 
@@ -306,7 +308,7 @@ router.post('/rooms/:roomId/gifts/send', userLimit('gift', 60, 60e3), idempotent
       type: 'global_gift_ribbon', roomId, gift: giftInfo,
       quantity: q.reduce((s, x) => s + x.quantity, 0),
       totalCoins: q.reduce((s, x) => s + x.coinAmount, 0n).toString(),
-      sender,
+      sender: senderGlobal,
       receivers: q.map((x) => publicUser(byId.get(x.userId))),
     };
     hub.broadcastGlobal(ribbon);

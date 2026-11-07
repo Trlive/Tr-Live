@@ -4,6 +4,7 @@ import 'app_theme.dart';
 import 'common.dart';
 import 'cosmetics.dart';
 import 'fig.dart';
+import 'id_badge.dart';
 import 'image_pick.dart';
 import 'level_badge.dart';
 import 'room_categories.dart';
@@ -231,11 +232,13 @@ class _ContributionsState extends State<_Contributions> {
                   style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 13 * k)),
               SizedBox(height: 4 * k),
               FittedBox(
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  LevelPill(level: u['coinLevel'] ?? 1, send: true, height: 14 * k),
-                  SizedBox(width: 3 * k),
-                  LevelPill(level: u['giftLevel'] ?? 1, send: false, height: 14 * k),
-                ]),
+                child: u['isHidden'] == true
+                    ? HiddenIdPill(alias: u['hiddenId']?.toString() ?? '', height: 14 * k)
+                    : Row(mainAxisSize: MainAxisSize.min, children: [
+                        LevelPill(level: u['coinLevel'] ?? 1, send: true, height: 14 * k),
+                        SizedBox(width: 3 * k),
+                        LevelPill(level: u['giftLevel'] ?? 1, send: false, height: 14 * k),
+                      ]),
               ),
             ]),
           ),
@@ -278,11 +281,14 @@ class _ContributionsState extends State<_Contributions> {
             child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
               u == null ? Text('—', style: TextStyle(color: Colors.white38, fontSize: 14 * k)) : UserName(user: u),
               if (u != null) SizedBox(height: 5 * k),
-              if (u != null) Row(children: [
-                LevelPill(level: u['coinLevel'] ?? 1, send: true, height: 14 * k),
-                SizedBox(width: 4 * k),
-                LevelPill(level: u['giftLevel'] ?? 1, send: false, height: 14 * k),
-              ]),
+              if (u != null && u['isHidden'] == true)
+                HiddenIdPill(alias: u['hiddenId']?.toString() ?? '', height: 14 * k)
+              else if (u != null)
+                Row(children: [
+                  LevelPill(level: u['coinLevel'] ?? 1, send: true, height: 14 * k),
+                  SizedBox(width: 4 * k),
+                  LevelPill(level: u['giftLevel'] ?? 1, send: false, height: 14 * k),
+                ]),
             ]),
           ),
           Column(mainAxisAlignment: MainAxisAlignment.center, children: [
@@ -393,7 +399,12 @@ void showRoomCard(
           ]),
           const SizedBox(height: 12),
           Text((room['name'] ?? '').toString(), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
-          if ((room['roomNumber'] ?? '').toString().isNotEmpty) Text('Oda ID: ${room['roomNumber']}', style: const TextStyle(color: Colors.white54, fontSize: 12)),
+          // Oda kimliği = sahibinin kimliği (Yoho): özel / renkli / normal ID sahibin kimliği gibi görünür, dokununca kopyalanır.
+          const SizedBox(height: 4),
+          if (displayIdOf(owner ?? mapOf(room['owner'])).isNotEmpty)
+            Align(alignment: Alignment.centerLeft, child: IdBadge(user: owner ?? mapOf(room['owner']), fontSize: 13))
+          else if ((room['roomNumber'] ?? '').toString().isNotEmpty)
+            Text('ID: ${room['roomNumber']}', style: const TextStyle(color: Colors.white54, fontSize: 12)),
           const SizedBox(height: 14),
           const Text('Oda Duyurusu', style: TextStyle(fontWeight: FontWeight.w800)),
           const SizedBox(height: 4),
