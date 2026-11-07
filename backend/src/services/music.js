@@ -12,7 +12,7 @@ const ELAPSED = `(EXTRACT(EPOCH FROM (NOW() - rm.updated_at)) * 1000)::bigint`;
 // İstemciler "positionMs" ve "serverTime" ile senkronize olur: şimdiki konum = positionMs + (yerelSaat - alındığıAn).
 export async function musicState(roomId, run = query) {
   const st = (await run(
-    `SELECT rm.status, rm.position_ms, ${ELAPSED} AS elapsed_ms, rm.track_id, t.title, t.artist, t.url, t.cover_url, t.duration_ms
+    `SELECT rm.status, rm.position_ms, ${ELAPSED} AS elapsed_ms, rm.track_id, rm.controlled_by, rm.volume, t.title, t.artist, t.url, t.cover_url, t.duration_ms
      FROM room_music rm LEFT JOIN music_tracks t ON t.id = rm.track_id WHERE rm.room_id = $1`,
     [roomId],
   )).rows[0];
@@ -27,6 +27,9 @@ export async function musicState(roomId, run = query) {
     track,
     positionMs: st && track ? positionAt(st.status, st.position_ms, st.elapsed_ms, track.durationMs) : 0,
     serverTime: Date.now(),
+    // Müziği çalan / son yöneten kişi (müzik kutusu yalnızca ona görünür) ve odadaki ses düzeyi (0–1).
+    controlledBy: st?.controlled_by ?? null,
+    volume: st?.volume == null ? 1 : Number(st.volume),
     queue: queue.map((q) => ({ id: q.id, addedBy: q.added_by, track: trackOf(q) })),
   };
 }

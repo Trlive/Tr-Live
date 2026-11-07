@@ -115,7 +115,7 @@ app.use('/uploads', express.static(config.uploadDir, {
 // göndermeyen eski sürümler dahil) 426 alır ve uygulama "Güncelleme gerekli" ekranını gösterir.
 const UPDATE_EXEMPT = new Set(['/health', '/app/config', '/client-errors', '/auth/logout', '/push/latest',
   // Google/Facebook dönüşü tarayıcıdan gelir (uygulama sürümü başlığı yok).
-  '/auth/oauth/google/callback', '/auth/oauth/facebook/callback', '/legal/privacy', '/legal/data-deletion', '/legal/terms']);
+  '/auth/oauth/google/callback', '/auth/oauth/facebook/callback', '/legal/privacy', '/legal/privacy.json', '/legal/data-deletion', '/legal/terms']);
 app.use('/api', async (req, res, next) => {
   if (UPDATE_EXEMPT.has(req.path)) return next();
   // Web yönetim/ajans paneli bir uygulama sürümü değildir: zorunlu güncelleme ona uygulanmaz.

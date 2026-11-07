@@ -7,7 +7,7 @@ import { userLimit } from '../firewall.js';
 import { hub } from '../realtime.js';
 import { cleanLine } from '../text_safety.js';
 import { screenText } from '../services/moderation.js';
-import { loadPublicRow } from '../services/users.js';
+import { loadPublicRow, loadPublicRows } from '../services/users.js';
 import { publicUser } from '../views.js';
 import { BAG_TIERS, SUPER_BAG_SLOTS } from '../services/rewards_config.js';
 import { noteTask, dailyState } from '../services/daily.js';
@@ -27,6 +27,28 @@ export function splitBag(total, slots) {
   return out;
 }
 
+/** Çantadan kim ne kadar aldı (en çok alan önce; açılış penceresindeki kayan şerit için). */
+export async function bagClaims(bagId, c = { query }, limit = 30) {
+  const rows = (await c.query(
+    `SELECT user_id, amount FROM lucky_bag_claims WHERE bag_id = $1 ORDER BY amount DESC, created_at LIMIT $2`, [bagId, limit],
+  )).rows;
+  const users = new Map((await loadPublicRows(rows.map((x) => x.user_id), c.query.bind(c))).map((u) => [u.id, u]));
+  return rows.filter((x) => users.has(x.user_id)).map((x) => ({ user: publicUser(users.get(x.user_id), null), amount: String(x.amount) }));
+}
+
+/** Süper çantada izleyici notu sohbete yazmış mı (bir kez yazması yeter). */
+async function noteSaid(b, viewerId, c = { query }) {
+  if (b.kind !== 'super' || !b.note) return false;
+  // Sohbet yazının ilk harfini büyük yapar; not büyük/küçük harf farkı gözetmeden karşılaştırılır.
+  const norm = (t) => String(t ?? '').trim().toLocaleLowerCase('tr').replace(/ı/g, 'i').replace(/i̇/g, 'i');
+  const r = await c.query(
+    `SELECT body FROM room_messages WHERE room_id = $1 AND user_id = $2 AND deleted = FALSE AND created_at >= $3 ORDER BY created_at DESC LIMIT 100`,
+    [b.room_id, viewerId, b.created_at],
+  );
+  const want = norm(b.note);
+  return r.rows.some((x) => norm(x.body) === want);
+}
+
 async function bagJson(b, viewerId, c = { query }) {
   const sender = await loadPublicRow(b.sender_id);
   const mine = (await c.query(`SELECT amount FROM lucky_bag_claims WHERE bag_id = $1 AND user_id = $2`, [b.id, viewerId])).rows[0];
@@ -34,6 +56,8 @@ async function bagJson(b, viewerId, c = { query }) {
     id: b.id, roomId: b.room_id, kind: b.kind, tier: b.tier, totalCoins: String(b.total_coins), slots: b.slots, claimed: b.claimed_count,
     status: b.status, note: b.kind === 'super' ? b.note : null, expiresAt: b.expires_at, opensAt: b.opens_at ?? b.created_at, sender: publicUser(sender, null),
     mine: mine ? String(mine.amount) : null,
+    noteSaid: await noteSaid(b, viewerId, c),
+    claims: mine ? await bagClaims(b.id, c) : [],
   };
 }
 
@@ -111,13 +135,7 @@ router.post('/lucky-bags/:id/claim', userLimit('lucky_claim', 30, 60e3), async (
     if (b.opens_at && new Date(b.opens_at) > new Date()) throw fail('Geri sayım bitince açılır.', 425);
     if (!(await c.query(`SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2`, [b.room_id, userId])).rowCount) throw fail('Çantayı açmak için odada olmalısınız.', 403);
     if ((await c.query(`SELECT 1 FROM lucky_bag_claims WHERE bag_id = $1 AND user_id = $2`, [id, userId])).rowCount) throw fail('Bu çantayı zaten açtınız.', 409);
-    if (b.kind === 'super') {
-      const said = await c.query(
-        `SELECT 1 FROM room_messages WHERE room_id = $1 AND user_id = $2 AND body = $3 AND deleted = FALSE AND created_at >= $4 LIMIT 1`,
-        [b.room_id, userId, b.note, b.created_at],
-      );
-      if (!said.rowCount) throw fail(`Önce sohbete şu notu yazın: "${b.note}"`, 403);
-    }
+    if (b.kind === 'super' && !(await noteSaid(b, userId, c))) throw fail(`Önce sohbete şu notu yazın: "${b.note}"`, 403);
     const amount = BigInt(b.amounts[b.claimed_count]);
     const claimed = b.claimed_count + 1;
     await c.query(`INSERT INTO lucky_bag_claims(bag_id, user_id, amount) VALUES($1,$2,$3)`, [id, userId, amount.toString()]);
@@ -136,7 +154,9 @@ router.post('/lucky-bags/:id/claim', userLimit('lucky_claim', 30, 60e3), async (
     type: 'lucky_bag_claimed', roomId: result.roomId, bagId: id, claimed: result.claimed, slots: result.slots, done: result.done,
     user: who, amount: result.amount.toString(),
   });
-  res.json({ ok: true, amount: result.amount.toString(), claimed: result.claimed, slots: result.slots });
+  let claims = [];
+  try { claims = await bagClaims(id); } catch (_) { /* liste boş gösterilir */ }
+  res.json({ ok: true, amount: result.amount.toString(), claimed: result.claimed, slots: result.slots, claims });
 });
 
 /** Süresi dolan çantalarda dağıtılmayan Coin gönderene iade edilir. */

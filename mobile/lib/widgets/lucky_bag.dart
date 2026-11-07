@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/api.dart';
+import '../services/socket_service.dart';
 import 'common.dart';
 import 'fig.dart';
 import 'level_badge.dart';
+import 'marquee.dart';
 
 /// Şanslı çanta kademeleri (sunucudaki ayarla aynı; sunucu doğrular).
 const _tiers = [
@@ -244,7 +246,11 @@ class _ClaimDialog extends StatefulWidget {
 }
 
 class _ClaimDialogState extends State<_ClaimDialog> {
+  /// Bu oturumda notu gönderilen süper çantalar (pencere kapanıp açılınca yeniden istenmez).
+  static final Set<String> _notedBags = {};
   Timer? _t;
+  StreamSubscription? _sub;
+  List<Map<String, dynamic>> _claims = [];
   int _toOpen = 0; // açılmasına kalan saniye (süper çanta geri sayımı)
   int _left = 1 << 30; // kapanmasına kalan saniye
   bool _noteSent = false;
@@ -259,8 +265,44 @@ class _ClaimDialogState extends State<_ClaimDialog> {
   void initState() {
     super.initState();
     _won = _b['mine']?.toString();
+    // Sunucu bilgisi varsa o esas; yoksa bu oturumda gönderilmiş olması yeter.
+    _noteSent = _b['noteSaid'] is bool ? _b['noteSaid'] == true : _notedBags.contains('${_b['id']}');
+    _claims = _sorted(listOf(_b['claims']));
     _tick();
     _t = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
+    // Çantadan yeni pay alan olursa kazanç şeridine eklenir.
+    _sub = SocketService.instance.events.listen((e) {
+      if (e['type'] != 'lucky_bag_claimed' || '${e['bagId']}' != '${_b['id']}' || !mounted) return;
+      final u = mapOf(e['user']);
+      if (u == null) return;
+      setState(() {
+        _b['claimed'] = e['claimed'] ?? _b['claimed'];
+        if (!_claims.any((c) => '${mapOf(c['user'])?['id']}' == '${u['id']}')) {
+          _claims = _sorted([..._claims, {'user': u, 'amount': '${e['amount']}'}]);
+        }
+      });
+    });
+    _refresh();
+  }
+
+  /// En çok alan önce.
+  static List<Map<String, dynamic>> _sorted(List<Map<String, dynamic>> l) =>
+      [...l]..sort((a, b) => (num.tryParse('${b['amount']}') ?? 0).compareTo(num.tryParse('${a['amount']}') ?? 0));
+
+  /// Güncel durum (notu daha önce yazdı mı, kim ne aldı) sunucudan alınır.
+  Future<void> _refresh() async {
+    try {
+      final r = await Api.get('/api/rooms/${widget.roomId}/lucky-bags');
+      final fresh = listOf(r['bags']).where((x) => '${x['id']}' == '${_b['id']}').firstOrNull;
+      if (fresh == null || !mounted) return;
+      setState(() {
+        if (fresh['noteSaid'] is bool) _noteSent = fresh['noteSaid'] == true || (_noteSent && _notedBags.contains('${_b['id']}'));
+        _b['claimed'] = fresh['claimed'] ?? _b['claimed'];
+        if (_won == null && fresh['mine'] != null) _won = '${fresh['mine']}';
+        final l = listOf(fresh['claims']);
+        if (l.isNotEmpty) _claims = _sorted(l);
+      });
+    } catch (_) {/* eldeki bilgiyle devam */}
   }
 
   int _secsTo(dynamic iso) {
@@ -279,12 +321,14 @@ class _ClaimDialogState extends State<_ClaimDialog> {
   @override
   void dispose() {
     _t?.cancel();
+    _sub?.cancel();
     super.dispose();
   }
 
   Future<void> _sendNote() async {
     setState(() => _busy = true);
     final r = await guard(context, () => Api.post('/api/rooms/${widget.roomId}/messages', {'text': (_b['note'] ?? '').toString()}));
+    if (r != null) _notedBags.add('${_b['id']}');
     if (mounted) setState(() { _busy = false; if (r != null) _noteSent = true; });
   }
 
@@ -303,6 +347,8 @@ class _ClaimDialogState extends State<_ClaimDialog> {
       if (r != null) {
         _won = r['amount'].toString();
         _b['mine'] = _won;
+        final l = listOf(r['claims']);
+        if (l.isNotEmpty) _claims = _sorted(l);
       } else {
         // Figma: "Üzgünüm, bu şanslı çanta zaten açılmış..." (süresi dolan / tükenen çanta).
         _failed = fail ?? 'Üzgünüm, bu şanslı çanta zaten açılmış...';
@@ -313,6 +359,50 @@ class _ClaimDialogState extends State<_ClaimDialog> {
 
   String _mmss(int s) => '${(s ~/ 60).toString().padLeft(2, '0')}:${(s % 60).toString().padLeft(2, '0')}';
 
+  /// Kim ne kadar aldı: en çok alandan başlayarak art arda kayan şerit (şeffaf siyah, ince altın çerçeve).
+  Widget _claimsStrip() {
+    Widget item(int i, Map<String, dynamic> c) {
+      final u = mapOf(c['user']);
+      final medal = i == 0 ? const Color(0xFFFFD54F) : i == 1 ? const Color(0xFFE0E0E0) : i == 2 ? const Color(0xFFFFAB73) : Colors.white70;
+      return Padding(
+        padding: const EdgeInsets.only(right: 16),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Text('${i + 1}.', style: TextStyle(color: medal, fontWeight: FontWeight.w900, fontSize: 12)),
+          const SizedBox(width: 4),
+          UserAvatar(user: u, radius: 10),
+          const SizedBox(width: 4),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 110),
+            child: Text('${u?['displayName'] ?? ''}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12)),
+          ),
+          const SizedBox(width: 4),
+          const Fig('bag_coin', width: 14, height: 14),
+          const SizedBox(width: 2),
+          Text(fmtNumber(c['amount']), style: const TextStyle(color: Color(0xFFFFE082), fontWeight: FontWeight.w900, fontSize: 12)),
+        ]),
+      );
+    }
+
+    return Container(
+      height: 34,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.42),
+        borderRadius: BorderRadius.circular(17),
+        border: Border.all(color: const Color(0xFFF2B92A), width: 1),
+      ),
+      child: Marquee(
+        height: 34,
+        always: _claims.length > 1,
+        alignX: 0,
+        speed: 38,
+        gap: 8,
+        startDelay: const Duration(milliseconds: 600),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [for (var i = 0; i < _claims.length; i++) item(i, _claims[i])]),
+      ),
+    );
+  }
+
   Widget _okButton() => _yellowButton('Tamam', () => Navigator.of(context).maybePop(), height: 38);
 
   @override
@@ -321,6 +411,7 @@ class _ClaimDialogState extends State<_ClaimDialog> {
     final expired = _left <= 0;
     final counting = _super && _toOpen > 0 && _won == null;
     final needNote = _super && !_noteSent && _won == null && !expired;
+    final showNote = _super && _won == null && !expired && '${_b['note'] ?? ''}'.isNotEmpty;
     final canOpen = _won == null && _failed == null && !expired && !counting && !needNote && !_busy;
     final name = '${sender?['displayName'] ?? ''}';
     Widget body;
@@ -346,6 +437,7 @@ class _ClaimDialogState extends State<_ClaimDialog> {
         const Text('Tebrikler!', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 17)),
         const SizedBox(height: 6),
         Text('$name takip et ve bir sonrakini kaçırma!', textAlign: TextAlign.center, maxLines: 2, style: const TextStyle(color: Color(0xFFFFF3B0), fontWeight: FontWeight.w600, fontSize: 12.5)),
+        if (_claims.isNotEmpty) ...[const SizedBox(height: 10), _claimsStrip()],
         const SizedBox(height: 12),
         _okButton(),
       ]);
@@ -385,16 +477,25 @@ class _ClaimDialogState extends State<_ClaimDialog> {
           Text(fmtNumber(_b['totalCoins']), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Colors.white)),
         ]),
         Text('${_b['claimed']}/${_b['slots']} kişi açtı', style: const TextStyle(color: Colors.white70, fontSize: 10.5)),
-        if (needNote) ...[
+        if (showNote) ...[
           const SizedBox(height: 8),
-          Text('"${_b['note']}"', textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13)),
+          // Not bir kez gönderilir; gönderilince gri olur ve yeniden dokunulamaz.
+          Text('"${_b['note']}"', textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: needNote ? Colors.white : Colors.white54, fontWeight: FontWeight.w700, fontSize: 13)),
           const SizedBox(height: 4),
           SizedBox(
             height: 30,
             child: FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: Colors.white, foregroundColor: const Color(0xFFE8258A), padding: const EdgeInsets.symmetric(horizontal: 12), textStyle: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
-              onPressed: _busy ? null : _sendNote,
-              child: const Text('Notu sohbete gönder ve aç'),
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: const Color(0xFFE8258A),
+                disabledBackgroundColor: const Color(0xFF9E9E9E),
+                disabledForegroundColor: const Color(0xFFEEEEEE),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                textStyle: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
+              ),
+              onPressed: _busy || !needNote ? null : _sendNote,
+              child: Text(needNote ? 'Notu sohbete gönder' : 'Not gönderildi ✓'),
             ),
           ),
         ],
@@ -421,23 +522,24 @@ class _ClaimDialogState extends State<_ClaimDialog> {
         ),
       ]);
     }
-    // Odanın ortasında küçük kare kart.
-    final side = (MediaQuery.sizeOf(context).width * 0.64).clamp(220.0, 290.0);
+    // Odanın ortasında kare kart (bir tık büyütüldü; kazanç listesi varken biraz uzar).
+    final side = (MediaQuery.sizeOf(context).width * 0.76).clamp(250.0, 330.0);
+    final tall = _won != null && _claims.isNotEmpty ? 46.0 : 0.0;
     return Dialog(
       backgroundColor: Colors.transparent,
       insetPadding: EdgeInsets.zero,
       child: Stack(clipBehavior: Clip.none, children: [
         Container(
           width: side,
-          height: side,
-          padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+          height: side + tall,
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: Colors.white, width: 1.4),
             image: DecorationImage(image: Fig.provider('bag_card'), fit: BoxFit.cover, onError: (_, __) {}),
             gradient: const LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFFFF4D6D), Color(0xFFE8258A)]),
           ),
-          child: Center(child: FittedBox(fit: BoxFit.scaleDown, child: SizedBox(width: side - 28, child: body))),
+          child: Center(child: FittedBox(fit: BoxFit.scaleDown, child: SizedBox(width: side - 32, child: body))),
         ),
         Positioned(right: -6, top: -6, child: InkWell(customBorder: const CircleBorder(), onTap: () => Navigator.pop(context), child: const CircleAvatar(radius: 13, backgroundColor: Colors.black54, child: Icon(Icons.close, size: 15, color: Colors.white)))),
       ]),

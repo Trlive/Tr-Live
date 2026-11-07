@@ -92,6 +92,9 @@ async function memberOf(roomId, userId) {
 }
 
 // ---------- Liste ve ayrıntı ----------
+/** Son 5 dakikada bu kadar Coin'lik hediye atılan oda "yükseliyor" olur ve listede anında en üste çıkar. */
+const ROOM_HOT_COINS = 10000;
+
 router.get('/', optionalAuth, async (req, res) => {
   const type = req.query.type === 'video' ? 'video' : req.query.type === 'audio' ? 'audio' : null;
   const tag = req.query.tag ? String(req.query.tag).trim().toLocaleLowerCase('tr').slice(0, 20) : null;
@@ -108,6 +111,11 @@ router.get('/', optionalAuth, async (req, res) => {
        -- Hayalet (SWIP) dinleyiciler sayılmaz; mikrofona çıkınca görünür olurlar.
        (SELECT COUNT(*)::int FROM room_members rm WHERE rm.room_id = r.id AND (rm.microphone OR rm.user_id NOT IN (SELECT id FROM active_ghosts))) AS member_count,
        (SELECT COUNT(*)::int FROM room_members rm WHERE rm.room_id = r.id AND rm.microphone = TRUE) AS mic_count,
+       -- Sıralama (Yoho / Mico): son 30 ve 5 dakikada odada atılan hediyeler, PK sürüyor mu.
+       (SELECT COALESCE(SUM(gt.coin_amount), 0)::bigint FROM gift_transactions gt WHERE gt.room_id = r.id AND gt.created_at > NOW() - INTERVAL '30 minutes') AS gifts_30m,
+       (SELECT COALESCE(SUM(gt.coin_amount), 0)::bigint FROM gift_transactions gt WHERE gt.room_id = r.id AND gt.created_at > NOW() - INTERVAL '5 minutes') AS gifts_5m,
+       (EXISTS (SELECT 1 FROM room_pk rp WHERE rp.room_id = r.id AND rp.status IN ('preparing','active'))
+        OR EXISTS (SELECT 1 FROM pk_battles pb WHERE (pb.room_a = r.id OR pb.room_b = r.id) AND pb.status = 'active')) AS in_pk,
        -- Kartta üst üste binen üye avatarları (Yoho): önce mikrofondakiler; gizli kullanıcı ve hayalet dinleyici hariç.
        (SELECT COALESCE(json_agg(a.avatar_url), '[]'::json) FROM (
           SELECT mu.avatar_url FROM room_members rm2 JOIN users mu ON mu.id = rm2.user_id
@@ -125,15 +133,25 @@ router.get('/', optionalAuth, async (req, res) => {
             OR ($5 = 'friends' AND EXISTS (SELECT 1 FROM follows f WHERE f.follower_id = $3::uuid AND f.followed_id = r.owner_id))
             OR ($5 = 'near' AND EXISTS (SELECT 1 FROM users me WHERE me.id = $3::uuid AND me.city IS NOT NULL AND lower(me.city) = lower(COALESCE(u.city, '')))))
        AND ($6::boolean IS FALSE OR u.created_at > NOW() - INTERVAL '30 days')
-     ORDER BY member_count DESC, r.created_at DESC LIMIT 100`,
+     ORDER BY member_count DESC, r.created_at DESC LIMIT 300`,
     [type, tag, req.user?.id ?? null, like, region, fresh],
   );
+  // Odalar puana göre sıralanır: kişi sayısı, mikrofondakiler, son 30 dakikadaki hediyeler ve PK; son 5 dakikada büyük
+  // hediye atılan oda "yükseliyor" olur ve anında en üste çıkar.
+  const scored = r.rows.map((x) => {
+    const g30 = Number(x.gifts_30m ?? 0);
+    const hot = Number(x.gifts_5m ?? 0) >= ROOM_HOT_COINS;
+    const score = x.member_count * 10 + x.mic_count * 4 + Math.min(g30 / 500, 400) + (x.in_pk ? 60 : 0) + (hot ? 1000 : 0);
+    return { x, hot, score };
+  });
+  scored.sort((a, b) => b.score - a.score || new Date(b.x.room_created_at) - new Date(a.x.room_created_at));
   // Kullanıcı sütunlarındaki "id" (= sahip kimliği) oda kimliğiyle karışmasın diye oda alanları takma adla alınır.
   res.json({
-    rooms: r.rows.map((x) => ({
+    rooms: scored.slice(0, 100).map(({ x, hot }) => ({
       id: x.room_id, roomNumber: x.room_number ?? null, coverUrl: x.cover_url ?? null, bagCount: x.bag_count, name: x.room_name, roomType: x.room_type, layout: x.room_layout === 'live' ? 'live' : 'grid', seatCount: x.seat_count, ownerId: x.owner_id, createdAt: x.room_created_at,
       memberCount: x.member_count, micCount: x.mic_count, tags: x.tags ?? [], locked: x.locked, theme: x.theme ?? 'default', themeImageUrl: x.theme_image_url ?? null,
       avatars: Array.isArray(x.avatars) ? x.avatars : [],
+      inPk: x.in_pk === true, hot, recentGiftCoins: String(x.gifts_30m ?? 0),
       owner: publicUser(x, req.user?.id ?? null),
     })),
   });
@@ -653,10 +671,13 @@ router.post('/:roomId/mic/take', requireAuth, userLimit('mic', 60, 60e3), async 
 });
 
 // Mikrofon emojisi: koltuktaki kişi 3 hareketli emojiden birini gönderir, koltuğunda birkaç saniye oynar.
+/** Mikrofon emojisi sayısı (uygulamadaki assets/images/mic_emoji_1..N.webp). */
+const MIC_EMOJI_COUNT = 21;
+
 router.post('/:roomId/mic-emoji', requireAuth, userLimit('mic_emoji', 20, 60e3), async (req, res) => {
   const roomId = uuid(req.params.roomId, 'Oda');
   const emoji = Number(req.body?.emoji);
-  if (!Number.isInteger(emoji) || emoji < 1 || emoji > 3) throw fail('Geçersiz emoji.');
+  if (!Number.isInteger(emoji) || emoji < 1 || emoji > MIC_EMOJI_COUNT) throw fail('Geçersiz emoji.');
   const me = await memberOf(roomId, req.user.id);
   if (!me || me.seat_index === null) throw fail('Emoji göndermek için mikrofonda olmalısınız.', 403);
   hub.broadcastRoom(roomId, { type: 'room_mic_emoji', roomId, userId: req.user.id, emoji });

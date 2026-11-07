@@ -164,8 +164,8 @@ class PushService with WidgetsBindingObserver {
       } catch (_) {}
     });
     try {
+      // İzin burada istenmez (açılışta / giriş ekranında değil): Micolive gibi girişten sonra ana sayfada bir kez sorulur.
       await _init();
-      await _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()?.requestNotificationsPermission();
     } catch (_) {/* izin verilmezse bildirim gösterilmez, uygulama çalışır */}
     // Uygulama öne gelince kaçırılan bildirimler sorulur.
     WidgetsBinding.instance.removeObserver(_observer);

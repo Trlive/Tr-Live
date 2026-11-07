@@ -5,6 +5,7 @@ import { ipLimit } from '../firewall.js';
 import fs from 'node:fs';
 import { getConfig } from '../services/app_config.js';
 import { TERMS_VERSION, LEGAL_SITE } from '../legal.js';
+import { PRIVACY_EN, COMPANY, privacyHtml } from '../legal_texts.js';
 
 // Sunucunun sürümü (yönetim panelinde ve sorun ararken görünür).
 let SERVER_VERSION = null;
@@ -71,8 +72,12 @@ router.post('/client-errors', ipLimit('client_errors', 30, 3600e3), optionalAuth
   res.json({ ok: true, saved: n });
 });
 
-// Google / Facebook giriş ayarlarında ve mağaza kaydında istenen herkese açık sayfalar: güncel yasal metinler sitede
-// (tek kaynak). Eski adresler bozulmasın diye bu adresler siteye yönlendirir.
-router.get('/legal/privacy', (_req, res) => res.redirect(302, `${LEGAL_SITE}/privacy.html`));
-router.get('/legal/data-deletion', (_req, res) => res.redirect(302, `${LEGAL_SITE}/privacy.html#hesap-silme`));
+// Gizlilik Politikası tek kaynaktan (legal_texts.js): uygulama JSON'u okur; Google Play, Google ve Facebook giriş
+// ayarlarında istenen herkese açık adres aynı metnin HTML sayfasıdır. Diğer sayfalar sitede.
+router.get('/legal/privacy.json', (_req, res) => res.json({ ...PRIVACY_EN, version: TERMS_VERSION, company: COMPANY }));
+router.get('/legal/privacy', (_req, res) => {
+  res.set('Cache-Control', 'public, max-age=600');
+  res.type('html').send(privacyHtml());
+});
+router.get('/legal/data-deletion', (_req, res) => res.redirect(302, '/api/legal/privacy#account-deletion'));
 router.get('/legal/terms', (_req, res) => res.redirect(302, `${LEGAL_SITE}/terms.html`));

@@ -1,17 +1,15 @@
 import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-// NotificationVisibility iki pakette de var; balon için flutter_overlay_window'unki kullanılır.
-import 'package:flutter_foreground_task/flutter_foreground_task.dart' hide NotificationVisibility;
-import 'package:flutter_overlay_window/flutter_overlay_window.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'error_log.dart';
 import 'room_dock.dart';
 import 'socket_service.dart';
 
-/// Odadayken uygulamanın arka planda kesintisiz çalışması ve diğer uygulamaların üzerinde yüzen balon:
+/// Odadayken uygulamanın arka planda kesintisiz çalışması:
 ///  - Ön plan servisi (bildirimli): Android uygulamayı kapatmaz; oda sesi ve (mikrofondaysanız) mikrofon açık kalır.
-///  - Yüzen balon: uygulamadan çıkınca ekranda küçük bir balon kalır, dokununca uygulamaya dönülür.
+///    Üstteki sabit "… odasındasınız" bildirimine dokununca odaya dönülür (balon / ek izin yok).
 ///  - Geri dönünce bağlantı hemen yenilenir.
 /// Hiçbir hata uygulamayı çökertmez; her adım korumalıdır.
 class BackgroundService with WidgetsBindingObserver {
@@ -188,37 +186,5 @@ class BackgroundService with WidgetsBindingObserver {
       if (_wasHidden) SocketService.instance.reconnectNow();
       _wasHidden = false;
     }
-  }
-}
-
-/// Yüzen balonun içeriği (ayrı bir Flutter motorunda çalışır; giriş noktası main.dart'taki overlayMain). Dokununca ana uygulamaya "open" gönderir.
-void overlayMainImpl() {
-  runApp(const MaterialApp(debugShowCheckedModeBanner: false, home: _Bubble()));
-}
-
-class _Bubble extends StatelessWidget {
-  const _Bubble();
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: Center(
-        child: GestureDetector(
-          onTap: () => FlutterOverlayWindow.shareData('open'),
-          child: Container(
-            width: 96,
-            height: 96,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: const LinearGradient(colors: [Color(0xFF1FD6F5), Color(0xFFFF4F9A)]),
-              boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 10)],
-              border: Border.all(color: Colors.white, width: 3),
-            ),
-            child: const Icon(Icons.mic, color: Colors.white, size: 44),
-          ),
-        ),
-      ),
-    );
   }
 }

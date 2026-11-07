@@ -17,6 +17,17 @@ class EffectPrefs {
   static bool giftSound = true;
   /// Odada "oda sesini kapat" seçiliyken hediye / araç sesleri de çalmaz (kaydedilmez; odadan çıkınca açılır).
   static final ValueNotifier<bool> roomMuted = ValueNotifier<bool>(false);
+  /// Şarj tüketimi (Ayarlar): açıkken arayüz animasyonları kısılır, kamera 360p yayınlar, güzellik filtresinin en çok
+  /// işlemci yoran pürüzsüzleştirmesi kapanır → daha az ısınma ve şarj tüketimi.
+  static final ValueNotifier<bool> powerSave = ValueNotifier<bool>(false);
+
+  static Future<void> setPowerSave(bool on) async {
+    powerSave.value = on;
+    try {
+      await (await SharedPreferences.getInstance()).setBool('power_save', on);
+    } catch (_) {}
+  }
+
   /// Ayar değişince artar: o an oynayan görsel / ses hemen durur (sonrakini beklemeden).
   static final ValueNotifier<int> version = ValueNotifier<int>(0);
 
@@ -36,6 +47,7 @@ class EffectPrefs {
       globalNotice = p.getBool('fx_global_notice') ?? true;
       entranceFx = p.getBool('fx_entrance') ?? true;
       giftSound = p.getBool('fx_gift_sound') ?? true;
+      powerSave.value = p.getBool('power_save') ?? false;
     } catch (_) {/* varsayılanlar (hepsi açık) */}
   }
 

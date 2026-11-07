@@ -7,6 +7,7 @@ import { hub } from '../realtime.js';
 import { forgetTyping } from '../services/presence.js';
 import { notifyUser } from '../services/notify.js';
 import { publicUser, USER_PUBLIC_COLUMNS, USER_PUBLIC_JOINS } from '../views.js';
+import { attachCurrentRooms } from '../services/users.js';
 
 export const router = Router();
 router.use(requireAuth);
@@ -39,7 +40,8 @@ router.get('/', async (req, res) => {
      ORDER BY fr.responded_at DESC NULLS LAST LIMIT 500`,
     [req.user.id],
   );
-  res.json({ users: r.rows.map((x) => publicUser(x, req.user.id)) });
+  const users = r.rows.map((x) => publicUser(x, req.user.id));
+  res.json({ users: await attachCurrentRooms(users).catch(() => users) });
 });
 
 // Bana gelen bekleyen istekler

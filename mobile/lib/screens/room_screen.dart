@@ -8,12 +8,12 @@ import '../widgets/cosmetics.dart';
 import '../widgets/entrance_strip.dart';
 import '../widgets/fly_text.dart';
 import '../widgets/lucky_bag.dart';
+import '../widgets/marquee.dart';
 import '../widgets/room_sheets.dart';
 import 'package:flutter/services.dart';
 import 'package:livekit_client/livekit_client.dart' as lk;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api.dart';
-import '../widgets/music_bubble.dart';
 import '../services/background_service.dart';
 import '../services/beauty.dart';
 import '../services/call_guard.dart';
@@ -50,6 +50,9 @@ import 'user_screens.dart';
 const _roleLabels = {'owner': 'Oda sahibi', 'cohost': 'Yardımcı sahip', 'moderator': 'Moderatör', 'user': 'Üye'};
 const _roleLevel = {'user': 1, 'moderator': 2, 'cohost': 3, 'owner': 4};
 
+
+/// Mikrofon emojisi sayısı (assets/images/mic_emoji_1..N.webp; sunucudaki MIC_EMOJI_COUNT ile aynı).
+const kMicEmojiCount = 21;
 class RoomScreen extends StatefulWidget {
   final String roomId;
   final String initialName;
@@ -98,6 +101,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   final List<Map<String, dynamic>> _messages = [];
   final _chatCtl = TextEditingController();
   final _chatScroll = ScrollController();
+  int _unseen = 0; // yukarıdaki eski mesajlar okunurken gelen yeni mesaj sayısı
   bool _sending = false;
   bool _chatMuted = false;
   bool _inputOpen = false;
@@ -141,6 +145,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     _sub = SocketService.instance.events.listen(_onEvent);
+    _chatScroll.addListener(_onChatScroll);
     RoomDock.exitHandler = _onBack;
     // Telefon araması gelince oda sesi ve mikrofon kapanır, bitince açılır.
     CallGuard.instance.inCall.addListener(_onPhoneCall);
@@ -508,15 +513,41 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 
   /// Sohbetin sonuna kaydırır. Kullanıcı yukarı kaydırıp eski mesajları okuyorsa ([force] yoksa) yerinden oynatmaz.
+  /// Sohbet ters sıralı listedir (Yoho gibi): en yeni mesaj en altta, liste konumu 0 = en alt. Kullanıcı en alttayken yeni
+  /// mesaj kendiliğinden görünür; yukarıda eski mesajları okuyorsa yerinden oynatılmaz, "yeni mesaj" düğmesi çıkar.
   void _scrollChatToEnd({bool force = false}) {
-    if (!force && _chatScroll.hasClients && _chatScroll.position.extentAfter > 120) return;
+    final reading = _chatScroll.hasClients && _chatScroll.position.pixels > 60;
+    if (reading && !force) {
+      if (_unseen < 99) setState(() => _unseen++);
+      // Ters listede yeni mesaj alta eklenince okunan kısım yukarı kayar; aynı yerde kalsın diye fark kadar kaydırılır.
+      final before = _chatScroll.position.maxScrollExtent;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!_chatScroll.hasClients) return;
+        final d = _chatScroll.position.maxScrollExtent - before;
+        if (d > 0) _chatScroll.jumpTo(_chatScroll.position.pixels + d);
+      });
+      return;
+    }
+    if (_unseen != 0) setState(() => _unseen = 0);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_chatScroll.hasClients) _chatScroll.jumpTo(_chatScroll.position.maxScrollExtent);
+      if (_chatScroll.hasClients && _chatScroll.position.pixels != 0) _chatScroll.jumpTo(0);
     });
   }
 
+  void _onChatScroll() {
+    if (_unseen != 0 && _chatScroll.hasClients && _chatScroll.position.pixels <= 30) setState(() => _unseen = 0);
+  }
+
+  /// Mesajın ilk harfi büyük (Türkçe: i → İ, ı → I).
+  static String _capFirst(String t) {
+    if (t.isEmpty) return t;
+    final f = t[0];
+    final up = f == 'i' ? 'İ' : f == 'ı' ? 'I' : f.toUpperCase();
+    return up + t.substring(1);
+  }
+
   Future<void> _sendChat() async {
-    final text = _chatCtl.text.trim();
+    final text = _capFirst(_chatCtl.text.trim());
     if (text.isEmpty || _sending) return;
     setState(() => _sending = true);
     final fly = _flyMode;
@@ -879,7 +910,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       case 'room_mic_emoji':
         final emUser = e['userId']?.toString();
         final emNo = (e['emoji'] as num?)?.toInt();
-        if (emUser != null && emNo != null && emNo >= 1 && emNo <= 3 && emUser != Session.id) _showMicEmoji(emUser, emNo);
+        if (emUser != null && emNo != null && emNo >= 1 && emNo <= kMicEmojiCount && emUser != Session.id) _showMicEmoji(emUser, emNo);
         break;
       case 'room_gift':
         if (e['roomTotal'] != null) setState(() => _room = {...?_room, 'totalDiamonds': e['roomTotal']});
@@ -1006,7 +1037,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         // (ses verisi ~2 katına çıkar). Varsayılanda kalsın.
         defaultAudioPublishOptions: const lk.AudioPublishOptions(encoding: lk.AudioEncoding(maxBitrate: 32000), dtx: true),
         // Kamera 540p (varsayılan 720p): telefon ekranında fark az, yükleme ~yarı, işlemci/pil daha az yorulur.
-        defaultCameraCaptureOptions: const lk.CameraCaptureOptions(params: lk.VideoParametersPresets.h540_169),
+        // Şarj tüketimi modunda 360p (daha az ısınma ve şarj).
+        defaultCameraCaptureOptions: lk.CameraCaptureOptions(
+          params: EffectPrefs.powerSave.value ? lk.VideoParametersPresets.h360_169 : lk.VideoParametersPresets.h540_169,
+        ),
       ));
       room.addListener(_onLkChanged);
       await room.connect(url, token);
@@ -2162,7 +2196,32 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           child: _fly.active ? ClipRect(child: Padding(padding: const EdgeInsets.only(top: 2), child: FlyTextLayer(queue: _fly))) : const SizedBox(width: double.infinity),
         ),
       ),
-      Expanded(child: _chatList(w, rightPad: rightPad)),
+      Expanded(
+        child: Stack(children: [
+          Positioned.fill(child: _chatList(w, rightPad: rightPad)),
+          // Eski mesajlar okunurken yeni mesaj gelirse: dokununca en alta iner.
+          if (_unseen > 0)
+            Positioned(
+              left: 8,
+              bottom: 6,
+              child: GestureDetector(
+                onTap: () {
+                  setState(() => _unseen = 0);
+                  if (_chatScroll.hasClients) _chatScroll.animateTo(0, duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(color: const Color(0xFFF2B92A), borderRadius: BorderRadius.circular(14), boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 4)]),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    const Icon(Icons.keyboard_double_arrow_down, size: 16, color: Colors.black),
+                    const SizedBox(width: 3),
+                    Text('$_unseen yeni mesaj', style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w800, fontSize: 12)),
+                  ]),
+                ),
+              ),
+            ),
+        ]),
+      ),
     ]);
   }
 
@@ -2180,11 +2239,15 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     ];
     final head = heads.length;
     if (_messages.isEmpty && head == 0) return const SizedBox.shrink();
+    final total = _messages.length + head;
+    // Ters liste: en yeni mesaj en altta; ekran dolunca da son yazılan hep görünür.
     return ListView.builder(
       controller: _chatScroll,
+      reverse: true,
       padding: EdgeInsets.fromLTRB(8, overlay ? 10 : 2, rightPad ?? w * 0.2, 8),
-      itemCount: _messages.length + head,
-      itemBuilder: (_, idx) {
+      itemCount: total,
+      itemBuilder: (_, rIdx) {
+        final idx = total - 1 - rIdx;
         if (idx < head) return heads[idx];
         final i = idx - head;
         final m = _messages[i];
@@ -2311,6 +2374,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           child: TextField(
             controller: _chatCtl,
             autofocus: true,
+            textCapitalization: TextCapitalization.sentences,
             maxLength: _flyMode ? 80 : 300,
             enabled: !_chatMuted,
             minLines: 1,
@@ -2545,7 +2609,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                   padding: const EdgeInsets.only(top: 48),
                   child: Stack(clipBehavior: Clip.none, alignment: Alignment.topCenter, children: [
                     Container(
-                      constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.85),
+                      // Kompakt kart (Yoho / Mico ölçüsü): ekranın en fazla %66'sı; fazlası kaydırılır.
+                      constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.66),
                       // Takılı profil kartı (mağaza) varsa kartın arka planı olur.
                       decoration: BoxDecoration(
                         color: const Color(0xFF26262B),
@@ -2601,6 +2666,48 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                 const Icon(Icons.copy, size: 14, color: Colors.white54),
                               ]),
                             ),
+                          // Cinsiyet / yaş, konum ve kısa biyografi.
+                          if (profile != null) ...[
+                            const SizedBox(height: 8),
+                            Wrap(alignment: WrapAlignment.center, spacing: 8, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                              if (profile['gender'] == 'male' || profile['gender'] == 'female')
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: profile['gender'] == 'female' ? const Color(0xFFFF4FA8) : const Color(0xFF3B9BFF),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                                    Icon(profile['gender'] == 'female' ? Icons.female : Icons.male, size: 13, color: Colors.white),
+                                    if (profile['age'] != null) Text(' ${profile['age']}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Colors.white)),
+                                  ]),
+                                ),
+                              if ('${profile['city'] ?? profile['country'] ?? ''}'.isNotEmpty)
+                                Row(mainAxisSize: MainAxisSize.min, children: [
+                                  const Icon(Icons.place, size: 14, color: Colors.white60),
+                                  Flexible(
+                                    child: Text(' ${[profile['city'], profile['country']].where((x) => '${x ?? ''}'.isNotEmpty).join(', ')}',
+                                        maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                                  ),
+                                ]),
+                            ]),
+                            if ('${profile['bio'] ?? ''}'.trim().isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 6),
+                                child: Text('${profile['bio']}'.trim(), textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(color: Colors.white60, fontSize: 12.5)),
+                              ),
+                            const SizedBox(height: 10),
+                            Row(children: [
+                              for (final (label, v) in [('Takipçi', profile['followers']), ('Takip', profile['following']), ('Arkadaş', profile['friends'])])
+                                Expanded(
+                                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                                    Text(fmtCompact(v ?? 0), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
+                                    Text(label, style: const TextStyle(color: Colors.white54, fontSize: 11.5)),
+                                  ]),
+                                ),
+                            ]),
+                          ],
                           if (snap.connectionState != ConnectionState.done)
                             const Padding(padding: EdgeInsets.all(14), child: SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2)))
                           else if (cpUser != null || rels.isNotEmpty) ...[
@@ -3075,6 +3182,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 'assets/images/mic_emoji_${_micEmoji[userId]}.webp',
                 key: ValueKey('emo-$userId-${_micEmojiSeq[userId]}'),
                 fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => const SizedBox.shrink(),
                 gaplessPlayback: false,
               ),
             ),
@@ -3600,10 +3708,17 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                     const SizedBox(width: 7),
                     Flexible(
                       child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, mainAxisSize: MainAxisSize.min, children: [
-                        Row(mainAxisSize: MainAxisSize.min, children: [
+                        Row(children: [
                           if (_room?['hidden'] == true) Padding(padding: const EdgeInsets.only(right: 3), child: Icon(Icons.visibility_off, size: h * 0.3)),
                           if (_room?['locked'] == true) Padding(padding: const EdgeInsets.only(right: 3), child: Icon(Icons.lock, size: h * 0.3, color: Colors.orangeAccent)),
-                          Flexible(child: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w800, fontSize: h * 0.36, height: 1.15))),
+                          // Oda adı alanı başlığın boş kalan genişliğini kullanır; ad uzunsa sürekli kayar (dışarıdaki kartta değişmez).
+                          Flexible(
+                            child: Marquee(
+                              height: h * 0.36 * 1.3,
+                              speed: 28,
+                              child: Text(name, maxLines: 1, softWrap: false, style: TextStyle(fontWeight: FontWeight.w800, fontSize: h * 0.36, height: 1.15)),
+                            ),
+                          ),
                         ]),
                         Text(
                           'ID:${(_room?['roomNumber'] ?? ownerUser?['publicId'] ?? '').toString()}',
@@ -3890,7 +4005,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     });
   }
 
-  /// Koltuktayken alt bardaki emoji: 3 hareketli emoji (koltuğunda oynar). Altta sohbete yazı emojisi seçeneği.
+  /// Koltuktayken alt bardaki emoji: hareketli emojiler (koltuğunda oynar). Altta sohbete yazı emojisi seçeneği.
   void _micEmojiSheet() {
     showModalBottomSheet<void>(
       context: context,
@@ -3902,8 +4017,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             const Text('Mikrofon emojisi', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
             const SizedBox(height: 12),
-            Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
-              for (var i = 1; i <= 3; i++)
+            Flexible(
+              child: GridView.count(
+              shrinkWrap: true,
+              crossAxisCount: 5,
+              mainAxisSpacing: 8,
+              crossAxisSpacing: 8,
+              children: [
+              for (var i = 1; i <= kMicEmojiCount; i++)
                 InkWell(
                   borderRadius: BorderRadius.circular(16),
                   onTap: () async {
@@ -3912,14 +4033,13 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                     await guard(context, () => Api.post('/api/rooms/${widget.roomId}/mic-emoji', {'emoji': i}));
                   },
                   child: Container(
-                    width: 84,
-                    height: 84,
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(16)),
-                    child: Image.asset('assets/images/mic_emoji_$i.webp', fit: BoxFit.contain),
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(14)),
+                    child: Image.asset('assets/images/mic_emoji_$i.webp', fit: BoxFit.contain, errorBuilder: (_, __, ___) => const SizedBox.shrink()),
                   ),
                 ),
             ]),
+            ),
             const SizedBox(height: 10),
             if (_chatOpen)
               TextButton.icon(
@@ -4190,24 +4310,30 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                     ),
                   ),
                 Positioned(left: 0, right: 0, top: MediaQuery.sizeOf(context).height * 0.36, child: EntranceStrip(queue: _entrance)),
-                // Müzik: alt çubuk ya da küçültülmüş dönen plak (boş yerler dokunmayı engellemez).
+                // Müzik (Yoho): yalnızca müziği çalan kişi plağı ve DJ panelini görür; odadakiler yalnızca müziği duyar.
                 Positioned.fill(
-                  child: ValueListenableBuilder<bool>(
-                    valueListenable: _musicBarOpen,
-                    builder: (context, open, _) => Stack(children: [
-                      if (open && !_inputOpen)
-                        Positioned(
-                          left: 10,
-                          right: 10,
-                          bottom: g.barH + MediaQuery.paddingOf(context).bottom + 6,
-                          child: RoomMusicBar(
-                            canManage: _isManager,
-                            onOpen: () => showNowPlaying(context, roomId: widget.roomId, canManage: _isManager),
-                            onMinimize: () => _musicBarOpen.value = false,
+                  child: ValueListenableBuilder<Map<String, dynamic>?>(
+                    valueListenable: MusicService.instance.state,
+                    builder: (context, _, __) {
+                      if (!showDjControls()) return const SizedBox.shrink();
+                      return ValueListenableBuilder<bool>(
+                        valueListenable: _musicBarOpen,
+                        builder: (context, open, _) => Stack(children: [
+                          Positioned(
+                            left: 14,
+                            top: MediaQuery.paddingOf(context).top + g.headerH + 44,
+                            child: DjDisc(onTap: () => _musicBarOpen.value = !open),
                           ),
-                        ),
-                      if (!open) MusicBubble(onOpen: () => _musicBarOpen.value = true),
-                    ]),
+                          if (open && !_inputOpen)
+                            Positioned(
+                              left: 12,
+                              right: 12,
+                              bottom: g.barH + MediaQuery.paddingOf(context).bottom + 8,
+                              child: DjPanel(roomId: widget.roomId, onMinimize: () => _musicBarOpen.value = false),
+                            ),
+                        ]),
+                      );
+                    },
                   ),
                 ),
                 for (final fx in _seatFx)

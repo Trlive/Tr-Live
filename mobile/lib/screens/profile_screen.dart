@@ -218,16 +218,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
           margin: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(color: Pal.surface, borderRadius: BorderRadius.circular(16), border: Border.all(color: Pal.outline)),
           child: Row(children: [
-            stat('TAKİP EDİLEN', p['following'], 0, () => _open(UserListScreen(title: 'Takip edilenler', path: '/api/users/${p['id']}/following'))),
-            stat('FANLAR', p['followers'], b['followers'] ?? 0, () async {
-              await _open(UserListScreen(title: 'Fanlar', path: '/api/users/${p['id']}/followers'));
-              Inbox.markSeen('followers');
-            }),
-            stat('ZİYARETÇİLER', p['visitorCount'], b['visitors'] ?? 0, () async {
-              await _open(const VisitorsScreen());
-              Inbox.markSeen('visitors');
-            }),
-            stat('ARKADAŞLAR', p['friends'], b['friends'] ?? 0, () => _open(const FriendsScreen())),
+            // Dört liste tek sayfada; yana kaydırarak aralarında geçilir.
+            stat('TAKİP EDİLEN', p['following'], 0, () => _open(SocialListsScreen(userId: '${p['id']}', initialTab: 0))),
+            stat('FANLAR', p['followers'], b['followers'] ?? 0, () => _open(SocialListsScreen(userId: '${p['id']}', initialTab: 1))),
+            stat('ZİYARETÇİLER', p['visitorCount'], b['visitors'] ?? 0, () => _open(SocialListsScreen(userId: '${p['id']}', initialTab: 2))),
+            stat('ARKADAŞLAR', p['friends'], b['friends'] ?? 0, () => _open(SocialListsScreen(userId: '${p['id']}', initialTab: 3))),
           ]),
         );
       },
@@ -260,7 +255,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 14, 12, 0),
       child: Row(children: [
-        card(const [Color(0xFFFFE259), Color(0xFFFFC107)], const Icon(Icons.monetization_on, color: Color(0xFFB26A00), size: 34), p['coins'], 'Coins Yükleme', const Color(0xFF3B2A00), () => _open(const CoinsCenterScreen())),
+        card(const [Color(0xFFFFE259), Color(0xFFFFC107)], const Icon(Icons.monetization_on, color: Color(0xFFB26A00), size: 34), p['coins'], 'Coins', const Color(0xFF3B2A00), () => _open(const WalletScreen())),
         const SizedBox(width: 10),
         card(const [Color(0xFF3A2E14), Color(0xFF6B5320)], const Icon(Icons.diamond, color: Colors.cyanAccent, size: 32), p['diamonds'], 'Gelir Merkezi', Colors.white, () => _open(const IncomeCenterScreen())),
       ]),

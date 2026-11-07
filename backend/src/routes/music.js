@@ -253,6 +253,18 @@ router.post('/rooms/:roomId/music/next', userLimit('music_ctl', 40, 60e3), async
   res.json({ state: await musicState(roomId) });
 });
 
+// Ses düzeyi: müziği çalan (yetkili) ayarlar; herkesin cihazında bu düzeyde çalar.
+router.post('/rooms/:roomId/music/volume', userLimit('music_volume', 120, 60e3), async (req, res) => {
+  const roomId = uuid(req.params.roomId, 'Oda');
+  await managerContext(roomId, req.user.id);
+  const v = Number(req.body?.volume);
+  if (!Number.isFinite(v) || v < 0 || v > 1) throw fail('Ses düzeyi 0 ile 1 arasında olmalı.');
+  const r = await query(`UPDATE room_music SET volume = $2 WHERE room_id = $1 RETURNING room_id`, [roomId, Math.round(v * 100) / 100]);
+  if (!r.rowCount) await query(`INSERT INTO room_music(room_id, status, volume) VALUES($1,'stopped',$2) ON CONFLICT (room_id) DO UPDATE SET volume = EXCLUDED.volume`, [roomId, Math.round(v * 100) / 100]);
+  await broadcastMusic(roomId);
+  res.json({ state: await musicState(roomId) });
+});
+
 router.post('/rooms/:roomId/music/stop', userLimit('music_ctl', 40, 60e3), async (req, res) => {
   const roomId = uuid(req.params.roomId, 'Oda');
   await managerContext(roomId, req.user.id);

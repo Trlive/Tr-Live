@@ -8,6 +8,8 @@ import '../services/session.dart';
 import '../services/socket_service.dart';
 import 'anim_asset.dart';
 import 'common.dart';
+import 'fig.dart';
+import 'global_gift_strip.dart';
 import 'wip_items.dart';
 
 /// Hediye şeridi ve giriş efektleri için üst katman.
@@ -85,6 +87,9 @@ class _GiftRibbonOverlayState extends State<GiftRibbonOverlay> {
       t.cancel();
     }
     _gTimer?.cancel();
+    for (final t in _repeatTimers) {
+      t.cancel();
+    }
     super.dispose();
   }
 
@@ -93,6 +98,15 @@ class _GiftRibbonOverlayState extends State<GiftRibbonOverlay> {
     final type = e['type'];
     if (type == 'lucky_bag_global' || type == 'lucky_gift_win' || type == 'global_gift_ribbon') {
       if (!EffectPrefs.globalNotice) return;
+      // Süper şanslı çanta duyurusu: ilk atıldığında geçer, 30 saniye sonra bir kez daha geçer.
+      if (type == 'lucky_bag_global' && e['repeat'] != true) {
+        late final Timer t;
+        t = Timer(const Duration(seconds: 30), () {
+          _repeatTimers.remove(t);
+          if (mounted) _onEvent({...e, 'repeat': true});
+        });
+        _repeatTimers.add(t);
+      }
       // Global duyurular (büyük hediye, süper çanta, büyük şanslı kazanç): yalnızca açık odalarda (hediyenin atıldığı
       // oda dahil), odanın üstünden geçen ayrı şeritte. Ana ekranda ve oda küçültülmüşken gösterilmez.
       if (widget.roomId == null || RoomDock.minimized.value) return;
@@ -250,13 +264,15 @@ class _GiftRibbonOverlayState extends State<GiftRibbonOverlay> {
 
   // Son gösterilen global duyurular: aynı duyuru iki kez gelirse (ör. iki bağlantıdan) bir kez gösterilir.
   final Map<String, DateTime> _gSeen = {};
+  final List<Timer> _repeatTimers = [];
 
   void _enqueueGlobal(Map<String, dynamic> e) {
     final now = DateTime.now();
     _gSeen.removeWhere((_, t) => now.difference(t).inSeconds > 30);
-    final key = (e['eventId'] ??
+    final key = (e['repeat'] == true ? 'r|' : '') +
+        (e['eventId'] ??
             '${e['type']}|${mapOf(e['sender'])?['id']}|${mapOf(e['gift'])?['id']}|${e['quantity']}|${e['totalCoins']}|${e['bagId']}|${e['win']}')
-        .toString();
+            .toString();
     if (_gSeen.containsKey(key)) return;
     _gSeen[key] = now;
     if (_gQueue.length < 8) _gQueue.add(e);
@@ -275,8 +291,11 @@ class _GiftRibbonOverlayState extends State<GiftRibbonOverlay> {
       _gCurrent = e;
       _gSeq++;
     });
-    _gTimer = Timer(const Duration(milliseconds: 5200), _nextGlobal);
+    _gTimer = Timer(Duration(milliseconds: _gMs(e) + 200), _nextGlobal);
   }
+
+  /// Global şeridin süresi: 1 milyon üstü hediye şeridi daha uzun kalır.
+  int _gMs(Map<String, dynamic> e) => e['type'] == 'global_gift_ribbon' ? globalGiftStripMs(e) : 5000;
 
   void _enqueue(Map<String, dynamic> e) {
     if (_queue.length < 10) _queue.add(e);
@@ -346,7 +365,7 @@ class _GiftRibbonOverlayState extends State<GiftRibbonOverlay> {
           top: MediaQuery.of(context).padding.top,
           left: 0,
           right: 0,
-          child: _SlideStrip(key: ValueKey('g$_gSeq'), durationMs: 5000, child: _buildRibbon(_gCurrent!)),
+          child: _SlideStrip(key: ValueKey('g$_gSeq'), durationMs: _gMs(_gCurrent!), child: _buildRibbon(_gCurrent!)),
         ),
     ]);
   }
@@ -385,100 +404,7 @@ class _GiftRibbonOverlayState extends State<GiftRibbonOverlay> {
     );
   }
 
-  /// Global hediye şeridi (yeni tasarım): kırmızı-altın bant üzerinde gönderen → alan, hediye ve adet.
-  Widget _buildGlobalRibbon(Map<String, dynamic> e) {
-    final gift = mapOf(e['gift']) ?? {};
-    final sender = mapOf(e['sender']);
-    final receivers = e['receivers'] is List ? (e['receivers'] as List) : const [];
-    final names = receivers
-        .map((r) => (r is Map && r['user'] is Map ? (r['user'] as Map)['displayName'] : (r is Map ? r['displayName'] : null)))
-        .whereType<String>()
-        .toList();
-    final icon = Api.absoluteUrl(gift['iconUrl'] as String?);
-    return IgnorePointer(
-      child: LayoutBuilder(builder: (context, box) {
-        // Küçük tutulur (üstten geçerken odayı kapatmasın): ekranın ~%68'i, en fazla 290 dp; yükseklik görsel oranında.
-        final w = (box.maxWidth * 0.68).clamp(0.0, 290.0).toDouble();
-        final h = w / 3;
-        final fs = (h * 0.16).clamp(9.0, 14.0).toDouble();
-        return Center(
-          child: SizedBox(
-            width: w,
-            height: h,
-            child: Stack(children: [
-              Positioned.fill(child: Image.asset('assets/images/gift_ribbon_gold.webp', fit: BoxFit.fill)),
-              // Kırmızı alanın içi (görselde yaklaşık %35–%80 yükseklik).
-              Positioned(
-                left: w * 0.08,
-                right: w * 0.08,
-                top: h * 0.36,
-                height: h * 0.44,
-                child: Row(children: [
-                  UserAvatar(user: sender, radius: h * 0.15),
-                  SizedBox(width: w * 0.02),
-                  // Gönderen ve alıcı alt alta; sağda hediyenin görseli ve adedi.
-                  Expanded(
-                    child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text.rich(
-                        TextSpan(children: [
-                          TextSpan(text: 'Gönderen ', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w600, fontSize: fs * 0.85)),
-                          TextSpan(text: '${sender?['displayName'] ?? 'Biri'}', style: TextStyle(color: const Color(0xFFFFE082), fontWeight: FontWeight.w900, fontSize: fs)),
-                        ]),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(height: 1.2, shadows: [Shadow(color: Colors.black54, blurRadius: 3)]),
-                      ),
-                      Text.rich(
-                        TextSpan(children: [
-                          TextSpan(text: 'Alıcı ', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w600, fontSize: fs * 0.85)),
-                          TextSpan(text: names.isEmpty ? 'herkes' : names.join(', '), style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: fs)),
-                        ]),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(height: 1.2, shadows: [Shadow(color: Colors.black54, blurRadius: 3)]),
-                      ),
-                    ]),
-                  ),
-                  if (icon != null) NetImg(icon, width: h * 0.4, height: h * 0.4, errorBuilder: (_, __, ___) => const Icon(Icons.card_giftcard, color: Colors.white)),
-                  SizedBox(width: w * 0.01),
-                  Text('x${e['quantity'] ?? 1}', style: TextStyle(color: const Color(0xFFFFD54F), fontWeight: FontWeight.w900, fontStyle: FontStyle.italic, fontSize: fs * 1.3, shadows: const [Shadow(color: Color(0xFFFF6D00), blurRadius: 6)])),
-                ]),
-              ),
-            ]),
-          ),
-        );
-      }),
-    );
-  }
-
-  Widget _buildBagRibbon(Map<String, dynamic> e) {
-    final sender = mapOf(e['sender']);
-    return IgnorePointer(
-      child: Material(
-        color: Colors.transparent,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(colors: [Color(0x009C6A00), Color(0xFFFFB300), Color(0xFFFFE082), Color(0xFFFFB300), Color(0x009C6A00)]),
-            boxShadow: const [BoxShadow(color: Colors.amber, blurRadius: 14)],
-          ),
-          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            Image.asset('assets/images/lucky_pouch.webp', width: 30, height: 30),
-            const SizedBox(width: 8),
-            Flexible(
-              child: Text(
-                '${sender?['displayName'] ?? 'Biri'} süper şanslı çanta gönderdi! ${fmtNumber(e['totalCoins'])} Coin • "${e['roomName'] ?? ''}"',
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontWeight: FontWeight.w900, color: Color(0xFF3A2500), fontSize: 13),
-              ),
-            ),
-          ]),
-        ),
-      ),
-    );
-  }
+  Widget _buildBagRibbon(Map<String, dynamic> e) => IgnorePointer(child: _BagGlobalStrip(e: e));
 
   /// Büyük şanslı hediye kazancı (Yoho "çan" duyurusu).
   Widget _buildLuckyRibbon(Map<String, dynamic> e) {
@@ -515,7 +441,7 @@ class _GiftRibbonOverlayState extends State<GiftRibbonOverlay> {
     if (e['type'] == 'lucky_bag_global') return _buildBagRibbon(e);
     if (e['type'] == 'lucky_gift_win') return _buildLuckyRibbon(e);
     if (e['type'] == 'lucky_bag_claimed') return _buildBagClaimRibbon(e);
-    if (e['type'] == 'global_gift_ribbon') return _buildGlobalRibbon(e);
+    if (e['type'] == 'global_gift_ribbon') return GlobalGiftStrip(e: e);
     final gift = mapOf(e['gift']) ?? {};
     final sender = mapOf(e['sender']);
     final receivers = e['receivers'] is List ? (e['receivers'] as List) : const [];
@@ -810,6 +736,132 @@ class _SlideStripState extends State<_SlideStrip> with SingleTickerProviderState
           return Transform.translate(offset: Offset(dx, 0), child: child);
         },
         child: RepaintBoundary(child: widget.child),
+      ),
+    );
+  }
+}
+
+/// Süper şanslı çanta global şeridi: çantanın kırmızı-pembe renkleri, ince uygulama sarısı çerçeve,
+/// üzerinden geçen parıltı; en sağda çanta ikonu.
+class _BagGlobalStrip extends StatefulWidget {
+  final Map<String, dynamic> e;
+  const _BagGlobalStrip({required this.e});
+  @override
+  State<_BagGlobalStrip> createState() => _BagGlobalStripState();
+}
+
+class _BagGlobalStripState extends State<_BagGlobalStrip> with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 1800))..repeat();
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final e = widget.e;
+    final sender = mapOf(e['sender']);
+    final sw = MediaQuery.sizeOf(context).width;
+    final k = (sw / 400).clamp(0.82, 1.15).toDouble();
+    final h = 50 * k;
+    const gold = Color(0xFFF2B92A);
+    return Material(
+      color: Colors.transparent,
+      child: Center(
+        child: SizedBox(
+          width: sw * 0.94,
+          height: h + 10 * k,
+          child: Stack(clipBehavior: Clip.none, alignment: Alignment.centerLeft, children: [
+            Container(
+              height: h,
+              margin: EdgeInsets.only(right: 26 * k),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(h / 2),
+                gradient: const LinearGradient(colors: [Color(0xFF8E0B2B), Color(0xFFD81B43), Color(0xFFFF4D74), Color(0xFFE8258A)], stops: [0, 0.35, 0.7, 1]),
+                border: Border.all(color: gold, width: 1.2),
+                boxShadow: const [BoxShadow(color: Color(0x88FF1744), blurRadius: 14), BoxShadow(color: Color(0x55F2B92A), blurRadius: 4)],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(h / 2),
+                child: Stack(children: [
+                  // Üzerinden geçen parıltı
+                  AnimatedBuilder(
+                    animation: _c,
+                    builder: (_, __) => Positioned(
+                      left: (_c.value * 1.6 - 0.3) * sw * 0.94,
+                      top: 0,
+                      bottom: 0,
+                      width: 60 * k,
+                      child: Transform(
+                        transform: Matrix4.skewX(-0.4),
+                        child: const DecoratedBox(
+                          decoration: BoxDecoration(gradient: LinearGradient(colors: [Color(0x00FFFFFF), Color(0x55FFF8E1), Color(0x00FFFFFF)])),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(4 * k, 4 * k, 48 * k, 4 * k),
+                    child: Row(children: [
+                      Container(
+                        padding: EdgeInsets.all(1.6 * k),
+                        decoration: const BoxDecoration(shape: BoxShape.circle, gradient: LinearGradient(colors: [Color(0xFFFFF1A8), gold, Color(0xFFB37A10)])),
+                        child: UserAvatar(user: sender, radius: (h - 12 * k) / 2),
+                      ),
+                      SizedBox(width: 7 * k),
+                      Expanded(
+                        child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text.rich(
+                            TextSpan(children: [
+                              TextSpan(text: '${sender?['displayName'] ?? 'Biri'} ', style: TextStyle(color: const Color(0xFFFFE082), fontWeight: FontWeight.w900, fontSize: 13 * k)),
+                              TextSpan(text: 'Süper Şanslı Çanta gönderdi!', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 12 * k)),
+                            ]),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(height: 1.15, shadows: [Shadow(color: Colors.black54, blurRadius: 3)]),
+                          ),
+                          SizedBox(height: 2 * k),
+                          Row(children: [
+                            Fig('bag_coin', width: 14 * k, height: 14 * k),
+                            SizedBox(width: 3 * k),
+                            Text(fmtNumber(e['totalCoins']), style: TextStyle(color: const Color(0xFFFFE082), fontWeight: FontWeight.w900, fontSize: 12 * k)),
+                            SizedBox(width: 6 * k),
+                            Flexible(
+                              child: Text(
+                                '• ${e['roomName'] ?? ''}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(color: Colors.white.withValues(alpha: 0.9), fontWeight: FontWeight.w600, fontSize: 11 * k),
+                              ),
+                            ),
+                          ]),
+                        ]),
+                      ),
+                    ]),
+                  ),
+                ]),
+              ),
+            ),
+            // En sağda çanta: şeridin ucundan taşar, hafifçe sallanır.
+            Positioned(
+              right: 0,
+              top: 0,
+              bottom: 0,
+              child: AnimatedBuilder(
+                animation: _c,
+                builder: (_, child) => Transform.rotate(angle: 0.08 * (1 - 2 * ((_c.value * 2) % 1 - 0.5).abs() * 2), child: child),
+                child: Container(
+                  width: 54 * k,
+                  alignment: Alignment.center,
+                  decoration: const BoxDecoration(shape: BoxShape.circle, gradient: RadialGradient(colors: [Color(0xAAFFE082), Color(0x00FFE082)])),
+                  child: Fig('bag_icon', width: 40 * k, height: 52 * k),
+                ),
+              ),
+            ),
+          ]),
+        ),
       ),
     );
   }

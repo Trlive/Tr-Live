@@ -49,9 +49,13 @@ class RoomCard extends StatelessWidget {
           final av = (cw * 0.104).clamp(16.0, 26.0).toDouble();
           final shown = avatars.take(8).toList();
           return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            SizedBox(
+            Container(
               width: cw,
               height: cw,
+              // Aktif oda: ince uygulama sarısı çerçeve.
+              foregroundDecoration: count is num && count > 0
+                  ? BoxDecoration(borderRadius: BorderRadius.circular(10), border: Border.all(color: const Color(0xFFF2B92A), width: 1.3))
+                  : null,
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(10),
                 child: Stack(fit: StackFit.expand, children: [
@@ -64,6 +68,44 @@ class RoomCard extends StatelessWidget {
                     decoration: BoxDecoration(
                       gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0x00000000), Color(0x00000000), Color(0x8C000000)], stops: [0, 0.55, 1]),
                     ),
+                  ),
+                  // Sol üst (Mico): oda türü simgesi, PK sürüyorsa PK, hediye yağıyorsa "yükseliyor".
+                  Positioned(
+                    left: inset,
+                    top: inset,
+                    // Sağ üstteki çanta / kilit ile çakışmasın.
+                    right: inset + (bags > 0 ? tagH * 1.9 : 0) + (room['locked'] == true ? tagH + 4 : 0) + 4,
+                    child: Row(children: [
+                      Container(
+                        width: tagH * 1.35,
+                        height: tagH * 1.35,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: LinearGradient(colors: isVideo ? const [Color(0xFFFF9F0A), Color(0xFFFF5E3A)] : const [Color(0xFF16C25B), Color(0xFF0E9F6E)]),
+                          boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 3)],
+                        ),
+                        child: Icon(isVideo ? Icons.videocam_rounded : Icons.mic_rounded, size: tagH * 0.9, color: Colors.white),
+                      ),
+                      if (room['inPk'] == true)
+                        Padding(
+                          padding: EdgeInsets.only(left: tagH * 0.25),
+                          child: Image.asset('assets/images/pk_logo.png', height: tagH * 1.45, fit: BoxFit.contain, errorBuilder: (_, __, ___) => const SizedBox.shrink()),
+                        ),
+                      if (room['hot'] == true)
+                        Flexible(child: Padding(
+                          padding: EdgeInsets.only(left: tagH * 0.25),
+                          child: Container(
+                            height: tagH,
+                            padding: EdgeInsets.symmetric(horizontal: tagH * 0.3),
+                            decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFFFF3D00), Color(0xFFFFB300)]), borderRadius: BorderRadius.circular(tagH / 2)),
+                            child: Center(
+                              widthFactor: 1,
+                              child: Text(cw < 180 ? '🔥' : '🔥 Yükseliyor',
+                                  maxLines: 1, overflow: TextOverflow.clip, style: TextStyle(color: Colors.white, fontSize: tagH * 0.62, height: 1, fontWeight: FontWeight.w800)),
+                            ),
+                          ),
+                        )),
+                    ]),
                   ),
                   // Sağ üst: kilit ve şanslı çanta.
                   Positioned(

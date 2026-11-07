@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:livekit_client/livekit_client.dart' as lk;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'effect_prefs.dart';
+
 /// Güzellik ayarları (0..1) ve renk filtresi.
 @immutable
 class BeautySettings {
@@ -56,6 +58,9 @@ class Beauty {
   /// Son bağlanma sonucu: true → bu cihazda çalışıyor, false → desteklenmiyor, null → henüz kamera yok.
   static final ValueNotifier<bool?> supported = ValueNotifier(null);
 
+  /// Telefona gönderilen ayar: şarj tüketimi modunda pürüzsüzleştirme (en çok işlemci yoran kısım) kapalı.
+  static Map<String, Object> _native(BeautySettings s) => {...s.toMap(), if (EffectPrefs.powerSave.value) 'smooth': 0.0};
+
   static Future<void> load() async {
     if (_loaded) return;
     _loaded = true;
@@ -73,7 +78,7 @@ class Beauty {
     if (id == null || id.isEmpty) return;
     if (id == _trackId && supported.value == true) return;
     try {
-      final r = await _ch.invokeMethod<String>('attach', {'trackId': id, ...settings.value.toMap()});
+      final r = await _ch.invokeMethod<String>('attach', {'trackId': id, ..._native(settings.value)});
       _trackId = r == 'ok' ? id : null;
       supported.value = r == 'ok';
       if (r != 'ok') debugPrint('Güzellik filtresi bağlanamadı: $r');
@@ -106,7 +111,7 @@ class Beauty {
   static Future<void> update(BeautySettings s, {bool save = true}) async {
     settings.value = s;
     try {
-      await _ch.invokeMethod('setParams', s.toMap());
+      await _ch.invokeMethod('setParams', _native(s));
     } catch (_) {}
     if (!save) return;
     try {

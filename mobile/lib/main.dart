@@ -25,10 +25,6 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 bool _loggingOut = false;
 bool _updateShown = false;
 
-// Yüzen balonun giriş noktası: tree-shaking silmesin diye burada da dışa açılır.
-@pragma('vm:entry-point')
-void overlayMain() => overlayMainImpl();
-
 Future<void> main() async {
   // Yakalanmamış hatalar uygulamayı çökertmesin; kayda geçip devam edilir.
   FlutterError.onError = (details) {

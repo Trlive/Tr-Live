@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../services/app_visibility.dart';
+import '../services/background_service.dart';
 import '../services/music_service.dart';
 import '../widgets/app_theme.dart';
 import '../widgets/banner_carousel.dart';
@@ -54,6 +55,13 @@ class _HomeScreenState extends State<HomeScreen> {
     Session.me.addListener(_checkTerms);
     _checkTerms();
     Inbox.start();
+    // Micolive gibi: bildirim izni girişten sonra ana sayfada bir kez (sözleşme onayı bittikten sonra) sorulur.
+    // Mikrofon / kamera yalnızca koltuğa çıkınca / yayın açınca, fotoğraf ve müzik yalnızca seçerken istenir.
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted && !TermsGate.needed(Session.me.value)) {
+        BackgroundService.instance.ensurePermissions((msg, action) => confirm(context, msg, action: action));
+      }
+    });
     // CP sistemi: biri seni Arkadaş / CP olarak seçince kısa bildirim (yanıt: Mesajlar → Arkadaşlık isteği ya da profil kartı).
     // Telefon bildirimine dokununca: arkadaş oda açtı → odaya gir; istek / takip → kişinin profili.
     PushService.onOpen = (kind, data) {
@@ -298,6 +306,7 @@ class RoomsTabState extends State<RoomsTab> {
   String? _error;
   String _q = '';
   Timer? _debounce;
+  Timer? _auto; // sıralama canlı: hediye atılan oda yukarı çıkar (Yoho / Mico)
   String _mode = 'popular'; // popular (Popüler) | friends (Takip: takip ettiğin yayıncılar)
   bool _searching = false;
 
@@ -319,6 +328,14 @@ class RoomsTabState extends State<RoomsTab> {
     RoomDock.request.addListener(_dockChanged);
     RoomDock.minimized.addListener(_dockChanged);
     refresh();
+    // Liste 20 saniyede bir sessizce yenilenir (yalnızca bu sekme görünürken, uygulama öndeyken ve oda tam ekran değilken).
+    _auto = Timer.periodic(const Duration(seconds: 20), (_) {
+      if (!mounted || _searching) return;
+      if (!TickerMode.getNotifier(context).value) return;
+      if (WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed) return;
+      if (RoomDock.isOpen && !RoomDock.minimized.value) return;
+      refresh();
+    });
   }
 
   @override
@@ -326,24 +343,28 @@ class RoomsTabState extends State<RoomsTab> {
     RoomDock.request.removeListener(_dockChanged);
     RoomDock.minimized.removeListener(_dockChanged);
     _debounce?.cancel();
+    _auto?.cancel();
     super.dispose();
   }
 
+  int _seq = 0; // geç gelen eski yanıt yeni listeyi ezmesin
+
   Future<void> refresh() async {
+    final my = ++_seq;
     try {
       final r = await Api.get('/api/rooms', query: {
         'type': widget.type,
         if (_q.isNotEmpty) 'q': _q,
         if (_mode == 'friends') 'region': 'friends',
       });
-      if (!mounted) return;
+      if (!mounted || my != _seq) return;
       setState(() {
         _rooms = listOf(r['rooms']);
         _error = null;
         _loading = false;
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || my != _seq) return;
       setState(() {
         _error = errorText(e);
         _loading = false;
@@ -475,7 +496,7 @@ class RoomsTabState extends State<RoomsTab> {
     final cols = Resp.roomColumns(w);
     final m = homeMargin(w);
     final gap = homeGap(w);
-    // Yoho ızgarası: kare görsel + altında ad alanı; satırlar arası ek boşluk yok (ad alanı boşluğu da sağlar).
+    // Yoho ızgarası: kare görsel + altında ad alanı; satırlar arasında bir satırlık boşluk.
     final cw = (w - 2 * m - gap * (cols - 1)) / cols;
     final ratio = cw / (cw + RoomCard.titleAreaFor(w));
     final empty = _mode == 'friends'
@@ -483,7 +504,8 @@ class RoomsTabState extends State<RoomsTab> {
         : (_q.isEmpty ? 'Şu an açık oda yok. İlk odayı sen aç!' : 'Aramanıza uyan oda yok.');
     final head = <Widget>[
       const BannerCarousel(),
-      SizedBox(height: gap),
+      // Banner ile odalar arasında bir satırlık ek boşluk.
+      SizedBox(height: gap + 16),
     ];
     final Widget body;
     if (_loading) {
@@ -502,7 +524,8 @@ class RoomsTabState extends State<RoomsTab> {
                   SliverPadding(
                     padding: EdgeInsets.fromLTRB(m, 0, m, 96),
                     sliver: SliverGrid(
-                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: cols, mainAxisSpacing: 0, crossAxisSpacing: gap, childAspectRatio: ratio),
+                      // Alt alta gelen odalar arasında bir satırlık boşluk.
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: cols, mainAxisSpacing: 14, crossAxisSpacing: gap, childAspectRatio: ratio),
                       delegate: SliverChildBuilderDelegate(
                         (_, i) {
                           final r = _rooms[i];

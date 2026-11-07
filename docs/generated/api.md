@@ -4,7 +4,7 @@
 
 Kimlik: **🔒** giriş gerekli · **👑** yalnızca yönetici · **🛠** yönetici + yardımcı admin (destek) · **⏱** hız sınırı adı
 
-**Toplam 369 uç.**
+**Toplam 371 uç.**
 
 ## system.js  (`/api`)
 
@@ -13,7 +13,8 @@ Kimlik: **🔒** giriş gerekli · **👑** yalnızca yönetici · **🛠** yön
 | GET | `/api/app/config` | açık |  | Uygulama açılışında okunur: zorunlu/isteğe bağlı güncelleme bilgisi. Giriş gerektirmez. |
 | GET | `/api/push/latest` | açık | push_poll | Herkese açık duyuru olduğu için giriş gerektirmez. [after]: telefonda gösterilen son bildirimin numarası. |
 | POST | `/api/client-errors` | (isteğe bağlı) | client_errors | Giriş ekranındaki hatalar da gönderilebilsin diye oturum zorunlu değildir; IP başına sınırlıdır. |
-| GET | `/api/legal/privacy` | açık |  | (tek kaynak). Eski adresler bozulmasın diye bu adresler siteye yönlendirir. |
+| GET | `/api/legal/privacy.json` | açık |  | ayarlarında istenen herkese açık adres aynı metnin HTML sayfasıdır. Diğer sayfalar sitede. |
+| GET | `/api/legal/privacy` | açık |  |  |
 | GET | `/api/legal/data-deletion` | açık |  |  |
 | GET | `/api/legal/terms` | açık |  |  |
 
@@ -82,7 +83,7 @@ Kimlik: **🔒** giriş gerekli · **👑** yalnızca yönetici · **🛠** yön
 
 | Yöntem | Yol | Kimlik | ⏱ | Not |
 |---|---|---|---|---|
-| GET | `/api/rooms` | (isteğe bağlı) |  | ---------- Liste ve ayrıntı ---------- |
+| GET | `/api/rooms` | (isteğe bağlı) |  |  |
 | GET | `/api/rooms/mine` | 🔒 |  | Kayıtlı odalarım ve şu an açık olanlar. |
 | POST | `/api/rooms` | 🔒 | room_create | setup gönderilmeyen eski istekler kayıtlı bilgilere dokunmaz (gövdedeki ad yok sayılır). |
 | GET | `/api/rooms/:roomId/managers` | 🔒 |  | Oda yöneticileri (oda kapalıyken de kalıcı). Oda sahibi ilk sırada. |
@@ -103,7 +104,7 @@ Kimlik: **🔒** giriş gerekli · **👑** yalnızca yönetici · **🛠** yön
 | GET | `/api/rooms/:roomId/members` | 🔒 |  |  |
 | POST | `/api/rooms/:roomId/heartbeat` | 🔒 | heartbeat | Uygulamadan düzenli gelen "oda açık" sinyali: üyeyi canlı tutar ve oda arada kapanmışsa istemciye hemen 404 döner. |
 | POST | `/api/rooms/:roomId/mic/take` | 🔒 | mic | ---------- Mikrofon / koltuk ---------- |
-| POST | `/api/rooms/:roomId/mic-emoji` | 🔒 | mic_emoji | Mikrofon emojisi: koltuktaki kişi 3 hareketli emojiden birini gönderir, koltuğunda birkaç saniye oynar. |
+| POST | `/api/rooms/:roomId/mic-emoji` | 🔒 | mic_emoji |  |
 | GET | `/api/rooms/:roomId/mic/queue` | 🔒 |  | ---------- Mikrofon sırası ---------- |
 | POST | `/api/rooms/:roomId/mic/queue` | 🔒 | mic_queue |  |
 | DELETE | `/api/rooms/:roomId/mic/queue` | 🔒 |  |  |
@@ -466,6 +467,7 @@ Kimlik: **🔒** giriş gerekli · **👑** yalnızca yönetici · **🛠** yön
 | POST | `/api/rooms/:roomId/music/pause` | 🔒 | music_ctl |  |
 | POST | `/api/rooms/:roomId/music/seek` | 🔒 | music_ctl |  |
 | POST | `/api/rooms/:roomId/music/next` | 🔒 | music_ctl |  |
+| POST | `/api/rooms/:roomId/music/volume` | 🔒 | music_volume | Ses düzeyi: müziği çalan (yetkili) ayarlar; herkesin cihazında bu düzeyde çalar. |
 | POST | `/api/rooms/:roomId/music/stop` | 🔒 | music_ctl |  |
 
 ## luckybag.js  (`/api`)

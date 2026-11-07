@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api.dart';
-import '../services/background_service.dart';
+import '../services/beauty.dart';
+import '../services/effect_prefs.dart';
 import '../services/session.dart';
 import '../version.dart';
 import '../widgets/app_theme.dart';
@@ -148,12 +148,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (mounted) toast(context, 'Davet metni kopyalandı. İstediğin yere yapıştırıp paylaş.');
   }
 
-  Future<void> _backgroundPerms() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('asked_battery');
-    await prefs.remove('asked_overlay');
-    if (!mounted) return;
-    await BackgroundService.instance.ensurePermissions((msg, action) => confirm(context, msg, action: action));
+  Future<void> _powerSave(bool on) async {
+    await EffectPrefs.setPowerSave(on);
+    await Beauty.update(Beauty.settings.value, save: false); // pürüzsüzleştirme hemen kapanır / açılır
+    if (mounted) toast(context, on ? 'Şarj tüketimi azaltıldı. Görüntülü odada kamera bir sonraki girişte 360p yayınlar.' : 'Şarj tüketimi modu kapatıldı.');
   }
 
   @override
@@ -178,7 +176,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _row(Icons.swap_horiz_rounded, _cCyan, 'Takas', value: 'Cüzdan · Elmas', onTap: () => _push(const WalletScreen())),
         ]),
         _group([
-          _row(Icons.layers_outlined, _cViolet, 'Arka plan ve balon izinleri', onTap: _backgroundPerms),
+          // Şarj tüketimi: animasyonlar kısılır, kamera 360p, güzellik pürüzsüzleştirmesi kapalı.
+          ValueListenableBuilder<bool>(
+            valueListenable: EffectPrefs.powerSave,
+            builder: (context, on, _) => InkWell(
+              onTap: () => _powerSave(!on),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 10, 12),
+                child: Row(children: [
+                  const Icon(Icons.speed_rounded, color: _cViolet, size: 26),
+                  const SizedBox(width: 16),
+                  const Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text('Şarj Tüketimi', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Pal.text)),
+                      SizedBox(height: 3),
+                      Text('Isınmayı ve şarj tüketimini azaltır', style: TextStyle(fontSize: 12.5, color: Pal.textDim)),
+                    ]),
+                  ),
+                  Switch(value: on, onChanged: _powerSave),
+                ]),
+              ),
+            ),
+          ),
         ]),
         const SizedBox(height: 12),
         Container(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/effect_prefs.dart';
 
 /// Uygulamanın tek renk ve stil kaynağı. Renkleri değiştirmek için yalnızca bu dosyayı düzenleyin.
 /// Siyah-altın tema (logo ve giriş ekranıyla aynı). Adlar eski kalıp korunmuştur: "cyan" ana vurgu rengidir (artık altın).
@@ -166,11 +167,15 @@ class Resp {
 Widget appFrame(BuildContext context, Widget? child) {
   final mq = MediaQuery.of(context);
   final scale = mq.textScaler.clamp(minScaleFactor: 0.85, maxScaleFactor: 1.3);
-  return MediaQuery(
-    data: mq.copyWith(textScaler: scale),
-    child: ColoredBox(
-      color: Pal.bg,
-      child: SafeArea(top: false, left: false, right: false, child: Align(alignment: Alignment.topCenter, child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: Resp.maxContent), child: child))),
+  // Şarj tüketimi modu: sistemdeki "animasyonları kapat" gibi davranır (animasyonlu süslemeler durur).
+  return ValueListenableBuilder<bool>(
+    valueListenable: EffectPrefs.powerSave,
+    builder: (context, save, _) => MediaQuery(
+      data: mq.copyWith(textScaler: scale, disableAnimations: mq.disableAnimations || save),
+      child: ColoredBox(
+        color: Pal.bg,
+        child: SafeArea(top: false, left: false, right: false, child: Align(alignment: Alignment.topCenter, child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: Resp.maxContent), child: child))),
+      ),
     ),
   );
 }

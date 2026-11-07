@@ -79,7 +79,34 @@ class _GoLiveScreenState extends State<GoLiveScreen> {
     }
     _mode = widget.initialType == 'audio' ? LiveMode.voice : (v?['layout'] == 'live' ? LiveMode.live : LiveMode.multi);
     if (!_voice) _startCam();
+    // Micolive gibi: yayın ekranı açılınca kurallar hatırlatılır.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _rulesReminder();
+    });
   }
+
+  Future<void> _rulesReminder() => showDialog<void>(
+        context: context,
+        builder: (c) => AlertDialog(
+          title: const Text('İpuçları', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.w900)),
+          content: const Text(
+            'Hatırlatma: Yayın sırasında lütfen platform kurallarına uy. Uygunsuz veya yasak içerik dahil kuralların '
+            'herhangi bir ihlali, yayının sonlandırılmasına ve hesabının yasaklanmasına yol açar.',
+            style: TextStyle(height: 1.45),
+          ),
+          actions: [
+            SizedBox(
+              width: double.infinity,
+              height: 46,
+              child: FilledButton(
+                style: FilledButton.styleFrom(shape: const StadiumBorder()),
+                onPressed: () => Navigator.pop(c),
+                child: const Text('Tamam', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+              ),
+            ),
+          ],
+        ),
+      );
 
   RoomCategory _categoryOf(dynamic tags) {
     if (tags is List && tags.isNotEmpty) return roomCategoryOf(tags.first?.toString()) ?? kRoomCategories.first;

@@ -9,7 +9,7 @@ import 'login_screen.dart';
 
 /// Yasal metinlerin sürümü. Sunucudaki TERMS_VERSION ile aynı olmalı (backend/src/legal.js).
 /// Metinler değişince ikisi birlikte artırılır: eski sürümü onaylamış kullanıcıdan yeniden onay istenir.
-const String kTermsVersion = '2026-10-31';
+const String kTermsVersion = '2026-11-01';
 
 /// Yasal metinlerin yayımlandığı site.
 const String kLegalSite = 'https://trlive.github.io';
@@ -23,8 +23,9 @@ const List<(String, String, IconData, Color)> kLegalPages = [
   ('child-safety.html', 'Çocuk Güvenliği', Icons.child_care_outlined, Color(0xFF29B6F6)),
 ];
 
-/// Yasal sayfayı tarayıcıda açar.
+/// Yasal sayfayı açar: Gizlilik Politikası uygulama içinde (alttan açılan pencere), diğerleri tarayıcıda.
 Future<void> openLegal(BuildContext context, String page) async {
+  if (page == 'privacy.html') return showPrivacyPolicy(context);
   final uri = Uri.parse('$kLegalSite/$page');
   var ok = false;
   try {
@@ -127,11 +128,7 @@ class TermsGate {
     if (_showing || !needed(Session.me.value)) return;
     _showing = true;
     try {
-      await showDialog<void>(
-        context: context,
-        barrierDismissible: false,
-        builder: (c) => const PopScope(canPop: false, child: _TermsDialog()),
-      );
+      await showPrivacyPolicy(context, gate: true);
     } finally {
       _showing = false;
     }
@@ -150,19 +147,64 @@ class TermsGate {
   }
 }
 
-class _TermsDialog extends StatefulWidget {
-  const _TermsDialog();
-
-  @override
-  State<_TermsDialog> createState() => _TermsDialogState();
+/// Gizlilik Politikası (Micolive gibi alttan açılan pencere). Metin sunucudaki tek kaynaktan okunur
+/// (/api/legal/privacy.json). [gate]: güncel sürüm onaylanmadıysa "Okudum ve onaylıyorum" onayı kaydeder; pencere
+/// kapatılamaz, onaylamayan çıkış yapabilir.
+Future<void> showPrivacyPolicy(BuildContext context, {bool gate = false}) {
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    isDismissible: !gate,
+    enableDrag: !gate,
+    backgroundColor: Colors.transparent,
+    builder: (_) => PopScope(canPop: !gate, child: _PrivacySheet(gate: gate)),
+  );
 }
 
-class _TermsDialogState extends State<_TermsDialog> {
-  bool _ok = false;
+class _PrivacySheet extends StatefulWidget {
+  final bool gate;
+  const _PrivacySheet({required this.gate});
+
+  @override
+  State<_PrivacySheet> createState() => _PrivacySheetState();
+}
+
+class _PrivacySheetState extends State<_PrivacySheet> {
+  Map<String, dynamic>? _doc;
+  String? _error;
   bool _busy = false;
   bool _leaving = false;
 
-  Future<void> _accept() async {
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _error = null);
+    try {
+      final r = await Api.get('/api/legal/privacy.json');
+      if (mounted) setState(() => _doc = r);
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      // Metni sunmayan (eski) sunucu: onay penceresinde kullanıcı engellenmez.
+      if (widget.gate && e.statusCode == 404) {
+        TermsGate.skipForSession();
+        Navigator.of(context).pop();
+        return;
+      }
+      setState(() => _error = e.message);
+    } catch (e) {
+      if (mounted) setState(() => _error = errorText(e));
+    }
+  }
+
+  Future<void> _confirm() async {
+    if (!widget.gate) {
+      Navigator.of(context).pop();
+      return;
+    }
     setState(() => _busy = true);
     try {
       await recordTermsAcceptance();
@@ -193,28 +235,118 @@ class _TermsDialogState extends State<_TermsDialog> {
     nav.pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const LoginScreen()), (_) => false);
   }
 
+  Widget _block(Map<String, dynamic> b) {
+    if (b['h'] != null) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 14, bottom: 4),
+        child: Text(b['h'].toString(), style: const TextStyle(color: Pal.text, fontSize: 15.5, fontWeight: FontWeight.w800)),
+      );
+    }
+    if (b['caps'] != null) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 10),
+        child: Text(b['caps'].toString(), style: const TextStyle(color: Pal.text, fontSize: 13.5, height: 1.5, fontWeight: FontWeight.w700)),
+      );
+    }
+    if (b['list'] != null) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 6),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          for (final (i, x) in (b['list'] is List ? b['list'] as List : const []).indexed)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                SizedBox(width: 28, child: Text('(${i + 1})', style: const TextStyle(color: Pal.textDim, fontSize: 13.5, height: 1.5))),
+                Expanded(child: Text(x.toString(), style: const TextStyle(color: Pal.text, fontSize: 13.5, height: 1.5))),
+              ]),
+            ),
+        ]),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Text((b['p'] ?? '').toString(), style: const TextStyle(color: Pal.text, fontSize: 13.5, height: 1.55)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: Pal.surface,
-      title: const Text('Sözleşmeler ve politikalar'),
-      content: SingleChildScrollView(
-        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text(
-            'TR Live\'ı kullanmaya devam etmek için güncel Kullanıcı Sözleşmesi\'ni ve Gizlilik Politikası\'nı onaylaman gerekiyor.',
-            style: TextStyle(height: 1.4),
+    final doc = _doc;
+    final title = (doc?['title'] ?? 'TR Live Privacy Policy').toString();
+    final Widget body;
+    if (doc == null) {
+      body = Center(
+        child: _error == null
+            ? const CircularProgressIndicator()
+            : Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Pal.textDim)),
+                  const SizedBox(height: 12),
+                  OutlinedButton(onPressed: _load, child: const Text('Try again')),
+                ]),
+              ),
+      );
+    } else {
+      body = ListView(padding: const EdgeInsets.fromLTRB(18, 4, 18, 18), children: [
+        Align(
+          alignment: Alignment.centerRight,
+          child: Text('${doc['updatedLabel'] ?? 'Last updated'}: ${doc['updated'] ?? ''}', style: const TextStyle(color: Pal.textDim, fontSize: 12.5)),
+        ),
+        for (final sec in listOf(doc['sections'])) ...[
+          if (mapOf(sec)?['title'] != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 22),
+              child: Text(mapOf(sec)!['title'].toString(), style: const TextStyle(color: Pal.cyan, fontSize: 17, fontWeight: FontWeight.w900)),
+            ),
+          for (final b in listOf(mapOf(sec)?['blocks'])) _block(mapOf(b) ?? const {}),
+        ],
+        if (widget.gate) ...[
+          const SizedBox(height: 18),
+          Wrap(crossAxisAlignment: WrapCrossAlignment.center, children: [
+            const Text('By confirming, you confirm that you are at least 18 years old and accept the current ', style: TextStyle(color: Pal.textDim, fontSize: 12.5)),
+            GestureDetector(
+              onTap: () => openLegal(context, 'terms.html'),
+              child: const Text('Terms of Service', style: TextStyle(color: Pal.cyan, fontSize: 12.5, fontWeight: FontWeight.w800, decoration: TextDecoration.underline, decorationColor: Pal.cyan)),
+            ),
+            const Text(' and this Privacy Policy.', style: TextStyle(color: Pal.textDim, fontSize: 12.5)),
+          ]),
+        ],
+      ]);
+    }
+    return Container(
+      height: MediaQuery.sizeOf(context).height * 0.86,
+      decoration: const BoxDecoration(color: Pal.surface, borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+      child: SafeArea(
+        top: false,
+        child: Column(children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 14, 8, 6),
+            child: Row(children: [
+              Expanded(child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Pal.text, fontSize: 18, fontWeight: FontWeight.w900))),
+              if (!widget.gate) IconButton(onPressed: () => Navigator.of(context).pop(), icon: const Icon(Icons.close, color: Pal.textDim)),
+              if (widget.gate) const SizedBox(height: 48),
+            ]),
           ),
-          const SizedBox(height: 10),
-          LegalConsent(value: _ok, onChanged: (v) => setState(() => _ok = v), text: Pal.text, accent: Pal.cyan),
+          Expanded(child: body),
+          if (widget.gate)
+            TextButton(onPressed: _busy || _leaving ? null : _logout, child: const Text('I do not agree, sign out')),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 6, 18, 12),
+            child: SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: FilledButton(
+                style: FilledButton.styleFrom(backgroundColor: Pal.cyan, foregroundColor: Pal.onBright, shape: const StadiumBorder()),
+                onPressed: doc == null || _busy || _leaving ? null : _confirm,
+                child: _busy
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.2, color: Pal.onBright))
+                    : Text(widget.gate ? 'I have read and confirmed' : 'I have read it', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
+              ),
+            ),
+          ),
         ]),
       ),
-      actions: [
-        TextButton(onPressed: _busy || _leaving ? null : _logout, child: const Text('Çıkış yap')),
-        FilledButton(
-          onPressed: _ok && !_busy && !_leaving ? _accept : null,
-          child: _busy ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Kabul ediyorum'),
-        ),
-      ],
     );
   }
 }
@@ -254,7 +386,7 @@ class LegalHubScreen extends StatelessWidget {
       appBar: AppBar(backgroundColor: Pal.bg, title: const Text('Sözleşmeler ve politikalar')),
       body: ListView(padding: const EdgeInsets.only(bottom: 28), children: [
         group([
-          for (final p in kLegalPages) row(p.$3, p.$4, p.$2, () => openLegal(context, p.$1), external: true),
+          for (final p in kLegalPages) row(p.$3, p.$4, p.$2, () => openLegal(context, p.$1), external: p.$1 != 'privacy.html'),
         ]),
         group([
           row(Icons.monetization_on_outlined, const Color(0xFFFFC43D), 'Coin, Hediye ve Elmas Koşulları',

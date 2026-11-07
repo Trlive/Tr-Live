@@ -202,6 +202,10 @@ class _EntranceBannerState extends State<EntranceBanner> with SingleTickerProvid
           ),
         ]),
       );
+      final stripH = avR * 2 * 1.3;
+      final bandTop = (stripH - barH) / 2;
+      final bandW = w * 0.92 - avR * 1.1;
+      final ms = _total.toDouble();
       return AnimatedBuilder(
         animation: _c,
         child: strip,
@@ -215,9 +219,163 @@ class _EntranceBannerState extends State<EntranceBanner> with SingleTickerProvid
           } else {
             dx = 0;
           }
-          return Transform.translate(offset: Offset(dx, 0), child: Align(alignment: Alignment.centerLeft, child: child));
+          // Süreden bağımsız akan zaman (saniye): parıltı, yıldız ve ışınlar bununla döner.
+          final sec = t * ms / 1000;
+          final pulse = 0.5 + 0.5 * math.sin(sec * math.pi * 2 * 1.2);
+          final c = s?.color ?? const Color(0xFFFFD54F);
+          final banner = SizedBox(
+            width: w * 0.92,
+            height: stripH,
+            child: Stack(clipBehavior: Clip.none, alignment: Alignment.centerLeft, children: [
+              // WIP 6+: fotoğrafın arkasında dönen ışınlar
+              if (lvl >= 6)
+                Positioned(
+                  left: avR * 0.3 + avR - avR * 1.9,
+                  top: stripH / 2 - avR * 1.9,
+                  width: avR * 3.8,
+                  height: avR * 3.8,
+                  child: Transform.rotate(
+                    angle: sec * (lvl >= 10 ? 1.4 : 0.9),
+                    child: CustomPaint(painter: _EntryRays(color: c.withValues(alpha: 0.55 + 0.3 * pulse), count: lvl >= 10 ? 16 : 10)),
+                  ),
+                ),
+              // WIP: fotoğrafın çevresinde atan ışık
+              if (s != null)
+                Positioned(
+                  left: avR * 0.3,
+                  child: Container(
+                    width: avR * 2,
+                    height: avR * 2,
+                    decoration: BoxDecoration(shape: BoxShape.circle, boxShadow: [
+                      BoxShadow(color: c.withValues(alpha: 0.35 + 0.45 * pulse), blurRadius: 8 + 10 * pulse * (lvl >= 8 ? 1.6 : 1), spreadRadius: 1 + 2 * pulse),
+                    ]),
+                  ),
+                ),
+              child!,
+              // Bandın üzerinden geçen parıltı (tüm WIP'ler; 8+ daha parlak ve sık)
+              if (s != null)
+                Positioned(
+                  left: avR * 1.1,
+                  top: bandTop,
+                  width: bandW,
+                  height: barH,
+                  child: ClipRect(
+                    child: Stack(children: [
+                      Positioned(
+                        left: ((sec * (lvl >= 8 ? 0.9 : 0.6)) % 1.0) * (bandW + barH * 2) - barH * 2,
+                        top: 0,
+                        bottom: 0,
+                        width: barH * 1.6,
+                        child: Transform(
+                          transform: Matrix4.skewX(-0.5),
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(colors: [
+                                Colors.white.withValues(alpha: 0),
+                                Colors.white.withValues(alpha: lvl >= 8 ? 0.5 : 0.32),
+                                Colors.white.withValues(alpha: 0),
+                              ]),
+                            ),
+                          ),
+                        ),
+                      ),
+                      // WIP 4+: bandın üstünde parıldayan yıldızlar
+                      if (lvl >= 4)
+                        for (var i = 0; i < (lvl >= 8 ? 9 : 5); i++)
+                          () {
+                            final ph = ((sec * 0.8) + i * 0.37) % 1.0;
+                            final v = math.sin(ph * math.pi);
+                            final x = ((i * 0.618 + 0.15) % 1.0) * (bandW - 20 * k) + avR * 0.9;
+                            final y = (i.isEven ? 0.18 : 0.62) * barH;
+                            return Positioned(
+                              left: x,
+                              top: y,
+                              child: Opacity(
+                                opacity: (v * v).clamp(0.0, 1.0),
+                                child: Transform.scale(
+                                  scale: 0.5 + 0.7 * v,
+                                  child: Icon(Icons.auto_awesome, size: 9 * k, color: lvl >= 10 ? const Color(0xFFFFF59D) : Colors.white),
+                                ),
+                              ),
+                            );
+                          }(),
+                    ]),
+                  ),
+                ),
+              // WIP 8+: üst ve alt kenarda akan altın ışık
+              if (lvl >= 8)
+                for (final top in [true, false])
+                  Positioned(
+                    left: avR * 1.1,
+                    width: bandW,
+                    top: top ? bandTop - 1.2 : null,
+                    bottom: top ? null : bandTop - 1.2,
+                    height: 2.4,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment(-1 + ((sec * 0.7) % 1.0) * 4 - 2, 0),
+                          end: Alignment(((sec * 0.7) % 1.0) * 4 - 2 + 0.6, 0),
+                          tileMode: TileMode.mirror,
+                          colors: lvl >= kSwipLevel
+                              ? const [Color(0xFFFF4F9A), Color(0xFFFFE082), Color(0xFF7DD3FC), Color(0xFFB388FF)]
+                              : const [Color(0x00FFB300), Color(0xFFFFF8E1), Color(0xFFFFB300)],
+                        ),
+                      ),
+                    ),
+                  ),
+              // WIP 10+: fotoğrafın üstünde sallanan taç
+              if (lvl >= 10)
+                Positioned(
+                  left: avR * 0.3 + avR - 9 * k,
+                  top: stripH / 2 - avR - 15 * k + 2 * math.sin(sec * math.pi * 2),
+                  child: Transform.rotate(
+                    angle: 0.12 * math.sin(sec * math.pi * 2 * 0.8),
+                    child: Text('👑', style: TextStyle(fontSize: 16 * k, height: 1, shadows: [Shadow(color: c, blurRadius: 8)])),
+                  ),
+                ),
+              // WIP 8+: giriş sırasında arkasında bıraktığı yıldız tozu
+              if (lvl >= 8 && t < inEnd + 0.08)
+                for (var i = 0; i < 7; i++)
+                  Positioned(
+                    left: avR * 2.6 + i * 16 * k,
+                    top: stripH / 2 + (i.isEven ? -1 : 1) * (4 + i * 1.5) * k,
+                    child: Opacity(
+                      opacity: ((1 - i / 7) * (1 - (t / (inEnd + 0.08)))).clamp(0.0, 1.0),
+                      child: Icon(Icons.star_rounded, size: (10 - i) * k, color: c),
+                    ),
+                  ),
+            ]),
+          );
+          return Transform.translate(offset: Offset(dx, 0), child: Align(alignment: Alignment.centerLeft, child: banner));
         },
       );
     });
   }
+}
+
+/// Giriş şeridinde fotoğrafın arkasındaki ışın demeti.
+class _EntryRays extends CustomPainter {
+  final Color color;
+  final int count;
+  _EntryRays({required this.color, required this.count});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final c = size.center(Offset.zero);
+    final r = size.width / 2;
+    final paint = Paint()..shader = RadialGradient(colors: [color, color.withValues(alpha: 0)]).createShader(Rect.fromCircle(center: c, radius: r));
+    for (var i = 0; i < count; i++) {
+      final a = i * math.pi * 2 / count;
+      final path = Path()
+        ..moveTo(c.dx, c.dy)
+        ..lineTo(c.dx + r * math.cos(a - 0.1), c.dy + r * math.sin(a - 0.1))
+        ..lineTo(c.dx + r * math.cos(a + 0.1), c.dy + r * math.sin(a + 0.1))
+        ..close();
+      canvas.drawPath(path, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _EntryRays old) => old.color != color || old.count != count;
 }

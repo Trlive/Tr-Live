@@ -121,3 +121,28 @@ export async function refreshCappedLevels() {
   }
   return n;
 }
+
+/**
+ * Listelerdeki (takip, fan, ziyaretçi, arkadaş) kullanıcıların şu an bulunduğu oda: kendi odasındaysa oda türü
+ * ('audio' → mikrofon, 'video' → kamera simgesi), başka bir odadaysa 'live' (yayında simgesi). Dokununca o odaya girilir.
+ * Gizli kullanıcı, hayalet mod, çevrimiçi durumunu gizleyen ve gizli odalar gösterilmez.
+ */
+export async function attachCurrentRooms(users, run = query) {
+  const ids = [...new Set(users.map((u) => u?.id).filter(Boolean))];
+  if (!ids.length) return users;
+  const r = await run(
+    `SELECT DISTINCT ON (rm.user_id) rm.user_id, r.id AS room_id, r.room_type, r.owner_id, (r.password_hash IS NOT NULL) AS locked
+     FROM room_members rm
+     JOIN rooms r ON r.id = rm.room_id AND r.is_active = TRUE AND r.is_hidden = FALSE
+     JOIN users u ON u.id = rm.user_id AND u.is_hidden = FALSE AND u.show_presence IS DISTINCT FROM FALSE AND NOT is_ghost(u.id)
+     WHERE rm.user_id = ANY($1::uuid[])
+     ORDER BY rm.user_id, (r.owner_id = rm.user_id) DESC, rm.joined_at DESC`,
+    [ids],
+  );
+  const map = new Map(r.rows.map((x) => [x.user_id, {
+    id: x.room_id,
+    locked: x.locked === true,
+    kind: x.owner_id === x.user_id ? (x.room_type === 'video' ? 'video' : 'audio') : 'live',
+  }]));
+  return users.map((u) => (u && map.has(u.id) ? { ...u, currentRoom: map.get(u.id) } : u));
+}

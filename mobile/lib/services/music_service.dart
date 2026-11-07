@@ -29,8 +29,35 @@ class MusicService {
   String? get roomId => _roomId;
   bool _callHooked = false;
 
-  /// Çalınacak ses düzeyi: kullanıcı kıstıysa ya da telefon araması sürüyorsa 0.
-  double get _vol => muted.value || EffectPrefs.roomMuted.value || CallGuard.instance.inCall.value ? 0 : volume.value;
+  /// Odanın müzik ses düzeyi (0–1): müziği çalan kişi (DJ) ayarlar, herkeste aynı.
+  double get roomVolume => (_pendingVol ?? (state.value?['volume'] as num?)?.toDouble() ?? 1.0).clamp(0.0, 1.0);
+
+  /// DJ'nin kaydırdığı, henüz sunucudan geri gelmemiş düzey (eski yayın kaydırıcıyı geri zıplatmasın).
+  double? _pendingVol;
+
+  /// Müzik kutusunu bu telefon mu yönetiyor (müziği çalan kişi). Kutu yalnızca ona görünür.
+  bool isController(String? userId) => userId != null && state.value?['controlledBy']?.toString() == userId && mapOf(state.value?['track']) != null;
+
+  /// Çalınacak ses düzeyi: kullanıcı kıstıysa ya da telefon araması sürüyorsa 0; değilse oda düzeyi × kendi düzeyi.
+  double get _vol => muted.value || EffectPrefs.roomMuted.value || CallGuard.instance.inCall.value ? 0 : volume.value * roomVolume;
+
+  Timer? _volSend;
+
+  /// DJ ses düzeyini değiştirir: kendi telefonunda hemen, odadakilerde kısa bir beklemeyle (kaydırırken istek yağmasın).
+  void setRoomVolume(double v) {
+    final id = _roomId;
+    final s = state.value;
+    if (id == null || s == null) return;
+    _pendingVol = v;
+    state.value = {...s, 'volume': v};
+    _player?.setVolume(_vol).catchError((_) {});
+    _volSend?.cancel();
+    _volSend = Timer(const Duration(milliseconds: 350), () async {
+      await Api.post('/api/rooms/$id/music/volume', {'volume': double.parse(v.toStringAsFixed(2))}).catchError((_) => <String, dynamic>{});
+      // Bu arada yeni kaydırma yoksa sunucu değeri esas alınır.
+      if (_pendingVol == v && _volSend?.isActive != true) _pendingVol = null;
+    });
+  }
 
   /// Panelde ilerleme çubuğu için şimdiki konum (ms).
   int currentPositionMs() {
@@ -127,6 +154,8 @@ class MusicService {
 
   Future<void> unbind() async {
     _gen++;
+    _volSend?.cancel();
+    _pendingVol = null;
     _resync?.cancel();
     _resync = null;
     _roomId = null;

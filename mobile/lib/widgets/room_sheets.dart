@@ -7,6 +7,7 @@ import 'fig.dart';
 import 'image_pick.dart';
 import 'level_badge.dart';
 import 'room_categories.dart';
+import '../screens/user_screens.dart';
 
 const _yellow = Color(0xFFFFE100);
 const roleLabels = {'owner': 'Oda sahibi', 'cohost': 'Yardımcı sahip', 'moderator': 'Moderatör', 'user': 'Üye'};
@@ -32,6 +33,13 @@ Widget tagChip(String t, {bool selected = true, VoidCallback? onTap}) {
       ]),
     ),
   );
+}
+
+/// Kullanıcının profil sayfasını açar (listelerde isme / fotoğrafa dokununca).
+void openUserProfile(BuildContext context, Map<String, dynamic>? user) {
+  final id = user?['id']?.toString();
+  if (id == null || id.isEmpty || user?['isHidden'] == true) return;
+  Navigator.of(context).push(MaterialPageRoute(builder: (_) => UserProfileScreen(userId: id)));
 }
 
 Widget _sheetShell(BuildContext c, String title, Widget child) {
@@ -74,10 +82,18 @@ void showViewers(BuildContext context, List<Map<String, dynamic>> members, void 
         for (final m in members)
           ListTile(
             contentPadding: EdgeInsets.zero,
-            leading: UserAvatar(user: mapOf(m['user']), radius: 24),
-            title: UserName(user: mapOf(m['user'])),
+            // Fotoğrafa ya da isme dokununca profil sayfası; satırın geri kalanı odadaki kullanıcı kartını açar.
+            leading: GestureDetector(onTap: () => openUserProfile(c, mapOf(m['user'])), child: UserAvatar(user: mapOf(m['user']), radius: 24)),
+            title: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => openUserProfile(c, mapOf(m['user'])),
+              child: Align(alignment: Alignment.centerLeft, child: UserName(user: mapOf(m['user']))),
+            ),
             subtitle: Text(roleLabels[m['role']] ?? '', style: const TextStyle(color: Colors.white54, fontSize: 12)),
-            trailing: m['microphone'] == true ? const Icon(Icons.mic, size: 18, color: Colors.greenAccent) : null,
+            trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+              if (m['microphone'] == true) const Icon(Icons.mic, size: 18, color: Colors.greenAccent),
+              const Icon(Icons.more_horiz, color: Colors.white38),
+            ]),
             onTap: () {
               Navigator.pop(c);
               onTap(m);
@@ -192,7 +208,9 @@ class _ContributionsState extends State<_Contributions> {
     final bannerTop = (first ? 94 : 88) * k;
     final scoreTop = (first ? 273 : 234) * k;
     final u = mapOf(row?['user']);
-    return SizedBox(
+    return GestureDetector(
+      onTap: u == null ? null : () => openUserProfile(context, u),
+      child: SizedBox(
       width: w,
       height: scoreTop + (first ? 33 : 26) * k,
       child: Stack(clipBehavior: Clip.none, alignment: Alignment.topCenter, children: [
@@ -240,12 +258,15 @@ class _ContributionsState extends State<_Contributions> {
           ),
         ),
       ]),
+      ),
     );
   }
 
   Widget _row(Map<String, dynamic> r, int i, double k) {
     final u = mapOf(r['user']);
-    return Container(
+    return InkWell(
+      onTap: u == null ? null : () => openUserProfile(context, u),
+      child: Container(
         height: 87 * k,
         padding: EdgeInsets.symmetric(horizontal: 21 * k),
         decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Colors.white12))),
@@ -270,7 +291,8 @@ class _ContributionsState extends State<_Contributions> {
             Text(fmtCompact(r['total']), style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 13 * k)),
           ]),
         ]),
-      );
+      ),
+    );
   }
 
   @override
@@ -335,7 +357,8 @@ void showRoomCard(
     backgroundColor: Colors.transparent,
     builder: (c) => SafeArea(
       child: Container(
-        constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(c).height * 0.85),
+        // Kompakt oda kartı: ekranın en fazla %62'si; fazlası kaydırılır.
+        constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(c).height * 0.62),
         // Oda sahibinin takılı oda kartı (mağaza) varsa kartın arka planı olur.
         decoration: BoxDecoration(
           gradient: const LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFF3A3A3F), Color(0xFF111114)]),
@@ -385,6 +408,8 @@ void showRoomCard(
           for (final m in managers)
             ListTile(
               contentPadding: EdgeInsets.zero,
+              onTap: () => openUserProfile(c, mapOf(m['user'])),
+              trailing: const Icon(Icons.chevron_right, color: Colors.white38),
               leading: UserAvatar(user: mapOf(m['user']), radius: 22),
               title: UserName(user: mapOf(m['user'])),
               subtitle: Text(roleLabels['${m['role']}'] ?? '', style: const TextStyle(color: Colors.white54, fontSize: 12)),

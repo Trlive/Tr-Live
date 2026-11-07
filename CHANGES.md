@@ -1,3 +1,103 @@
+## v2.83.0 — Bağlantılar sayfası, canlı oda sıralaması, oda kartı simgeleri
+- Profil → Takip Edilen / Fanlar / Ziyaretçiler / Arkadaşlar tek sayfada ("Bağlantılarım"); yana kaydırarak geçilir.
+  Satırlar kart: fotoğraf, isim, gönderme / alma seviyeleri, WIP ve ID. Kişi bir odadaysa sağda simge: kendi sesli
+  odası mikrofon, görüntülü odası kamera, başka bir odadaysa hareketli yatay "Odada" çubukları; dokununca o odaya
+  girilir. Başkalarının takip/fan listeleri de aynı kartları kullanır. Arkadaşlar sekmesinde istekler bağlantısı.
+  (Sunucu: listelerde currentRoom; gizli kullanıcı, hayalet mod, durumunu gizleyen ve gizli odalar gösterilmez.)
+- Oda listesi sıralaması (Yoho / Mico): kişi sayısı, mikrofondakiler, son 30 dakikadaki hediyeler ve PK puana katılır;
+  son 5 dakikada 10.000 Coin ve üzeri hediye atılan oda "🔥 Yükseliyor" olur ve anında en üste çıkar. Liste 20
+  saniyede bir sessizce yenilenir.
+- Ana sayfa: banner ile odalar arasında ve alt alta gelen oda sıraları arasında bir satırlık ek boşluk.
+- Oda kartı (Mico): sol üstte oda türü simgesi (sesli: yeşil mikrofon, görüntülü: turuncu kamera), PK sürüyorsa PK
+  logosu, yükselen odada "🔥 Yükseliyor".
+
+## v2.82.0 — Müzik sistemi Yoho düzeninde
+- Odadaki kullanıcılar müzik kutusunu görmez, yalnızca müziği duyar. Plak ve DJ paneli yalnızca müziği çalan kişide
+  (oda yetkilisi) görünür.
+- Odada başlığın altında solda dönen plak (pikap kolu çalarken iğneye iner); dokununca DJ paneli açılır/kapanır.
+- DJ paneli: müziği kapat, küçült, kayan şarkı adı, ses düzeyi, oynat/duraklat, sonraki ve şarkı listesi.
+- Ses düzeyini DJ ayarlar; odadaki herkesin cihazında bu düzeyde çalar (sunucu: room_music.volume, yeni uç
+  POST /api/rooms/:id/music/volume; müzik durumunda controlledBy ve volume).
+- "Müzik" sayfası beyaz Yoho tasarımı: "Toplamda: N şarkı", satırda ad ve "süre | sanatçı", çalan satır yeşil ve
+  duraklat simgesi, uzun basınca listeden kaldırma; altta koyu küçük çalar (oynat/duraklat, ilerleme ve atlama,
+  süreler, ses düzeyi).
+- "Yerel eklendi" sayfası: telefondaki şarkılar, yeşil "Eklemek" / soluk "Eklendi", "Yeniden tara", "Tümünü ekle".
+- Eski koyu müzik ekranları, "Şimdi Çalıyor" penceresi ve sürüklenen müzik balonu kaldırıldı.
+- Veritabanı: 056_room_music_volume.
+
+## v2.81.0 — Kademeli global hediye şeritleri, yeni mikrofon emojileri, WIP giriş efektleri
+- Global hediye şeridi hediyenin toplam değerine göre üç kademe:
+  - 400 bine kadar: var olan altın-kırmızı şerit; üzerinden parıltı geçer, hediye hafifçe süzülür.
+  - 400 bin – 1 milyon: mor-pembe parlak bant, ince altın çerçeve, nabız gibi atan ışık, parıldayan yıldızlar,
+    "SÜPER HEDİYE" rozeti ve arkasında dönen ışınlarla büyük hediye.
+  - 1 milyon ve üstü: etrafında dönen altın çerçeve, koyu kırmızı zemin, taç ve "EFSANE HEDİYE" rozeti, toplam Coin,
+    ışınlı dev hediye; ekranda 7 saniye kalır.
+  - CP hediyeleri: pembe tonlu şerit, çerçevesi boyunca dolaşan ve atan küçük kalpler.
+- Mikrofon emojileri 3'ten 21'e çıktı (18 yeni hareketli emoji); seçim penceresi ızgara oldu.
+- WIP giriş şeridi geliştirildi: tüm WIP'lerde üzerinden geçen parıltı ve fotoğrafın çevresinde atan ışık; WIP 4+
+  parıldayan yıldızlar; WIP 6+ fotoğrafın arkasında dönen ışınlar; WIP 8+ kenarlarda akan altın ışık ve girişte yıldız
+  tozu; WIP 10+ sallanan taç; SWIP'te gökkuşağı kenar ışığı.
+
+## v2.80.0 — Şanslı çanta, kayan oda adı, sohbet düzeltmesi
+- Oda içi: oda adı alanı başlığın boş kalan genişliğine uzar; ad sığmazsa sürekli kayan yazı olarak döner
+  (dışarıdaki oda kartında değişiklik yok).
+- Ana sayfa oda kartları: aktif odalarda ince uygulama sarısı çerçeve.
+- Şanslı çanta:
+  - Odadaki çantaya dokununca açılan pencere büyütüldü.
+  - Çanta açılınca kim ne kadar aldığı, en çok alandan başlayarak art arda kayan şeritte geçer (saydam siyah zemin,
+    ince altın çerçeve); yeni alanlar canlı eklenir.
+  - Süper çantada not bir kez gönderilir; gönderilince düğme gri olur ve yeniden dokunulamaz. Pencere kapanıp açılsa da
+    yeniden istenmez (sunucu notu büyük/küçük harf farkı gözetmeden tanır).
+  - Global süper çanta şeridi yeniden tasarlandı: çanta renkleri, ince uygulama sarısı çerçeve, üzerinden geçen parıltı,
+    en sağda sallanan çanta. İlk atıldığında geçer, 30 saniye sonra bir kez daha geçer.
+- İzleyiciler, Katkı listesi ve Oda yöneticileri listelerinde isme / fotoğrafa dokununca kişinin profili açılır
+  (izleyicide satırın geri kalanı odadaki kullanıcı kartını açar).
+- Oda sohbeti Yoho gibi alttan dolar (ters liste): ekran dolunca da son yazılan hep görünür. Eski mesajlar okunurken
+  yeni mesaj gelirse "N yeni mesaj" düğmesi çıkar. Mesajların ilk harfi büyük yazılır.
+- Oda içi kullanıcı kartı daha kompakt (ekranın en fazla %66'sı); cinsiyet/yaş, konum, kısa biyografi ve
+  Takipçi / Takip / Arkadaş sayıları eklendi. Oda adına dokununca açılan oda kartı da küçültüldü.
+
+## v2.79.0 — Coin yükleme kaldırıldı, Google Play imzası ve AAB
+- Profil → Coins artık yalnızca cüzdanı açar; "Coin yükle / ödeme yöntemleri" ekranı kaldırıldı (uygulamada satın alma yok).
+- Uygulama dışı yüzen balon eklentisi (flutter_overlay_window) kaldırıldı; oda küçültme uygulama içinde balonla,
+  dışarıda "odadasınız" bildirimiyle sürer. "Diğer uygulamaların üstünde göster", pil optimizasyonu ve telefon
+  izinleri manifestten çıkarıldı (eklenti eklese bile silinir).
+- Derleme: targetSdk / compileSdk 36 (Google Play şartı), sürüm kodu sürümden hesaplanır (2.79.0 → 27900),
+  APK'nın yanında Google Play paketi (tr-live-aab) de üretilir.
+- İmza: yeni "İmza anahtarı oluştur" iş akışı (bir kez çalıştırılır) yükleme anahtarını üretir, KEYSTORE_PASSWORD
+  gizli değeriyle şifreleyip .github/signing/upload.jks.enc olarak saklar. Anahtar varsa APK ve AAB onunla imzalanır;
+  yoksa uyarı verilip deneme anahtarı kullanılır.
+- Gizlilik Politikası'ndaki izin listesi güncellendi (telefon ve yüzen balon izinleri yok).
+- Not: .github/workflows dosyaları zip ile güncellenmez; apk_build.yml ve imza_anahtari.yml elle yüklenmelidir.
+
+## v2.78.1 — Ayarlar: Şarj Tüketimi
+- Ayarlar'daki "Arka plan ve balon izinleri" yerine "Şarj Tüketimi — Isınmayı ve şarj tüketimini azaltır" düğmesi.
+  Açıkken: arayüz animasyonları kısılır (sistemdeki "animasyonları kapat" gibi), görüntülü odada kamera 360p yayınlar
+  (bir sonraki girişte), güzellik filtresinin en çok işlemci yoran pürüzsüzleştirmesi kapanır. Ayar telefonda saklanır.
+- Telefon izni sorulmaz; arama gelince oda sesi telefonun ses modundan anlaşılıp otomatik kapanır (değişiklik yok).
+- Oda küçültme izin gerektirmez (uygulama içindeki küçük oda balonu ve uygulama dışında sabit "odadasınız" bildirimi).
+
+## v2.78.0 — Yeni Gizlilik Politikası (ABD LLC), Micolive tarzı onay penceresi, yayın kuralları hatırlatması
+- Gizlilik Politikası İngilizce (asıl metin, Micolive gibi) olarak baştan yazıldı (kendi metnimiz): hizmetleri ABD'de kurulu TR Live LLC sunar;
+  18+ uyarısı, toplanan bilgiler (verilenler, otomatik toplananlar, cihaz izinleri, diğer kaynaklar), kullanım amaçları,
+  paylaşım, haklar ve hesap silme, güvenlik ve uluslararası aktarım, reşit olmayanlar, paylaşım uyarısı, iletişim.
+  Uygulamanın gerçekte topladığı bilgilere göre yazıldı (ör. hassas konum ve IMEI toplanmaz).
+- Tek kaynak: backend/src/legal_texts.js. Uygulama metni /api/legal/privacy.json'dan okur; Google Play'e verilecek
+  herkese açık adres /api/legal/privacy aynı metinden üretilir (hesap silme bölümü: /api/legal/data-deletion → #account-deletion).
+  Şirketin tam unvanı / adresi kesinleşince yalnızca COMPANY satırı değişir.
+- Micolive gibi alttan açılan "TR Live Privacy Policy" penceresi ve "I have read and confirmed" düğmesi. Sözleşme
+  sürümü 2026-11-01'e yükseltildi: herkes bir kez yeni metni onaylar (onaylamayan çıkış yapabilir).
+- Yayın açma ekranı açılınca "İpuçları" hatırlatması: kurallara aykırı yayın sonlandırılır, hesap yasaklanır.
+- İzinler Micolive gibi yalnızca gerektiği yerde istenir: bildirim izni artık açılışta / giriş ekranında değil, girişten
+  sonra ana sayfada bir kez (sözleşme onayından sonra); mikrofon koltuğa çıkınca, kamera yayın açınca, fotoğraf ve müzik
+  yalnızca seçerken. Pil, balon (diğer uygulamaların üstünde) ve telefon izni hiç sorulmaz.
+- Hediye adları: marka / telifli karakter çağrıştıranlar değişti (Külkedisi Ayakkabısı → Cam Ayakkabı, Zengin Şeyh →
+  Zengin Beyefendi). Sunucudaki katalogda marka adı (Ferrari, Lamborghini, Rolls-Royce, Bugatti, McLaren, Mercedes,
+  Aston Martin, Porsche, BMW, Titanic, Wonder Woman, Transformer vb.) içeren hediye ve mağaza öğesi adları genel
+  adlarla değiştirilir (055_gift_names.sql); fiyat, animasyon ve geçmiş aynı kalır.
+- Gizlilik metni koda göre düzeltildi (şehir bilgisi, rastgele kurulum kimliği, hesap silme yolu: Profil → Ayarlar →
+  Hesap & Güvenlik → Hesabı sil); onay penceresinde 18 yaş beyanı; metin yüklenemezse de "çıkış yap" görünür.
+
 ## v2.77.0 — PK puanları (Micolive gibi), yeni "PK BAŞLIYOR / PK BAŞLADI" animasyonu, PK logosu
 - PK puanı artık Micolive gibi sayılıyor; kişinin kendine gönderdiği hediye de sayılır.
   - Sesli oda PK: takım koltuğundaki kişiye gelen her hediye (kendine gönderdiği dahil) takım puanı olur. Tarafsız

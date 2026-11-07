@@ -543,14 +543,8 @@ class UserListScreen extends StatelessWidget {
             ? const Center(child: Text('Liste boş.'))
             : RefreshIndicator(
                 onRefresh: reload,
-                child: ListView(children: [
-                  for (final u in users)
-                    ListTile(
-                      leading: UserAvatar(user: u),
-                      title: UserName(user: u),
-                      subtitle: u['isHidden'] == true && u['username'] == 'Gizli Kullanıcı' ? null : Text('@${u['username']}'),
-                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => UserProfileScreen(userId: u['id'] as String))),
-                    ),
+                child: ListView(padding: const EdgeInsets.fromLTRB(12, 8, 12, 24), children: [
+                  for (final u in users) SocialUserTile(user: u),
                 ]),
               ),
       ),

@@ -9,7 +9,7 @@ import { activeWip, requireFeature } from '../services/wip.js';
 import { isAnimatedImage, mimeFor } from '../services/media.js';
 import { detectImage, storeImage, removeUpload, removeAnimatedAvatar, IMAGE_TYPES } from '../services/images.js';
 import { publicUser, USER_PUBLIC_COLUMNS, USER_PUBLIC_JOINS } from '../views.js';
-import { announceUserChange } from '../services/users.js';
+import { announceUserChange, attachCurrentRooms } from '../services/users.js';
 import { cleanPublic } from '../safe_text.js';
 import { hub } from '../realtime.js';
 import { userLimit } from '../firewall.js';
@@ -495,7 +495,9 @@ router.get('/visitors', async (req, res) => {
      ORDER BY pv.last_visited_at DESC LIMIT 200`,
     [req.user.id],
   );
+  const users = r.rows.map((x) => publicUser(x, req.user.id));
+  const withRooms = await attachCurrentRooms(users).catch(() => users);
   res.json({
-    visitors: r.rows.map((x) => ({ user: publicUser(x, req.user.id), visitCount: x.visit_count, lastVisitedAt: x.last_visited_at })),
+    visitors: r.rows.map((x, i) => ({ user: withRooms[i], visitCount: x.visit_count, lastVisitedAt: x.last_visited_at })),
   });
 });

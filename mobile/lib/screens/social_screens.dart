@@ -1,11 +1,15 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import '../services/api.dart';
 import '../services/inbox_service.dart';
+import '../services/room_dock.dart';
 import '../widgets/anim_asset.dart';
 import '../widgets/app_theme.dart';
 import '../widgets/common.dart';
 import 'messages_screen.dart';
 import '../widgets/level_badge.dart';
+import 'home_screen.dart' show openRoom;
 import 'user_screens.dart';
 
 /// Arkadaşlarım ve bana gelen arkadaşlık istekleri. Yalnızca arkadaşlar mesajlaşabilir.
@@ -252,4 +256,233 @@ Widget levelBar(String title, dynamic level, IconData icon, List<Color> colors, 
       ]),
     ),
   ]);
+}
+
+// ======================================================================= Takip / Fan / Ziyaretçi / Arkadaş
+/// Kendi profilimdeki dört liste tek sayfada: yana kaydırarak Takip Edilen ↔ Fanlar ↔ Ziyaretçiler ↔ Arkadaşlar.
+/// Satırda isim ve seviyeler; kişi bir odadaysa sağda oda simgesi (kendi sesli odası: mikrofon, görüntülü: kamera,
+/// başka bir odada: "yayında" çubukları). Simgeye dokununca o odaya girilir.
+class SocialListsScreen extends StatefulWidget {
+  final String userId;
+  final int initialTab;
+  const SocialListsScreen({super.key, required this.userId, this.initialTab = 0});
+
+  @override
+  State<SocialListsScreen> createState() => _SocialListsScreenState();
+}
+
+class _SocialListsScreenState extends State<SocialListsScreen> with SingleTickerProviderStateMixin {
+  late final TabController _tabs = TabController(length: 4, vsync: this, initialIndex: widget.initialTab.clamp(0, 3));
+
+  @override
+  void initState() {
+    super.initState();
+    _seen(_tabs.index);
+    _tabs.addListener(() {
+      if (!_tabs.indexIsChanging) _seen(_tabs.index);
+    });
+  }
+
+  /// Fan / ziyaretçi rozeti sekme açılınca sıfırlanır.
+  void _seen(int i) {
+    if (i == 1) Inbox.markSeen('followers');
+    if (i == 2) Inbox.markSeen('visitors');
+  }
+
+  @override
+  void dispose() {
+    _tabs.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final id = widget.userId;
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Bağlantılarım'),
+        bottom: TabBar(
+          controller: _tabs,
+          isScrollable: true,
+          tabAlignment: TabAlignment.center,
+          labelStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+          tabs: const [Tab(text: 'Takip Edilen'), Tab(text: 'Fanlar'), Tab(text: 'Ziyaretçiler'), Tab(text: 'Arkadaşlar')],
+        ),
+      ),
+      body: TabBarView(controller: _tabs, children: [
+        _SocialList(load: () async => listOf((await Api.get('/api/users/$id/following'))['users']).map((u) => {'user': u}).toList(), empty: 'Henüz kimseyi takip etmiyorsun.'),
+        _SocialList(load: () async => listOf((await Api.get('/api/users/$id/followers'))['users']).map((u) => {'user': u}).toList(), empty: 'Henüz fanın yok.'),
+        _SocialList(
+          load: () async {
+            final list = listOf((await Api.get('/api/me/visitors'))['visitors']);
+            DateTime at(Map<String, dynamic> v) => DateTime.tryParse('${v['lastVisitedAt']}') ?? DateTime.fromMillisecondsSinceEpoch(0);
+            list.sort((a, b) => at(b).compareTo(at(a)));
+            return list;
+          },
+          empty: 'Son 7 günde ziyaretçi yok.',
+          subtitle: (v) {
+            final t = DateTime.tryParse('${v['lastVisitedAt']}')?.toLocal();
+            return t == null ? null : 'Son ziyaret: ${t.day.toString().padLeft(2, '0')}.${t.month.toString().padLeft(2, '0')} ${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')} · ${v['visitCount'] ?? 1} kez';
+          },
+        ),
+        _SocialList(
+          load: () async => listOf((await Api.get('/api/friends'))['users']).map((u) => {'user': u}).toList(),
+          empty: 'Henüz arkadaşın yok. Bir profile girip "Arkadaş ekle" diyebilirsin.',
+          header: (context) => ListTile(
+            leading: const Icon(Icons.person_add_alt_1_rounded, color: Pal.amber),
+            title: const Text('Arkadaşlık istekleri', style: TextStyle(fontWeight: FontWeight.w700)),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const FriendsScreen())),
+          ),
+        ),
+      ]),
+    );
+  }
+}
+
+/// Bir sekmedeki liste. Her öğe {'user': ..., (ziyaretçide) 'lastVisitedAt', 'visitCount'}.
+class _SocialList extends StatefulWidget {
+  final Future<List<Map<String, dynamic>>> Function() load;
+  final String empty;
+  final String? Function(Map<String, dynamic> item)? subtitle;
+  final Widget Function(BuildContext context)? header;
+  const _SocialList({required this.load, required this.empty, this.subtitle, this.header});
+
+  @override
+  State<_SocialList> createState() => _SocialListState();
+}
+
+class _SocialListState extends State<_SocialList> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true; // sekmeler arasında kayarken liste yeniden yüklenmesin
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return AsyncBody<List<Map<String, dynamic>>>(
+      load: widget.load,
+      builder: (context, items, reload) => RefreshIndicator(
+        onRefresh: reload,
+        child: ListView(padding: const EdgeInsets.fromLTRB(12, 8, 12, 24), children: [
+          if (widget.header != null) widget.header!(context),
+          if (items.isEmpty)
+            Padding(padding: const EdgeInsets.fromLTRB(24, 60, 24, 0), child: Text(widget.empty, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white60)))
+          else
+            for (final it in items) SocialUserTile(user: mapOf(it['user']), subtitle: widget.subtitle?.call(it)),
+        ]),
+      ),
+    );
+  }
+}
+
+/// Liste satırı (kart): fotoğraf, isim, seviyeler, alt yazı ve kişi bir odadaysa oda simgesi.
+class SocialUserTile extends StatelessWidget {
+  final Map<String, dynamic>? user;
+  final String? subtitle;
+  const SocialUserTile({super.key, required this.user, this.subtitle});
+
+  @override
+  Widget build(BuildContext context) {
+    final u = user;
+    if (u == null) return const SizedBox.shrink();
+    final room = mapOf(u['currentRoom']);
+    final hidden = u['isHidden'] == true;
+    final sub = subtitle ?? (hidden ? null : 'ID: ${u['publicId'] ?? u['username'] ?? ''}');
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(color: Pal.surface, borderRadius: BorderRadius.circular(16), border: Border.all(color: Pal.outline)),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: hidden || u['id'] == null ? null : () => Navigator.push(context, MaterialPageRoute(builder: (_) => UserProfileScreen(userId: '${u['id']}'))),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
+          child: Row(children: [
+            UserAvatar(user: u, radius: 26),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                UserName(user: u),
+                const SizedBox(height: 4),
+                Wrap(spacing: 4, runSpacing: 3, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                  if (u['coinLevel'] != null) LevelPill(level: u['coinLevel'], send: true, height: 16),
+                  if (u['giftLevel'] != null) LevelPill(level: u['giftLevel'], send: false, height: 16),
+                  if (u['wipLevel'] != null) WipChip(level: u['wipLevel'], compact: true),
+                ]),
+                if (sub != null && sub.isNotEmpty) ...[
+                  const SizedBox(height: 3),
+                  Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white54, fontSize: 12.5)),
+                ],
+              ]),
+            ),
+            if (room != null && room['id'] != null) ...[
+              const SizedBox(width: 8),
+              RoomStatusIcon(kind: '${room['kind']}', onTap: () => openRoom(context, RoomRequest(roomId: '${room['id']}', name: '${u['displayName'] ?? 'Oda'}', locked: room['locked'] == true))),
+            ],
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+/// Kişinin bulunduğu oda: 'audio' mikrofon, 'video' kamera, 'live' (başka odada) yatay "yayında" çubukları.
+class RoomStatusIcon extends StatefulWidget {
+  final String kind;
+  final VoidCallback onTap;
+  const RoomStatusIcon({super.key, required this.kind, required this.onTap});
+
+  @override
+  State<RoomStatusIcon> createState() => _RoomStatusIconState();
+}
+
+class _RoomStatusIconState extends State<RoomStatusIcon> with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 900))..repeat();
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final k = widget.kind;
+    final colors = k == 'video'
+        ? const [Color(0xFFFF9F0A), Color(0xFFFF5E3A)]
+        : k == 'audio'
+            ? const [Color(0xFF16C25B), Color(0xFF0E9F6E)]
+            : const [Color(0xFFFF4F9A), Color(0xFFB0127A)];
+    return GestureDetector(
+      onTap: widget.onTap,
+      child: Container(
+        height: 30,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(colors: colors),
+          borderRadius: BorderRadius.circular(15),
+          boxShadow: [BoxShadow(color: colors.first.withValues(alpha: 0.45), blurRadius: 8)],
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          if (k == 'audio' || k == 'video')
+            Icon(k == 'video' ? Icons.videocam_rounded : Icons.mic_rounded, color: Colors.white, size: 18)
+          else
+            // Yatay "yayında" çubukları
+            AnimatedBuilder(
+              animation: _c,
+              builder: (_, __) => Row(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.end, children: [
+                for (var i = 0; i < 4; i++)
+                  Container(
+                    width: 3,
+                    height: 5 + 9 * (0.5 + 0.5 * math.sin((_c.value + i * 0.23) * math.pi * 2)).abs(),
+                    margin: const EdgeInsets.symmetric(horizontal: 1),
+                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(2)),
+                  ),
+              ]),
+            ),
+          const SizedBox(width: 5),
+          Text(k == 'live' ? 'Odada' : 'Oda', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 12)),
+        ]),
+      ),
+    );
+  }
 }

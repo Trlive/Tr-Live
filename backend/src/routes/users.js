@@ -4,7 +4,7 @@ import { requireAuth } from '../auth.js';
 import { userLimit } from '../firewall.js';
 import { fail, uuid } from '../http.js';
 import { loadProfile } from '../services/profile.js';
-import { loadPublicRows } from '../services/users.js';
+import { loadPublicRows, attachCurrentRooms } from '../services/users.js';
 import { publicUser, USER_PUBLIC_COLUMNS, USER_PUBLIC_JOINS } from '../views.js';
 import { featuresFor } from '../services/wip.js';
 import { isGhost } from '../services/presence.js';
@@ -109,7 +109,7 @@ async function followList(req, res, column, otherColumn) {
      WHERE f.${column} = $1 AND u.account_status = 'active' ORDER BY f.created_at DESC LIMIT $2 OFFSET $3`,
     [targetId, limit, offset],
   );
-  res.json({ users: r.rows.map((x) => publicUser(x, req.user.id)) });
+  res.json({ users: await attachCurrentRooms(r.rows.map((x) => publicUser(x, req.user.id))).catch(() => r.rows.map((x) => publicUser(x, req.user.id))) });
 }
 router.get('/:userId/followers', (req, res) => followList(req, res, 'followed_id', 'follower_id'));
 router.get('/:userId/following', (req, res) => followList(req, res, 'follower_id', 'followed_id'));
