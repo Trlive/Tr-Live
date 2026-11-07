@@ -1,3 +1,15 @@
+## v2.84.0 — Düzeltmeler (WIP rozeti, hediye şeritleri, emojiler, çanta)
+- Oda içi oda adı kutusu kısaltıldı: en fazla ekranın ~%36'sı, ad kısaysa yalnızca ad kadar; uzun ad kayar.
+- WIP rozeti her yerde yeni görünüm (Yoho VIP3 gibi): koyu parlak hap, ince altın çerçeve, eğik altın "WIP3";
+  yalnızca SWIP'in üzerinden altın parıltı geçer. Bağlantılar listesindeki uzun WIP çubuğu kaldırıldı.
+- Global hediye şeridi 400 bin – 1 milyon ve 1 milyon üstü: mor tasarım kaldırıldı; var olan altın-kırmızı şerit
+  geliştirildi. 400K+: daha büyük, atan altın ışık, parıltı ve yıldızlar, ışınlı büyük hediye. 1M+: en büyük boyut,
+  arkada dönen dev ışınlar ve alev hale, kenarda dolaşan altın ışıklar, taç, yağan altın tozları, toplam Coin.
+- Uçan yazı (sohbetin üstünde kayan yazı): saydam siyah zemin, ince uygulama sarısı çerçeve.
+- Mikrofon emojileri koltuk dairesini tamamen kaplar (altta daireyi örten zemin); yeni emojiler daha büyük çizildi;
+  sola öpücük emojisi eklendi (22 emoji).
+- Şanslı çanta penceresi: profil, yazılar, Coin, AÇ düğmesi ve kazanç şeridi orantılı büyütüldü.
+
 ## v2.83.0 — Bağlantılar sayfası, canlı oda sıralaması, oda kartı simgeleri
 - Profil → Takip Edilen / Fanlar / Ziyaretçiler / Arkadaşlar tek sayfada ("Bağlantılarım"); yana kaydırarak geçilir.
   Satırlar kart: fotoğraf, isim, gönderme / alma seviyeleri, WIP ve ID. Kişi bir odadaysa sağda simge: kendi sesli

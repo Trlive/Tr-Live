@@ -16,6 +16,8 @@ class Marquee extends StatefulWidget {
   final bool always;
   /// Kaymaya başlamadan önceki bekleme.
   final Duration startDelay;
+  /// Sığdığında yalnızca içerik kadar yer kaplasın (kutu gereksiz uzamasın).
+  final bool shrinkWrap;
   const Marquee({
     super.key,
     required this.child,
@@ -25,6 +27,7 @@ class Marquee extends StatefulWidget {
     this.alignX = -1,
     this.always = false,
     this.startDelay = const Duration(milliseconds: 1200),
+    this.shrinkWrap = false,
   });
 
   @override
@@ -103,7 +106,7 @@ class _MarqueeState extends State<Marquee> with SingleTickerProviderStateMixin {
       final left = moving ? -_off : (_w == null ? 0.0 : ((maxW - w) * (widget.alignX + 1) / 2).clamp(0.0, double.infinity));
       final period = _period(w);
       return SizedBox(
-        width: maxW,
+        width: widget.shrinkWrap && !moving && _w != null ? w.clamp(0.0, maxW) : maxW,
         height: widget.height,
         child: ClipRect(
           child: Opacity(

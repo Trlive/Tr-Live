@@ -206,185 +206,185 @@ class _GlobalGiftStripState extends State<GlobalGiftStrip> with SingleTickerProv
 
   // ---------------------------------------------------------------- 2) 400 bin – 1 milyon
 
-  /// Mor-pembe parlak bant, ince altın çerçeve, nabız gibi atan ışık, parıldayan yıldızlar, arkasında dönen ışınlı hediye.
-  Widget _bigStrip(double sw) {
-    final k = (sw / 400).clamp(0.82, 1.15).toDouble();
-    final w = (sw * 0.94).clamp(0.0, 380.0).toDouble();
-    final h = 60 * k;
-    final fs = 13.5 * k;
-    return Center(
-      child: SizedBox(
-        width: w,
-        height: h + 16 * k,
-        child: Stack(clipBehavior: Clip.none, alignment: Alignment.center, children: [
-          AnimatedBuilder(
-            animation: _c,
-            builder: (_, child) {
-              final pulse = 0.5 + 0.5 * math.sin(_c.value * math.pi * 2);
-              return Container(
-                height: h,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(h / 2),
-                  border: Border.all(color: const Color(0xFFFFD54F), width: 1.4),
-                  gradient: const LinearGradient(colors: [Color(0xFF3A0CA3), Color(0xFF7209B7), Color(0xFFD0218F), Color(0xFF7209B7)], stops: [0, 0.35, 0.7, 1]),
-                  boxShadow: [
-                    BoxShadow(color: const Color(0xFFE040FB).withValues(alpha: 0.35 + 0.35 * pulse), blurRadius: 10 + 10 * pulse),
-                    BoxShadow(color: const Color(0xFFFFD54F).withValues(alpha: 0.25 * pulse), blurRadius: 4),
-                  ],
-                ),
-                child: child,
-              );
-            },
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(h / 2),
-              child: Stack(children: [
-                _shine(w, h),
-                ..._sparkles(w, h, 7, const Color(0xFFFFF59D)),
-                Padding(
-                  padding: EdgeInsets.fromLTRB(5 * k, 5 * k, 14 * k, 5 * k),
-                  child: Row(children: [
-                    _avatar((h - 14 * k) / 2, const [Color(0xFFFFF1A8), Color(0xFFFFB300), Color(0xFFFF8F00)]),
-                    SizedBox(width: 8 * k),
-                    Expanded(child: _texts(fs)),
-                    _qty(24 * k, color: const Color(0xFFFFF59D), glow: const Color(0xFFE040FB)),
-                    SizedBox(width: h * 1.15 - 8 * k),
-                  ]),
-                ),
-              ]),
-            ),
-          ),
-          // Üstte "SÜPER HEDİYE" rozeti
-          Positioned(top: -2 * k, child: _badge('SÜPER HEDİYE', k, const [Color(0xFFFF4F9A), Color(0xFF9D4EDD)])),
-          // Hediye: şeridin üstüne taşan, arkasında dönen ışınlar
-          Positioned(right: 0, child: _giftIcon(h * 1.15, rays: true, glow: const Color(0xAAFFC6FF))),
-        ]),
-      ),
-    );
-  }
+  /// Aynı altın-kırmızı şerit, daha büyük ve canlı: arkasında nabız gibi atan altın ışık, bant üzerinde parıltı ve
+  /// yıldızlar, ışınlı büyük hediye, parlayan adet.
+  Widget _bigStrip(double sw) => _ribbon(sw, legend: false);
 
   // ---------------------------------------------------------------- 3) 1 milyon ve üstü
 
-  /// En gelişmiş: etrafında dönen altın çerçeve, koyu kırmızı-siyah zemin, üstte taç ve "EFSANE HEDİYE", ışınlı büyük
-  /// hediye, yıldızlar ve parıltı.
-  Widget _legendStrip(double sw) {
-    final k = (sw / 400).clamp(0.82, 1.15).toDouble();
-    final w = (sw * 0.96).clamp(0.0, 390.0).toDouble();
-    final h = 70 * k;
-    final fs = 15 * k;
-    const border = 3.0;
+  /// En gelişmiş: aynı şerit en büyük boyutta; arkasında dönen dev altın ışınlar ve alev rengi hale, bandın kenarında
+  /// dolaşan altın ışık, atan amblem, yağan altın tozları, toplam Coin.
+  Widget _legendStrip(double sw) => _ribbon(sw, legend: true);
+
+  Widget _ribbon(double sw, {required bool legend}) {
+    final w = legend ? (sw * 0.98).clamp(0.0, 410.0).toDouble() : (sw * 0.86).clamp(0.0, 350.0).toDouble();
+    final h = w / 3;
+    final fs = (h * (legend ? 0.15 : 0.155)).clamp(10.0, 17.0).toDouble();
+    // Görseldeki kırmızı bant: genişliğin ~%3–%97'si, yüksekliğin ~%34–%84'ü.
+    final bandL = w * 0.03, bandT = h * 0.34, bandW = w * 0.94, bandH = h * 0.5;
     return Center(
       child: SizedBox(
         width: w,
-        height: h + 26 * k,
-        child: Stack(clipBehavior: Clip.none, alignment: Alignment.center, children: [
-          // Dönen altın çerçeve (sweep gradyanı döndürülür)
-          AnimatedBuilder(
-            animation: _c,
-            builder: (_, child) => Container(
-              height: h,
-              padding: const EdgeInsets.all(border),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(h / 2),
-                gradient: SweepGradient(
-                  transform: GradientRotation(_c.value * math.pi * 2),
-                  colors: const [Color(0xFFFFF6C2), Color(0xFFFFC300), Color(0xFFB8860B), Color(0xFFFFE57F), Color(0xFFFF8F00), Color(0xFFFFF6C2)],
-                ),
-                boxShadow: [
-                  BoxShadow(color: const Color(0xFFFFC300).withValues(alpha: 0.55 + 0.25 * math.sin(_c.value * math.pi * 2)), blurRadius: 18),
-                  const BoxShadow(color: Color(0x88FF3D00), blurRadius: 30, spreadRadius: -6),
-                ],
-              ),
-              child: child,
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(h / 2 - border),
-              child: DecoratedBox(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(colors: [Color(0xFF1A0000), Color(0xFF7A0010), Color(0xFFB71C1C), Color(0xFF7A0010), Color(0xFF1A0000)]),
-                ),
-                child: Stack(children: [
-                  _shine(w, h, alpha: 0.5),
-                  ..._sparkles(w, h, 10, const Color(0xFFFFE57F)),
-                  Padding(
-                    padding: EdgeInsets.fromLTRB(5 * k, 4 * k, 14 * k, 4 * k),
-                    child: Row(children: [
-                      _avatar((h - 2 * border - 12 * k) / 2, const [Color(0xFFFFF6C2), Color(0xFFFFC300), Color(0xFFB8860B)]),
-                      SizedBox(width: 8 * k),
-                      Expanded(child: _texts(fs, name: const Color(0xFFFFE57F), to: const Color(0xFFFFF6C2))),
-                      Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
-                        _qty(26 * k, color: const Color(0xFFFFE57F), glow: const Color(0xFFFF3D00)),
-                        Text('${fmtNumber(e['totalCoins'])} Coin',
-                            style: TextStyle(color: const Color(0xFFFFF6C2), fontWeight: FontWeight.w800, fontSize: 10.5 * k, height: 1)),
-                      ]),
-                      SizedBox(width: h * 1.25 - 10 * k),
-                    ]),
+        height: h,
+        child: AnimatedBuilder(
+          animation: _c,
+          builder: (context, _) {
+            final t = _c.value;
+            final pulse = 0.5 + 0.5 * math.sin(t * math.pi * 2);
+            return Stack(clipBehavior: Clip.none, children: [
+              // Arkada dönen dev ışınlar (yalnızca 1M+)
+              if (legend)
+                Positioned(
+                  left: w / 2 - w * 0.42,
+                  top: h * 0.2 - w * 0.42,
+                  width: w * 0.84,
+                  height: w * 0.84,
+                  child: Opacity(
+                    opacity: 0.55 + 0.25 * pulse,
+                    child: Transform.rotate(angle: t * math.pi * 2 / 4, child: CustomPaint(painter: _RaysPainter(color: const Color(0xAAFFC93C)))),
                   ),
+                ),
+              // Bandın arkasında atan ışık
+              Positioned(
+                left: bandL,
+                top: bandT,
+                width: bandW,
+                height: bandH,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(bandH / 2),
+                    boxShadow: [
+                      BoxShadow(color: const Color(0xFFFFC93C).withValues(alpha: 0.35 + 0.4 * pulse), blurRadius: legend ? 26 : 16, spreadRadius: legend ? 4 : 1),
+                      if (legend) BoxShadow(color: const Color(0xFFFF5722).withValues(alpha: 0.35 + 0.3 * pulse), blurRadius: 40, spreadRadius: 6),
+                    ],
+                  ),
+                ),
+              ),
+              Positioned.fill(child: Image.asset('assets/images/gift_ribbon_gold.webp', fit: BoxFit.fill)),
+              // Bandın üzerinde parıltı ve yıldızlar
+              Positioned(
+                left: bandL + bandH * 0.3,
+                top: bandT,
+                width: bandW - bandH * 0.6,
+                height: bandH,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(bandH / 2),
+                  child: Stack(children: [
+                    Positioned(
+                      left: ((t * (legend ? 1.5 : 1.0)) % 1.0) * (bandW + bandH * 2) - bandH * 2,
+                      top: 0,
+                      bottom: 0,
+                      width: bandH * 1.3,
+                      child: Transform(
+                        transform: Matrix4.skewX(-0.45),
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(colors: [
+                              Colors.white.withValues(alpha: 0),
+                              Colors.white.withValues(alpha: legend ? 0.45 : 0.32),
+                              Colors.white.withValues(alpha: 0),
+                            ]),
+                          ),
+                        ),
+                      ),
+                    ),
+                    for (var i = 0; i < (legend ? 12 : 8); i++) _twinkle(i, t, bandW - bandH * 0.6, bandH, legend ? const Color(0xFFFFE57F) : Colors.white),
+                  ]),
+                ),
+              ),
+              // 1M+: bandın kenarında dolaşan iki altın ışık
+              if (legend)
+                for (final off in [0.0, 0.5])
+                  () {
+                    final p = _perimeter((t * 0.5 + off) % 1, bandW, bandH);
+                    final d = bandH * 0.32;
+                    return Positioned(
+                      left: bandL + p.dx - d / 2,
+                      top: bandT + p.dy - d / 2,
+                      child: Container(
+                        width: d,
+                        height: d,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: RadialGradient(colors: [Color(0xFFFFFFFF), Color(0xFFFFE57F), Color(0x00FFC93C)], stops: [0, 0.35, 1]),
+                        ),
+                      ),
+                    );
+                  }(),
+              // 1M+: amblemin üstünde atan taç
+              if (legend)
+                Positioned(
+                  left: w / 2 - h * 0.13,
+                  top: -h * 0.2 - 2 * pulse,
+                  child: Transform.scale(
+                    scale: 0.92 + 0.12 * pulse,
+                    child: Text('👑', style: TextStyle(fontSize: h * 0.24, height: 1, shadows: const [Shadow(color: Color(0xFFFFC93C), blurRadius: 12)])),
+                  ),
+                ),
+              // 1M+: yağan altın tozları
+              if (legend)
+                for (var i = 0; i < 10; i++)
+                  () {
+                    final ph = (t + i / 10) % 1.0;
+                    final x = ((i * 0.37 + 0.05) % 1.0) * w;
+                    return Positioned(
+                      left: x,
+                      top: -h * 0.15 + ph * h * 1.3,
+                      child: Opacity(
+                        opacity: math.sin(ph * math.pi).clamp(0.0, 1.0),
+                        child: Icon(i.isEven ? Icons.star_rounded : Icons.circle, size: (i.isEven ? 0.09 : 0.045) * h, color: const Color(0xFFFFD54F)),
+                      ),
+                    );
+                  }(),
+              // İçerik: gönderen, alıcı, hediye, adet (ve 1M+ toplam Coin)
+              Positioned(
+                left: bandL + bandH * 0.35,
+                right: w - bandL - bandW + bandH * 0.3,
+                top: bandT,
+                height: bandH,
+                child: Row(children: [
+                  _avatar(bandH * 0.36, legend ? const [Color(0xFFFFF6C2), Color(0xFFFFC300), Color(0xFFB8860B)] : const [Color(0xFFFFF1A8), Color(0xFFFFB300)]),
+                  SizedBox(width: w * 0.02),
+                  Expanded(child: _texts(fs)),
+                  // Hediye bandın dışına taşar (büyük görünsün).
+                  SizedBox(
+                    width: bandH * (legend ? 1.15 : 1.0),
+                    height: bandH,
+                    child: OverflowBox(
+                      maxWidth: bandH * (legend ? 1.5 : 1.3),
+                      maxHeight: bandH * (legend ? 1.5 : 1.3),
+                      child: _giftIcon(bandH * (legend ? 1.5 : 1.3), rays: true, glow: legend ? const Color(0xCCFFD54F) : const Color(0xAAFFE082)),
+                    ),
+                  ),
+                  SizedBox(width: w * 0.01),
+                  Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
+                    Transform.scale(scale: 1 + 0.08 * pulse, child: _qty(fs * (legend ? 1.7 : 1.55), color: const Color(0xFFFFE57F), glow: const Color(0xFFFF6D00))),
+                    if (legend)
+                      Text('${fmtNumber(e['totalCoins'])} Coin',
+                          style: TextStyle(color: const Color(0xFFFFF6C2), fontWeight: FontWeight.w800, fontSize: fs * 0.72, height: 1, shadows: const [Shadow(color: Colors.black, blurRadius: 3)])),
+                  ]),
                 ]),
               ),
-            ),
-          ),
-          // Taç ve rozet
-          Positioned(
-            top: -6 * k,
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              AnimatedBuilder(
-                animation: _c,
-                builder: (_, child) => Transform.scale(scale: 1 + 0.08 * math.sin(_c.value * math.pi * 4), child: child),
-                child: Text('👑', style: TextStyle(fontSize: 18 * k, height: 1, shadows: const [Shadow(color: Color(0xFFFFC300), blurRadius: 10)])),
-              ),
-              _badge('EFSANE HEDİYE', k, const [Color(0xFFFFC300), Color(0xFFFF6F00)], dark: true),
-            ]),
-          ),
-          Positioned(right: 0, child: _giftIcon(h * 1.25, rays: true, glow: const Color(0xCCFFD54F))),
-        ]),
+            ]);
+          },
+        ),
       ),
     );
   }
 
-  Widget _badge(String text, double k, List<Color> colors, {bool dark = false}) => Container(
-        padding: EdgeInsets.symmetric(horizontal: 9 * k, vertical: 1.5 * k),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(colors: colors),
-          borderRadius: BorderRadius.circular(9 * k),
-          border: Border.all(color: const Color(0xFFFFF6C2), width: 0.8),
-          boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 4)],
-        ),
-        child: Text(text,
-            style: TextStyle(
-              color: dark ? const Color(0xFF3A1A00) : Colors.white,
-              fontWeight: FontWeight.w900,
-              fontSize: 9.5 * k,
-              letterSpacing: 0.8,
-              height: 1.1,
-            )),
-      );
-
-  /// Şeridin içinde yanıp sönen küçük yıldızlar (konumlar sabit, sırayla parıldar).
-  List<Widget> _sparkles(double w, double h, int n, Color color) {
-    final rnd = math.Random(7);
-    return [
-      for (var i = 0; i < n; i++)
-        () {
-          final x = (0.12 + rnd.nextDouble() * 0.76) * w;
-          final y = (0.12 + rnd.nextDouble() * 0.7) * h;
-          final phase = i / n;
-          final size = h * (0.12 + rnd.nextDouble() * 0.1);
-          return Positioned(
-            left: x,
-            top: y,
-            child: AnimatedBuilder(
-              animation: _c,
-              builder: (_, __) {
-                final v = math.sin(((_c.value + phase) % 1) * math.pi);
-                return Opacity(
-                  opacity: (v * v).clamp(0.0, 1.0),
-                  child: Transform.scale(scale: 0.5 + 0.7 * v, child: Icon(Icons.auto_awesome, size: size, color: color)),
-                );
-              },
-            ),
-          );
-        }(),
-    ];
+  /// Bant üzerinde sırayla parıldayan küçük yıldız.
+  Widget _twinkle(int i, double t, double w, double h, Color color) {
+    final ph = (t * 1.3 + i * 0.29) % 1.0;
+    final v = math.sin(ph * math.pi);
+    final size = h * (0.16 + (i % 3) * 0.05);
+    return Positioned(
+      left: ((i * 0.618 + 0.07) % 1.0) * (w - size),
+      top: (i.isEven ? 0.12 : 0.58) * h,
+      child: Opacity(
+        opacity: (v * v).clamp(0.0, 1.0),
+        child: Transform.scale(scale: 0.5 + 0.7 * v, child: Icon(Icons.auto_awesome, size: size, color: color)),
+      ),
+    );
   }
 
   // ---------------------------------------------------------------- CP

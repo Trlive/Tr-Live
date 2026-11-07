@@ -52,7 +52,7 @@ const _roleLevel = {'user': 1, 'moderator': 2, 'cohost': 3, 'owner': 4};
 
 
 /// Mikrofon emojisi sayısı (assets/images/mic_emoji_1..N.webp; sunucudaki MIC_EMOJI_COUNT ile aynı).
-const kMicEmojiCount = 21;
+const kMicEmojiCount = 22;
 class RoomScreen extends StatefulWidget {
   final String roomId;
   final String initialName;
@@ -3176,14 +3176,33 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         if (_micEmoji[userId] == kCryEmoji)
           Positioned.fill(child: PkCryEmoji(key: ValueKey('emo-$userId-${_micEmojiSeq[userId]}')))
         else if (_micEmoji[userId] != null)
+          // Emoji koltuk dairesini tamamen kaplar: altta daireyi örten koyu zemin, üstte daireden biraz büyük emoji.
           Positioned.fill(
             child: IgnorePointer(
-              child: Image.asset(
-                'assets/images/mic_emoji_${_micEmoji[userId]}.webp',
-                key: ValueKey('emo-$userId-${_micEmojiSeq[userId]}'),
-                fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-                gaplessPlayback: false,
+              child: Center(
+                child: SizedBox(
+                  width: seatR * 2,
+                  height: seatR * 2,
+                  child: Stack(clipBehavior: Clip.none, alignment: Alignment.center, children: [
+                    Container(
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: RadialGradient(colors: [Color(0xFF3A2F5C), Color(0xFF1C1630)]),
+                      ),
+                    ),
+                    OverflowBox(
+                      maxWidth: seatR * 2 * (_micEmoji[userId]! <= 3 ? 1.06 : 1.22),
+                      maxHeight: seatR * 2 * (_micEmoji[userId]! <= 3 ? 1.06 : 1.22),
+                      child: Image.asset(
+                        'assets/images/mic_emoji_${_micEmoji[userId]}.webp',
+                        key: ValueKey('emo-$userId-${_micEmojiSeq[userId]}'),
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                        gaplessPlayback: false,
+                      ),
+                    ),
+                  ]),
+                ),
               ),
             ),
           ),
@@ -3708,15 +3727,19 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                     const SizedBox(width: 7),
                     Flexible(
                       child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, mainAxisSize: MainAxisSize.min, children: [
-                        Row(children: [
+                        Row(mainAxisSize: MainAxisSize.min, children: [
                           if (_room?['hidden'] == true) Padding(padding: const EdgeInsets.only(right: 3), child: Icon(Icons.visibility_off, size: h * 0.3)),
                           if (_room?['locked'] == true) Padding(padding: const EdgeInsets.only(right: 3), child: Icon(Icons.lock, size: h * 0.3, color: Colors.orangeAccent)),
-                          // Oda adı alanı başlığın boş kalan genişliğini kullanır; ad uzunsa sürekli kayar (dışarıdaki kartta değişmez).
+                          // Oda adı alanı en fazla ekranın ~%36'sı; ad sığmazsa sürekli kayar (dışarıdaki kartta değişmez).
                           Flexible(
-                            child: Marquee(
+                            child: ConstrainedBox(
+                              constraints: BoxConstraints(maxWidth: g.w * 0.36),
+                              child: Marquee(
                               height: h * 0.36 * 1.3,
                               speed: 28,
+                              shrinkWrap: true,
                               child: Text(name, maxLines: 1, softWrap: false, style: TextStyle(fontWeight: FontWeight.w800, fontSize: h * 0.36, height: 1.15)),
+                              ),
                             ),
                           ),
                         ]),
@@ -3974,7 +3997,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 
   // ---------- Mikrofon emojileri ----------
-  final Map<String, int> _micEmoji = {}; // kullanıcı → oynayan emoji (1–3; kCryEmoji: PK kaybeden)
+  final Map<String, int> _micEmoji = {}; // kullanıcı → oynayan emoji (1–kMicEmojiCount; kCryEmoji: PK kaybeden)
   final Map<String, int> _micEmojiSeq = {};
   final Map<String, Timer> _micEmojiTimers = {};
   static const kCryEmoji = -1;

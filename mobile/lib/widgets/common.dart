@@ -238,6 +238,8 @@ class UserAvatar extends StatelessWidget {
   }
 }
 
+/// WIP rozeti (Yoho VIP3 görünümü): koyu parlak hap, ince altın çerçeve, eğik altın "WIP3" yazısı.
+/// Tüm kademeler aynı sade rozet; yalnızca SWIP'in üzerinden altın parıltı geçer.
 class WipChip extends StatelessWidget {
   final dynamic level;
   final String? colorHex;
@@ -248,33 +250,97 @@ class WipChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final lvl = wipLevelOf(level);
-    final s = WipStyle.of(lvl);
-    if (lvl == null || s == null) return const SizedBox.shrink();
-    final grad = LinearGradient(colors: s.gradient);
-    const shadow = [Shadow(color: Colors.black54, blurRadius: 2)];
-    if (compact) {
-      return Container(
-        height: 12,
-        alignment: Alignment.center,
-        padding: const EdgeInsets.symmetric(horizontal: 3),
-        decoration: BoxDecoration(gradient: grad, border: Border.all(color: Colors.white54, width: 0.6), borderRadius: BorderRadius.circular(5)),
-        child: Text(wipShort(lvl), style: const TextStyle(fontSize: 8, height: 1.0, color: Colors.white, fontWeight: FontWeight.w900, shadows: shadow)),
-      );
-    }
-    return Container(
-      margin: const EdgeInsets.only(left: 6),
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+    if (lvl == null || lvl < 1) return const SizedBox.shrink();
+    final swip = lvl >= kSwipLevel;
+    final h = compact ? 12.0 : 18.0;
+    final text = compact ? (swip ? 'SWIP' : 'W$lvl') : (swip ? 'SWIP' : 'WIP$lvl');
+    final chip = Container(
+      height: h,
+      padding: EdgeInsets.all(compact ? 0.9 : 1.3),
       decoration: BoxDecoration(
-        gradient: grad,
-        border: Border.all(color: Colors.white38, width: 0.6),
-        borderRadius: BorderRadius.circular(8),
-        boxShadow: lvl >= 6 ? [BoxShadow(color: s.color.withValues(alpha: 0.6), blurRadius: 6)] : null,
+        borderRadius: BorderRadius.circular(h / 2),
+        // İnce altın çerçeve (her yanda eşit)
+        gradient: const LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFFF8E7B5), Color(0xFFD9AE5C), Color(0xFFF3D892)]),
+        boxShadow: swip ? const [BoxShadow(color: Color(0x88F2C14E), blurRadius: 6)] : null,
       ),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        if (lvl >= 6) Padding(padding: const EdgeInsets.only(right: 2), child: Text(s.isSwip ? '👻' : '👑', style: const TextStyle(fontSize: 9))),
-        Text(wipLabel(lvl), style: const TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.w900, shadows: shadow)),
-      ]),
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: h * 0.5),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(h / 2),
+          // Koyu, üstü parlak zemin
+          gradient: const LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFF4A4A4E), Color(0xFF242427), Color(0xFF151517)], stops: [0, 0.48, 1]),
+        ),
+        child: ShaderMask(
+          blendMode: BlendMode.srcIn,
+          shaderCallback: (r) => const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFFFFF4D6), Color(0xFFF1D08A), Color(0xFFD9A955)],
+          ).createShader(r),
+          child: Text(
+            text,
+            maxLines: 1,
+            style: TextStyle(fontSize: compact ? 8 : 11.5, height: 1.0, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic, letterSpacing: 0.2, color: Colors.white),
+          ),
+        ),
+      ),
     );
+    final out = swip ? _GoldSweep(radius: h / 2, child: chip) : chip;
+    // Satır içinde genişlemesin (Wrap / Row içinde yalnızca yazı kadar).
+    return Padding(padding: EdgeInsets.only(left: compact ? 0 : 6), child: IntrinsicWidth(child: out));
+  }
+}
+
+/// SWIP rozetinin üzerinden soldan sağa geçen altın parıltı.
+class _GoldSweep extends StatefulWidget {
+  final Widget child;
+  final double radius;
+  const _GoldSweep({required this.child, required this.radius});
+
+  @override
+  State<_GoldSweep> createState() => _GoldSweepState();
+}
+
+class _GoldSweepState extends State<_GoldSweep> with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 2200))..repeat();
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(children: [
+      widget.child,
+      Positioned.fill(
+        child: IgnorePointer(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(widget.radius),
+            child: AnimatedBuilder(
+              animation: _c,
+              builder: (_, __) {
+                // Geçiş zamanın %60'ında; kalan sürede bekler.
+                final t = (_c.value / 0.6).clamp(0.0, 1.0);
+                return FractionalTranslation(
+                  translation: Offset(-1 + 2.2 * t, 0),
+                  child: Transform(
+                    transform: Matrix4.skewX(-0.5),
+                    child: const DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(colors: [Color(0x00FFE9A8), Color(0xCCFFF1C2), Color(0x00FFE9A8)], stops: [0.3, 0.5, 0.7]),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    ]);
   }
 }
 

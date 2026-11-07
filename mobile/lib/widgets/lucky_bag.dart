@@ -367,32 +367,32 @@ class _ClaimDialogState extends State<_ClaimDialog> {
       return Padding(
         padding: const EdgeInsets.only(right: 16),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Text('${i + 1}.', style: TextStyle(color: medal, fontWeight: FontWeight.w900, fontSize: 12)),
+          Text('${i + 1}.', style: TextStyle(color: medal, fontWeight: FontWeight.w900, fontSize: 14)),
           const SizedBox(width: 4),
-          UserAvatar(user: u, radius: 10),
+          UserAvatar(user: u, radius: 12),
           const SizedBox(width: 4),
           ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 110),
-            child: Text('${u?['displayName'] ?? ''}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12)),
+            child: Text('${u?['displayName'] ?? ''}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14)),
           ),
           const SizedBox(width: 4),
-          const Fig('bag_coin', width: 14, height: 14),
+          const Fig('bag_coin', width: 17, height: 17),
           const SizedBox(width: 2),
-          Text(fmtNumber(c['amount']), style: const TextStyle(color: Color(0xFFFFE082), fontWeight: FontWeight.w900, fontSize: 12)),
+          Text(fmtNumber(c['amount']), style: const TextStyle(color: Color(0xFFFFE082), fontWeight: FontWeight.w900, fontSize: 14)),
         ]),
       );
     }
 
     return Container(
-      height: 34,
+      height: 40,
       padding: const EdgeInsets.symmetric(horizontal: 8),
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.42),
-        borderRadius: BorderRadius.circular(17),
+        color: Colors.black.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(color: const Color(0xFFF2B92A), width: 1),
       ),
       child: Marquee(
-        height: 34,
+        height: 40,
         always: _claims.length > 1,
         alignX: 0,
         speed: 38,
@@ -403,7 +403,7 @@ class _ClaimDialogState extends State<_ClaimDialog> {
     );
   }
 
-  Widget _okButton() => _yellowButton('Tamam', () => Navigator.of(context).maybePop(), height: 38);
+  Widget _okButton() => _yellowButton('Tamam', () => Navigator.of(context).maybePop(), height: 44);
 
   @override
   Widget build(BuildContext context) {
@@ -419,36 +419,36 @@ class _ClaimDialogState extends State<_ClaimDialog> {
       // Kazanç: parıltılı altın para, xTutar, Tebrikler!
       body = Column(mainAxisSize: MainAxisSize.min, children: [
         SizedBox(
-          width: 110,
-          height: 92,
+          width: 130,
+          height: 110,
           child: Stack(alignment: Alignment.center, children: [
-            const Fig('fam_shine', width: 110, height: 110),
+            const Fig('fam_shine', width: 130, height: 130),
             TweenAnimationBuilder<double>(
               tween: Tween(begin: 0.4, end: 1),
               duration: const Duration(milliseconds: 520),
               curve: Curves.elasticOut,
               builder: (_, k, child) => Transform.scale(scale: k, child: child),
-              child: const Fig('bag_coin', width: 66, height: 66),
+              child: const Fig('bag_coin', width: 80, height: 80),
             ),
           ]),
         ),
-        Text('x${fmtNumber(_won)}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 21)),
+        Text('x${fmtNumber(_won)}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 27)),
         const SizedBox(height: 2),
-        const Text('Tebrikler!', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 17)),
+        const Text('Tebrikler!', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 21)),
         const SizedBox(height: 6),
-        Text('$name takip et ve bir sonrakini kaçırma!', textAlign: TextAlign.center, maxLines: 2, style: const TextStyle(color: Color(0xFFFFF3B0), fontWeight: FontWeight.w600, fontSize: 12.5)),
+        Text('$name takip et ve bir sonrakini kaçırma!', textAlign: TextAlign.center, maxLines: 2, style: const TextStyle(color: Color(0xFFFFF3B0), fontWeight: FontWeight.w600, fontSize: 14.5)),
         if (_claims.isNotEmpty) ...[const SizedBox(height: 10), _claimsStrip()],
         const SizedBox(height: 12),
         _okButton(),
       ]);
     } else if (_failed != null || (expired && _won == null)) {
       body = Column(mainAxisSize: MainAxisSize.min, children: [
-        const Fig('bag_sad', width: 70, height: 70),
+        const Fig('bag_sad', width: 84, height: 84),
         const SizedBox(height: 12),
         Text(
           _failed == null || _failed!.contains('tükendi') || _failed!.contains('doldu') ? 'Üzgünüm, bu şanslı çanta zaten açılmış...' : _failed!,
           textAlign: TextAlign.center,
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13.5),
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 16),
         ),
         const SizedBox(height: 16),
         _okButton(),
@@ -458,33 +458,33 @@ class _ClaimDialogState extends State<_ClaimDialog> {
         Container(
           padding: const EdgeInsets.all(2),
           decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.white),
-          child: UserAvatar(user: sender, radius: 24),
+          child: UserAvatar(user: sender, radius: 31),
         ),
         const SizedBox(height: 4),
-        Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15)),
+        Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 19)),
         const SizedBox(height: 3),
         Row(mainAxisSize: MainAxisSize.min, children: [
-          LevelPill(level: sender?['coinLevel'] ?? 1, send: true, height: 13),
-          const SizedBox(width: 4),
-          LevelPill(level: sender?['giftLevel'] ?? 1, send: false, height: 13),
+          LevelPill(level: sender?['coinLevel'] ?? 1, send: true, height: 16),
+          const SizedBox(width: 5),
+          LevelPill(level: sender?['giftLevel'] ?? 1, send: false, height: 16),
         ]),
         const SizedBox(height: 4),
-        Text(_super ? 'Süper şanslı çanta gönderdi' : 'Şanslı çanta gönderdi', style: const TextStyle(color: Color(0xFFFFF3B0), fontSize: 11.5, fontWeight: FontWeight.w600)),
+        Text(_super ? 'Süper şanslı çanta gönderdi' : 'Şanslı çanta gönderdi', style: const TextStyle(color: Color(0xFFFFF3B0), fontSize: 14.5, fontWeight: FontWeight.w700)),
         const SizedBox(height: 8),
         Row(mainAxisSize: MainAxisSize.min, children: [
-          const Fig('bag_coin', width: 20, height: 20),
-          const SizedBox(width: 5),
-          Text(fmtNumber(_b['totalCoins']), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Colors.white)),
+          const Fig('bag_coin', width: 27, height: 27),
+          const SizedBox(width: 6),
+          Text(fmtNumber(_b['totalCoins']), style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: Colors.white)),
         ]),
-        Text('${_b['claimed']}/${_b['slots']} kişi açtı', style: const TextStyle(color: Colors.white70, fontSize: 10.5)),
+        Text('${_b['claimed']}/${_b['slots']} kişi açtı', style: const TextStyle(color: Colors.white70, fontSize: 13)),
         if (showNote) ...[
           const SizedBox(height: 8),
           // Not bir kez gönderilir; gönderilince gri olur ve yeniden dokunulamaz.
           Text('"${_b['note']}"', textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: needNote ? Colors.white : Colors.white54, fontWeight: FontWeight.w700, fontSize: 13)),
+              style: TextStyle(color: needNote ? Colors.white : Colors.white54, fontWeight: FontWeight.w700, fontSize: 15)),
           const SizedBox(height: 4),
           SizedBox(
-            height: 30,
+            height: 34,
             child: FilledButton(
               style: FilledButton.styleFrom(
                 backgroundColor: Colors.white,
@@ -492,7 +492,7 @@ class _ClaimDialogState extends State<_ClaimDialog> {
                 disabledBackgroundColor: const Color(0xFF9E9E9E),
                 disabledForegroundColor: const Color(0xFFEEEEEE),
                 padding: const EdgeInsets.symmetric(horizontal: 12),
-                textStyle: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
+                textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
               ),
               onPressed: _busy || !needNote ? null : _sendNote,
               child: Text(needNote ? 'Notu sohbete gönder' : 'Not gönderildi ✓'),
@@ -504,9 +504,9 @@ class _ClaimDialogState extends State<_ClaimDialog> {
         GestureDetector(
           onTap: canOpen ? _open : null,
           child: Container(
-            width: 64,
-            height: 64,
-            padding: const EdgeInsets.all(4),
+            width: 78,
+            height: 78,
+            padding: const EdgeInsets.all(5),
             decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0x66FFFFFF)),
             child: Container(
               alignment: Alignment.center,
@@ -515,8 +515,8 @@ class _ClaimDialogState extends State<_ClaimDialog> {
                 gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFFFFFDE7), Color(0xFFFFF176)]),
               ),
               child: _busy
-                  ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 3, color: Color(0xFFE5257E)))
-                  : Text(counting ? _mmss(_toOpen) : 'AÇ', style: TextStyle(color: const Color(0xFFE5257E), fontWeight: FontWeight.w900, fontSize: counting ? 15 : 20)),
+                  ? const SizedBox(width: 26, height: 26, child: CircularProgressIndicator(strokeWidth: 3, color: Color(0xFFE5257E)))
+                  : Text(counting ? _mmss(_toOpen) : 'AÇ', style: TextStyle(color: const Color(0xFFE5257E), fontWeight: FontWeight.w900, fontSize: counting ? 18 : 25)),
             ),
           ),
         ),
@@ -524,7 +524,7 @@ class _ClaimDialogState extends State<_ClaimDialog> {
     }
     // Odanın ortasında kare kart (bir tık büyütüldü; kazanç listesi varken biraz uzar).
     final side = (MediaQuery.sizeOf(context).width * 0.76).clamp(250.0, 330.0);
-    final tall = _won != null && _claims.isNotEmpty ? 46.0 : 0.0;
+    final tall = _won != null && _claims.isNotEmpty ? 56.0 : 0.0;
     return Dialog(
       backgroundColor: Colors.transparent,
       insetPadding: EdgeInsets.zero,

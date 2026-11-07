@@ -110,23 +110,21 @@ class _FlyItemState extends State<_FlyItem> with SingleTickerProviderStateMixin 
     final m = widget.m;
     final u = mapOf(m['user']);
     final welcome = mapOf(m['welcomeTo']);
-    final colors = welcome != null
-        ? const [Color(0xF000BFA5), Color(0xE064DD17), Color(0x0064DD17)]
-        : const [Color(0xF0FF4081), Color(0xE07C4DFF), Color(0x007C4DFF)];
     final pill = Container(
       key: _key,
       constraints: BoxConstraints(maxWidth: sw * 0.9),
       height: 38,
       padding: const EdgeInsets.fromLTRB(3, 3, 18, 3),
       decoration: BoxDecoration(
+        // Saydam siyah zemin, ince uygulama sarısı çerçeve.
         borderRadius: BorderRadius.circular(19),
-        gradient: LinearGradient(colors: colors, stops: const [0, 0.75, 1]),
-        border: const Border(top: BorderSide(color: Color(0x80FFFFFF), width: 0.8)),
+        color: Colors.black.withValues(alpha: 0.5),
+        border: Border.all(color: const Color(0xFFF2B92A), width: 1),
       ),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
         Container(
           padding: const EdgeInsets.all(1.4),
-          decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.white),
+          decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFFF2B92A)),
           child: UserAvatar(user: u, radius: 14.5),
         ),
         const SizedBox(width: 6),

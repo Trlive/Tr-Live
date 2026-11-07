@@ -406,7 +406,6 @@ class SocialUserTile extends StatelessWidget {
                 Wrap(spacing: 4, runSpacing: 3, crossAxisAlignment: WrapCrossAlignment.center, children: [
                   if (u['coinLevel'] != null) LevelPill(level: u['coinLevel'], send: true, height: 16),
                   if (u['giftLevel'] != null) LevelPill(level: u['giftLevel'], send: false, height: 16),
-                  if (u['wipLevel'] != null) WipChip(level: u['wipLevel'], compact: true),
                 ]),
                 if (sub != null && sub.isNotEmpty) ...[
                   const SizedBox(height: 3),
