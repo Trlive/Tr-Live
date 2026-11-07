@@ -211,8 +211,8 @@ class _GlobalGiftStripState extends State<GlobalGiftStrip> with SingleTickerProv
 
   // ---------------------------------------------------------------- 2) 400 bin – 1 milyon
 
-  /// Aynı altın-kırmızı şerit, daha büyük ve canlı: arkasında nabız gibi atan altın ışık, bant üzerinde parıltı ve
-  /// yıldızlar, ışınlı büyük hediye, parlayan adet.
+  /// Aynı şerit gümüş renkte (süsler parlak gümüş, bant koyu füme), daha büyük ve canlı: arkasında atan gümüş ışık,
+  /// üzerinden kayan beyaz parıltı, yıldızlar, kenarında dolaşan gümüş ışık, yağan gümüş tozları, ışınlı büyük hediye.
   Widget _bigStrip(double sw) => _ribbon(sw, legend: false);
 
   // ---------------------------------------------------------------- 3) 1 milyon ve üstü
@@ -221,8 +221,8 @@ class _GlobalGiftStripState extends State<GlobalGiftStrip> with SingleTickerProv
   /// dolaşan altın ışık, atan amblem, yağan altın tozları, toplam Coin.
   Widget _legendStrip(double sw) => _ribbon(sw, legend: true);
 
-  /// 400K+ ve 1M+ şerit: var olan altın-kırmızı şerit korunur, üzerine ışık ve parıltı eklenir.
-  /// 400K+: şeridin biçimini izleyen sıcak ışık halesi, şerit (süsler dahil) üzerinden kayan parlak ışık, süslerin
+  /// 400K+ ve 1M+ şerit: var olan şeridin biçimi korunur, üzerine ışık ve parıltı eklenir.
+  /// 400K+: şerit gümüş renge döner; şeridin biçimini izleyen gümüş ışık halesi, şerit (süsler dahil) üzerinden kayan parlak ışık, süslerin
   /// üstünde patlayan yıldız parıltıları, banttan yükselen ışık taneleri, amblemde parlama.
   /// 1M+: kırmızı bant altın sarısına döner; altın hale daha güçlü, altın parıltı iki kez geçer, amblemin arkasında dönen
   /// altın ışınlar, bandın kenarında dolaşan altın ışık, yağan altın tozları, toplam Coin.
@@ -233,10 +233,10 @@ class _GlobalGiftStripState extends State<GlobalGiftStrip> with SingleTickerProv
     // Görseldeki bant: genişliğin ~%2–%98'i, yüksekliğin ~%35,5–%83'ü.
     final bandL = w * 0.02, bandT = h * 0.355, bandW = w * 0.96, bandH = h * 0.475;
     final band = RRect.fromRectAndRadius(Rect.fromLTWH(bandL, bandT, bandW, bandH), Radius.circular(bandH / 2));
-    final glow = legend ? const Color(0xFFFFD54F) : const Color(0xFFFFA94D);
-    final star = legend ? const Color(0xFFFFE57F) : const Color(0xFFFFF3E0);
+    final glow = legend ? const Color(0xFFFFD54F) : const Color(0xFFD6E4FF);
+    final star = legend ? const Color(0xFFFFE57F) : const Color(0xFFF4F8FF);
     Widget ribbon() => Image.asset('assets/images/gift_ribbon_gold.webp', width: w, height: h, fit: BoxFit.fill);
-    // 1M+: yalnızca kırmızı bant altın sarısı (süsler olduğu gibi kalır).
+    // 1M+: yalnızca kırmızı bant altın sarısı (süsler olduğu gibi kalır). 400K+: tüm şerit gümüş.
     Widget visual() => legend
         ? Stack(children: [
             ribbon(),
@@ -245,7 +245,7 @@ class _GlobalGiftStripState extends State<GlobalGiftStrip> with SingleTickerProv
               child: ColorFiltered(colorFilter: const ColorFilter.matrix(_kGoldBand), child: ribbon()),
             ),
           ])
-        : ribbon();
+        : ColorFiltered(colorFilter: const ColorFilter.matrix(_kSilver), child: ribbon());
     // Süslerin üzerindeki parıltı noktaları (genişlik/yükseklik oranı).
     const glints = [
       Offset(0.5, 0.12), Offset(0.36, 0.24), Offset(0.64, 0.24), Offset(0.2, 0.3), Offset(0.8, 0.3),
@@ -319,10 +319,15 @@ class _GlobalGiftStripState extends State<GlobalGiftStrip> with SingleTickerProv
                 child: IgnorePointer(
                   child: Opacity(
                     opacity: (math.sin(t * math.pi * 2 * (legend ? 2 : 1)) * 0.5 + 0.5) * (legend ? 0.95 : 0.75),
-                    child: const DecoratedBox(
+                    child: DecoratedBox(
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        gradient: RadialGradient(colors: [Color(0xFFFFFFFF), Color(0x99FFE082), Color(0x00FFC107)], stops: [0, 0.25, 1]),
+                        gradient: RadialGradient(
+                          colors: legend
+                              ? const [Color(0xFFFFFFFF), Color(0x99FFE082), Color(0x00FFC107)]
+                              : const [Color(0xFFFFFFFF), Color(0x99DCE8FF), Color(0x00A9C4FF)],
+                          stops: const [0, 0.25, 1],
+                        ),
                       ),
                     ),
                   ),
@@ -371,9 +376,8 @@ class _GlobalGiftStripState extends State<GlobalGiftStrip> with SingleTickerProv
                     ),
                   );
                 }(),
-              // 1M+: bandın kenarında dolaşan altın ışık (kuyruklu)
-              if (legend)
-                for (final off in [0.0, 0.5])
+              // Bandın kenarında dolaşan ışık (kuyruklu): 1M+ iki altın, 400K+ bir gümüş
+              for (final off in legend ? const [0.0, 0.5] : const [0.25])
                   for (var k = 0; k < 4; k++)
                     () {
                       final p = _perimeter((t * 0.6 + off - k * 0.012 + 1) % 1, bandW, bandH);
@@ -387,20 +391,24 @@ class _GlobalGiftStripState extends State<GlobalGiftStrip> with SingleTickerProv
                             child: Container(
                               width: d,
                               height: d,
-                              decoration: const BoxDecoration(
+                              decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                gradient: RadialGradient(colors: [Color(0xFFFFFFFF), Color(0xFFFFE57F), Color(0x00FFC93C)], stops: [0, 0.35, 1]),
+                                gradient: RadialGradient(
+                                  colors: legend
+                                      ? const [Color(0xFFFFFFFF), Color(0xFFFFE57F), Color(0x00FFC93C)]
+                                      : const [Color(0xFFFFFFFF), Color(0xFFDCE8FF), Color(0x00A9C4FF)],
+                                  stops: const [0, 0.35, 1],
+                                ),
                               ),
                             ),
                           ),
                         ),
                       );
                     }(),
-              // 1M+: yağan altın tozları
-              if (legend)
-                for (var i = 0; i < 12; i++)
+              // Yağan tozlar: 1M+ altın (12), 400K+ gümüş (7)
+              for (var i = 0; i < (legend ? 12 : 7); i++)
                   () {
-                    final ph = (t * 1.2 + i / 12) % 1.0;
+                    final ph = (t * 1.2 + i / (legend ? 12 : 7)) % 1.0;
                     final x = ((i * 0.37 + 0.04) % 1.0) * w;
                     return Positioned(
                       left: x,
@@ -410,7 +418,11 @@ class _GlobalGiftStripState extends State<GlobalGiftStrip> with SingleTickerProv
                           opacity: math.sin(ph * math.pi).clamp(0.0, 1.0),
                           child: Transform.rotate(
                             angle: ph * math.pi * 2,
-                            child: SizedBox(width: h * 0.12, height: h * 0.12, child: CustomPaint(painter: _GlintPainter(const Color(0xFFFFD54F)))),
+                            child: SizedBox(
+                              width: h * (legend ? 0.12 : 0.1),
+                              height: h * (legend ? 0.12 : 0.1),
+                              child: CustomPaint(painter: _GlintPainter(legend ? const Color(0xFFFFD54F) : const Color(0xFFE8F0FF))),
+                            ),
                           ),
                         ),
                       ),
@@ -423,16 +435,20 @@ class _GlobalGiftStripState extends State<GlobalGiftStrip> with SingleTickerProv
                 top: bandT,
                 height: bandH,
                 child: Row(children: [
-                  _avatar(bandH * 0.37, legend ? const [Color(0xFFFFFFFF), Color(0xFFFFD54F), Color(0xFFB8860B)] : const [Color(0xFFFFF1A8), Color(0xFFFFB300)]),
+                  _avatar(bandH * 0.37, legend ? const [Color(0xFFFFFFFF), Color(0xFFFFD54F), Color(0xFFB8860B)] : const [Color(0xFFFFFFFF), Color(0xFFC9D6E6), Color(0xFF7D8DA1)]),
                   SizedBox(width: w * 0.02),
-                  Expanded(child: legend ? _texts(fs, name: Colors.white, to: const Color(0xFFFFF8E1), strong: true) : _texts(fs)),
+                  Expanded(
+                    child: legend
+                        ? _texts(fs, name: Colors.white, to: const Color(0xFFFFF8E1), strong: true)
+                        : _texts(fs, name: const Color(0xFFE3ECFA), to: Colors.white),
+                  ),
                   SizedBox(
                     width: bandH * 1.05,
                     height: bandH,
                     child: OverflowBox(
                       maxWidth: bandH * 1.35,
                       maxHeight: bandH * 1.35,
-                      child: _giftIcon(bandH * 1.35, rays: true, glow: legend ? const Color(0xCCFFF59D) : const Color(0xAAFFE082)),
+                      child: _giftIcon(bandH * 1.35, rays: true, glow: legend ? const Color(0xCCFFF59D) : const Color(0xBBDCE8FF)),
                     ),
                   ),
                   SizedBox(width: w * 0.008),
@@ -441,7 +457,7 @@ class _GlobalGiftStripState extends State<GlobalGiftStrip> with SingleTickerProv
                       scale: 1 + 0.1 * pulse,
                       child: legend
                           ? _qty(fs * 1.6, color: Colors.white, glow: const Color(0xFFB8860B))
-                          : _qty(fs * 1.5, color: const Color(0xFFFFE57F), glow: const Color(0xFFFF6D00)),
+                          : _qty(fs * 1.5, color: const Color(0xFFF4F8FF), glow: const Color(0xFF6E9BFF)),
                     ),
                     if (legend)
                       Text('${fmtNumber(e['totalCoins'])} Coin',
@@ -595,6 +611,14 @@ const List<double> _kGoldBand = [
 ];
 
 /// Yalnızca bandı (yuvarlak köşeli dikdörtgen) bırakan kırpma.
+/// 400K+ şerit: gümüş (altın süsler parlak gümüş-mavi, kırmızı bant koyu füme; kontrast artırılmış, hafif soğuk ton).
+const List<double> _kSilver = [
+  0.36, 0.708, 0.132, 0, -17.6,
+  0.375, 0.7375, 0.1375, 0, -18,
+  0.39, 0.767, 0.143, 0, -10.4,
+  0, 0, 0, 1, 0,
+];
+
 class _RRectClip extends CustomClipper<RRect> {
   final RRect r;
   _RRectClip(this.r);

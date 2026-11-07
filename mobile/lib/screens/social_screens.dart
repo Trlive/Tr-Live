@@ -452,22 +452,26 @@ class _RoomStatusIconState extends State<RoomStatusIcon> with SingleTickerProvid
   @override
   Widget build(BuildContext context) {
     final k = widget.kind;
-    final colors = k == 'video'
-        ? const [Color(0xFFFF9F0A), Color(0xFFFF5E3A)]
-        : k == 'audio'
-            ? const [Color(0xFF16C25B), Color(0xFF0E9F6E)]
-            : const [Color(0xFFFF4F9A), Color(0xFFB0127A)];
+    // Oda kartlarıyla aynı tip: koyu cam kapsül, ince uygulama sarısı çerçeve, altın simge ve yazı.
     return GestureDetector(
       onTap: widget.onTap,
       child: Container(
         height: 30,
         padding: const EdgeInsets.symmetric(horizontal: 10),
         decoration: BoxDecoration(
-          gradient: LinearGradient(colors: colors),
+          color: const Color(0x99000000),
           borderRadius: BorderRadius.circular(15),
-          boxShadow: [BoxShadow(color: colors.first.withValues(alpha: 0.45), blurRadius: 8)],
+          border: Border.all(color: const Color(0xD9F2B92A), width: 1),
+          boxShadow: const [BoxShadow(color: Color(0x40F2B92A), blurRadius: 6)],
         ),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
+        child: ShaderMask(
+          blendMode: BlendMode.srcIn,
+          shaderCallback: (r) => const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFFFFF3B0), Color(0xFFF2B92A), Color(0xFFC98A12)],
+          ).createShader(r),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
           if (k == 'audio' || k == 'video')
             Icon(k == 'video' ? Icons.videocam_rounded : Icons.mic_rounded, color: Colors.white, size: 18)
           else
@@ -486,7 +490,8 @@ class _RoomStatusIconState extends State<RoomStatusIcon> with SingleTickerProvid
             ),
           const SizedBox(width: 5),
           Text(k == 'live' ? 'Odada' : 'Oda', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 12)),
-        ]),
+          ]),
+        ),
       ),
     );
   }

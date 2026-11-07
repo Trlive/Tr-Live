@@ -1,3 +1,16 @@
+## v2.88.0 — Gümüş 400K şeridi, düz oda ID, sade oda simgeleri, siyah-sarı müzik, yükseltilmiş kartlar, eşit rozetler
+- 400K–1M global hediye şeridi gümüş: süsler parlak gümüş, bant koyu füme; gümüş ışık halesi, beyaz parıltı, yıldızlar,
+  bandın kenarında dolaşan gümüş ışık, yağan gümüş tozları, gümüş halkalı avatar ve parlayan adet (1M+ altın aynı).
+- Oda başlığındaki ve oda bilgisindeki ID yine düz yazı ("ID:2147"): sahibin güncel kimliği (özel ID varsa o), renkli ya
+  da özel olsa da burada süssüz görünür.
+- Oda kartı sol üst simgeleri (sesli / görüntülü, PK, Yükseliyor) tek tip: koyu cam kapsül, ince uygulama sarısı çerçeve,
+  altın simge; dinleyici simgesi de altın. Takip/fan listelerindeki "Oda / Odada" simgesi de aynı tarz.
+- Müzik sayfaları, küçük çalar, ses düzeyi, plak ve DJ paneli siyah-sarı: siyah zemin, altın düğmeler ve çizgiler.
+- Banner'a parlak altın çerçeve ve ışıma; banner ve oda kartları altında gölge ve üst kenarda ince ışıkla bir kademe
+  yükseltilmiş görünür.
+- WIP, seviye ve CP kutucukları her yerde eşit: WIP rozeti yanındaki seviye etiketiyle aynı yükseklik ve en az aynı
+  genişlikte (sohbet, profil kartı, listeler, paylaşımlar, giriş şeridi); profil kartındaki küçük etiketler de aynı boy.
+
 ## v2.87.0 — Gizli kullanıcı (Yoho gizemli kişi gibi)
 - Gizli kullanıcı modu odadayken açılıp kapatılamaz (sahibi olduğun açık oda da sayılır): "önce odadan çık" uyarısı çıkar.
   Böylece odadakiler gizli kişinin kim olduğunu eşleştiremez. WIP bitince gizlilik de kişi odadan çıktıktan sonra kapanır.

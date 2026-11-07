@@ -156,7 +156,7 @@ class _EntranceBannerState extends State<EntranceBanner> with SingleTickerProvid
                 boxShadow: s != null && lvl >= 6 ? [BoxShadow(color: s.color.withValues(alpha: 0.55), blurRadius: 12)] : null,
               ),
               child: Row(children: [
-                if (s != null) WipChip(level: u['wipBadge'] ?? u['wipLevel'], compact: true),
+                if (s != null) WipChip(level: u['wipBadge'] ?? u['wipLevel'], height: 15 * k),
                 if (coin != null) Padding(padding: EdgeInsets.only(left: 4 * k), child: LevelPill(level: coin, send: true, height: 15 * k)),
                 if (gift != null && gift > 1) Padding(padding: EdgeInsets.only(left: 3 * k), child: LevelPill(level: gift, send: false, height: 15 * k)),
                 SizedBox(width: 6 * k),

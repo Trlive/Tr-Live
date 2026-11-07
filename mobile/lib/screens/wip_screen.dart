@@ -158,7 +158,7 @@ class _WipScreenState extends State<WipScreen> {
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          WipChip(level: sel),
+          WipChip(level: sel, height: 22),
           const SizedBox(width: 8),
           Expanded(child: Text('${tier['name'] ?? s.label}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Colors.white))),
         ]),
@@ -181,7 +181,8 @@ class _WipScreenState extends State<WipScreen> {
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(mainAxisSize: MainAxisSize.min, children: [
                 Flexible(child: WipNameText(myName, level: sel, color: nameColor, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700))),
-                WipChip(level: sel),
+                const SizedBox(width: 5),
+                WipChip(level: sel, height: 18),
               ]),
               const SizedBox(height: 4),
               Text('${s.nameFxText} · ${s.animatedFrame ? 'hareketli çerçeve' : 'çerçeve'}', style: const TextStyle(color: Colors.white60, fontSize: 12)),

@@ -282,7 +282,7 @@ class _PostCardState extends State<PostCard> {
                       const SizedBox(height: 3),
                       Wrap(spacing: 4, runSpacing: 3, crossAxisAlignment: WrapCrossAlignment.center, children: [
                         if (wipLevelOf(u?['wipBadge'] ?? u?['wipLevel']) != null)
-                          Transform.translate(offset: const Offset(-6, 0), child: WipChip(level: u?['wipBadge'] ?? u?['wipLevel'], colorHex: u?['nameColor'] as String?)),
+                          WipChip(level: u?['wipBadge'] ?? u?['wipLevel'], colorHex: u?['nameColor'] as String?, height: 16),
                         // Gizli kullanıcıda seviye gösterilmez.
                         if (u?['isHidden'] != true) LevelPill(level: u?['coinLevel'] ?? 1, send: true, height: 16),
                         if (gift > 1 && u?['isHidden'] != true) LevelPill(level: gift, send: false, height: 16),

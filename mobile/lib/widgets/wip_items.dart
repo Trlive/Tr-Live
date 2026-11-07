@@ -44,7 +44,7 @@ Widget wipItemArt(String type, int level, double size) {
         ]),
       );
     case 'badge':
-      return WipChip(level: level);
+      return WipChip(level: level, height: 20);
     case 'chat_bubble':
       return WipBubble(level: level, fallback: const Color(0x8C13285A), child: const Text('Merhaba', style: TextStyle(fontSize: 12)));
     case 'vehicle':

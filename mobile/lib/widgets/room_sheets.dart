@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../services/api.dart';
 import 'app_theme.dart';
 import 'common.dart';
@@ -399,12 +400,18 @@ void showRoomCard(
           ]),
           const SizedBox(height: 12),
           Text((room['name'] ?? '').toString(), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
-          // Oda kimliği = sahibinin kimliği (Yoho): özel / renkli / normal ID sahibin kimliği gibi görünür, dokununca kopyalanır.
-          const SizedBox(height: 4),
-          if (displayIdOf(owner ?? mapOf(room['owner'])).isNotEmpty)
-            Align(alignment: Alignment.centerLeft, child: IdBadge(user: owner ?? mapOf(room['owner']), fontSize: 13))
-          else if ((room['roomNumber'] ?? '').toString().isNotEmpty)
-            Text('ID: ${room['roomNumber']}', style: const TextStyle(color: Colors.white54, fontSize: 12)),
+          // Oda kimliği = sahibinin güncel kimliği; renkli/özel olsa da düz yazı. Dokununca kopyalanır.
+          if (roomIdOf(room, owner ?? mapOf(room['owner'])).isNotEmpty)
+            GestureDetector(
+              onTap: () {
+                Clipboard.setData(ClipboardData(text: roomIdOf(room, owner ?? mapOf(room['owner']))));
+                toast(context, 'Oda ID kopyalandı.');
+              },
+              child: Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text('ID: ${roomIdOf(room, owner ?? mapOf(room['owner']))}', style: const TextStyle(color: Colors.white54, fontSize: 12)),
+              ),
+            ),
           const SizedBox(height: 14),
           const Text('Oda Duyurusu', style: TextStyle(fontWeight: FontWeight.w800)),
           const SizedBox(height: 4),

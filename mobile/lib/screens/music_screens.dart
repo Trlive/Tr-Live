@@ -8,15 +8,25 @@ import '../services/session.dart';
 import '../widgets/common.dart';
 import '../widgets/marquee.dart';
 
-// Müzik (Yoho düzeni): beyaz liste sayfaları ("Müzik", "Yerel eklendi"), altta koyu küçük çalar;
+// Müzik (Yoho düzeni, siyah-sarı): siyah liste sayfaları ("Müzik", "Yerel eklendi"), altta altın çizgili küçük çalar;
 // odada yalnızca müziği çalan kişiye görünen plak ve DJ paneli. Odadaki diğer kullanıcılar müzik kutusunu görmez,
 // yalnızca müziği duyar (ses düzeyini DJ ayarlar).
-const _text = Color(0xFF1F2330);
-const _sub = Color(0xFF9AA3B5);
-const _green = Color(0xFF12C95A);
-const _line = Color(0xFFEEF0F4);
-const _band = Color(0xFFF2F4F8);
-const _player = Color(0xFF3A3D45);
+const _bg = Color(0xFF0B0B0D);
+const _text = Color(0xFFF5F5F7);
+const _sub = Color(0xFF8C8C96);
+const _gold = Color(0xFFF2B92A);
+const _goldHi = Color(0xFFFFE08A);
+const _idle = Color(0xFF55555E);
+const _line = Color(0xFF232328);
+const _band = Color(0xFF15151A);
+const _player = Color(0xFF111114);
+
+/// Siyah-sarı tema (sayfa içi düğme, imleç, seçim renkleri altın).
+final ThemeData _musicTheme = ThemeData.dark(useMaterial3: true).copyWith(
+  scaffoldBackgroundColor: _bg,
+  colorScheme: const ColorScheme.dark(primary: _gold, secondary: _gold, surface: _band, onPrimary: Colors.black),
+  textSelectionTheme: const TextSelectionThemeData(cursorColor: _gold, selectionColor: Color(0x55F2B92A), selectionHandleColor: _gold),
+);
 
 String _mmss(num ms) {
   final s = (ms / 1000).floor();
@@ -31,7 +41,7 @@ void openRoomMusic(BuildContext context, {required String roomId, required bool 
 }
 
 PreferredSizeWidget _bar(BuildContext context, String title, List<Widget> actions) => AppBar(
-      backgroundColor: Colors.white,
+      backgroundColor: _bg,
       foregroundColor: _text,
       elevation: 0,
       scrolledUnderElevation: 0,
@@ -39,7 +49,8 @@ PreferredSizeWidget _bar(BuildContext context, String title, List<Widget> action
       leading: IconButton(icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 22), onPressed: () => Navigator.maybePop(context)),
       title: Text(title, style: const TextStyle(color: _text, fontSize: 19, fontWeight: FontWeight.w800)),
       actions: [...actions, const SizedBox(width: 6)],
-      bottom: const PreferredSize(preferredSize: Size.fromHeight(1), child: Divider(height: 1, color: _line)),
+      // Altında ince altın çizgi
+      bottom: const PreferredSize(preferredSize: Size.fromHeight(1), child: Divider(height: 1, color: Color(0x66F2B92A))),
     );
 
 /// Şarkı satırı: ad (kalın), altında "süre | sanatçı", sağda düğme.
@@ -53,7 +64,7 @@ Widget _trackRow({required String title, required int durationMs, required Strin
       child: Row(children: [
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: active ? _green : _text, fontWeight: FontWeight.w700, fontSize: 16)),
+            Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: active ? _gold : _text, fontWeight: FontWeight.w700, fontSize: 16)),
             const SizedBox(height: 5),
             Text.rich(
               TextSpan(children: [
@@ -127,12 +138,12 @@ class _MusicLibraryPageState extends State<MusicLibraryPage> {
   @override
   Widget build(BuildContext context) {
     return Theme(
-      data: ThemeData.light(useMaterial3: true),
+      data: _musicTheme,
       child: Scaffold(
-        backgroundColor: Colors.white,
+        backgroundColor: _bg,
         appBar: _bar(context, 'Müzik', [
-          IconButton(tooltip: 'Ara', icon: const Icon(Icons.search_rounded, size: 28), onPressed: () => setState(() => _search = !_search)),
-          IconButton(tooltip: 'Telefondan ekle', icon: const Icon(Icons.library_add_outlined, size: 27), onPressed: _openDevice),
+          IconButton(tooltip: 'Ara', icon: const Icon(Icons.search_rounded, size: 28, color: _gold), onPressed: () => setState(() => _search = !_search)),
+          IconButton(tooltip: 'Telefondan ekle', icon: const Icon(Icons.library_add_outlined, size: 27, color: _gold), onPressed: _openDevice),
         ]),
         body: ValueListenableBuilder<List<LocalTrack>>(
           valueListenable: LocalMusic.instance.tracks,
@@ -163,7 +174,11 @@ class _MusicLibraryPageState extends State<MusicLibraryPage> {
                 width: double.infinity,
                 color: _band,
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
-                child: Text('Toplamda: ${all.length} şarkı', style: const TextStyle(color: _sub, fontSize: 14, fontWeight: FontWeight.w600)),
+                child: Row(children: [
+                  const Icon(Icons.queue_music_rounded, color: _gold, size: 18),
+                  const SizedBox(width: 6),
+                  Text('Toplamda: ${all.length} şarkı', style: const TextStyle(color: _sub, fontSize: 14, fontWeight: FontWeight.w600)),
+                ]),
               ),
               Expanded(
                 child: all.isEmpty
@@ -191,10 +206,10 @@ class _MusicLibraryPageState extends State<MusicLibraryPage> {
                                     valueListenable: RoomPlaylist.instance.loadingPath,
                                     builder: (context, loading, _) => loading == t.path
                                         // Şarkı odaya gönderiliyor (DJ zaten telefondan dinliyor).
-                                        ? const SizedBox(width: 34, height: 34, child: Padding(padding: EdgeInsets.all(6), child: CircularProgressIndicator(strokeWidth: 2.6, color: _green)))
+                                        ? const SizedBox(width: 34, height: 34, child: Padding(padding: EdgeInsets.all(6), child: CircularProgressIndicator(strokeWidth: 2.6, color: _gold)))
                                         : Icon(
                                             (active || cur == t.path) && (playing || loading == t.path) ? Icons.pause_circle_outline_rounded : Icons.play_circle_outline_rounded,
-                                            color: active || cur == t.path ? _green : const Color(0xFFC5CAD6),
+                                            color: active || cur == t.path ? _gold : _idle,
                                             size: 34,
                                           ),
                                   ),
@@ -215,12 +230,12 @@ class _MusicLibraryPageState extends State<MusicLibraryPage> {
 
   Widget _empty() => Center(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Icon(Icons.queue_music_rounded, color: Color(0xFFC5CAD6), size: 72),
+          const Icon(Icons.queue_music_rounded, color: _idle, size: 72),
           const SizedBox(height: 14),
           const Text('Henüz şarkı eklemediniz', style: TextStyle(color: _sub, fontSize: 15)),
           const SizedBox(height: 18),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: _green, foregroundColor: Colors.white, shape: const StadiumBorder(), padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 12)),
+            style: FilledButton.styleFrom(backgroundColor: _gold, foregroundColor: Colors.black, shape: const StadiumBorder(), padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 12)),
             onPressed: _openDevice,
             child: const Text('Telefondan şarkı ekle', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
           ),
@@ -267,7 +282,11 @@ class _MiniPlayerState extends State<_MiniPlayer> {
         final dur = ((track['durationMs'] as num?)?.toInt() ?? 0).clamp(1, 1 << 31).toDouble();
         final pos = (_drag ?? MusicService.instance.currentPositionMs().toDouble()).clamp(0.0, dur);
         return Container(
-          color: _player,
+          decoration: const BoxDecoration(
+            color: _player,
+            border: Border(top: BorderSide(color: Color(0x99F2B92A), width: 1)),
+            boxShadow: [BoxShadow(color: Color(0x33F2B92A), blurRadius: 12, offset: Offset(0, -2))],
+          ),
           padding: EdgeInsets.fromLTRB(14, 10, 10, 8 + MediaQuery.paddingOf(context).bottom),
           child: Row(children: [
             GestureDetector(
@@ -275,8 +294,12 @@ class _MiniPlayerState extends State<_MiniPlayer> {
               child: Container(
                 width: 46,
                 height: 46,
-                decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2.4)),
-                child: Icon(playing ? Icons.pause_rounded : Icons.play_arrow_rounded, color: Colors.white, size: 28),
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [_goldHi, _gold, Color(0xFFC98A12)]),
+                  boxShadow: [BoxShadow(color: Color(0x66F2B92A), blurRadius: 10)],
+                ),
+                child: Icon(playing ? Icons.pause_rounded : Icons.play_arrow_rounded, color: Colors.black, size: 28),
               ),
             ),
             const SizedBox(width: 12),
@@ -290,7 +313,7 @@ class _MiniPlayerState extends State<_MiniPlayer> {
                   IconButton(
                     visualDensity: VisualDensity.compact,
                     tooltip: 'Ses düzeyi',
-                    icon: Icon(MusicService.instance.roomVolume == 0 ? Icons.volume_off_rounded : Icons.volume_up_rounded, color: Colors.white),
+                    icon: Icon(MusicService.instance.roomVolume == 0 ? Icons.volume_off_rounded : Icons.volume_up_rounded, color: _gold),
                     onPressed: () => _volumeSheet(context),
                   ),
                 ]),
@@ -299,9 +322,9 @@ class _MiniPlayerState extends State<_MiniPlayer> {
                     trackHeight: 2,
                     overlayShape: SliderComponentShape.noOverlay,
                     thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
-                    activeTrackColor: _green,
+                    activeTrackColor: _gold,
                     inactiveTrackColor: Colors.white24,
-                    thumbColor: Colors.white,
+                    thumbColor: _goldHi,
                   ),
                   child: Slider(
                     value: pos,
@@ -315,9 +338,9 @@ class _MiniPlayerState extends State<_MiniPlayer> {
                 ),
                 const SizedBox(height: 4),
                 Row(children: [
-                  Text(_mmss(pos), style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                  Text(_mmss(pos), style: const TextStyle(color: _gold, fontSize: 12, fontWeight: FontWeight.w700)),
                   const Spacer(),
-                  Text(_mmss(dur), style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                  Text(_mmss(dur), style: const TextStyle(color: _sub, fontSize: 12)),
                   const SizedBox(width: 6),
                 ]),
               ]),
@@ -333,14 +356,18 @@ class _MiniPlayerState extends State<_MiniPlayer> {
 void _volumeSheet(BuildContext context) {
   showModalBottomSheet<void>(
     context: context,
-    backgroundColor: Colors.white,
+    backgroundColor: _band,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      side: BorderSide(color: Color(0x66F2B92A)),
+    ),
     builder: (c) => SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           const Text('Odadaki müzik sesi', style: TextStyle(color: _text, fontWeight: FontWeight.w800, fontSize: 16)),
           const SizedBox(height: 6),
-          const _RoomVolumeSlider(dark: false),
+          const _RoomVolumeSlider(dark: true),
         ]),
       ),
     ),
@@ -360,15 +387,15 @@ class _RoomVolumeSlider extends StatelessWidget {
         return Row(children: [
           GestureDetector(
             onTap: () => MusicService.instance.setRoomVolume(v == 0 ? 0.7 : 0),
-            child: Icon(v == 0 ? Icons.volume_off_rounded : Icons.volume_up_rounded, color: dark ? Colors.white : _text, size: 26),
+            child: Icon(v == 0 ? Icons.volume_off_rounded : Icons.volume_up_rounded, color: dark ? _gold : _text, size: 26),
           ),
           Expanded(
             child: SliderTheme(
               data: SliderTheme.of(context).copyWith(
                 trackHeight: 3,
-                activeTrackColor: _green,
+                activeTrackColor: _gold,
                 inactiveTrackColor: dark ? Colors.white24 : _line,
-                thumbColor: Colors.white,
+                thumbColor: _goldHi,
                 thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 9, elevation: 2),
                 overlayShape: SliderComponentShape.noOverlay,
               ),
@@ -439,13 +466,13 @@ class _DeviceAudioPageState extends State<DeviceAudioPage> with WidgetsBindingOb
   Widget build(BuildContext context) {
     final files = _files;
     return Theme(
-      data: ThemeData.light(useMaterial3: true),
+      data: _musicTheme,
       child: Scaffold(
-        backgroundColor: Colors.white,
+        backgroundColor: _bg,
         appBar: _bar(context, 'Yerel eklendi', [
           TextButton(
             onPressed: _scanning ? null : _scan,
-            child: const Text('Yeniden tara', style: TextStyle(color: _green, fontWeight: FontWeight.w800, fontSize: 16)),
+            child: const Text('Yeniden tara', style: TextStyle(color: _gold, fontWeight: FontWeight.w800, fontSize: 16)),
           ),
         ]),
         body: Column(children: [
@@ -461,7 +488,7 @@ class _DeviceAudioPageState extends State<DeviceAudioPage> with WidgetsBindingOb
                     final n = await LocalMusic.instance.addDevice(files);
                     if (context.mounted) toast(context, n == 0 ? 'Hepsi zaten ekli.' : '$n şarkı eklendi.');
                   },
-                  child: const Text('Tümünü ekle', style: TextStyle(color: _green, fontWeight: FontWeight.w800)),
+                  child: const Text('Tümünü ekle', style: TextStyle(color: _gold, fontWeight: FontWeight.w800)),
                 ),
               ]),
             ),
@@ -474,7 +501,7 @@ class _DeviceAudioPageState extends State<DeviceAudioPage> with WidgetsBindingOb
   Widget _body(List<DeviceAudio>? files) {
     if (_scanning || files == null) {
       return const Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-        CircularProgressIndicator(color: _green),
+        CircularProgressIndicator(color: _gold),
         SizedBox(height: 14),
         Text('Telefonundaki müzik dosyaları taranıyor...', style: TextStyle(color: _sub)),
       ]));
@@ -484,7 +511,7 @@ class _DeviceAudioPageState extends State<DeviceAudioPage> with WidgetsBindingOb
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            const Icon(Icons.library_music_rounded, color: Color(0xFFC5CAD6), size: 64),
+            const Icon(Icons.library_music_rounded, color: _idle, size: 64),
             const SizedBox(height: 14),
             Text(
               _needPermission
@@ -494,7 +521,7 @@ class _DeviceAudioPageState extends State<DeviceAudioPage> with WidgetsBindingOb
               style: const TextStyle(color: _sub, fontSize: 15, height: 1.4),
             ),
             const SizedBox(height: 14),
-            TextButton(onPressed: _pickManually, child: const Text('Dosyaları elle seç', style: TextStyle(color: _green, fontWeight: FontWeight.w800))),
+            TextButton(onPressed: _pickManually, child: const Text('Dosyaları elle seç', style: TextStyle(color: _gold, fontWeight: FontWeight.w800))),
           ]),
         ),
       );
@@ -519,9 +546,13 @@ class _DeviceAudioPageState extends State<DeviceAudioPage> with WidgetsBindingOb
                   height: 36,
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   alignment: Alignment.center,
-                  decoration: BoxDecoration(color: added ? const Color(0xFFF4F5F8) : _green, borderRadius: BorderRadius.circular(9)),
+                  decoration: BoxDecoration(
+                    color: added ? const Color(0xFF1E1E23) : _gold,
+                    borderRadius: BorderRadius.circular(9),
+                    border: added ? Border.all(color: const Color(0xFF2E2E35)) : null,
+                  ),
                   child: Text(added ? 'Eklendi' : 'Eklemek',
-                      style: TextStyle(color: added ? const Color(0xFFE1E4EA) : Colors.white, fontWeight: FontWeight.w800, fontSize: 15)),
+                      style: TextStyle(color: added ? const Color(0xFF6B6B74) : Colors.black, fontWeight: FontWeight.w800, fontSize: 15)),
                 ),
               ),
             );
@@ -578,7 +609,16 @@ class _DjDiscState extends State<DjDisc> with SingleTickerProviderStateMixin {
                 child: RotationTransition(
                   turns: _spin,
                   child: Container(
-                    decoration: const BoxDecoration(shape: BoxShape.circle, boxShadow: [BoxShadow(color: Colors.black54, blurRadius: 8)]),
+                    // Altın halka ve çalarken altın ışıma
+                    padding: const EdgeInsets.all(1.6),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [_goldHi, _gold, Color(0xFF8A5C0A), _gold]),
+                      boxShadow: [
+                        const BoxShadow(color: Colors.black54, blurRadius: 8),
+                        if (playing) const BoxShadow(color: Color(0x80F2B92A), blurRadius: 12),
+                      ],
+                    ),
                     child: ClipOval(child: Image.asset('assets/images/music_disc.png', fit: BoxFit.cover)),
                   ),
                 ),
@@ -593,11 +633,11 @@ class _DjDiscState extends State<DjDisc> with SingleTickerProviderStateMixin {
                   child: Container(
                     width: 3,
                     height: d * 0.62,
-                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(2), boxShadow: const [BoxShadow(color: Colors.black45, blurRadius: 2)]),
+                    decoration: BoxDecoration(color: _gold, borderRadius: BorderRadius.circular(2), boxShadow: const [BoxShadow(color: Colors.black45, blurRadius: 2)]),
                   ),
                 ),
               ),
-              Positioned(right: 0, top: 0, child: Container(width: 8, height: 8, decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle))),
+              Positioned(right: 0, top: 0, child: Container(width: 8, height: 8, decoration: const BoxDecoration(color: _goldHi, shape: BoxShape.circle))),
             ]),
           ),
         );
@@ -622,8 +662,10 @@ class DjPanel extends StatelessWidget {
         if (track == null) return const SizedBox.shrink();
         final playing = s?['status'] == 'playing';
         return Material(
-          color: const Color(0xF20C0C10),
-          borderRadius: BorderRadius.circular(18),
+          color: const Color(0xF20B0B0D),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18), side: const BorderSide(color: Color(0xB3F2B92A), width: 1.1)),
+          shadowColor: _gold,
+          elevation: 6,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
             child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -631,7 +673,7 @@ class DjPanel extends StatelessWidget {
                 IconButton(
                   tooltip: 'Müziği kapat',
                   visualDensity: VisualDensity.compact,
-                  icon: const Icon(Icons.power_settings_new_rounded, color: Colors.white, size: 28),
+                  icon: const Icon(Icons.power_settings_new_rounded, color: _gold, size: 28),
                   onPressed: () => guard(context, () async {
                     await RoomPlaylist.instance.stop();
                     return true;
@@ -641,7 +683,7 @@ class DjPanel extends StatelessWidget {
                 IconButton(
                   tooltip: 'Küçült',
                   visualDensity: VisualDensity.compact,
-                  icon: const Icon(Icons.close_fullscreen_rounded, color: Colors.white, size: 24),
+                  icon: const Icon(Icons.close_fullscreen_rounded, color: Colors.white70, size: 24),
                   onPressed: onMinimize,
                 ),
               ]),
@@ -662,13 +704,17 @@ class DjPanel extends StatelessWidget {
                   child: Container(
                     width: 48,
                     height: 48,
-                    decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2.6)),
-                    child: Icon(playing ? Icons.pause_rounded : Icons.play_arrow_rounded, color: Colors.white, size: 30),
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [_goldHi, _gold, Color(0xFFC98A12)]),
+                      boxShadow: [BoxShadow(color: Color(0x66F2B92A), blurRadius: 10)],
+                    ),
+                    child: Icon(playing ? Icons.pause_rounded : Icons.play_arrow_rounded, color: Colors.black, size: 30),
                   ),
                 ),
                 IconButton(
                   tooltip: 'Sonraki',
-                  icon: const Icon(Icons.skip_next_rounded, color: Colors.white, size: 36),
+                  icon: const Icon(Icons.skip_next_rounded, color: _gold, size: 36),
                   onPressed: () => guard(context, () async {
                     await RoomPlaylist.instance.next();
                     return true;
@@ -676,7 +722,7 @@ class DjPanel extends StatelessWidget {
                 ),
                 IconButton(
                   tooltip: 'Şarkı listesi',
-                  icon: const Icon(Icons.queue_music_rounded, color: Colors.white, size: 30),
+                  icon: const Icon(Icons.queue_music_rounded, color: _gold, size: 30),
                   onPressed: () => openRoomMusic(context, roomId: roomId, canManage: true),
                 ),
               ]),

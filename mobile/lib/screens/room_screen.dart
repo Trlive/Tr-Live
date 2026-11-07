@@ -2012,7 +2012,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final gift = (u?['giftLevel'] as num?)?.toInt() ?? 1;
     final cp = (u?['cpLevel'] as num?)?.toInt();
     final items = <Widget>[
-      if (wip != null) WipChip(level: wip, colorHex: u?['nameColor'] as String?),
+      if (wip != null) WipChip(level: wip, colorHex: u?['nameColor'] as String?, height: h),
       LevelPill(level: u?['coinLevel'] ?? 1, send: true, height: h),
       if (gift > 1) LevelPill(level: gift, send: false, height: h),
       if (cp != null && cp >= 1) CpLevelPill(level: cp, height: h),
@@ -2033,10 +2033,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           ]),
         ),
     ];
-    return Wrap(spacing: 4, runSpacing: 3, crossAxisAlignment: WrapCrossAlignment.center, children: [
-      // WipChip kendi sol boşluğunu taşır; satır başında hizalansın.
-      for (final w in items) w is WipChip ? Transform.translate(offset: const Offset(-6, 0), child: w) : w,
-    ]);
+    // WIP, seviye, CP ve doğrulama kutucukları aynı yükseklikte (h) ve eşit aralıkla.
+    return Wrap(spacing: 4, runSpacing: 3, crossAxisAlignment: WrapCrossAlignment.center, children: items);
   }
 
   Widget _nameText(Map<String, dynamic>? u, {double size = 13.5, Color? fallback}) => WipNameText(
@@ -2635,7 +2633,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                               LevelPill(level: user?['coinLevel'] ?? 1, send: true, height: 20),
                               LevelPill(level: user?['giftLevel'] ?? 1, send: false, height: 20),
                             ],
-                            if (user?['wipLevel'] != null) _pill(wipLabel(wipLevelOf(user?['wipLevel'])), WipStyle.of(wipLevelOf(user?['wipLevel']))?.color ?? Pal.amber),
+                            if (wipLevelOf(user?['wipBadge'] ?? user?['wipLevel']) != null)
+                              WipChip(level: user?['wipBadge'] ?? user?['wipLevel'], colorHex: user?['nameColor'] as String?, height: 20),
                             if (role != 'user') _pill(_roleLabels[role] ?? role, Pal.cyan),
                             if (family != null) _pill('${family['name']}', Pal.red),
                             if ((profile?['hostBadge'] ?? user?['hostBadge']) != null) HostBadgeChip(badge: (profile?['hostBadge'] ?? user?['hostBadge'])?.toString(), height: 20),
@@ -2886,12 +2885,13 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     );
   }
 
+  /// Profil kartındaki küçük etiket: seviye / WIP kutucuklarıyla aynı yükseklik (20).
   Widget _pill(String text, Color color) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        height: 20,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
         decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(10)),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Text(text, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Colors.white)),
-        ]),
+        // widthFactor 1: yazı kadar (Wrap içinde satırı kaplamasın).
+        child: Center(widthFactor: 1, child: Text(text, maxLines: 1, style: const TextStyle(fontSize: 11, height: 1.0, fontWeight: FontWeight.w800, color: Colors.white))),
       );
 
   void _roleChoice(String userId, String role) {
@@ -3760,18 +3760,13 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                             ),
                           ),
                         ]),
-                        // Oda kimliği = sahibinin güncel kimliği (Yoho): özel ID varsa o, yoksa normal ID; renkli/özel tasarımıyla.
-                        // Sahip kimliğini değiştirince başlık da hemen değişir (room_member_updated).
-                        // Ad satırı (0.468h) + ID en fazla 0.34h: h-6 yüksekliğe sığar (taşma olmaz).
-                        ConstrainedBox(
-                          constraints: BoxConstraints(maxHeight: h * 0.34),
-                          child: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            alignment: Alignment.centerLeft,
-                            child: displayIdOf(idUser).isNotEmpty
-                                ? IdBadge(user: idUser, fontSize: h * 0.25, copyable: false)
-                                : PlainIdText(id: (_room?['roomNumber'] ?? '').toString(), fontSize: h * 0.25),
-                          ),
+                        // Oda kimliği = sahibinin güncel kimliği (özel ID varsa o, yoksa normal ID); renkli/özel olsa da burada
+                        // düz yazı (ID:2147). Sahip kimliğini değiştirince başlık da hemen değişir (room_member_updated).
+                        Text(
+                          'ID:${roomIdOf(_room, idUser)}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: h * 0.27, height: 1.15, color: Colors.white70),
                         ),
                       ]),
                     ),

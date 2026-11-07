@@ -93,7 +93,24 @@ class _BannerCarouselState extends State<BannerCarousel> {
       padding: EdgeInsets.fromLTRB(m, 0, m, 0),
       child: AspectRatio(
         aspectRatio: 3.0,
-        child: ClipRRect(
+        // Oda kartları gibi: parlak uygulama sarısı çerçeve (altın degrade + hafif ışıma) ve altında gölge; banner bir kademe
+        // yükseltilmiş görünür.
+        child: Container(
+          padding: const EdgeInsets.all(1.6),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(11.6),
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFFFFF4B8), Color(0xFFF2B92A), Color(0xFFB7811A), Color(0xFFF2B92A), Color(0xFFFFE27A)],
+              stops: [0, 0.3, 0.55, 0.78, 1],
+            ),
+            boxShadow: const [
+              BoxShadow(color: Color(0x99000000), blurRadius: 12, offset: Offset(0, 7)),
+              BoxShadow(color: Color(0x47F2B92A), blurRadius: 9),
+            ],
+          ),
+          child: ClipRRect(
           borderRadius: BorderRadius.circular(10),
           child: Stack(children: [
             PageView.builder(
@@ -134,7 +151,23 @@ class _BannerCarouselState extends State<BannerCarousel> {
                     ),
                 ]),
               ),
+            // Üst kenarda ince ışık (kabartma hissi)
+            const Positioned.fill(
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Color(0x2EFFFFFF), Color(0x00FFFFFF), Color(0x00000000), Color(0x33000000)],
+                      stops: [0, 0.22, 0.75, 1],
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ]),
+        ),
         ),
       ),
     );

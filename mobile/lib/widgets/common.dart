@@ -285,20 +285,26 @@ class HiddenAvatar extends StatelessWidget {
 class WipChip extends StatelessWidget {
   final dynamic level;
   final String? colorHex;
-  /// Küçük koltuk satırı için: dar, 12 px yüksekliğe sığar.
+  /// Küçük koltuk satırı için: dar, 12 px yüksekliğe sığar ("W5").
   final bool compact;
-  const WipChip({super.key, required this.level, this.colorHex, this.compact = false});
+  /// Yükseklik: yanındaki seviye etiketleriyle (LevelPill) aynı verilir; genişliği de en az seviye etiketi kadardır,
+  /// böylece WIP, seviye ve CP kutucukları her yerde eşit boyda görünür. Varsayılan 16.
+  final double? height;
+  const WipChip({super.key, required this.level, this.colorHex, this.compact = false, this.height});
 
   @override
   Widget build(BuildContext context) {
     final lvl = wipLevelOf(level);
     if (lvl == null || lvl < 1) return const SizedBox.shrink();
     final swip = lvl >= kSwipLevel;
-    final h = compact ? 12.0 : 18.0;
+    final h = height ?? (compact ? 12.0 : 16.0);
     final text = compact ? (swip ? 'SWIP' : 'W$lvl') : (swip ? 'SWIP' : 'WIP$lvl');
+    final border = (h * 0.075).clamp(0.8, 1.6).toDouble();
     final chip = Container(
       height: h,
-      padding: EdgeInsets.all(compact ? 0.9 : 1.3),
+      // Seviye etiketiyle (LevelPill: h·96/42) aynı en az genişlik.
+      constraints: BoxConstraints(minWidth: compact ? 0 : h * 96 / 42),
+      padding: EdgeInsets.all(border),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(h / 2),
         // İnce altın çerçeve (her yanda eşit)
@@ -306,7 +312,7 @@ class WipChip extends StatelessWidget {
         boxShadow: swip ? const [BoxShadow(color: Color(0x88F2C14E), blurRadius: 6)] : null,
       ),
       child: Container(
-        padding: EdgeInsets.symmetric(horizontal: h * 0.5),
+        padding: EdgeInsets.symmetric(horizontal: h * 0.38),
         alignment: Alignment.center,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(h / 2),
@@ -323,14 +329,14 @@ class WipChip extends StatelessWidget {
           child: Text(
             text,
             maxLines: 1,
-            style: TextStyle(fontSize: compact ? 8 : 11.5, height: 1.0, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic, letterSpacing: 0.2, color: Colors.white),
+            style: TextStyle(fontSize: h * 0.62, height: 1.0, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic, letterSpacing: 0.2, color: Colors.white),
           ),
         ),
       ),
     );
     final out = swip ? _GoldSweep(radius: h / 2, child: chip) : chip;
-    // Satır içinde genişlemesin (Wrap / Row içinde yalnızca yazı kadar).
-    return Padding(padding: EdgeInsets.only(left: compact ? 0 : 6), child: IntrinsicWidth(child: out));
+    // Satır içinde genişlemesin (Wrap / Row içinde yalnızca yazı kadar). Boşluğu çağıran yer verir.
+    return IntrinsicWidth(child: out);
   }
 }
 
@@ -498,7 +504,11 @@ class UserName extends StatelessWidget {
         Flexible(
           child: WipNameText((user?['displayName'] ?? '').toString(), level: (user?['wipLevel'] as num?)?.toInt(), color: color, style: style),
         ),
-        WipChip(level: user?['wipBadge'] ?? user?['wipLevel'], colorHex: user?['nameColor'] as String?),
+        // Rozet boyu adın yanındaki seviye etiketleriyle aynı: küçük yazıda 16, büyük başlıkta 18.
+        if (wipLevelOf(user?['wipBadge'] ?? user?['wipLevel']) != null) ...[
+          const SizedBox(width: 5),
+          WipChip(level: user?['wipBadge'] ?? user?['wipLevel'], colorHex: user?['nameColor'] as String?, height: (style?.fontSize ?? 14) > 16 ? 18 : 16),
+        ],
       ],
     );
   }

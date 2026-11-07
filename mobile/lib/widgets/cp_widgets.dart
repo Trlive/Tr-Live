@@ -360,7 +360,7 @@ class CpPartnerCard extends StatelessWidget {
             child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text((partner?['displayName'] ?? '').toString(), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
               const SizedBox(height: 3),
-              if (level >= 1) CpLevelPill(level: level, height: 17) else CpHearts(level: level, size: 13),
+              if (level >= 1) CpLevelPill(level: level, height: 16) else CpHearts(level: level, size: 13),
             ]),
           ),
           Container(

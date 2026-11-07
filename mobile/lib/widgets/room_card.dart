@@ -11,6 +11,32 @@ class RoomCard extends StatelessWidget {
   final VoidCallback onTap;
   const RoomCard({super.key, required this.room, required this.onTap});
 
+  /// Koyu cam kapsül: yarı saydam siyah zemin, ince uygulama sarısı çerçeve (sol üst simgeler aynı tip görünsün).
+  static Widget _glass(double tagH, {required Widget child, double? width, EdgeInsets? padding}) => Container(
+        height: tagH * 1.3,
+        width: width,
+        padding: padding,
+        decoration: BoxDecoration(
+          color: const Color(0x99000000),
+          borderRadius: BorderRadius.circular(tagH * 0.65),
+          border: Border.all(color: const Color(0xD9F2B92A), width: 0.9),
+          boxShadow: const [BoxShadow(color: Color(0x66000000), blurRadius: 4, offset: Offset(0, 1))],
+        ),
+        // widthFactor 1: kapsül içeriği kadar (Flexible içinde gereksiz uzamasın).
+        child: Center(widthFactor: 1, child: child),
+      );
+
+  /// Altın degrade simge / yazı.
+  static Widget _gold(Widget child) => ShaderMask(
+        blendMode: BlendMode.srcIn,
+        shaderCallback: (r) => const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFFFFF3B0), Color(0xFFF2B92A), Color(0xFFC98A12)],
+        ).createShader(r),
+        child: child,
+      );
+
   /// Kartın görselinin altındaki ad alanı (genişliğe oranla); ızgara bu payı ayırır.
   static double titleAreaFor(double screenW) => (screenW * 0.104).clamp(38.0, 50.0).toDouble();
 
@@ -52,6 +78,14 @@ class RoomCard extends StatelessWidget {
             Container(
               width: cw,
               height: cw,
+              // Bir kademe yükseltilmiş görünüm: altında gölge; aktif odada hafif sarı ışıma.
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                boxShadow: [
+                  const BoxShadow(color: Color(0x8C000000), blurRadius: 10, offset: Offset(0, 6)),
+                  if (count is num && count > 0) const BoxShadow(color: Color(0x40F2B92A), blurRadius: 8),
+                ],
+              ),
               // Aktif oda: ince uygulama sarısı çerçeve.
               foregroundDecoration: count is num && count > 0
                   ? BoxDecoration(borderRadius: BorderRadius.circular(10), border: Border.all(color: const Color(0xFFF2B92A), width: 1.3))
@@ -64,47 +98,65 @@ class RoomCard extends StatelessWidget {
                     NetImg(image, box: Size.square(cw), fit: BoxFit.cover)
                   else
                     Center(child: Icon(isVideo ? Icons.videocam : Icons.graphic_eq, size: cw * 0.28, color: Pal.textDim)),
+                  // Üstte ince ışık, altta koyulaşma: kabartma (yükseltilmiş) hissi.
                   const DecoratedBox(
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0x00000000), Color(0x00000000), Color(0x8C000000)], stops: [0, 0.55, 1]),
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [Color(0x2EFFFFFF), Color(0x00FFFFFF), Color(0x00000000), Color(0x8C000000)],
+                        stops: [0, 0.16, 0.55, 1],
+                      ),
                     ),
                   ),
-                  // Sol üst (Mico): oda türü simgesi, PK sürüyorsa PK, hediye yağıyorsa "yükseliyor".
+                  // Sol üst: oda türü, PK, "yükseliyor" — hepsi aynı koyu cam kapsül, ince uygulama sarısı çerçeve ve altın simge
+                  // (rengarenk değil; tek tip, sade).
                   Positioned(
                     left: inset,
                     top: inset,
                     // Sağ üstteki çanta / kilit ile çakışmasın.
                     right: inset + (bags > 0 ? tagH * 1.9 : 0) + (room['locked'] == true ? tagH + 4 : 0) + 4,
                     child: Row(children: [
-                      Container(
-                        width: tagH * 1.35,
-                        height: tagH * 1.35,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: LinearGradient(colors: isVideo ? const [Color(0xFFFF9F0A), Color(0xFFFF5E3A)] : const [Color(0xFF16C25B), Color(0xFF0E9F6E)]),
-                          boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 3)],
-                        ),
-                        child: Icon(isVideo ? Icons.videocam_rounded : Icons.mic_rounded, size: tagH * 0.9, color: Colors.white),
+                      _glass(
+                        tagH,
+                        width: tagH * 1.3,
+                        child: _gold(Icon(isVideo ? Icons.videocam_rounded : Icons.mic_rounded, size: tagH * 0.82, color: Colors.white)),
                       ),
                       if (room['inPk'] == true)
                         Padding(
-                          padding: EdgeInsets.only(left: tagH * 0.25),
-                          child: Image.asset('assets/images/pk_logo.png', height: tagH * 1.45, fit: BoxFit.contain, errorBuilder: (_, __, ___) => const SizedBox.shrink()),
+                          padding: EdgeInsets.only(left: tagH * 0.22),
+                          child: _glass(
+                            tagH,
+                            padding: EdgeInsets.symmetric(horizontal: tagH * 0.32),
+                            child: _gold(Row(mainAxisSize: MainAxisSize.min, children: [
+                              Icon(Icons.bolt_rounded, size: tagH * 0.72, color: Colors.white),
+                              Text('PK', style: TextStyle(color: Colors.white, fontSize: tagH * 0.66, height: 1, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic)),
+                            ])),
+                          ),
                         ),
                       if (room['hot'] == true)
-                        Flexible(child: Padding(
-                          padding: EdgeInsets.only(left: tagH * 0.25),
-                          child: Container(
-                            height: tagH,
-                            padding: EdgeInsets.symmetric(horizontal: tagH * 0.3),
-                            decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFFFF3D00), Color(0xFFFFB300)]), borderRadius: BorderRadius.circular(tagH / 2)),
-                            child: Center(
-                              widthFactor: 1,
-                              child: Text(cw < 180 ? '🔥' : '🔥 Yükseliyor',
-                                  maxLines: 1, overflow: TextOverflow.clip, style: TextStyle(color: Colors.white, fontSize: tagH * 0.62, height: 1, fontWeight: FontWeight.w800)),
+                        Flexible(
+                          child: Padding(
+                            padding: EdgeInsets.only(left: tagH * 0.22),
+                            child: _glass(
+                              tagH,
+                              padding: EdgeInsets.symmetric(horizontal: tagH * 0.3),
+                              child: _gold(Row(mainAxisSize: MainAxisSize.min, children: [
+                                Icon(Icons.local_fire_department_rounded, size: tagH * 0.78, color: Colors.white),
+                                if (cw >= 180)
+                                  Flexible(
+                                    child: Padding(
+                                      padding: EdgeInsets.only(left: tagH * 0.1),
+                                      child: Text('Yükseliyor',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.clip,
+                                          style: TextStyle(color: Colors.white, fontSize: tagH * 0.6, height: 1, fontWeight: FontWeight.w800)),
+                                    ),
+                                  ),
+                              ])),
                             ),
                           ),
-                        )),
+                        ),
                     ]),
                   ),
                   // Sağ üst: kilit ve şanslı çanta.
@@ -158,7 +210,7 @@ class RoomCard extends StatelessWidget {
                     bottom: inset,
                     height: tagH,
                     child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      Icon(Icons.bar_chart_rounded, size: tagH * 0.95, color: const Color(0xFF2EE6A6)),
+                      Icon(Icons.bar_chart_rounded, size: tagH * 0.95, color: const Color(0xFFF2B92A), shadows: const [Shadow(color: Colors.black54, blurRadius: 3)]),
                       const SizedBox(width: 2),
                       Text('$count', style: TextStyle(color: Colors.white, fontSize: tagH * 0.82, height: 1.0, fontWeight: FontWeight.w800, shadows: const [Shadow(color: Colors.black54, blurRadius: 3)])),
                     ]),

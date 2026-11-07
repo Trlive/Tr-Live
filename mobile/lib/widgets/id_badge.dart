@@ -313,6 +313,12 @@ String displayIdOf(Map<String, dynamic>? user) {
   return special.isNotEmpty ? special : (user?['publicId']?.toString() ?? '');
 }
 
+/// Oda kimliği: sahibinin görünen kimliği (gizli / özel / normal); bilinmiyorsa eski oda numarası. Düz yazı olarak gösterilir.
+String roomIdOf(Map<String, dynamic>? room, Map<String, dynamic>? owner) {
+  final d = displayIdOf(owner);
+  return d.isNotEmpty ? d : (room?['roomNumber'] ?? '').toString();
+}
+
 /// Gizli kimlik (Yoho "gizemli kişi"): koyu mor kapsül, solda gözü kapalı madalyon, "Gizli" + gizli ID;
 /// üzerinden yavaşça mor ışık geçer. Gerçek ID hiçbir yerde görünmez.
 class HiddenIdPill extends StatefulWidget {
