@@ -18,8 +18,10 @@ import { memberJson, TRANSFER_SELECT, transferJson, sendBroadcasterInvite } from
 
 export const router = Router();
 // Yönlendirici '/api' altına bağlı: kimlik doğrulama yalnızca kendi yollarında (diğer isteklerde boşuna çalışmasın).
+// Yol eşleşmesi büyük/küçük harfe duyarsız olduğundan (/Agency-Center da bu yollara gider) denetim de öyle yapılır.
 router.use(function requireAgencyAuth(req, res, next) {
-  if (req.path.startsWith('/agency-center') || req.path.startsWith('/agency-assistant')) return requireAuth(req, res, next);
+  const p = req.path.toLowerCase();
+  if (p.startsWith('/agency-center') || p.startsWith('/agency-assistant')) return requireAuth(req, res, next);
   return next();
 });
 

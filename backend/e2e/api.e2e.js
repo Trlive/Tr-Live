@@ -22,7 +22,7 @@ const tag = Date.now().toString(36);
 const env = {
   ...process.env, NODE_ENV: 'test', PORT: String(PORT), DATABASE_URL: DB, DATABASE_SSL: 'false',
   JWT_SECRET: 'e2e-secret-e2e-secret-e2e-secret-1234567890', FIREWALL_ENABLED: 'false', GLOBAL_GIFT_MIN_COINS: '100',
-  ADMIN_USERNAMES: `e2e_${tag}_boss`,
+  ADMIN_USERNAMES: `e2e_${tag}_boss`, SUPPORT_COIN_DAILY_LIMIT: '1000',
   UPLOAD_DIR: fs.mkdtempSync(path.join(os.tmpdir(), 'trlive-up-')),
 };
 
@@ -48,7 +48,7 @@ const ok = (r, msg = '') => assert.ok(r.status >= 200 && r.status < 300, `${msg}
 const status = (r, code, msg = '') => assert.equal(r.status, code, `${msg} → HTTP ${r.status} ${JSON.stringify(r.body)}`);
 
 async function register(name) {
-  const r = await api('POST', '/api/auth/register', { body: { username: `e2e_${tag}_${name}`, password: 'sifre123', displayName: `Kişi ${name}` } });
+  const r = await api('POST', '/api/auth/register', { body: { username: `e2e_${tag}_${name}`, password: 'Sifre-e2e-123', displayName: `Kişi ${name}` } });
   ok(r, `kayıt ${name}`);
   return { id: r.body.user.id, token: r.body.token, username: `e2e_${tag}_${name}` };
 }
@@ -78,11 +78,11 @@ test('sağlık ve kayıt/giriş', { skip, timeout: 60000 }, async () => {
   const h = await api('GET', '/health');
   ok(h);
   for (const n of ['a', 'b', 'c', 'd', 'f', 'g', 'h', 'e', 'x']) U[n] = await register(n);
-  const dup = await api('POST', '/api/auth/register', { body: { username: U.a.username.toUpperCase(), password: 'sifre123' } });
+  const dup = await api('POST', '/api/auth/register', { body: { username: U.a.username.toUpperCase(), password: 'Sifre-e2e-123' } });
   status(dup, 409, 'büyük/küçük harf duyarsız tekrar');
-  status(await api('POST', '/api/auth/register', { body: { username: 'x', password: 'sifre123' } }), 400, 'kısa kullanıcı adı');
+  status(await api('POST', '/api/auth/register', { body: { username: 'x', password: 'Sifre-e2e-123' } }), 400, 'kısa kullanıcı adı');
   status(await api('POST', '/api/auth/register', { body: { username: `okay_${tag}`, password: '123' } }), 400, 'kısa şifre');
-  const login = await api('POST', '/api/auth/login', { body: { username: U.a.username, password: 'sifre123' } });
+  const login = await api('POST', '/api/auth/login', { body: { username: U.a.username, password: 'Sifre-e2e-123' } });
   ok(login, 'giriş');
   status(await api('POST', '/api/auth/login', { body: { username: U.a.username, password: 'yanlis' } }), 401, 'yanlış şifre');
   const me = await api('GET', '/api/me', { token: U.a.token });
@@ -101,7 +101,7 @@ test('sağlık ve kayıt/giriş', { skip, timeout: 60000 }, async () => {
 
 test('giriş kilidi: 5 hatalı denemeden sonra doğru şifre bile 429', { skip, timeout: 60000 }, async () => {
   for (let i = 0; i < 5; i++) status(await api('POST', '/api/auth/login', { body: { username: U.x.username, password: 'yanlis' } }), 401);
-  status(await api('POST', '/api/auth/login', { body: { username: U.x.username, password: 'sifre123' } }), 429, 'kilitli');
+  status(await api('POST', '/api/auth/login', { body: { username: U.x.username, password: 'Sifre-e2e-123' } }), 429, 'kilitli');
 });
 
 test('profil: düzenleme, arama, takip, gizli mod, avatar yükleme, engelleme etkisi', { skip, timeout: 60000 }, async () => {
@@ -121,10 +121,37 @@ test('profil: düzenleme, arama, takip, gizli mod, avatar yükleme, engelleme et
   assert.equal((await api('PATCH', '/api/me', { token: U.c.token, body: { isHidden: true } })).status, 403, 'gizli kullanıcı WIP 10 ister');
   await giveWip(U.c, 10);
   ok(await api('PATCH', '/api/me', { token: U.c.token, body: { isHidden: true } }));
+  // Gizlilik yalnızca odalarda (v2.92.1): profil ve aramada kişi kendi kimliğiyle; gizli mod, gizli ID ve çevrimiçi / oda durumu
+  // başkasına verilmez.
   const hidden = await api('GET', `/api/users/${U.c.id}`, { token: U.a.token });
-  assert.equal(hidden.body.profile.displayName, 'Gizli Kullanıcı');
+  ok(hidden);
+  assert.equal(hidden.body.profile.displayName, 'Kişi c', 'profil kendi kimliğiyle');
+  assert.equal(hidden.body.profile.isHidden, false, 'gizli mod başkasına bildirilmez');
+  assert.equal(hidden.body.profile.hiddenId, undefined, 'gizli ID oda dışında yok');
+  assert.equal(hidden.body.profile.presence, null, 'çevrimiçi / oda durumu gösterilmez');
   const s2 = await api('GET', `/api/users/search?q=${encodeURIComponent(`e2e_${tag}_c`)}`, { token: U.a.token });
-  assert.ok(!s2.body.users.some((u) => u.id === U.c.id), 'gizli kullanıcı aramada çıkmamalı');
+  const found = s2.body.users.find((u) => u.id === U.c.id);
+  assert.ok(found && found.displayName === 'Kişi c' && found.isHidden === false, 'aramada kendi kimliğiyle');
+  // Oda içinde gizli kimlik: "Gizli Kullanıcı" + gizli ID, gerçek ID ve seviye yok.
+  const ho = await register('hidO');
+  const hroom = await api('POST', '/api/rooms', { token: ho.token, body: { name: 'Gizli Oda Testi' } });
+  status(hroom, 201);
+  const hid = hroom.body.room.id;
+  ok(await api('POST', `/api/rooms/${hid}/join`, { token: U.c.token, body: {} }));
+  const hm = (await api('GET', `/api/rooms/${hid}/members`, { token: ho.token })).body.members.find((m) => m.userId === U.c.id);
+  assert.ok(hm, 'gizli üye odada');
+  assert.equal(hm.user.displayName, 'Gizli Kullanıcı');
+  assert.equal(hm.user.isHidden, true);
+  assert.match(String(hm.user.hiddenId), /^\d{6}$/, 'odada gizli ID');
+  assert.equal(hm.user.publicId, null, 'odada gerçek ID yok');
+  // Takip edilebilir; takip listesinde kendi kimliğiyle görünür ama odadayken hangi odada olduğu gösterilmez.
+  ok(await api('POST', `/api/users/${U.c.id}/follow`, { token: U.a.token }), 'gizli moddaki kişi takip edilebilir');
+  const fl = (await api('GET', `/api/users/${U.a.id}/following`, { token: U.a.token })).body.users.find((u) => u.id === U.c.id);
+  assert.ok(fl && fl.displayName === 'Kişi c' && fl.isHidden === false, 'takip listesinde kendi kimliğiyle');
+  assert.equal(fl.currentRoom, undefined, 'hangi odada olduğu görünmez');
+  ok(await api('DELETE', `/api/users/${U.c.id}/follow`, { token: U.a.token }));
+  ok(await api('POST', `/api/rooms/${hid}/leave`, { token: U.c.token, body: {} }));
+  ok(await api('POST', `/api/rooms/${hid}/close`, { token: ho.token }));
   ok(await api('PATCH', '/api/me', { token: U.c.token, body: { isHidden: false } }));
   await dropWip(U.c);
   // avatar (1x1 png)
@@ -337,7 +364,10 @@ test('şifreli oda', { skip, timeout: 60000 }, async () => {
   status(await api('POST', `/api/rooms/${id}/join`, { token: U.f.token, body: { password: 'yanlis' } }), 403, 'yanlış şifre');
   ok(await api('POST', `/api/rooms/${id}/join`, { token: U.f.token, body: { password: '1234' } }), 'doğru şifre');
   ok(await api('POST', `/api/rooms/${id}/join`, { token: U.f.token }), 'zaten üye olan şifresiz yeniden bağlanabilir');
+  const fIn = await sql(`SELECT room_id FROM room_members WHERE user_id = $1`, [U.f.id]);
+  assert.deepEqual(fIn.rows.map((x) => x.room_id), [id], 'tek oda kuralı: yeni odaya giren önceki odadan çıkar');
   ok(await api('POST', `/api/rooms/${id}/close`, { token: U.e.token }));
+  ok(await api('POST', `/api/rooms/${roomId}/join`, { token: U.f.token, body: {} }), 'F ana odaya döner');
 });
 
 test('aile: kurma, katılma, çifte üyelik engeli, devir, dağıtma', { skip, timeout: 60000 }, async () => {
@@ -398,12 +428,13 @@ test('WIP: kademeler, satın alma, uzatma, düşük seviye engeli, oda sınırı
   status(await api('GET', '/api/me/visitors', { token: U.g.token }), 403, 'WIP yok');
   const r1 = await api('POST', '/api/rooms', { token: U.h.token, body: { name: 'H1' } });
   ok(r1);
-  const r2 = await api('POST', '/api/rooms', { token: U.h.token, body: { name: 'H2', roomType: 'video' } });
-  ok(r2, 'sesli ve görüntülü için birer oda');
   const again = await api('POST', '/api/rooms', { token: U.h.token, body: { name: 'H3' } });
   status(again, 200, 'aynı türde yeni oda açılmaz');
   assert.equal(again.body.room.id, r1.body.room.id);
-  await api('POST', `/api/rooms/${r1.body.room.id}/close`, { token: U.h.token });
+  const r2 = await api('POST', '/api/rooms', { token: U.h.token, body: { name: 'H2', roomType: 'video' } });
+  ok(r2, 'görüntülü oda');
+  const h1 = await sql(`SELECT is_active FROM rooms WHERE id = $1`, [r1.body.room.id]);
+  assert.equal(h1.rows[0].is_active, false, 'tek oda kuralı: görüntülü odasını açınca sesli odasından çıkar, oda kapanır');
   await api('POST', `/api/rooms/${r2.body.room.id}/close`, { token: U.h.token });
   await sql(`UPDATE users SET coins = 10 WHERE id = $1`, [U.x.id]);
   status(await api('POST', '/api/wip/purchase', { token: U.x.token, body: { planId: plan(1).id } }), 400, 'yetersiz coin');
@@ -760,6 +791,13 @@ test('roller: yardımcı admin (dar yetki, süreli ban) ve oda moderatörü', { 
   // Coin: yalnızca yükleme, tek seferde en fazla 100.000 (v2.71); WIP verebilir.
   ok(await api('POST', `/api/admin/users/${v.id}/coins`, { token: sup.token, body: { amount: 100 } }), 'coin yükleme');
   status(await api('POST', `/api/admin/users/${v.id}/coins`, { token: sup.token, body: { amount: 100001 } }), 403, 'coin sınırı');
+  // 24 saatlik toplam sınır (testte 1000): işlem kaydından sayılır, sunucu yeniden başlasa da sıfırlanmaz (v2.92).
+  const over = await api('POST', `/api/admin/users/${v.id}/coins`, { token: sup.token, body: { amount: 950 } });
+  status(over, 403, 'günlük coin sınırı');
+  assert.match(over.body.message, /24 saatte/);
+  ok(await api('POST', `/api/admin/users/${v.id}/coins`, { token: sup.token, body: { amount: 900 } }), 'sınıra kadar yüklenir');
+  status(await api('POST', `/api/admin/users/${v.id}/coins`, { token: sup.token, body: { amount: 1 } }), 403, 'sınır doldu');
+  ok(await api('POST', `/api/admin/users/${v.id}/coins`, { token: U.d.token, body: { amount: 5000 } }), 'yöneticiye sınır yok');
   status(await api('POST', `/api/admin/users/${v.id}/coins`, { token: sup.token, body: { amount: -50 } }), 403, 'coin düşemez');
   ok(await api('POST', `/api/admin/users/${v.id}/wip`, { token: sup.token, body: { level: 1, days: 1 } }), 'wip');
   status(await api('POST', `/api/admin/users/${U.d.id}/wip`, { token: sup.token, body: { level: 1, days: 1 } }), 403, 'yöneticiye wip veremez');
@@ -770,18 +808,23 @@ test('roller: yardımcı admin (dar yetki, süreli ban) ve oda moderatörü', { 
   status(await api('POST', `/api/admin/users/${U.d.id}/ban`, { token: sup.token, body: {} }), 403, 'yöneticiyi banlayamaz');
   // süreli ban: giriş reddedilir, süre dolunca otomatik açılır
   ok(await api('POST', `/api/admin/users/${v.id}/ban`, { token: sup.token, body: { hours: 2, reason: 'spam' } }));
-  const lg = await api('POST', '/api/auth/login', { body: { username: v.username, password: 'sifre123' } });
+  const lg = await api('POST', '/api/auth/login', { body: { username: v.username, password: 'Sifre-e2e-123' } });
   status(lg, 403, 'banlı giriş');
   assert.match(lg.body.error || lg.body.message || '', /spam/);
   status(await api('GET', '/api/me', { token: v.token }), 401, 'banlı token');
   await sql(`UPDATE users SET banned_until = NOW() - INTERVAL '1 minute' WHERE id = $1`, [v.id]);
-  const lg2 = await api('POST', '/api/auth/login', { body: { username: v.username, password: 'sifre123' } });
+  const lg2 = await api('POST', '/api/auth/login', { body: { username: v.username, password: 'Sifre-e2e-123' } });
   ok(lg2, 'süre dolunca giriş açılır');
   assert.equal((await sql('SELECT account_status FROM users WHERE id=$1', [v.id])).rows[0].account_status, 'active');
   // süresiz ban + kaldırma
   ok(await api('POST', `/api/admin/users/${v2.id}/ban`, { token: sup.token, body: {} }));
   assert.equal((await sql('SELECT banned_until FROM users WHERE id=$1', [v2.id])).rows[0].banned_until, null);
   ok(await api('POST', `/api/admin/users/${v2.id}/unban`, { token: sup.token, body: {} }));
+  // Yönetimin koyduğu banı yardımcı admin kaldıramaz (v2.92).
+  ok(await api('POST', `/api/admin/users/${v2.id}/ban`, { token: U.d.token, body: { reason: 'yönetim' } }));
+  status(await api('POST', `/api/admin/users/${v2.id}/unban`, { token: sup.token, body: {} }), 403, 'yönetimin banı');
+  status(await api('POST', `/api/admin/users/${v2.id}/ban`, { token: sup.token, body: { hours: 1 } }), 403, 'yönetimin banı kısaltılamaz');
+  ok(await api('POST', `/api/admin/users/${v2.id}/unban`, { token: U.d.token, body: {} }), 'yönetim kaldırır');
   status(await api('POST', `/api/admin/users/${v2.id}/ban`, { token: sup.token, body: { hours: -5 } }), 400);
   // yetkiyi geri alınca panel kapanır
   ok(await api('POST', `/api/admin/users/${sup.id}/staff-role`, { token: U.d.token, body: { role: 'user' } }));
@@ -1014,9 +1057,33 @@ test('liderlik tablosu, cüzdan geçmişi ve hesap silme', { skip, timeout: 6000
   assert.ok(w.body.transactions.length > 5);
   status(await api('DELETE', '/api/me', { token: U.x.token, body: { password: 'yanlis' } }), 403);
   const y = await register('y');
-  ok(await api('DELETE', '/api/me', { token: y.token, body: { password: 'sifre123' } }));
+  ok(await api('DELETE', '/api/me', { token: y.token, body: { password: 'Sifre-e2e-123' } }));
   status(await api('GET', '/api/me', { token: y.token }), 401, 'silinen hesabın tokeni geçersiz');
-  status(await api('POST', '/api/auth/login', { body: { username: y.username, password: 'sifre123' } }), 401, 'eski kullanıcı adı artık yok');
+  status(await api('POST', '/api/auth/login', { body: { username: y.username, password: 'Sifre-e2e-123' } }), 401, 'eski kullanıcı adı artık yok');
+});
+
+test('tek oda kuralı: başka odaya giren önceki odadan çıkar, sahibi çıkan oda kapanır', { skip, timeout: 60000 }, async () => {
+  const p = await register('one1'); const q = await register('one2'); const s = await register('one3');
+  const ra = (await api('POST', '/api/rooms', { token: q.token, body: { name: 'Q Oda' } })).body.room.id;
+  ok(await api('POST', `/api/rooms/${ra}/join`, { token: p.token, body: {} }));
+  const own = await api('POST', '/api/rooms', { token: p.token, body: { name: 'P Oda' } });
+  status(own, 201);
+  const rb = own.body.room.id;
+  let m = await sql(`SELECT room_id FROM room_members WHERE user_id = $1`, [p.id]);
+  assert.deepEqual(m.rows.map((x) => x.room_id), [rb], 'kendi odasını açınca önceki odadan çıkar');
+  const rc = (await api('POST', '/api/rooms', { token: s.token, body: { name: 'S Oda' } })).body.room.id;
+  ok(await api('POST', `/api/rooms/${rc}/join`, { token: p.token, body: {} }));
+  m = await sql(`SELECT room_id FROM room_members WHERE user_id = $1`, [p.id]);
+  assert.deepEqual(m.rows.map((x) => x.room_id), [rc], 'başka odaya girince kendi odasından çıkar');
+  status(await api('GET', `/api/rooms/${rb}`, { token: q.token }), 404, 'sahibi çıkan (yardımcısız) oda kapanır');
+  status(await api('POST', `/api/rooms/${ra}/join`, { token: p.token, body: { rejoin: true } }), 409, 'kendiliğinden yeniden bağlanma geri çekmez');
+  status(await api('POST', `/api/rooms/${ra}/heartbeat`, { token: p.token }), 409, 'eski odanın sinyali: başka odaya geçti');
+  ok(await api('POST', `/api/rooms/${rc}/heartbeat`, { token: p.token }));
+  await sql(`UPDATE room_members SET joined_at = NOW() - INTERVAL '5 minutes', last_seen_at = NOW() - INTERVAL '5 minutes' WHERE user_id = $1`, [p.id]);
+  const st = await api('POST', '/api/rooms/leave-stale', { token: p.token });
+  ok(st);
+  assert.equal(st.body.left, 1, 'uygulama açılışında asılı kalan üyelik temizlenir');
+  for (const [t, id] of [[q, ra], [s, rc]]) await api('POST', `/api/rooms/${id}/close`, { token: t.token });
 });
 
 test('oda sahibi çıkınca oda kapanır', { skip, timeout: 60000 }, async () => {
@@ -1099,12 +1166,12 @@ test('şanslı çanta ve günlük görev', { skip, timeout: 60000 }, async () =>
 // ---------------------------------------------------------------- v2.36
 test('cihaz oturumu: giriş, token yenileme (rotasyon), çalıntı tespiti, uzaktan çıkış, eski token yükseltme', { skip, timeout: 60000 }, async () => {
   const name = `e2e_${tag}_ss`;
-  const reg = await api('POST', '/api/auth/register', { body: { username: name, password: 'sifre123', displayName: 'Oturum' } });
+  const reg = await api('POST', '/api/auth/register', { body: { username: name, password: 'Sifre-e2e-123', displayName: 'Oturum' } });
   ok(reg, 'kayıt (cihaz bilgisi yok → eski tip token)');
   assert.equal(reg.body.refreshToken, undefined);
   const uid = reg.body.user.id;
   const dev = (id) => ({ id, name: 'Test Telefon', platform: 'android', appVersion: '2.36.0' });
-  const login = (id) => api('POST', '/api/auth/login', { body: { username: name, password: 'sifre123', device: dev(id) } });
+  const login = (id) => api('POST', '/api/auth/login', { body: { username: name, password: 'Sifre-e2e-123', device: dev(id) } });
 
   const l1 = await login('device_one_123');
   ok(l1, 'cihazlı giriş');
@@ -1150,7 +1217,7 @@ test('cihaz oturumu: giriş, token yenileme (rotasyon), çalıntı tespiti, uzak
   ok(await api('POST', '/api/auth/refresh', { body: { refreshToken: a2.body.refreshToken } }), 'bu cihazın yenileme token\'ı sürüyor');
 
   // Eski tip token → cihaz oturumuna geçiş, çıkış
-  const legacy = await api('POST', '/api/auth/login', { body: { username: name, password: 'sifre123' } });
+  const legacy = await api('POST', '/api/auth/login', { body: { username: name, password: 'Sifre-e2e-123' } });
   ok(legacy);
   const up = await api('POST', '/api/auth/session', { token: legacy.body.token, body: { device: dev('device_ddd_444') } });
   ok(up, 'yükseltme');
@@ -1402,11 +1469,20 @@ test('şanslı hediye: alıcı payı, kazanç, ayar sınırları', { skip, timeo
   ok(await api('PUT', '/api/admin/app-config', { token: U.d.token, body: { luckyEnabled: true, luckyRtpBps: 7000, luckyReceiverBps: 1000 } }));
 });
 
-test('ADMIN_USERNAMES: listedeki kullanıcı kayıtta yönetici olur, diğerleri olmaz', { skip, timeout: 30000 }, async () => {
-  const boss = await api('POST', '/api/auth/register', { body: { username: `e2e_${tag}_boss`, password: 'sifre123' } });
+test('ADMIN_USERNAMES: yönetici varken listedeki adla kayıt olan yönetici olmaz (ad kapma koruması)', { skip, timeout: 30000 }, async () => {
+  const admins = (await sql(`SELECT COUNT(*)::int AS n FROM users WHERE system_role = 'admin' AND account_status = 'active'`)).rows[0].n;
+  assert.ok(admins > 0, 'testte aktif yönetici var');
+  // Sunucu açılışında listedeki ad "ilk görüldü" olarak kaydedilir; bu addan sonra açılan hesap yönetici yapılmaz.
+  const listed = (await sql(`SELECT first_listed_at, user_id FROM bootstrap_admins WHERE username = $1`, [`e2e_${tag}_boss`])).rows[0];
+  assert.ok(listed, 'ad açılışta kaydedildi');
+  assert.equal(listed.user_id, null);
+  const boss = await api('POST', '/api/auth/register', { body: { username: `e2e_${tag}_boss`, password: 'Sifre-e2e-123' } });
   status(boss, 201);
-  assert.equal(boss.body.user.systemRole, 'admin');
-  ok(await api('GET', '/api/admin/app-config', { token: boss.body.token }), 'yönetici paneli açılır');
+  assert.equal(boss.body.user.systemRole, 'user', 'listedeki adı sonradan alan yönetici olmaz');
+  status(await api('GET', '/api/admin/app-config', { token: boss.body.token }), 403);
+  // Yaygın şifre ve kullanıcı adıyla aynı şifre kabul edilmez (v2.92).
+  status(await api('POST', '/api/auth/register', { body: { username: `e2e_${tag}_weak`, password: '123456' } }), 400, 'yaygın şifre');
+  status(await api('POST', '/api/auth/register', { body: { username: `e2e_${tag}_same`, password: `e2e_${tag}_same` } }), 400, 'ad = şifre');
   const other = await register('notboss');
   status(await api('GET', '/api/admin/app-config', { token: other.token }), 403);
 });

@@ -24,6 +24,7 @@ const KEYS = [
   ['GLOBAL_GIFT_MIN_COINS', 'Global hediye şeridi alt sınırı (Coin)', false],
   ['BANNED_WORDS', 'Yasaklı kelimeler (virgülle)', false],
   ['FIREWALL_ALLOW_IPS', 'Asla engellenmeyecek IP adresleri (virgülle)', false],
+  ['SUPPORT_COIN_DAILY_LIMIT', 'Yardımcı admin 24 saatlik Coin yükleme sınırı (boş = 2.000.000, 0 = kapalı)', false],
 ];
 
 function readText(f) {
@@ -141,14 +142,28 @@ const server = http.createServer((req, res) => {
 });
 
 async function handle(req, res) {
-  const send = (code, html, headers = {}) => { res.writeHead(code, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Frame-Options': 'DENY', ...headers }); res.end(html); };
+  const send = (code, html, headers = {}) => {
+    res.writeHead(code, {
+      'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Frame-Options': 'DENY',
+      // Sayfada betik yok: yalnızca kendi formları ve satır içi stil çalışır.
+      'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+      // same-origin: panelin kendi form gönderimlerinde Origin başlığı gerçek adresle gider (no-referrer "null" yapardı).
+      'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'same-origin', ...headers,
+    });
+    res.end(html);
+  };
   if (!authorized(req)) return send(401, 'Şifre gerekli.', { 'WWW-Authenticate': 'Basic realm="TR Live Panel", charset="UTF-8"' });
   const url = new URL(req.url, 'http://x');
   if (req.method === 'GET' && (url.pathname === '/panel' || url.pathname === '/panel/')) return send(200, await page(url.searchParams.get('m') || ''));
   if (req.method !== 'POST') return send(404, 'Bulunamadı');
-  // Başka siteden form gönderimini engelle.
+  // Başka siteden form gönderimini engelle: tarayıcının bildirdiği kaynak (Origin, yoksa Referer) bu panel olmalı.
+  const mine = new Set([`https://${DOMAIN()}`, `https://${SSLIP()}`]);
+  const site = String(req.headers['sec-fetch-site'] || '');
+  if (site && site !== 'same-origin' && site !== 'none') return send(403, 'Geçersiz istek.');
   const origin = String(req.headers.origin || '');
-  if (origin && origin !== `https://${DOMAIN()}` && origin !== `https://${SSLIP()}`) return send(403, 'Geçersiz istek.');
+  let from = origin && origin !== 'null' ? origin : '';
+  if (!from && req.headers.referer) { try { from = new URL(String(req.headers.referer)).origin; } catch { from = 'x'; } }
+  if ((from && !mine.has(from)) || origin === 'null') return send(403, 'Geçersiz istek.');
   const f = await body(req);
   const back = (m) => send(303, '', { Location: `/panel?m=${encodeURIComponent(m)}` });
 

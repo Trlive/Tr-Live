@@ -4,7 +4,7 @@
 
 Kimlik: **🔒** giriş gerekli · **👑** yalnızca yönetici · **🛠** yönetici + yardımcı admin (destek) · **⏱** hız sınırı adı
 
-**Toplam 373 uç.**
+**Toplam 374 uç.**
 
 ## system.js  (`/api`)
 
@@ -62,7 +62,7 @@ Kimlik: **🔒** giriş gerekli · **👑** yalnızca yönetici · **🛠** yön
 
 | Yöntem | Yol | Kimlik | ⏱ | Not |
 |---|---|---|---|---|
-| GET | `/api/users/search` | 🔒 | user_search | Gizli kullanıcılar aramada çıkmaz. |
+| GET | `/api/users/search` | 🔒 | user_search | Gizli moddaki kullanıcı da kendi kimliğiyle bulunur (gizlilik yalnızca odalarda; hangi odada olduğu gösterilmez). |
 | GET | `/api/users/:userId/card` | 🔒 |  | Oda içi profil kartı: "Yakın Arkadaşlarım" (bu kişiye en çok hediye gönderen 5 kişi) ve "Madalyalar" (rozetler). |
 | GET | `/api/users/:userId` | 🔒 |  |  |
 | POST | `/api/users/:userId/follow` | 🔒 | follow |  |
@@ -101,6 +101,7 @@ Kimlik: **🔒** giriş gerekli · **👑** yalnızca yönetici · **🛠** yön
 | DELETE | `/api/rooms/:roomId/staff/:userId` | 🔒 | moderate | Yönetici silme: odada olmasa da kalıcı yönetici listesinden çıkarır (yalnızca oda sahibi). |
 | GET | `/api/rooms/:roomId/contributions` | 🔒 |  | (oda kapanıp açılınca liste sıfırlanmaz). |
 | POST | `/api/rooms/:roomId/leave` | 🔒 |  |  |
+| POST | `/api/rooms/leave-stale` | 🔒 | room_leave_stale | eski odada asılı kalmasın; sahibi olduğu oda içeride yönetici yoksa kapanır). Başka cihazda gerçekten odadaysa dokunulmaz. |
 | POST | `/api/rooms/:roomId/close` | 🔒 |  |  |
 | GET | `/api/rooms/:roomId/members` | 🔒 |  |  |
 | POST | `/api/rooms/:roomId/heartbeat` | 🔒 | heartbeat | Uygulamadan düzenli gelen "oda açık" sinyali: üyeyi canlı tutar ve oda arada kapanmışsa istemciye hemen 404 döner. |

@@ -118,7 +118,7 @@ router.get('/:familyId', async (req, res) => {
       `SELECT r.id, r.name, r.cover_url, r.tags, r.room_type, r.owner_id, u.avatar_url AS owner_avatar,
               (SELECT COUNT(*)::int FROM room_members rm WHERE rm.room_id = r.id) AS online
        FROM rooms r JOIN family_members fm ON fm.user_id = r.owner_id AND fm.family_id = $1 JOIN users u ON u.id = r.owner_id
-       WHERE r.is_active = TRUE AND r.is_hidden = FALSE AND u.account_status = 'active'
+       WHERE r.is_active = TRUE AND r.is_hidden = FALSE AND u.account_status = 'active' AND u.is_hidden = FALSE
        ORDER BY online DESC, r.created_at DESC LIMIT 10`,
       [id],
     ),
@@ -235,7 +235,7 @@ router.post('/:familyId/join', userLimit('family_join', 20, 3600e3), async (req,
   // Yöneticilere haber ver: aile sayfasında / profilde kırmızı rozet (soket) ve Bildirimler'de kayıt + telefon bildirimi.
   // Aynı başvuru tekrar gönderilirse yöneticiler yeniden rahatsız edilmez.
   const admins = inserted ? (await query(`SELECT user_id FROM family_members WHERE family_id = $1 AND role IN ('owner','admin')`, [id])).rows : [];
-  const who = req.user.is_hidden ? 'Gizli Kullanıcı' : (req.user.display_name || req.user.username || 'Biri');
+  const who = req.user.display_name || req.user.username || 'Biri';
   for (const a of admins) {
     hub.sendToUser(a.user_id, { type: 'family_request', familyId: id });
     notifyUser(a.user_id, 'family_request', '👪 Aileye yeni istek', `${who} ailene katılmak istiyor.`, { familyId: id, userId: me });
@@ -536,7 +536,8 @@ router.post('/:familyId/notice', userLimit('family_notice', 10, 3600e3), async (
   await screenText(req.user, body, 'family_notice');
   const f = await activeFamily(id);
   let roomId = null;
-  if (req.body?.withRoom === true) {
+  // Gizli moddaki kişinin açık odası bildirime eklenmez (aile odaları listesinde de gösterilmez).
+  if (req.body?.withRoom === true && !req.user.is_hidden) {
     roomId = (await query(
       `SELECT id FROM rooms WHERE owner_id = $1 AND is_active = TRUE AND is_hidden = FALSE ORDER BY created_at DESC LIMIT 1`, [req.user.id],
     )).rows[0]?.id ?? null;

@@ -12,7 +12,7 @@ import { roomStaffShield } from '../staff_logic.js';
 import { featuresFor, requireFeature } from '../services/wip.js';
 import { refreshGhost } from '../services/ghost.js';
 import { loadPublicRow, loadPublicRows, activeEntranceEffect } from '../services/users.js';
-import { leaveRoom, closeRoom, SUPPORTED_SEATS } from '../services/rooms.js';
+import { leaveRoom, leaveOtherRooms, leaveStaleRooms, closeRoom, noteKick, recentlyKicked, SUPPORTED_SEATS } from '../services/rooms.js';
 import { openMicSession, closeMicSessions } from '../services/mic.js';
 import { scoreboardOf } from '../services/scoreboard.js';
 import { queueOf, broadcastQueue, removeFromQueue, notifyNext, grantMicInvite, hasMicInvite, consumeMicInvite, isQueued } from '../services/micqueue.js';
@@ -134,7 +134,8 @@ router.get('/', optionalAuth, async (req, res) => {
      FROM rooms r JOIN users u ON u.id = r.owner_id ${USER_PUBLIC_JOINS}
      WHERE r.is_active = TRUE AND ($1::text IS NULL OR r.room_type = $1) AND ($2::text IS NULL OR $2 = ANY(r.tags))
        AND (r.is_hidden = FALSE OR r.owner_id = $3::uuid OR EXISTS (SELECT 1 FROM room_members hm WHERE hm.room_id = r.id AND hm.user_id = $3::uuid))
-       AND ($4::text IS NULL OR lower(r.name) LIKE $4 ESCAPE '\\' OR lower(u.display_name) LIKE $4 ESCAPE '\\' OR lower(u.username) LIKE $4 ESCAPE '\\'
+       -- Gizli sahibin adıyla odası bulunmaz (gizli kimlik adla eşleşmesin).
+       AND ($4::text IS NULL OR lower(r.name) LIKE $4 ESCAPE '\\' OR (u.is_hidden = FALSE AND (lower(u.display_name) LIKE $4 ESCAPE '\\' OR lower(u.username) LIKE $4 ESCAPE '\\'))
             OR EXISTS (SELECT 1 FROM unnest(r.tags) t WHERE lower(t) LIKE $4 ESCAPE '\\')
             OR ($7::text IS NOT NULL AND (r.room_number = $7
               -- Gizli kullanıcının kimliği odasıyla eşleştirilmez.
@@ -143,7 +144,7 @@ router.get('/', optionalAuth, async (req, res) => {
        AND ($5::text IS NULL
             OR ($5 = 'tr' AND lower(COALESCE(u.country, '')) IN ('türkiye', 'turkiye', 'turkey', 'tr', 'türkiye cumhuriyeti'))
             OR ($5 = 'other' AND lower(COALESCE(u.country, '')) NOT IN ('türkiye', 'turkiye', 'turkey', 'tr', 'türkiye cumhuriyeti'))
-            OR ($5 = 'friends' AND EXISTS (SELECT 1 FROM follows f WHERE f.follower_id = $3::uuid AND f.followed_id = r.owner_id))
+            OR ($5 = 'friends' AND u.is_hidden = FALSE AND EXISTS (SELECT 1 FROM follows f WHERE f.follower_id = $3::uuid AND f.followed_id = r.owner_id))
             OR ($5 = 'near' AND EXISTS (SELECT 1 FROM users me WHERE me.id = $3::uuid AND me.city IS NOT NULL AND lower(me.city) = lower(COALESCE(u.city, '')))))
        AND ($6::boolean IS FALSE OR u.created_at > NOW() - INTERVAL '30 days')
      ORDER BY member_count DESC, r.created_at DESC LIMIT 300`,
@@ -165,7 +166,8 @@ router.get('/', optionalAuth, async (req, res) => {
       memberCount: x.member_count, micCount: x.mic_count, tags: x.tags ?? [], locked: x.locked, theme: x.theme ?? 'default', themeImageUrl: x.theme_image_url ?? null,
       avatars: Array.isArray(x.avatars) ? x.avatars : [],
       inPk: x.in_pk === true, hot, recentGiftCoins: String(x.gifts_30m ?? 0),
-      owner: publicUser(x, req.user?.id ?? null),
+      // Oda kartı oda bağlamıdır: gizli sahip "Gizli Kullanıcı" görünür.
+      owner: roomUser(x, req.user?.id ?? null),
     })),
   });
 });
@@ -252,6 +254,9 @@ router.post('/', requireAuth, userLimit('room_create', 20, 3600e3), async (req, 
       [userId, roomType, name, tags, seatCount, theme, profile?.room_number ?? await newRoomNumber(), announcement, layout],
     )).rows[0];
   }
+  // Tek oda kuralı: kendi odasını açan kişi bulunduğu diğer odalardan çıkar (açık odasına dönüyorsa o oda hariç).
+  const already = (await query(`SELECT id FROM rooms WHERE owner_id = $1 AND room_type = $2 AND is_active = TRUE LIMIT 1`, [userId, roomType])).rows[0];
+  await leaveOtherRooms(userId, already?.id ?? null);
   const { room, created } = await openFromProfile(userId, profile, b.hidden === true);
   res.status(created ? 201 : 200).json({ room: roomJson(room, { showCode: true }), created });
   // Yeni açılan (gizli olmayan) odada arkadaşlara bildirim. Gizli kullanıcı / hayalet modda gönderilmez.
@@ -294,10 +299,11 @@ router.get('/favorites', requireAuth, async (req, res) => {
      FROM favorite_hosts f JOIN users u ON u.id = f.host_id ${USER_PUBLIC_JOINS}
      CROSS JOIN LATERAL (SELECT f.host_id) h
      WHERE f.user_id = $1 AND u.account_status = 'active'
-     ORDER BY (SELECT 1 FROM rooms r WHERE r.owner_id = f.host_id AND r.is_active = TRUE AND r.is_hidden = FALSE LIMIT 1) NULLS LAST, f.created_at DESC LIMIT 200`,
+     ORDER BY (SELECT 1 FROM rooms r WHERE r.owner_id = f.host_id AND r.is_active = TRUE AND r.is_hidden = FALSE AND NOT u.is_hidden LIMIT 1) NULLS LAST, f.created_at DESC LIMIT 200`,
     [req.user.id],
   );
-  res.json({ hosts: r.rows.map((x) => ({ user: publicUser(x, req.user.id), room: x.room })) });
+  // Gizli moddaki yayıncının açık odası gösterilmez (kim olduğu bilinen listede hangi odada olduğu anlaşılmasın).
+  res.json({ hosts: r.rows.map((x) => ({ user: publicUser(x, req.user.id), room: x.is_hidden ? null : x.room })) });
 });
 
 router.get('/recent', requireAuth, async (req, res) => {
@@ -308,14 +314,16 @@ router.get('/recent', requireAuth, async (req, res) => {
      WHERE rr.user_id = $1 AND u.account_status = 'active' ORDER BY rr.visited_at DESC LIMIT 30`,
     [req.user.id],
   );
-  res.json({ recent: r.rows.map((x) => ({ user: publicUser(x, req.user.id), roomName: x.room_name, roomType: x.room_type, visitedAt: x.visited_at, room: x.room })) });
+  res.json({ recent: r.rows.map((x) => ({ user: publicUser(x, req.user.id), roomName: x.room_name, roomType: x.room_type, visitedAt: x.visited_at, room: x.is_hidden ? null : x.room })) });
 });
 
 router.post('/hosts/:userId/favorite', requireAuth, userLimit('favorite', 60, 60e3), async (req, res) => {
   const hostId = uuid(req.params.userId, 'Yayıncı');
   if (hostId === req.user.id) throw fail('Kendinizi favorilere ekleyemezsiniz.');
-  const h = (await query(`SELECT 1 FROM users WHERE id = $1 AND account_status = 'active'`, [hostId])).rowCount;
+  const h = (await query(`SELECT is_hidden FROM users WHERE id = $1 AND account_status = 'active'`, [hostId])).rows[0];
   if (!h) throw fail('Kullanıcı bulunamadı.', 404);
+  // Gizli sahibin odasından favoriye eklenemez (favoriler listesi gizli kimliği ele vermesin).
+  if (h.is_hidden) throw fail('Bu yayıncı şu an favorilere eklenemez.', 403);
   const n = (await query(`SELECT COUNT(*)::int AS n FROM favorite_hosts WHERE user_id = $1`, [req.user.id])).rows[0].n;
   if (n >= 200) throw fail('En fazla 200 favori ekleyebilirsiniz.', 409);
   await query(`INSERT INTO favorite_hosts(user_id, host_id) VALUES($1,$2) ON CONFLICT DO NOTHING`, [req.user.id, hostId]);
@@ -393,6 +401,18 @@ router.post('/:roomId/join', requireAuth, userLimit('room_join', 40, 60e3), asyn
     if (!pw || !(await checkPassword(pw, room.password_hash))) throw fail('Oda şifresi hatalı.', 403);
   }
 
+  // Tek oda kuralı (Yoho): yeni odaya giren kişi önceki odalarından çıkar; sahibi olduğu oda, içeride yönetici yoksa kapanır.
+  // Uygulamanın kendiliğinden yeniden bağlanması (rejoin) ise kişi bu arada başka odaya geçtiyse onu geri çekmez.
+  // Odadan atılan kişi de kendiliğinden geri girmez (atılma bildirimi kaçsa bile).
+  if (req.body?.rejoin === true && !(await memberOf(roomId, userId))) {
+    if (recentlyKicked(roomId, userId)) throw fail('Odadan çıkarıldınız.', 403);
+    const elsewhere = await query(
+      `SELECT 1 FROM room_members m JOIN rooms r ON r.id = m.room_id AND r.is_active WHERE m.user_id = $1 AND m.room_id <> $2 LIMIT 1`,
+      [userId, roomId],
+    );
+    if (elsewhere.rowCount) throw fail('Başka bir odaya geçtiğin için bu odadan çıktın.', 409);
+  }
+  await leaveOtherRooms(userId, roomId);
   // WIP ayrıcalığı bitmiş gizli kullanıcı: hiçbir odada değilken (kimse eşleştiremez) gizlilik odaya girmeden kapanır;
   // böylece odadan odaya geçerek gizli kalınamaz.
   if (req.user.is_hidden && req.user.system_role !== 'admin' && !(await featuresFor(userId)).hiddenUser) {
@@ -413,6 +433,16 @@ router.post('/:roomId/join', requireAuth, userLimit('room_join', 40, 60e3), asyn
     `INSERT INTO room_members(room_id, user_id, role) VALUES($1,$2,$3) ON CONFLICT (room_id, user_id) DO NOTHING RETURNING user_id`,
     [roomId, userId, room.owner_id === userId ? 'owner' : (staffRole ?? 'user')],
   );
+  // Sahip, yönetici sayesinde açık kalan odasına döndü: yayın süresi sayımı yeniden başlar (onaylı yayıncıysa).
+  if (ins.rowCount && room.owner_id === userId) {
+    await query(
+      `INSERT INTO broadcast_sessions(user_id, room_id, agency_id)
+       SELECT b.user_id, $2, b.agency_id FROM broadcasters b
+       WHERE b.user_id = $1 AND b.status = 'approved'
+         AND NOT EXISTS (SELECT 1 FROM broadcast_sessions s WHERE s.room_id = $2 AND s.user_id = $1 AND s.ended_at IS NULL)`,
+      [userId, roomId],
+    );
+  }
   // Giren kişi kendi aracını da görsün: duyuru, uygulama odaya abone olmadan önce gittiği için yanıtla da döner.
   let myEntrance = null;
   if (ins.rowCount && !(await isGhost(userId))) {
@@ -427,9 +457,10 @@ router.post('/:roomId/join', requireAuth, userLimit('room_join', 40, 60e3), asyn
     const effect = row && !row.is_hidden ? await activeEntranceEffect(userId) : null;
     if (effect) myEntrance = { user: roomUser(row, userId), effect };
   }
+  // Sahibi gizli moddaysa "son odalar"a yazılmaz (sonradan kimin odası olduğu anlaşılmasın).
   if (room.owner_id !== userId && !room.is_hidden) {
     await query(
-      `INSERT INTO recent_rooms(user_id, host_id, room_name, room_type) VALUES($1,$2,$3,$4)
+      `INSERT INTO recent_rooms(user_id, host_id, room_name, room_type) SELECT $1,$2,$3,$4 WHERE NOT (SELECT is_hidden FROM users WHERE id = $2)
        ON CONFLICT (user_id, host_id) DO UPDATE SET room_name = EXCLUDED.room_name, room_type = EXCLUDED.room_type, visited_at = NOW()`,
       [userId, room.owner_id, room.name, room.room_type],
     );
@@ -591,12 +622,18 @@ router.get('/:roomId/contributions', requireAuth, async (req, res) => {
      JOIN users u ON u.id = g.sender_id ${USER_PUBLIC_JOINS} WHERE u.account_status = 'active' ORDER BY g.total DESC`,
     [room.owner_id, room.room_type, day],
   );
-  res.json({ contributions: r.rows.map((x) => ({ user: publicUser(x, req.user.id), total: String(x.total) })) });
+  res.json({ contributions: r.rows.map((x) => ({ user: roomUser(x, req.user.id), total: String(x.total) })) });
 });
 
 router.post('/:roomId/leave', requireAuth, async (req, res) => {
   await leaveRoom(req.user.id, uuid(req.params.roomId, 'Oda'));
   res.json({ ok: true });
+});
+
+// Uygulama açılışında: bu kişinin, hiçbir cihazında bağlı olmadığı eski oda üyelikleri temizlenir (uygulama kapanınca
+// eski odada asılı kalmasın; sahibi olduğu oda içeride yönetici yoksa kapanır). Başka cihazda gerçekten odadaysa dokunulmaz.
+router.post('/leave-stale', requireAuth, userLimit('room_leave_stale', 10, 60e3), async (req, res) => {
+  res.json({ ok: true, left: await leaveStaleRooms(req.user.id) });
 });
 
 router.post('/:roomId/close', requireAuth, async (req, res) => {
@@ -632,7 +669,14 @@ router.post('/:roomId/heartbeat', requireAuth, userLimit('heartbeat', 12, 60e3),
   const roomId = uuid(req.params.roomId, 'Oda');
   const room = await activeRoom(roomId);
   const r = await query(`UPDATE room_members SET last_seen_at = NOW() WHERE room_id = $1 AND user_id = $2`, [roomId, req.user.id]);
-  if (!r.rowCount) throw fail('Bu odanın üyesi değilsiniz.', 403);
+  if (!r.rowCount) {
+    // Başka odaya geçmiş (ör. başka cihazdan): bu ekran kapanır, geri katılmaya çalışmaz.
+    const elsewhere = await query(
+      `SELECT 1 FROM room_members m JOIN rooms r ON r.id = m.room_id AND r.is_active WHERE m.user_id = $1 LIMIT 1`, [req.user.id],
+    );
+    if (elsewhere.rowCount) throw fail('Başka bir odaya geçtiğin için bu odadan çıktın.', 409);
+    throw fail('Bu odanın üyesi değilsiniz.', 403);
+  }
   res.json({ ok: true, seatCount: room.seat_count });
 });
 
@@ -809,6 +853,7 @@ router.post('/:roomId/members/:userId/mic-off', requireAuth, userLimit('moderate
 });
 
 async function removeFromRoom(roomId, targetId, type) {
+  noteKick(roomId, targetId);
   await leaveRoom(targetId, roomId);
   hub.sendToUser(targetId, { type, roomId });
   await removeParticipant(roomId, targetId);

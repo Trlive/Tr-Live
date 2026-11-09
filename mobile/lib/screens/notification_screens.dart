@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/api.dart';
 import '../services/room_dock.dart';
+import 'home_screen.dart' show openRoom;
 import '../services/session.dart';
 import '../services/socket_service.dart';
 import '../widgets/app_theme.dart';
@@ -89,7 +90,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
     final d = mapOf(n['data']) ?? {};
     final roomId = d['roomId']?.toString();
     if (roomId != null) {
-      RoomDock.open(RoomRequest(roomId: roomId, name: (d['roomName'] ?? 'Oda').toString()));
+      openRoom(context, RoomRequest(roomId: roomId, name: (d['roomName'] ?? 'Oda').toString()));
       return;
     }
     Widget? page;

@@ -72,6 +72,8 @@ fi
 # Yalnızca izni yanlışsa dokunulur (her dokunuş "panel isteği" sayılıp sunucuyu yeniden başlatırdı).
 [ "$(stat -c %a "$STATE/update" 2>/dev/null)" = 666 ] || { systemctl stop trlive-apply.path 2>/dev/null; touch "$STATE/update" && chmod 666 "$STATE/update"; systemctl start trlive-apply.path 2>/dev/null; } || true
 chmod 644 "$STATE/update.log" "$STATE/install.log" 2>/dev/null || true
+# Eski sürümlerin kurulum kaydına yazdığı panel şifresi satırı silinir (kayıtlar uygulamada da görünür).
+sed -i -E 's/(PANEL SIFRESI[^:]*: ).*/\1[gizlendi]/' "$STATE/install.log" "$STATE/update.log" 2>/dev/null || true
 # Ses sunucusu testi (panelde "Ses sunucusu testi" bölümünde görünür).
 bash "$SRC/deploy/oracle/diag.sh" >/dev/null 2>&1 || true
 tail -n 200 "$STATE/update.log" > "$STATE/update.log.tmp" 2>/dev/null && mv "$STATE/update.log.tmp" "$STATE/update.log"

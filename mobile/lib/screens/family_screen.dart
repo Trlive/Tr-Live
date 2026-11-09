@@ -5,6 +5,7 @@ import '../services/api.dart';
 import '../services/inbox_service.dart';
 import '../services/socket_service.dart';
 import '../services/room_dock.dart';
+import 'home_screen.dart' show openRoom;
 import '../services/session.dart';
 import '../widgets/app_theme.dart';
 import '../widgets/common.dart';
@@ -534,7 +535,7 @@ class _FamilyPageState extends State<FamilyPage> {
           final tag = (r['tag'] ?? (r['roomType'] == 'video' ? 'Parti' : 'Sohbet')).toString();
           final party = tag.toLowerCase().contains('part');
           return GestureDetector(
-            onTap: () => RoomDock.open(RoomRequest(roomId: r['id'].toString(), name: (r['name'] ?? 'Oda').toString())),
+            onTap: () => openRoom(context, RoomRequest(roomId: r['id'].toString(), name: (r['name'] ?? 'Oda').toString())),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               AspectRatio(
                 aspectRatio: 1,

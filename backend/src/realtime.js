@@ -73,7 +73,10 @@ export const hub = {
   },
   detachUserFromRoom(userId, roomId, payload = null) {
     for (const ws of clients()) {
-      if (ws.userId === userId && ws.roomId === roomId) {
+      if (ws.userId !== userId) continue;
+      // Yolda olan bir abonelik isteği, çıkıştan sonra soketi bu odaya yeniden bağlamasın.
+      if (ws.pendingRoom === roomId) ws.subSeq = (ws.subSeq ?? 0) + 1;
+      if (ws.roomId === roomId) {
         ws.roomId = null;
         if (payload) safeSend(ws, payload);
       }
@@ -161,7 +164,7 @@ export function attachRealtime(server, {
     let data;
     try { data = JSON.parse(String(raw)); } catch { return; }
     if (data.type === 'ping') return safeSend(ws, { type: 'pong' });
-    if (data.type === 'room_unsubscribe') { ws.roomId = null; return; }
+    if (data.type === 'room_unsubscribe') { ws.subSeq = (ws.subSeq ?? 0) + 1; ws.roomId = null; return; }
     // Ekranda görünen kişilerin çevrimiçi durumunu izleme (sohbet listesi, DM, profil). Liste her seferinde yenilenir.
     if (data.type === 'presence_watch' && Array.isArray(data.userIds)) {
       const ids = [...new Set(data.userIds.filter((x) => typeof x === 'string' && UUID_RE.test(x)))].slice(0, MAX_WATCH);
@@ -187,8 +190,14 @@ export function attachRealtime(server, {
       return;
     }
     if (data.type === 'room_subscribe' && typeof data.roomId === 'string') {
+      // Yalnızca en son istek geçerli: üyelik kontrolü sürerken gelen çıkış / başka abonelik eskisini geçersiz kılar.
+      const seq = (ws.subSeq = (ws.subSeq ?? 0) + 1);
+      ws.pendingRoom = data.roomId;
       try {
-        if (await isRoomMember(ws.userId, data.roomId)) {
+        const member = await isRoomMember(ws.userId, data.roomId);
+        if (ws.subSeq !== seq) return;
+        ws.pendingRoom = null;
+        if (member) {
           ws.roomId = data.roomId;
           safeSend(ws, { type: 'room_subscribed', roomId: data.roomId });
         } else {

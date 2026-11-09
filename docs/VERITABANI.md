@@ -26,8 +26,11 @@ ay ortasında biter ve veritabanı ay sonuna kadar kapanır. Uygun olan: kotası
    ya da 4. adımla sıfırdan başlayın.
 4. Render → backend → Environment: `DATABASE_URL` = Aiven Service URI → Save (sunucu yeniden başlar; tablolar yoksa
    kendiliğinden oluşturulur).
-5. **Sıfırdan başlandıysa yönetici hesabı:** Render'a `ADMIN_USERNAMES` = kendi kullanıcı adınız (virgülle birden çok)
-   ekleyin. O adla kayıt olunca (ya da sunucu yeniden başlayınca) hesap yönetici olur.
+5. **Sıfırdan başlandıysa yönetici hesabı:** `ADMIN_USERNAMES` = kendi kullanıcı adınız (virgülle birden çok) ekleyin.
+   Sistemde hiç yönetici yokken o adla kayıt olunca hesap yönetici olur. Yönetici varken yeni bir yönetici eklemek için
+   önce o kişi kayıt olmalı, sonra adı listeye eklenmelidir (ad, listeye eklenmeden önce açılmış hesaba ve bir kez yetki verir).
+   Ad listeye kayıttan önce yazıldıysa listeden çıkarıp eklemek işe yaramaz (adı kapan biri yönetici olamasın diye): kişi
+   yeni bir kullanıcı adıyla hesap açar ve o ad listeye yazılır (ya da veritabanında `DELETE FROM bootstrap_admins WHERE username = 'ad'`).
 
 ## Ayarlar
 
@@ -36,7 +39,8 @@ ay ortasında biter ve veritabanı ay sonuna kadar kapanır. Uygun olan: kotası
 | `DATABASE_URL` | Bağlantı adresi. Adresteki `sslmode` parametresi yok sayılır (sağlayıcının kendi sertifikasıyla hata vermesin). |
 | `DATABASE_SSL` | `no-verify` (varsayılan: şifreli, sertifika doğrulanmaz) · `true` (tam doğrulama) · `false` (şifresiz, yalnızca yerel) |
 | `DATABASE_CA` | İsteğe bağlı: sağlayıcının CA sertifikası (Aiven → "CA certificate"); verilirse sertifika tam doğrulanır. |
-| `ADMIN_USERNAMES` | İsteğe bağlı: bu kullanıcı adları yönetici yapılır (listeden çıkarmak yetkiyi geri almaz). |
+| `ADMIN_USERNAMES` | İsteğe bağlı: bu kullanıcı adları yönetici yapılır (listeden çıkarmak yetkiyi geri almaz). Ad yalnızca listeye eklenmeden önce açılmış hesaba ve bir kez yetki verir (v2.92). |
+| `SUPPORT_COIN_DAILY_LIMIT` | Yardımcı adminin 24 saatte yükleyebileceği toplam Coin (varsayılan 2.000.000; `2.000.000` gibi ayraçlı yazılabilir; `0` = yükleyemez). |
 | `DATABASE_POOL_MAX` | Sunucunun aynı anda açtığı en fazla bağlantı (varsayılan 5). Aiven Free toplam 20 bağlantı verir ve bir kısmını kendisi kullanır; Render yeni sürümü açarken eski sürüm de kısa süre açık kalır. 10'dan büyük yapmayın. |
 
 ## Disk kullanımı

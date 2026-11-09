@@ -66,7 +66,7 @@ router.post('/request/:userId', userLimit('friendreq', 40, 3600e3), async (req, 
   if (reverse.rowCount) {
     await query(`UPDATE friend_requests SET status = 'accepted', responded_at = NOW() WHERE requester_id = $1 AND target_id = $2`, [other, req.user.id]);
     hub.sendToUser(other, { type: 'friend_update' });
-    notifyUser(other, 'friend_accept', '🤝 Arkadaşlık kabul edildi', `${(req.user.is_hidden ? 'Gizli Kullanıcı' : (req.user.display_name || req.user.username))} arkadaşlık isteğini kabul etti.`, { userId: req.user.id });
+    notifyUser(other, 'friend_accept', '🤝 Arkadaşlık kabul edildi', `${req.user.display_name || req.user.username} arkadaşlık isteğini kabul etti.`, { userId: req.user.id });
     return res.json({ ok: true, status: 'friends' });
   }
   const ins = await query(
@@ -77,7 +77,7 @@ router.post('/request/:userId', userLimit('friendreq', 40, 3600e3), async (req, 
   );
   hub.sendToUser(other, { type: 'friend_update' });
   // Yalnızca yeni (ya da süresi dolup yenilenen) istekte bildirim: art arda basınca bildirim yağmasın.
-  if (ins.rowCount) notifyUser(other, 'friend_request', '👋 Arkadaşlık isteği', `${(req.user.is_hidden ? 'Gizli Kullanıcı' : (req.user.display_name || req.user.username))} sana arkadaşlık isteği gönderdi.`, { userId: req.user.id });
+  if (ins.rowCount) notifyUser(other, 'friend_request', '👋 Arkadaşlık isteği', `${req.user.display_name || req.user.username} sana arkadaşlık isteği gönderdi.`, { userId: req.user.id });
   res.json({ ok: true, status: 'requested' });
 });
 
@@ -90,7 +90,7 @@ router.post('/accept/:userId', async (req, res) => {
   );
   if (!r.rowCount) throw fail('Bekleyen istek bulunamadı.', 404);
   hub.sendToUser(other, { type: 'friend_update' });
-  notifyUser(other, 'friend_accept', '🤝 Arkadaşlık kabul edildi', `${(req.user.is_hidden ? 'Gizli Kullanıcı' : (req.user.display_name || req.user.username))} arkadaşlık isteğini kabul etti.`, { userId: req.user.id });
+  notifyUser(other, 'friend_accept', '🤝 Arkadaşlık kabul edildi', `${req.user.display_name || req.user.username} arkadaşlık isteğini kabul etti.`, { userId: req.user.id });
   res.json({ ok: true, status: 'friends' });
 });
 

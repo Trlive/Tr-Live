@@ -54,11 +54,10 @@ router.get('/of/:userId', async (req, res) => {
   const ownerRow = await loadPublicRow(owner);
   if (!ownerRow) throw fail('Kullanıcı bulunamadı.', 404);
   const st = (await query(`SELECT guardian_enabled, guardian_shown_id FROM users WHERE id = $1`, [owner])).rows[0];
-  // Gizli kullanıcının koruyucuları başkalarına gösterilmez ve kimse koruyucusu olamaz.
-  const hiddenForMe = Boolean(ownerRow.is_hidden) && owner !== me;
-  const enabled = st?.guardian_enabled !== false && !hiddenForMe;
+  // Koruyucu oda dışı bir ilişkidir: gizli modda da kişinin kendi kimliğiyle gösterilir.
+  const enabled = st?.guardian_enabled !== false;
   // Koruyucu kapalıysa sıralama başkalarına gösterilmez (kişi kendisi görür).
-  const list = (enabled || owner === me) && !hiddenForMe ? await guardiansOf(owner, me) : [];
+  const list = enabled || owner === me ? await guardiansOf(owner, me) : [];
   const mine = (await query(`SELECT points FROM guardians WHERE owner_id = $1 AND guardian_id = $2`, [owner, me])).rows[0];
   res.json({
     owner: publicUser(ownerRow, me),
@@ -83,13 +82,13 @@ router.post('/of/:userId/join', userLimit('guardjoin', 20, 3600e3), async (req, 
   if (blocked.rowCount) throw fail('Bu kullanıcıyla işlem yapılamaz.', 403);
   const coins = await tx(async (c) => {
     const users = (await c.query(
-      `SELECT id, coins, account_status, guardian_enabled, is_hidden FROM users WHERE id = ANY($1::uuid[]) ORDER BY id FOR UPDATE`,
+      `SELECT id, coins, account_status, guardian_enabled FROM users WHERE id = ANY($1::uuid[]) ORDER BY id FOR UPDATE`,
       [[me, owner]],
     )).rows;
     const o = users.find((u) => u.id === owner);
     const m = users.find((u) => u.id === me);
     if (!o || o.account_status !== 'active') throw fail('Kullanıcı bulunamadı.', 404);
-    if (o.guardian_enabled === false || o.is_hidden) throw fail('Bu kullanıcı koruyucu kabul etmiyor.');
+    if (o.guardian_enabled === false) throw fail('Bu kullanıcı koruyucu kabul etmiyor.');
     const exists = await c.query(`SELECT 1 FROM guardians WHERE owner_id = $1 AND guardian_id = $2`, [owner, me]);
     if (exists.rowCount) throw fail('Zaten bu kişinin koruyucususunuz.');
     if (BigInt(m.coins) < GUARDIAN_COST) throw fail(`Koruyucu olmak için ${GUARDIAN_COST} Coin gerekir.`);
@@ -105,7 +104,7 @@ router.post('/of/:userId/join', userLimit('guardjoin', 20, 3600e3), async (req, 
     return String(left);
   });
   const meRow = await loadPublicRow(me);
-  const name = meRow?.is_hidden ? 'Bir kullanıcı' : (meRow?.display_name || meRow?.username || 'Bir kullanıcı');
+  const name = meRow?.display_name || meRow?.username || 'Bir kullanıcı';
   notifyUser(owner, 'guardian', '🛡️ Yeni koruyucu', `${name} artık senin koruyucun!`, { userId: me });
   res.json({ ok: true, coins });
 });

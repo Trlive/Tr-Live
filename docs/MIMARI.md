@@ -135,4 +135,4 @@ backend/
 * GitHub Actions: `backend.yml` (sözdizimi + test), `mobile.yml` (flutter analyze), `apk_build.yml` (APK; derleme hatasında erken durur ve hatayı özet sayfasına yazar), `db_tasi.yml` (elle: veritabanını başka sağlayıcıya birebir kopyalar).
 * Render: `npm run migrate && npm start`. Migration'lar her açılışta sırayla ve bir kez uygulanır.
 * Uzaktan ayarlar (`app_config` tablosu, Panel > Uygulama ayarları): en düşük/güncel sürüm, indirme bağlantısı, moderasyon kuralları, şanslı hediye oranları — APK yayınlamadan değişir.
-* Ortam değişkenleri: `DATABASE_URL` (sağlayıcı seçimi: [VERITABANI.md](VERITABANI.md)), `DATABASE_SSL`, `DATABASE_CA`, `ADMIN_USERNAMES`, `JWT_SECRET` (≥32 karakter), `LIVEKIT_URL/API_KEY/API_SECRET`, `TRUST_PROXY`, `CORS_ORIGIN`, `BANNED_WORDS`, `FIREWALL_*`, `GLOBAL_GIFT_MIN_COINS`.
+* Ortam değişkenleri: `DATABASE_URL` (sağlayıcı seçimi: [VERITABANI.md](VERITABANI.md)), `DATABASE_SSL`, `DATABASE_CA`, `ADMIN_USERNAMES`, `JWT_SECRET` (≥32 karakter), `LIVEKIT_URL/API_KEY/API_SECRET`, `TRUST_PROXY`, `CORS_ORIGIN`, `BANNED_WORDS`, `FIREWALL_*`, `GLOBAL_GIFT_MIN_COINS`, `SUPPORT_COIN_DAILY_LIMIT`.

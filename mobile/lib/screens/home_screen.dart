@@ -55,6 +55,9 @@ class _HomeScreenState extends State<HomeScreen> {
     Session.me.addListener(_checkTerms);
     _checkTerms();
     Inbox.start();
+    // Uygulama açılışı: önceki oturumdan (uygulama kapanmış / çökmüştü) eski odada asılı kalan üyelik temizlenir;
+    // sahibi olduğun oda, içeride yönetici yoksa kapanır. Başka bir cihazda gerçekten odadaysan dokunulmaz.
+    if (!RoomDock.isOpen) Api.post('/api/rooms/leave-stale').catchError((_) => <String, dynamic>{});
     // Micolive gibi: bildirim izni girişten sonra ana sayfada bir kez (sözleşme onayı bittikten sonra) sorulur.
     // Mikrofon / kamera yalnızca koltuğa çıkınca / yayın açınca, fotoğraf ve müzik yalnızca seçerken istenir.
     Future.delayed(const Duration(seconds: 3), () {
@@ -69,7 +72,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final roomId = data['roomId']?.toString();
       final userId = data['userId']?.toString();
       if (kind == 'room_open' && roomId != null) {
-        RoomDock.open(RoomRequest(roomId: roomId, name: (data['roomName'] ?? 'Oda').toString()));
+        openRoom(context, RoomRequest(roomId: roomId, name: (data['roomName'] ?? 'Oda').toString()));
       } else if (userId != null) {
         Navigator.of(context).push(MaterialPageRoute(builder: (_) => UserProfileScreen(userId: userId)));
       }
@@ -282,13 +285,24 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-/// Odayı dock'ta açar. Oda sahibi başka odaya geçerse kendi odası kapanacağı için önce sorulur.
-Future<void> openRoom(BuildContext context, RoomRequest req) async {
-  if (RoomDock.isOpen && RoomDock.request.value?.roomId != req.roomId && RoomDock.myRole == 'owner') {
-    final ok = await confirm(context, 'Başka odaya geçerseniz kendi odanız kapanır. Devam edilsin mi?', action: 'Geç');
-    if (!ok) return;
-  }
+/// Odayı dock'ta açar. Bir kişi aynı anda tek odada bulunur (Yoho): başka odaya geçince önceki odadan çıkar.
+/// Oda sahibi kendi odasından ayrılacağı için önce sorulur ([confirmed]: soru zaten soruldu).
+Future<void> openRoom(BuildContext context, RoomRequest req, {bool confirmed = false}) async {
+  if (!confirmed && !await confirmLeaveCurrentRoom(context, req.roomId)) return;
   RoomDock.open(req);
+}
+
+/// Açık odadan çıkılacaksa (başka odaya geçiş / kendi odanı açma) ve kişi o odanın sahibiyse onay ister.
+Future<bool> confirmLeaveCurrentRoom(BuildContext context, String? nextRoomId) async {
+  if (!RoomDock.isOpen || RoomDock.request.value?.roomId == nextRoomId) return true;
+  if (RoomDock.myRole != 'owner' && !RoomDock.closesOnLeave) return true;
+  return confirm(
+    context,
+    RoomDock.myRole == 'owner'
+        ? 'Başka odaya geçerseniz kendi odanızdan çıkarsınız; içeride yardımcı sahip yoksa odanız kapanır. Devam edilsin mi?'
+        : 'Bulunduğunuz odada sahip ya da başka yardımcı sahip yok; başka odaya geçerseniz oda herkes için kapanır. Devam edilsin mi?',
+    action: 'Geç',
+  );
 }
 
 class RoomsTab extends StatefulWidget {
@@ -372,7 +386,7 @@ class RoomsTabState extends State<RoomsTab> {
     }
   }
 
-  Future<void> _open(String id, String name, {bool locked = false}) => openRoom(context, RoomRequest(roomId: id, name: name, locked: locked));
+  Future<void> _open(String id, String name, {bool locked = false, bool confirmed = false}) => openRoom(context, RoomRequest(roomId: id, name: name, locked: locked), confirmed: confirmed);
 
   /// Oda aç. Sesli oda bir kez kurulur: kayıtlıysa doğrudan odana girersin. Görüntülü yayın açık değilse her seferinde
   /// "Yayın başlat" ekranı gelir (kamera önizlemesi, başlık, tür, Canlı/Çoklu seçimi); açıksa doğrudan girersin.
@@ -382,16 +396,26 @@ class RoomsTabState extends State<RoomsTab> {
     if (mine == null || !mounted) return;
     final rooms = mapOf(mine['rooms']) ?? <String, dynamic>{};
     final profile = mapOf(rooms[roomType]);
-    if (profile != null && (roomType == 'audio' || profile['activeRoomId'] != null)) {
+    final activeId = profile?['activeRoomId']?.toString();
+    // Zaten kendi açık odandaysan (küçültülmüş) yalnızca büyütülür.
+    if (activeId != null && RoomDock.request.value?.roomId == activeId) {
+      RoomDock.expand();
+      return;
+    }
+    // Tek oda kuralı: kendi odanı açınca bulunduğun odadan çıkarsın; o oda senin odansa önce sorulur
+    // (soru odayı açmadan önce: vazgeçersen boşuna oda açılmaz).
+    if (!await confirmLeaveCurrentRoom(context, activeId)) return;
+    if (!mounted) return;
+    if (profile != null && (roomType == 'audio' || activeId != null)) {
       final r = await guard(context, () => Api.post('/api/rooms', {'roomType': roomType}));
       final room = mapOf(r?['room']);
-      if (room != null && mounted) await _open(room['id'] as String, (room['name'] ?? '').toString());
+      if (room != null && mounted) await _open(room['id'] as String, (room['name'] ?? '').toString(), confirmed: true);
       return;
     }
     final room = await Navigator.of(context).push<Map<String, dynamic>>(
       MaterialPageRoute(fullscreenDialog: true, builder: (_) => GoLiveScreen(initialType: roomType, profiles: rooms)),
     );
-    if (room != null && mounted) await _open(room['id'] as String, (room['name'] ?? '').toString());
+    if (room != null && mounted) await _open(room['id'] as String, (room['name'] ?? '').toString(), confirmed: true);
   }
 
   /// Yoho sekmesi: seçili olan büyük ve kalın, altında kısa çizgi; diğerleri küçük ve soluk.

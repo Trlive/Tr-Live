@@ -1,3 +1,86 @@
+## v2.92.1 — Gizli kullanıcı yalnızca odalarda gizli (mesaj, akış, profil kendi kimliğiyle)
+- Hata: gizli moddaki kişi her yerde "Gizli Kullanıcı" görünüyordu (mesaj listesi, akış, yorumlar, profil, arama, takip,
+  arkadaş, aile, CP, koruyucu, bildirimler). Artık Yoho'daki "gizemli kişi" gibi yalnızca:
+  * odalarda (üyeler, koltuk, oda sohbeti, hediye, şanslı çanta, PK, oyun, oda katkı listesi): "Gizli Kullanıcı" + gizli ID;
+  * tüm uygulamaya giden hediye / şans / çanta şeritlerinde ve sıralamalarda (liderlik, destekçiler, haftalık etkinlik):
+    "Gizli Kullanıcı" (gizli ID'siz).
+  Mesajlarda, akışta, yorumlarda, profilde, aramada, takip / arkadaş / aile listelerinde, CP ve koruyucuda kişi kendi
+  adıyla, fotoğrafıyla ve ID'siyle görünür; takip edilebilir, koruyucusu olunabilir, beğeni / yorum / takip bildirimleri
+  kendi adıyla gider.
+- Odadaki gizli kimlik ele verilmez: gizli kişinin başkalarına gizli modda olduğu, gizli ID'si, çevrimiçi durumu ve hangi
+  odada olduğu gösterilmez (takip, favori yayıncı, son odalar ve aile odaları listeleri dahil).
+- Gizli kişinin odada gönderdiği büyük hediye şeridi ve şanslı çantası, gönderim anındaki gizlilikle saklanır: odadan çıkıp
+  gizliliği kapatsa da gerçek adı görünmez (059).
+- Ayarlar'daki "Gizli kullanıcı" açıklaması yeni davranışa göre güncellendi.
+- Gizli sahibin odası adıyla aranınca bulunmaz (takip ettiklerim sekmesinde de çıkmaz); odası "son odalar"a yazılmaz,
+  favoriye eklenemez; PK aday listesinde adı "Gizli Kullanıcı"; aile bildirimine odası eklenmez. CP sıralaması gerçek
+  kimlikle (CP eşi profilde zaten açık).
+- Bilinen sınır: toplam sıralamalar (destekçiler, oda katkı, liderlik) kişinin ŞU ANKİ gizliliğine göre gösterilir.
+
+## v2.92.0 — Güvenlik denetimi: yönetici atama, gizli anahtarlar, yardımcı admin sınırları, sunucu paneli
+- Yönetici atama (ADMIN_USERNAMES) açığı kapatıldı: eskiden listedeki bir ad boşa çıkınca (yöneticinin adı değişince,
+  hesabı silinince ya da listede henüz açılmamış bir ad varken) o adla kayıt olan herkes yönetici oluyordu. Artık kayıtta
+  yalnızca sistemde hiç yönetici yokken (ilk kurulum) yönetici yapılır; sunucu açılışında ad yalnızca listeye eklenmeden önce
+  açılmış hesaba ve yalnızca bir kez yetki verir (yeni tablo bootstrap_admins, 058). Reddedilen deneme güvenlik kaydına düşer.
+  Listeden çıkarıp yeniden eklemek adı kapmış hesabı yönetici yapmaz. Yeni bir yönetici eklemek için önce kişi kayıt olur,
+  sonra adı listeye yazılır. Yönetici hesabı artık uygulamadan silinemez (adı boşa çıkıp başkasına geçmesin).
+- Gizli anahtarlar: NODE_ENV yazılmamışsa sunucu artık üretim sayılır; JWT_SECRET en az 32 karakter olmadan ve örnek değerle
+  (CHANGE_ME …) açılmaz (eskiden NODE_ENV unutulursa herkesin bildiği geliştirme anahtarıyla token imzalanabiliyordu).
+  LiveKit anahtarları örnek değerde bırakılmışsa sunucu açılmaz.
+- Yardımcı admin Coin yükleme: saatlik 30 yükleme sınırı ve yeni 24 saatlik toplam sınır (varsayılan 2.000.000 Coin;
+  sunucu panelinde "Yardımcı admin 24 saatlik Coin yükleme sınırı"; 2.000.000 gibi yazılabilir, 0 = yükleyemez) işlem
+  kaydından sayılır: sunucu yeniden başlayınca sıfırlanmaz, aynı anda gönderilen isteklerle aşılamaz. Yönetici için sınır yok.
+- Yönetimin koyduğu banı yardımcı admin kaldıramaz, yeni bir banla da değiştiremez (kısaltıp sonra kaldırma yolu kapalı);
+  kendi koyduğu banı ve süresi dolmuş banları kaldırabilir.
+- Şifre: yeni şifrede en yaygın şifreler (123456, qwerty, sifre123, takım adları …), tek karakter tekrarı ve kullanıcı
+  adıyla aynı şifre kabul edilmez. Mevcut şifrelerle giriş etkilenmez.
+- Ses/görüntü anahtarı (LiveKit) 2 saat yerine 20 dakika geçerli: odadan atılan / engellenen kişinin elindeki eski anahtarla
+  odaya doğrudan girebileceği süre 2 saatten 20 dakikaya indi. Odada bağlı olanın bağlantısı kesilmez.
+- Sunucu paneli: sayfa betik çalıştırmaz (CSP), başka siteden form gönderimi daha sıkı reddedilir. Kurulumda üretilen panel
+  şifresi artık kurulum kaydına yazılmaz (yalnızca sunucu konsolu); eski kayıtlardaki şifre satırı silinir. Uygulamadaki
+  Sunucu sayfası kayıtlardaki şifre, anahtar ve token'ları gizler.
+- Ajans merkezi yollarında oturum denetimi büyük/küçük harfe duyarsız; katalog aç/kapat ucunda tür adı sıkı denetlenir.
+- Android: uygulamanın bulut yedeği kapalı (oturum anahtarları Google yedeğine gitmez). Bu ayar APK iş akışındadır.
+- CI: Backend ve Mobile iş akışları depoyu yalnızca okur; Backend iş akışı bilinen açığı olan paketleri özet sayfasında
+  gösterir. Not: .github/workflows dosyaları değişti, GitHub'a elle yüklenmeli (yüklenmezse yalnızca bu iki madde eksik kalır).
+- Belgeler: docs/GUVENLIK.md (sunucu ve CI bölümleri), YETKILER.md, VERITABANI.md güncellendi.
+
+## v2.91.1 — Alev çerçeveleri yönetim panelinden eklenecek
+- Alev Halkası ve Mavi Alev Halkası sunucuya kendiliğinden eklenmez (aynı çerçeve iki kez görünmesin); dosyalar yönetim
+  panelinden mağazaya yüklenir. Dosyalar uygulamanın varsayılan çerçeve oranına (1.6) göre üretildi, avatara tam oturur.
+- Üretici araç: tools/alev_halkasi_cerceve.py (fire / blue).
+
+## v2.91.0 — Alev Halkası yenilendi + Mavi Alev Halkası
+- "Alev Halkası" baştan çizildi (videodaki gibi): kalın turuncu halka (ortası açık sarı çizgi, kenarları turuncu, net iç
+  kenar), halkadan yükselen gerçekçi alev dilleri (tabanı sarı-beyaz, gövdesi turuncu, uçları kırmızı ve yarı saydam),
+  üstte uzun alev tacı, yanlarda orta, altta kısa alevler; hızlı yükselen kıvrımlı hareket ve uçuşan turuncu kıvılcımlar.
+- Yeni "Mavi Alev Halkası": aynı çerçevenin mavi alevli hâli (elektrik mavisi halka, beyaz-camgöbeği çekirdekli alevler).
+- İkisi de sunucu güncellenince mağazaya kendiliğinden eklenir / güncellenir (samples/pack21); 5.000 coin / 30 gün,
+  fiyat yönetim panelinden değiştirilebilir. Üretici: tools/alev_halkasi_cerceve.py.
+
+## v2.90.0 — Yeni çerçeve: Alev Halkası
+- Mağazaya (Çerçeveler) hareketli "Alev Halkası" çerçevesi eklendi: avatarı saran parlak ateş halkası, üstte yükselen
+  alev dilleri ve uçuşan kıvılcımlar; kusursuz döngü, şeffaf zemin. Kendi çizimimiz (tools/alev_halkasi_cerceve.py ile
+  üretilir), başka uygulamanın dosyası kullanılmadı.
+- Sunucu güncellenince kendiliğinden eklenir (backend/src/samples/pack20/f_fire.webp); fiyatı paket çerçeveleri gibi
+  5.000 coin / 30 gün, yönetim panelinden değiştirilebilir.
+
+## v2.89.0 — Oda giriş-çıkış sistemi: tek oda kuralı, asılı kalan üyelik ve açık kalan oda düzeltmeleri
+- Tek oda kuralı (Yoho gibi): bir kişi aynı anda yalnızca bir odada bulunur. Başka odaya girince ya da kendi odasını açınca
+  önceki odadan sunucuda anında çıkar (eskiden hesap eski odada asılı kalabiliyordu). Sahibi olduğu oda, içeride yardımcı
+  sahip yoksa kapanır. Başka cihazdan başka odaya geçilirse eski ekran "Başka bir odaya geçtiğin için bu odadan çıktın" ile kapanır.
+- Oda yalnızca sahibi ya da yardımcı sahibi içerideyken açık kalır; moderatör artık odayı açık tutmaz (sahip çıkıp başka
+  odaya gidince oda açık kalıyordu). Son yardımcı sahip çıkarken de "oda herkes için kapanır" uyarısı çıkar.
+- Uygulaması kapanan / bağlantısı kopan kişi ~3 dk içinde odadan düşer (eskiden üye 5 dk, sahip 15 dk); sahipsiz kalan açık
+  odalar 2 dk içinde kendiliğinden kapanır. Uygulama yeniden açılınca eski odada asılı kalan üyelik hemen temizlenir.
+- Kendi odanı açarken önce sorulur (vazgeçersen boşuna oda açılmaz); bildirimden / aileden odaya girerken de aynı uyarı.
+- Odadan atılan kişi uygulamanın kendiliğinden yeniden bağlanmasıyla geri girmez; elle tekrar girebilir.
+- Sahip odadan çıkınca yayın süresi sayımı durur, dönünce yeniden başlar (yardımcı sahip odayı açık tutsa da süre şişmez).
+- Müziği çalan kişi odadan çıkınca müzik durur; mikrofon sırasındaki kişi çıkınca sıra herkeste güncellenir, boşalan koltuk
+  için sıradaki davet edilir. Banlanan kişinin açık odaları kapanır.
+- Giriş isteği yarıda kalırsa (zaman aşımı) üyelik asılı kalmaz; eski odanın geç gelen "kapandı" bildirimi yeni açılan odayı
+  kapatmaz; soket odaya abonelik yarışı düzeltildi.
+
 ## v2.88.0 — Gümüş 400K şeridi, düz oda ID, sade oda simgeleri, siyah-sarı müzik, yükseltilmiş kartlar, eşit rozetler
 - 400K–1M global hediye şeridi gümüş: süsler parlak gümüş, bant koyu füme; gümüş ışık halesi, beyaz parıltı, yıldızlar,
   bandın kenarında dolaşan gümüş ışık, yağan gümüş tozları, gümüş halkalı avatar ve parlayan adet (1M+ altın aynı).

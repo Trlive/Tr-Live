@@ -25,7 +25,7 @@ import { WIP_MIN_LEVEL, WIP_MAX_LEVEL, MAX_LEVEL, expForLevel, levelFromExp, lev
 import { wipLabel } from '../services/wip.js';
 import { dealerSell } from '../services/dealers.js';
 import { hub } from '../realtime.js';
-import { leaveRoom } from '../services/rooms.js';
+import { leaveRoom, closeRoom } from '../services/rooms.js';
 import { banIpPersist, unbanIp, listBans, securityStats, userLimit, hitLimit } from '../firewall.js';
 import net from 'node:net';
 import { saveUpload, removeUpload, removeAnimatedAvatar, IMAGE_TYPES, OWN_IMAGE_RE } from '../services/images.js';
@@ -41,6 +41,8 @@ import os from 'node:os';
 import { idempotent } from '../idempotency.js';
 import { ghostNow, refreshGhost } from '../services/ghost.js';
 import { mountPanelRoutes } from './admin_panel.js';
+import { config } from '../config.js';
+import { redactSecrets } from '../redact.js';
 
 export const router = Router();
 router.use(requireAuth, requireStaff);
@@ -57,7 +59,10 @@ router.get('/me/permissions', (req, res) => {
     role: req.user.system_role, full: admin,
     can: admin ? ['all'] : ['search_users', 'ban', 'unban', 'change_display_name', 'change_avatar', 'chat_restriction',
       'load_coins', 'grant_level', 'grant_wip', 'grant_items'],
-    limits: admin ? null : { coinsPerLoad: Number(SUPPORT_COIN_LIMIT), maxLevel: SUPPORT_LEVEL_LIMIT },
+    limits: admin ? null : {
+      coinsPerLoad: Number(SUPPORT_COIN_LIMIT), coinsPerDay: Number(config.supportCoinDailyLimit), loadsPerHour: SUPPORT_COIN_LOADS_PER_HOUR,
+      maxLevel: SUPPORT_LEVEL_LIMIT,
+    },
   });
 });
 
@@ -79,6 +84,8 @@ async function assertUser(id, run = query) {
 
 // Yardımcı admin (Coin yükleme, WIP, öğe, seviye) yalnızca normal kullanıcılara işlem yapar; yönetici herkese.
 export const SUPPORT_COIN_LIMIT = 100000n;
+export const SUPPORT_COIN_LOADS_PER_HOUR = 30;
+const groupDigits = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 export const SUPPORT_LEVEL_LIMIT = 100;
 async function assertStaffTarget(req, userId) {
   const target = await assertUser(userId);
@@ -111,6 +118,20 @@ router.get('/users', async (req, res) => {
   });
 });
 
+// Yönetimin koyduğu (süresi dolmamış) banı yalnızca yönetim değiştirir ya da kaldırır: yardımcı admin banı kısa süreli
+// yeni bir banla değiştirip sonra kaldırarak bu kuralı aşamaz. Satır kilitlenir (eşzamanlı ban / kaldırma ile yarışmasın).
+async function lockBanState(c, userId, actorRole) {
+  const cur = (await c.query(
+    `SELECT u.account_status, (u.banned_until IS NULL OR u.banned_until > NOW()) AS ban_active, b.system_role AS banned_by_role
+     FROM users u LEFT JOIN users b ON b.id = u.banned_by WHERE u.id = $1 FOR UPDATE OF u`,
+    [userId],
+  )).rows[0];
+  if (actorRole !== 'admin' && cur?.account_status === 'banned' && cur.ban_active && cur.banned_by_role === 'admin') {
+    throw fail('Bu banı yönetim koydu; yalnızca yönetim değiştirebilir veya kaldırabilir.', 403);
+  }
+  return cur;
+}
+
 async function auditStaff(c, adminId, userId, action, meta) {
   await c.query(
     `INSERT INTO financial_audit_logs(admin_id, user_id, action, reference_type, metadata) VALUES($1,$2,$3,'user',$4)`,
@@ -129,6 +150,7 @@ router.post('/users/:userId/ban', async (req, res) => {
   if (until === undefined) throw fail('Süre 1 saat ile 1 yıl arasında olmalı (süresiz için boş bırakın).');
   const reason = text(req.body?.reason, 'Neden', { max: 300 });
   await tx(async (c) => {
+    await lockBanState(c, userId, req.user.system_role);
     await c.query(
       `UPDATE users SET account_status = 'banned', banned_until = $2, ban_reason = $3, banned_by = $4, token_version = token_version + 1, updated_at = NOW() WHERE id = $1`,
       [userId, until, reason, req.user.id],
@@ -138,6 +160,10 @@ router.post('/users/:userId/ban', async (req, res) => {
   await revokeAllSessions(userId, 'banned');
   hub.disconnectUser(userId, 'banned');
   // Banlanan kullanıcı odalardan çıkarılır; ses/görüntü (LiveKit) bağlantısı da kesilir, sahibi olduğu oda kapanır.
+  // Sahibi olduğu açık odalar (içeride yardımcı sahip olsa da) kapanır.
+  for (const r of (await query(`SELECT id FROM rooms WHERE owner_id = $1 AND is_active = TRUE`, [userId])).rows) {
+    await closeRoom(r.id).catch((e) => console.error('Ban sonrası oda kapatma:', e.message));
+  }
   for (const r of (await query(`SELECT room_id FROM room_members WHERE user_id = $1`, [userId])).rows) {
     await leaveRoom(userId, r.room_id).catch((e) => console.error('Ban sonrası odadan çıkarma:', e.message));
   }
@@ -164,6 +190,9 @@ router.post('/users/:userId/unban', async (req, res) => {
   if (!mayActOnUser(req.user.system_role, target.system_role)) throw fail('Bu hesap üzerinde işlem yetkiniz yok.', 403);
   if (target.account_status !== 'banned') throw fail('Hesap banlı değil.', 409);
   await tx(async (c) => {
+    // Yardımcı admin kendi koyduğu ya da otomatik banları kaldırır; yönetimin koyduğunu kaldıramaz.
+    const cur = await lockBanState(c, userId, req.user.system_role);
+    if (cur?.account_status !== 'banned') throw fail('Hesap banlı değil.', 409);
     await c.query(`UPDATE users SET account_status = 'active', banned_until = NULL, ban_reason = NULL, banned_by = NULL, updated_at = NOW() WHERE id = $1`, [userId]);
     await auditStaff(c, req.user.id, userId, 'account_unban', { by: req.user.system_role });
   });
@@ -230,14 +259,32 @@ router.post('/users/:userId/coins', idempotent('admin_coins'), async (req, res) 
   const userId = uuid(req.params.userId, 'Kullanıcı');
   const delta = bigAmount(req.body?.amount, 'Coin miktarı', { allowNegative: true });
   const reason = text(req.body?.reason, 'Neden', { max: 300 }) || 'Admin Coin düzenlemesi';
-  if (req.user.system_role !== 'admin') {
+  const support = req.user.system_role !== 'admin';
+  if (support) {
     if (delta <= 0n) throw fail('Yardımcı admin yalnızca Coin yükleyebilir (düşemez).', 403);
     if (delta > SUPPORT_COIN_LIMIT) throw fail('Yardımcı admin tek seferde en fazla 100.000 Coin yükleyebilir.', 403);
     await assertStaffTarget(req, userId);
     // Kötüye kullanıma karşı hız sınırı: yardımcı admin saatte en fazla 30 yükleme yapar.
-    if (!hitLimit(`support_coins:${req.user.id}`, 30, 3600e3).allowed) throw fail('Çok fazla Coin yükleme yaptınız; biraz sonra tekrar deneyin.', 429);
+    if (!hitLimit(`support_coins:${req.user.id}`, SUPPORT_COIN_LOADS_PER_HOUR, 3600e3).allowed) throw fail('Çok fazla Coin yükleme yaptınız; biraz sonra tekrar deneyin.', 429);
   }
   const result = await tx(async (c) => {
+    if (support) {
+      // Kalıcı sınırlar (işlem kaydından): sunucu yeniden başlasa da sıfırlanmaz. Aynı yardımcı adminin eşzamanlı
+      // yüklemeleri sırayla denetlenir (sınır iki istekle aşılamasın).
+      await c.query(`SELECT pg_advisory_xact_lock(hashtext('support_coins:' || $1::text))`, [req.user.id]);
+      const used = (await c.query(
+        `SELECT COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '1 hour')::int AS hour_loads, COALESCE(SUM(amount_coins), 0)::text AS day_coins
+         FROM financial_audit_logs WHERE admin_id = $1 AND action = 'admin_coin_adjustment' AND created_at > NOW() - INTERVAL '24 hours'`,
+        [req.user.id],
+      )).rows[0];
+      if (used.hour_loads >= SUPPORT_COIN_LOADS_PER_HOUR) throw fail('Çok fazla Coin yükleme yaptınız; biraz sonra tekrar deneyin.', 429);
+      const cap = config.supportCoinDailyLimit;
+      if (cap === 0n) throw fail('Yardımcı adminin Coin yüklemesi sunucu ayarında kapalı.', 403);
+      const left = cap - BigInt(used.day_coins);
+      if (delta > left) {
+        throw fail(`Yardımcı admin 24 saatte en fazla ${groupDigits(cap)} Coin yükleyebilir (kalan: ${groupDigits(left > 0n ? left : 0n)}).`, 403);
+      }
+    }
     const user = (await c.query(`SELECT coins FROM users WHERE id = $1 AND account_status = 'active' FOR UPDATE`, [userId])).rows[0];
     if (!user) throw fail('Kullanıcı bulunamadı.', 404);
     const before = BigInt(user.coins);
@@ -635,7 +682,8 @@ router.post('/asset-pack', requireSuperAdmin, express.raw({ type: () => true, li
 const STATE_DIR = '/srv/state';
 function tailFile(name, lines) {
   try {
-    return fs.readFileSync(`${STATE_DIR}/${name}`, 'utf8').split('\n').slice(-lines).join('\n').trim();
+    // Şifre / anahtar / token içeren satırlar gizlenir (kayıtlar telefonda gösterilir).
+    return redactSecrets(fs.readFileSync(`${STATE_DIR}/${name}`, 'utf8').split('\n').slice(-lines).join('\n').trim());
   } catch {
     return null;
   }
@@ -844,7 +892,7 @@ router.get('/catalog', requireSuperAdmin, async (_req, res) => {
 });
 const TOGGLE_TABLES = { gifts: 'gifts', frames: 'frames', 'entrance-effects': 'entrance_effects', music: 'music_tracks' };
 router.post('/catalog/:kind/:id/active', requireSuperAdmin, async (req, res) => {
-  const table = TOGGLE_TABLES[req.params.kind];
+  const table = Object.hasOwn(TOGGLE_TABLES, req.params.kind) ? TOGGLE_TABLES[req.params.kind] : null;
   if (!table) throw fail('Geçersiz katalog türü.', 404);
   if (typeof req.body?.isActive !== 'boolean') throw fail('isActive true/false olmalı.');
   const r = await query(`UPDATE ${table} SET is_active = $2 WHERE id = $1 RETURNING id`, [uuid(req.params.id, 'Kimlik'), req.body.isActive]);
@@ -2036,7 +2084,7 @@ router.post('/users/:userId/credentials', requireSuperAdmin, async (req, res) =>
   }
   let passwordHash = null;
   if (b.password !== undefined && b.password !== null && String(b.password) !== '') {
-    passwordRules(String(b.password));
+    passwordRules(String(b.password), { username: changes.username ?? target.username });
     passwordHash = await hashPassword(String(b.password));
   }
   if (!Object.keys(changes).length && !passwordHash) throw fail('Değiştirilecek bir bilgi yok.');

@@ -9,9 +9,26 @@ import { touchSession } from './services/sessions.js';
 export const hashPassword = (p) => bcrypt.hash(p, 12);
 export const checkPassword = (p, h) => bcrypt.compare(p, h);
 
-export function passwordRules(password) {
+// En sık kullanılan (ilk denenen) şifreler: yeni şifre olarak kabul edilmez. Mevcut şifrelerle giriş etkilenmez.
+const COMMON_PASSWORDS = new Set([
+  '123456', '1234567', '12345678', '123456789', '1234567890', '0123456789', '123123', '123321', '654321', '987654', '112233',
+  '121212', '123qwe', 'qwe123', 'qwerty', 'qwerty1', 'qwerty123', 'qwertyuiop', 'asdasd', 'asd123', 'asdfgh', 'zxcvbn', 'abc123',
+  'abcdef', '1q2w3e', '1q2w3e4r', '1qaz2wsx', 'password', 'password1', 'passw0rd', 'iloveyou', 'sifre', 'sifre123', 'şifre', 'şifre123',
+  'parola', 'parola123', 'trlive', 'trlive123', 'tr-live', 'admin', 'admin123', 'galatasaray', 'fenerbahce', 'besiktas', 'trabzonspor',
+  '147258', '159753', '789456', '456789', '147852', '258369', '102030', '101010', '202020', '696969', '123654', '741852', 'aaaaaa',
+]);
+
+// Karşılaştırma için küçük harf: Türkçe I/İ/ı farkı yok sayılır (BESIKTAS = besiktas = beşiktaş değil, ayrı yazılır).
+const fold = (v) => String(v).trim().toLowerCase().normalize('NFD').replace(/\u0307/g, '').normalize('NFC').replace(/ı/g, 'i');
+
+/** Yeni şifre kuralları (kayıt, şifre değişimi, yöneticinin verdiği şifre). username verilirse şifre ona eşit olamaz. */
+export function passwordRules(password, { username = null } = {}) {
   if (typeof password !== 'string' || password.length < 6) throw fail('Şifre en az 6 karakter olmalı.');
   if (Buffer.byteLength(password, 'utf8') > 72) throw fail('Şifre en fazla 72 bayt olabilir.');
+  const p = fold(password);
+  // Tek karakter tekrarı (111111, aaaaaa) ve listedeki yaygın şifreler ilk denenenlerdir.
+  if (COMMON_PASSWORDS.has(p) || /^(.)\1+$/u.test(p)) throw fail('Bu şifre çok yaygın ve kolay tahmin edilir. Daha güçlü bir şifre seçin.');
+  if (username && p === fold(username)) throw fail('Şifre kullanıcı adıyla aynı olamaz.');
 }
 
 // Eski uygulama sürümleri (cihaz bilgisi göndermeyen) için 30 günlük tek token. Yeni sürümler cihaz oturumu

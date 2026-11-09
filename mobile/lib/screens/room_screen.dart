@@ -139,6 +139,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   String get _myRole => (_me['role'] ?? 'user').toString();
   bool get _onSeat => _me['microphone'] == true;
 
+  /// Bu ekranın dock'taki açılış sırası: eski odanın geç gelen olayı yeni odayı kapatmasın (RoomDock.closeIf).
+  final int _dockSerial = RoomDock.serial;
+
   @override
   void initState() {
     super.initState();
@@ -167,6 +170,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         if (!mounted || _closing) return;
         if (e.statusCode == 404) {
           _exit('Oda kapandı.');
+        } else if (e.statusCode == 409) {
+          _exit(e.message); // başka odaya geçilmiş: geri katılınmaz
         } else if (e.statusCode == 403) {
           _rejoin();
         }
@@ -290,7 +295,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         if (!mounted) return;
         password = await askText(context, 'Oda şifresi', obscure: true);
         if (password == null) {
-          if (mounted) RoomDock.close();
+          if (mounted) RoomDock.closeIf(_dockSerial);
           return;
         }
       }
@@ -338,9 +343,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           .catchError((_) {})
           .whenComplete(() => CallGuard.instance.requestPhonePermission());
     } catch (e) {
+      // Sunucu girişi yapmış ama yanıt gelmemiş olabilir (zaman aşımı / bağlantı kesildi): üyelik asılı kalmasın.
+      final code = e is ApiException ? e.statusCode : null;
+      if (code == null || code >= 500 || code == 408) {
+        Api.post('/api/rooms/${widget.roomId}/leave').catchError((_) => <String, dynamic>{});
+      }
       if (!mounted) return;
       toast(context, errorText(e), error: true);
-      RoomDock.close();
+      RoomDock.closeIf(_dockSerial);
     }
   }
 
@@ -562,7 +572,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     if (_rejoining || _closing) return;
     _rejoining = true;
     try {
-      final r = await Api.post('/api/rooms/${widget.roomId}/join', {if (_password != null) 'password': _password, if (widget.code != null) 'code': widget.code});
+      // rejoin: kişi bu arada başka odaya geçtiyse sunucu onu bu odaya geri çekmez (409 → ekran kapanır).
+      final r = await Api.post('/api/rooms/${widget.roomId}/join', {
+        'rejoin': true,
+        if (_password != null) 'password': _password,
+        if (widget.code != null) 'code': widget.code,
+      });
       if (!mounted || _closing) {
         Api.post('/api/rooms/${widget.roomId}/leave').catchError((_) => <String, dynamic>{});
         return;
@@ -597,26 +612,36 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     if (_closing || !mounted) return;
     _closing = true;
     _joined = false; // sunucu tarafında zaten çıkarıldık
+    // Yeni bir oda açıldıysa (bu ekran kapanmak üzere) ona dokunulmaz, eski odanın mesajı da gösterilmez.
+    if (_dockSerial != RoomDock.serial) return;
     toast(context, message);
     // Oda açıkken üstünde duran pencereler (Ludo, alt pencereler, diyaloglar) kapanmış odanın üstünde kalmasın.
     if (!RoomDock.minimized.value) Navigator.of(context).popUntil((r) => r.isFirst);
-    RoomDock.close();
+    RoomDock.closeIf(_dockSerial);
+  }
+
+  /// Ben çıkarsam oda kapanır mı: odayı açık tutan (sahip / yardımcı sahip) son kişi benim.
+  bool get _closesOnLeave {
+    if (_myRole != 'owner' && _myRole != 'cohost') return false;
+    return !_members.any((m) => m['userId']?.toString() != Session.id && (m['role'] == 'owner' || m['role'] == 'cohost'));
   }
 
   Future<void> _onBack() async {
     if (_closing) return;
-    if (_myRole == 'owner') {
+    if (_myRole == 'owner' || _closesOnLeave) {
       final ok = await confirm(
         context,
-        'Odadan ayrılırsanız ve içeride yönetici (yardımcı sahip / moderatör) yoksa oda kapanır. Yönetici varsa oda açık kalır; '
-        'döndüğünüzde yine oda sahibi olarak girersiniz. Odayı tamamen kapatmak için menüden "Odayı kapat"ı kullanın.',
+        _myRole == 'owner'
+            ? 'Odadan ayrılırsanız ve içeride yardımcı sahip yoksa oda kapanır. Yardımcı sahip varsa oda açık kalır; '
+                'döndüğünüzde yine oda sahibi olarak girersiniz. Odayı tamamen kapatmak için menüden "Odayı kapat"ı kullanın.'
+            : 'Odada sahip ya da başka yardımcı sahip yok; ayrılırsanız oda herkes için kapanır. Devam edilsin mi?',
         action: 'Ayrıl',
       );
       if (!ok || !mounted) return;
     }
     // Ağ yavaşsa çıkış düğmesi 20 sn donmasın: oda hemen kapanır, "leave" isteğini dispose() gönderir.
     _closing = true;
-    RoomDock.close();
+    RoomDock.closeIf(_dockSerial);
   }
 
   bool _micInviteOpen = false;
@@ -659,6 +684,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
     if (type == 'error' && e['code'] == 'not_member' && e['roomId'] == widget.roomId) {
       _rejoin();
+      return;
+    }
+    // Tek oda kuralı: başka odaya girdin / kendi odanı açtın (ör. başka cihazdan): bu oda ekranı kapanır, geri katılmaz.
+    if (type == 'room_moved' && e['roomId'] == widget.roomId) {
+      _exit('Başka bir odaya geçtiğin için bu odadan çıktın.');
       return;
     }
     if (type == 'mic_request_declined' && e['roomId'] == widget.roomId) {
@@ -4281,6 +4311,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     RoomDock.myRole = _myRole;
+    RoomDock.closesOnLeave = _closesOnLeave;
     return ValueListenableBuilder<bool>(
       valueListenable: RoomDock.minimized,
       builder: (context, minimized, _) => PopScope(

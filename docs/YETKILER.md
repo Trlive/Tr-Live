@@ -9,9 +9,10 @@ Uygulamada birbirinden bağımsız beş rol ekseni vardır. Bir kişi aynı anda
 |---|:-:|:-:|:-:|
 | Kullanıcı arama | ✅ | ✅ | — |
 | Nick / profil fotoğrafı değiştirme | ✅ | ✅ yalnızca normal kullanıcıya | — |
-| Süreli / süresiz ban, ban kaldırma | ✅ | ✅ yalnızca normal kullanıcıya | — |
+| Süreli / süresiz ban, ban kaldırma | ✅ | ✅ yalnızca normal kullanıcıya; yönetimin koyduğu banı kaldıramaz ve değiştiremez | — |
+| Coin yükleme | ✅ sınırsız (düşürebilir) | ✅ tek seferde 100.000, saatte 30, 24 saatte toplam `SUPPORT_COIN_DAILY_LIMIT` (varsayılan 2.000.000; `0` = kapalı); düşüremez | — |
 | Destek sohbetlerini okuma / yanıtlama | ✅ | ✅ | — |
-| Coin / Elmas düzeltme, bayi yükleme | ✅ | — | — |
+| Elmas düzeltme, Coin düşürme, bayi yükleme | ✅ | — | — |
 | Hediye, çerçeve, giriş efekti, mağaza ürünü ekleme/silme | ✅ | — | — |
 | WIP kademeleri, ajans ayarları, dönem kapatma, ödeme işaretleme | ✅ | — | — |
 | Banner, duyuru, şikâyet yönetimi | ✅ | — | — |

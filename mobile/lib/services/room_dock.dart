@@ -23,6 +23,10 @@ class RoomDock {
   /// Açık odadaki rolüm (oda sahibi başka odaya geçerken uyarmak için).
   static String myRole = 'user';
 
+  /// Ben çıkarsam oda kapanır mı: odayı açık tutan son kişiyim (sahip ya da yardımcı sahip; içeride başka sahip /
+  /// yardımcı sahip yok). Başka odaya geçerken uyarmak için oda ekranı yazar.
+  static bool closesOnLeave = false;
+
   /// RoomScreen'in kayıt ettiği "odadan ayrıl" işlemi (küçültülmüş çubuktaki X bunu çağırır).
   static VoidCallback? exitHandler;
 
@@ -73,11 +77,17 @@ class RoomDock {
     if (isOpen) minimized.value = false;
   }
 
+  /// Yalnızca hâlâ aynı oda açıksa kapatır: eski odanın geç gelen "kapandı / çıkarıldın" olayı yeni açılan odayı kapatmasın.
+  static void closeIf(int serial) {
+    if (serial == _serial) close();
+  }
+
   static void close() {
     request.value = null;
     cover.value = null;
     minimized.value = false;
     myRole = 'user';
+    closesOnLeave = false;
     BackgroundService.instance.roomClosed();
     exitHandler = null;
   }
