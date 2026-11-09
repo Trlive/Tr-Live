@@ -2,6 +2,9 @@ name: Backend
 on:
   push:
   pull_request:
+# İş akışı depoyu yalnızca okur (en az yetki).
+permissions:
+  contents: read
 jobs:
   unit:
     runs-on: ubuntu-latest
@@ -19,6 +22,17 @@ jobs:
       - run: npm install
       - run: npm run check
       - run: npm test
+      # Bilinen güvenlik açığı olan paket var mı (bilgi amaçlı; derlemeyi durdurmaz, özet sayfasında görünür).
+      - name: Paket güvenlik taraması
+        if: matrix.node == 20
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          npm audit --omit=dev --audit-level=high 2>&1 | tee audit.log || {
+            { echo "### ⚠️ Sunucu paketlerinde bilinen güvenlik açığı"; echo '```'; tail -n 40 audit.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          }
 
   e2e:
     # Gerçek PostgreSQL + gerçek sunucu süreci ile uçtan uca testler (SQL doğrulaması burada yapılır)
