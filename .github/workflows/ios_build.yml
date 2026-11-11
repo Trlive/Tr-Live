@@ -1,0 +1,118 @@
+name: iPhone (iOS) Test Derlemesi
+
+# Yalnızca elle başlatılır: Eylemler → "iPhone (iOS) Test Derlemesi" → Run workflow.
+# Gizli depoda Mac makinesi dakikayı 10 kat sayar; her yüklemede otomatik çalışmaz.
+# Çıktı: imzasız TR-Live.ipa → Releases → "Son iPhone (test)". Apple Developer hesabı olmadan Sideloadly gibi bir
+# araçla kendi ücretsiz Apple kimliğinle imzalanıp iPhone'a kurulur (7 gün geçerli). Ayarlar: mobile/native/ios/setup_ios.py
+on:
+  workflow_dispatch:
+    inputs:
+      api_url:
+        description: "Sunucu adresi"
+        required: false
+        default: "https://130-61-222-48.sslip.io"
+
+permissions:
+  contents: write  # IPA, "Releases" bölümüne yüklenir
+
+concurrency:
+  group: ios-build
+  cancel-in-progress: true
+
+jobs:
+  build-ios:
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      INPUT_API_URL: ${{ github.event.inputs.api_url }}
+      REPO_API_URL: ${{ vars.API_URL }}
+    defaults:
+      run:
+        shell: bash
+        working-directory: mobile
+    steps:
+      - name: Depoyu indir
+        uses: actions/checkout@v4
+
+      - name: Flutter kur
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Sunucu adresini doğrula
+        run: |
+          set -euo pipefail
+          API_URL="${INPUT_API_URL:-}"
+          [ -n "$API_URL" ] || API_URL="${REPO_API_URL:-}"
+          [ -n "$API_URL" ] || API_URL="https://130-61-222-48.sslip.io"
+          if ! printf '%s' "$API_URL" | grep -qE '^https://[A-Za-z0-9._:-]+(/[A-Za-z0-9._/-]*)?$'; then
+            echo "::error::Sunucu adresi geçersiz (iPhone yalnızca https kabul eder): $API_URL"; exit 1
+          fi
+          echo "API_URL=$API_URL" >> "$GITHUB_ENV"
+
+      - name: Sürüm tutarlılığı (pubspec ↔ lib/version.dart)
+        run: |
+          set -euo pipefail
+          P="$(grep -E '^version:' pubspec.yaml | sed -E 's/^version: *//; s/\+.*//')"
+          D="$(grep -oE "kAppVersion = '[^']+'" lib/version.dart | sed -E "s/.*'([^']+)'/\1/")"
+          [ "$P" = "$D" ] || { echo "::error::pubspec ($P) ile lib/version.dart ($D) farklı"; exit 1; }
+          echo "Sürüm: $P"
+
+      - name: ios klasörünü üret ve ayarla
+        run: |
+          set -euo pipefail
+          flutter --version
+          if [ ! -f ios/Runner/Info.plist ]; then
+            flutter create . --platforms=ios --project-name tr_live --org com.trlive
+            # flutter create örnek bir test ekleyebilir; bu projede olmayan MyApp'e bağlıdır, silinir.
+            if [ -f test/widget_test.dart ] && grep -q 'MyApp' test/widget_test.dart; then rm -f test/widget_test.dart; fi
+          fi
+          # Eklentiler eklenince Podfile vb. oluşur; ayarlar ondan sonra yapılır.
+          flutter pub get
+          flutter build ios --config-only --no-codesign --dart-define=API_URL="$API_URL"
+          python3 native/ios/setup_ios.py
+
+      - name: iPhone uygulamasını derle (imzasız)
+        run: |
+          set -euo pipefail
+          flutter build ios --release --no-codesign --dart-define=API_URL="$API_URL" 2>&1 | tee build.log
+          test -d build/ios/iphoneos/Runner.app
+
+      - name: IPA paketle
+        run: |
+          set -euo pipefail
+          rm -rf Payload TR-Live.ipa
+          mkdir Payload
+          cp -R build/ios/iphoneos/Runner.app Payload/
+          zip -qry TR-Live.ipa Payload
+          ls -lh TR-Live.ipa
+
+      - name: IPA'yı Releases'e yükle (Son iPhone)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          VER="$(grep -E '^version:' pubspec.yaml | sed -E 's/^version: *//')"
+          NOTES="Sürüm: $VER · $(date -u '+%Y-%m-%d %H:%M') UTC · Sunucu: $API_URL. İmzasız test sürümü: bilgisayarda Sideloadly ile kendi Apple kimliğinle iPhone'a kur (7 gün geçerli)."
+          # Etiket her derlemede bu commit'e taşınsın diye sürüm silinip yeniden oluşturulur.
+          gh release delete son-ios --yes --cleanup-tag >/dev/null 2>&1 || true
+          gh release create son-ios TR-Live.ipa --target "$GITHUB_SHA" --title "Son iPhone - test ($VER)" --notes "$NOTES" --prerelease
+
+      - name: Özet
+        run: |
+          {
+            echo "### iPhone test derlemesi hazır"
+            echo "- Releases → **Son iPhone - test** → \`TR-Live.ipa\`"
+            echo "- Sunucu: \`$API_URL\`"
+            echo "- Kurulum: Sideloadly (Windows/Mac) → iPhone'u kabloyla bağla → IPA'yı sürükle → Apple kimliğinle Start."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Hata günlüğünü paylaş
+        if: failure()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-build-log
+          path: mobile/build.log
+          if-no-files-found: ignore
