@@ -34,6 +34,23 @@ jobs:
       - name: Depoyu indir
         uses: actions/checkout@v4
 
+      # Makinede kurulu en yeni (beta olmayan) Xcode seçilir: güncel eklentiler (ör. device_info_plus 12.4) Xcode 26
+      # SDK'sındaki API'leri kullanıyor; varsayılan eski Xcode ile derlenmez.
+      - name: En yeni Xcode'u seç
+        working-directory: .
+        run: |
+          set -euo pipefail
+          ls -d /Applications/Xcode*.app || true
+          X="$(ls -d /Applications/Xcode_*.app 2>/dev/null | grep -vi beta | sort -V | tail -1 || true)"
+          [ -n "$X" ] || X="$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+          sudo xcode-select -s "$X/Contents/Developer"
+          xcodebuild -version
+          MAJOR="$(xcodebuild -version | head -1 | sed -E 's/Xcode ([0-9]+).*/\1/')"
+          if [ "$MAJOR" -lt 26 ]; then
+            echo "::error::Bu makinede Xcode 26 yok (en yenisi: $MAJOR). İş akışında runs-on: macos-26 yapılmalı."
+            exit 1
+          fi
+
       - name: Flutter kur
         uses: subosito/flutter-action@v2
         with:
