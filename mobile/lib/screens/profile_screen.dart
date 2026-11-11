@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/api.dart';
 import '../services/auth_service.dart';
 import '../services/session.dart';
+import '../services/platform_rules.dart';
 import '../services/inbox_service.dart';
 import '../widgets/anim_asset.dart';
 import '../widgets/app_theme.dart';
@@ -331,7 +332,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           row(Icons.support_agent, Pal.cyan, 'Ajans Merkezi', () => _open(const AgencyCenterScreen()), sub: '${agencyAssistant['agencyName']} · Asistan'),
         row(Icons.shield_outlined, const Color(0xFFFF4FA8), 'Koruyuculuğum', () => _open(MyGuardianScreen(profileBuilder: (id) => UserProfileScreen(userId: id))), sub: 'Koruyucuların ve koruduğun kişiler'),
         row(Icons.task_alt, Colors.greenAccent, 'Günlük Görevler', () => showDailySheet(context)),
-        if (isDealer) row(Icons.store_mall_directory, Pal.cyan, 'Bayi paneli', () => _open(const DealerScreen())),
+        // iPhone'da bayi (uygulama dışı Coin satışı) paneli gösterilmez: App Store kuralı.
+        if (isDealer && !isIOS) row(Icons.store_mall_directory, Pal.cyan, 'Bayi paneli', () => _open(const DealerScreen())),
         if (Session.isStaff) row(Icons.admin_panel_settings, Colors.redAccent, Session.isAdmin ? 'Yönetim paneli' : 'Yardımcı admin paneli', () => _open(const AdminScreen())),
       ]),
     );

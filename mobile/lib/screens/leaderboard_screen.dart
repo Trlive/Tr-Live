@@ -6,6 +6,7 @@ import '../widgets/common.dart';
 import '../widgets/fig.dart';
 import 'family_screen.dart';
 import 'user_screens.dart';
+import '../services/platform_rules.dart';
 
 /// Zirve Listesi (Figma): Yayıncı · Destekçi · Yükleme · Ajans · Aile · CP × Günlük / Haftalık / Aylık.
 /// Her sekmenin kendi rengi; ilk 3 kürsüde (taçlı çerçeve + sancak), devamı liste; altta kendi sıran.
@@ -34,6 +35,9 @@ const _tabs = [
   _Tab('cp', 'CP', Color(0xCC8E1458), Color(0xB3A8226E), Color(0xFFC2307F)),
 ];
 
+/// iPhone'da Coin yükleme sıralaması gösterilmez (App Store: uygulama dışı Coin satışına yönlendirme yok).
+List<_Tab> get _shownTabs => isIOS ? [for (final t in _tabs) if (t.type != 'topups') t] : _tabs;
+
 const _periods = [('daily', 'Günlük'), ('weekly', 'Haftalık'), ('monthly', 'Aylık')];
 
 /// Figma'daki gibi tutar gizlenir: ilk ve son rakam görünür (7*****5).
@@ -56,7 +60,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
   int _tab = 0;
   String _period = 'weekly';
 
-  _Tab get _t => _tabs[_tab];
+  _Tab get _t => _shownTabs[_tab];
 
   void _openUser(Map<String, dynamic>? u) {
     final id = u?['id']?.toString();
@@ -95,7 +99,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
               padding: const EdgeInsets.all(4),
               decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.18), borderRadius: BorderRadius.circular(8)),
               child: Row(children: [
-                for (var i = 0; i < _tabs.length; i++)
+                for (var i = 0; i < _shownTabs.length; i++)
                   Expanded(
                     child: GestureDetector(
                       onTap: () => setState(() => _tab = i),
@@ -105,7 +109,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                         decoration: BoxDecoration(color: _tab == i ? Colors.white : Colors.transparent, borderRadius: BorderRadius.circular(6)),
                         child: FittedBox(
                           fit: BoxFit.scaleDown,
-                          child: Text(_tabs[i].label, style: TextStyle(color: _tab == i ? Colors.black : Colors.white, fontWeight: _tab == i ? FontWeight.w700 : FontWeight.w500, fontSize: 13)),
+                          child: Text(_shownTabs[i].label, style: TextStyle(color: _tab == i ? Colors.black : Colors.white, fontWeight: _tab == i ? FontWeight.w700 : FontWeight.w500, fontSize: 13)),
                         ),
                       ),
                     ),

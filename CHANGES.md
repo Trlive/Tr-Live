@@ -1,3 +1,14 @@
+## v2.93.0 — iPhone (iOS) sürümü: test derlemesi
+- Yeni iş akışı "iPhone (iOS) Test Derlemesi" (.github/workflows/ios_build.yml, elle yüklenir): Mac'te imzasız TR-Live.ipa
+  derler, Releases → "Son iPhone - test"e koyar. Yalnızca elle başlar (Mac dakikası 10 kat sayılır). Apple Developer
+  hesabı olmadan Sideloadly ile kendi Apple kimliğinle iPhone'a kurulur (7 gün geçerli). Rehber: docs/IPHONE.md.
+- iOS proje ayarları mobile/native/ios/setup_ios.py'de: izin metinleri (kamera, mikrofon, galeri, müzik), odadayken
+  arka planda ses, Google/Facebook giriş dönüşü (trlive://), dikey ekran, iOS 14+, paket kimliği com.trlive.trlive,
+  uygulama simgesi, uygulama açıkken bildirim gösterimi.
+- Uygulama: iPhone'da bildirimler çalışır (izin odaya ilk girişte sorulur); Android'e özel ön plan servisi iPhone'da
+  çalıştırılmaz; şarkılar Dosyalar uygulamasından seçilir; App Store kuralı gereği iPhone'da bayi paneli ve Coin
+  yükleme sıralaması gizli; güncelleme ekranında APK bağlantısı gösterilmez. Android'de değişiklik yok.
+
 ## v2.92.1 — Gizli kullanıcı yalnızca odalarda gizli (mesaj, akış, profil kendi kimliğiyle)
 - Hata: gizli moddaki kişi her yerde "Gizli Kullanıcı" görünüyordu (mesaj listesi, akış, yorumlar, profil, arama, takip,
   arkadaş, aile, CP, koruyucu, bildirimler). Artık Yoho'daki "gizemli kişi" gibi yalnızca:

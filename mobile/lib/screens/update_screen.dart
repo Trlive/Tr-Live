@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api.dart';
+import '../services/platform_rules.dart';
 import '../version.dart';
 import '../widgets/app_theme.dart';
 import '../widgets/common.dart';
@@ -15,7 +16,8 @@ class UpdateRequiredScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final link = url ?? '';
+    // İndirme bağlantısı Android APK'sıdır: iPhone'da gösterilmez (yeni sürüm TestFlight / App Store ya da test IPA'sıyla kurulur).
+    final link = isIOS ? '' : (url ?? '');
     return PopScope(
       canPop: false,
       child: Scaffold(

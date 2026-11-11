@@ -516,7 +516,7 @@ class _DeviceAudioPageState extends State<DeviceAudioPage> with WidgetsBindingOb
             Text(
               _needPermission
                   ? 'Müzik dosyalarını görebilmek için açılan pencerede "İzin ver"e dokun.'
-                  : (LocalMusic.scanUnsupported ? 'Bu sürümde otomatik tarama yok; dosyaları elle seçebilirsin.' : 'Telefonunda müzik dosyası bulunamadı.'),
+                  : (LocalMusic.scanUnsupported ? 'Bu cihazda otomatik tarama yok; dosyaları elle seçebilirsin.' : 'Telefonunda müzik dosyası bulunamadı.'),
               textAlign: TextAlign.center,
               style: const TextStyle(color: _sub, fontSize: 15, height: 1.4),
             ),
