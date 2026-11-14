@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../l10n/l10n.dart';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../services/api.dart';
@@ -169,7 +170,7 @@ class _EntranceBannerState extends State<EntranceBanner> with SingleTickerProvid
                   ),
                 ),
                 SizedBox(width: 5 * k),
-                Text('odaya girdi', style: TextStyle(color: Colors.white, fontSize: 12.5 * k, fontWeight: FontWeight.w700, shadows: const [Shadow(blurRadius: 3, color: Colors.black54)])),
+                Text(tx('odaya girdi'), style: TextStyle(color: Colors.white, fontSize: 12.5 * k, fontWeight: FontWeight.w700, shadows: const [Shadow(blurRadius: 3, color: Colors.black54)])),
               ]),
             ),
           ),

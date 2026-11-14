@@ -1,9 +1,14 @@
+import '../l10n/l10n.dart';
+
 /// Kayıt ekranındaki ülke seçimi: ISO kodu, Türkçe ad, telefon kodu. Bayrak, koddan emoji olarak üretilir (görsel yok).
 class Country {
   final String code;
   final String name;
   final String dial;
   const Country(this.code, this.name, this.dial);
+
+  /// Ekranda gösterilen ad: uygulama İngilizceyse İngilizce ad (sunucuya Türkçe [name] gider).
+  String get label => L10n.isTr ? name : (kCountryEn[code] ?? name);
 
   /// "TR" → 🇹🇷 (bölgesel gösterge harfleri).
   String get flag => String.fromCharCodes(code.toUpperCase().codeUnits.map((c) => 0x1F1E6 + c - 65));
@@ -100,3 +105,83 @@ Country? countryByCode(String? code) {
   }
   return null;
 }
+
+/// Ülkelerin İngilizce adları (uygulama dili İngilizceyken gösterilir).
+const kCountryEn = <String, String>{
+  'TR': 'Türkiye',
+  'AZ': 'Azerbaijan',
+  'CY': 'Cyprus',
+  'SA': 'Saudi Arabia',
+  'AE': 'United Arab Emirates',
+  'QA': 'Qatar',
+  'KW': 'Kuwait',
+  'BH': 'Bahrain',
+  'OM': 'Oman',
+  'YE': 'Yemen',
+  'IQ': 'Iraq',
+  'SY': 'Syria',
+  'LB': 'Lebanon',
+  'JO': 'Jordan',
+  'PS': 'Palestine',
+  'EG': 'Egypt',
+  'LY': 'Libya',
+  'TN': 'Tunisia',
+  'DZ': 'Algeria',
+  'MA': 'Morocco',
+  'SD': 'Sudan',
+  'IN': 'India',
+  'PK': 'Pakistan',
+  'BD': 'Bangladesh',
+  'NP': 'Nepal',
+  'LK': 'Sri Lanka',
+  'AF': 'Afghanistan',
+  'DE': 'Germany',
+  'NL': 'Netherlands',
+  'BE': 'Belgium',
+  'FR': 'France',
+  'AT': 'Austria',
+  'CH': 'Switzerland',
+  'GB': 'United Kingdom',
+  'IT': 'Italy',
+  'ES': 'Spain',
+  'PT': 'Portugal',
+  'SE': 'Sweden',
+  'NO': 'Norway',
+  'DK': 'Denmark',
+  'FI': 'Finland',
+  'PL': 'Poland',
+  'GR': 'Greece',
+  'BG': 'Bulgaria',
+  'RO': 'Romania',
+  'HU': 'Hungary',
+  'CZ': 'Czechia',
+  'IE': 'Ireland',
+  'UA': 'Ukraine',
+  'RU': 'Russia',
+  'AL': 'Albania',
+  'AU': 'Australia',
+  'BA': 'Bosnia and Herzegovina',
+  'BR': 'Brazil',
+  'CA': 'Canada',
+  'CN': 'China',
+  'GE': 'Georgia',
+  'ID': 'Indonesia',
+  'IR': 'Iran',
+  'JP': 'Japan',
+  'KZ': 'Kazakhstan',
+  'KG': 'Kyrgyzstan',
+  'KR': 'South Korea',
+  'XK': 'Kosovo',
+  'MK': 'North Macedonia',
+  'MY': 'Malaysia',
+  'MX': 'Mexico',
+  'NG': 'Nigeria',
+  'PH': 'Philippines',
+  'RS': 'Serbia',
+  'SO': 'Somalia',
+  'TJ': 'Tajikistan',
+  'TM': 'Turkmenistan',
+  'US': 'United States',
+  'UZ': 'Uzbekistan',
+  'ZA': 'South Africa',
+};

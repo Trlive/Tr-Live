@@ -1132,6 +1132,10 @@ test('şanslı çanta ve günlük görev', { skip, timeout: 60000 }, async () =>
   const meDone = await api('GET', '/api/me', { token: c1.token });
   assert.equal(meDone.body.user.setupDone, true);
   assert.equal(meDone.body.user.countryCode, 'TR');
+  assert.equal(meDone.body.user.region, 'uz', 'Türkiye → Uzbekistan sekmesi');
+  ok(await api('PATCH', '/api/me', { token: c1.token, body: { region: 'eu' } }), 'bölge değiştir');
+  status(await api('PATCH', '/api/me', { token: c1.token, body: { region: 'tr' } }), 400, 'geçersiz bölge');
+  ok(await api('GET', '/api/rooms?region=eu', { token: c1.token }), 'bölge listesi');
   // oda kartı: duyuru, katkı listesi, yönetici silme
   const up = await api('PATCH', `/api/rooms/${room}`, { token: s.token, body: { announcement: 'Hoş geldiniz' } });
   ok(up, 'duyuru');

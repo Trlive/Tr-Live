@@ -1,3 +1,35 @@
+## v2.99.1 — Doğum Günü modu: koltuk dizilimi ve Mikrofon Modu'na taşındı
+- Koltuklar üst üste biniyordu: satır araları koltuk + numara/ad satırı sığacak şekilde yeniden hesaplandı
+  (satırlar arası en az "yarım koltuk + ad + yarım koltuk"; küçük ekranlarda ölçek düşse de binmez). Pasta ve şerit
+  koltuklara ve adlara değmeyecek ölçüde; yan koltuklar pastadan ayrıldı.
+- Doğum Günü artık Oda araçları > Mikrofon Modu penceresinde (modların sonunda önizlemeli kart; fiyat ya da
+  "Hakkın var" rozeti, açıkken seçili). Karta dokununca pencere: önizleme, kimin doğum günü, tek dokunuşla
+  "Satın al ve uygula"; hakkı olana Uygula / Güncelle, Normal moda dön, Süre ekle. Araçlardaki ayrı düğme kaldırıldı.
+- Mikrofon Modu ve Doğum Günü pencereleri uygulama renklerinde (koyu zemin + altın).
+
+## v2.99.0 — Arapça, Hintçe ve oda içi çeviri
+- Diller: Türkçe, English, العربية (sağdan sola düzen), हिन्दी. Dil seçimi diğer uygulamalardaki gibi:
+  1) Ayarlar > Dil'den seçilen dil; 2) seçilmediyse telefonun dili (uygulamada varsa);
+  3) yoksa kayıttaki bölgenin dili: Uzbekistan → Türkçe, Arap → Arapça, Hindistan → Hintçe, Avrupa → İngilizce.
+  Bölge sekmeleri ve oda listeleri yine kayıttaki ülkeye göre.
+- Oda içi çevrildi: oda ekranı, alt düğmeler, oda araçları, kullanıcı kartı ve yönetim işlemleri, mikrofon / konuk
+  istekleri, hediye penceresi, şanslı çanta, PK, doğum günü modu, müzik, güzellik, oda açma ekranı, şikâyet / engelle.
+- Arapça ve Hintçede eksik kalan metin İngilizce görünür; tarih seçici gibi yerleşik metinler İngilizce.
+- Sunucu hata mesajları, oda adları ve tema adları çevrilmez (yazıldıkları dilde görünür).
+
+## v2.98.0 — Bölge sekmeleri ve İngilizce
+- Ana sayfa (Popüler): bannerın altında bölge sekmeleri: 🇺🇿 Uzbekistan · 🇸🇦 Arap · 🇮🇳 Hindistan · 🇪🇺 Avrupa
+  (uygulama renkleri: seçili altın). Liste, o bölgedeki kullanıcıların açtığı odaları gösterir. Türkiye, Azerbaycan,
+  Kıbrıs ve Orta Asya ülkeleri Uzbekistan sekmesindedir. İlk açılışta kişinin kendi bölgesi seçilir; seçim telefonda saklanır.
+  Arama tüm bölgelerde yapılır; "Takip" sekmesi eskisi gibi.
+- Bölge, kayıt ekranındaki ülkeden sunucuda belirlenir (users.region; migration 067 mevcut kullanıcıları ülkelerine göre
+  yerleştirir, ülkesi olmayanlar Uzbekistan).
+- Dil: Türkçe ve English. İlk açılışta telefonun dili (Türkçe değilse İngilizce); Ayarlar > Dil'den değiştirilir, seçim
+  saklanır ve sunucuya da yazılır. Dil değişince sayfalar yeni dille açılır (odadaysan önce onay sorulur).
+- 1. aşama İngilizce: alt menü, ana sayfa, giriş / kayıt, kayıt ekranı (ülke adları dahil), profil, ayarlar, gizlilik,
+  hesap & güvenlik, günlük giriş, oda temaları. Diğer ekranlar sonraki sürümlerde; çevirisi olmayan metin Türkçe görünür.
+- Test + e2e: bölge eşlemesi, migration kısıtı, PATCH /api/me bölge, /api/rooms?region=eu.
+
 ## v2.97.0 — Günlük giriş ödülü ve kayıt ekranı
 - Günlük Giriş (7 gün): uygulama açılınca o gün alınmadıysa pencere gelir; her gün "Giriş yap" ile o günün Coin'i,
   7. gün ayrıca çerçeve / araç (yönetim seçer). Bir gün atlanırsa veya 7. gün alınınca 1. güne döner (İstanbul saati).

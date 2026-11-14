@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../l10n/l10n.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -122,21 +123,20 @@ class _RoomPkSetupState extends State<_RoomPkSetup> {
             const SizedBox(height: 14),
             const Center(child: PkLogo(size: 96)),
             const SizedBox(height: 6),
-            const Text('Takım Savaşı', textAlign: TextAlign.center, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Colors.white)),
+            Text(tx('Takım Savaşı'), textAlign: TextAlign.center, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Colors.white)),
             const SizedBox(height: 4),
-            Text('Soldaki 4 koltuk Kırmızı, sağdaki 4 koltuk Mavi takım (koltuk 2-${split + 1} / ${split + 2}-$last). PK modu açılınca '
-                '"Başla"ya basınca tur başlar; takım koltuklarına gelen hediyeler (kişinin kendine gönderdiği de) puan olur, her tur sonunda yeni tur hazırlanır.',
+            Text(tx('Soldaki 4 koltuk Kırmızı, sağdaki 4 koltuk Mavi takım (koltuk 2-{v1} / {v2}-{last}). PK modu açılınca "Başla"ya basınca tur başlar; takım koltuklarına gelen hediyeler (kişinin kendine gönderdiği de) puan olur, her tur sonunda yeni tur hazırlanır.', {'v1': split + 1, 'v2': split + 2, 'last': last}),
                 textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: Colors.white60)),
             const SizedBox(height: 18),
-            const Text('Süre', style: TextStyle(fontWeight: FontWeight.w800, color: Colors.white)),
+            Text(tx('Süre'), style: TextStyle(fontWeight: FontWeight.w800, color: Colors.white)),
             const SizedBox(height: 8),
             Row(children: [for (final m in const [15, 30, 60]) _chip('$m dk', _minutes == m, () => setState(() => _minutes = m))]),
             const SizedBox(height: 16),
-            const Text('Oda sahibi', style: TextStyle(fontWeight: FontWeight.w800, color: Colors.white)),
+            Text(tx('Oda sahibi'), style: TextStyle(fontWeight: FontWeight.w800, color: Colors.white)),
             const SizedBox(height: 8),
             Row(children: [
-              _chip('Tarafsız (hakem)', !_partisan, () => setState(() => _partisan = false), color: const Color(0xFF7A5CFF)),
-              _chip('Taraflı', _partisan, () => setState(() => _partisan = true), color: const Color(0xFFFF9500)),
+              _chip(tx('Tarafsız (hakem)'), !_partisan, () => setState(() => _partisan = false), color: const Color(0xFF7A5CFF)),
+              _chip(tx('Taraflı'), _partisan, () => setState(() => _partisan = true), color: const Color(0xFFFF9500)),
             ]),
             AnimatedSize(
               duration: const Duration(milliseconds: 250),
@@ -145,14 +145,14 @@ class _RoomPkSetupState extends State<_RoomPkSetup> {
                   ? Padding(
                       padding: const EdgeInsets.only(top: 12),
                       child: Row(children: [
-                        _chip('Kırmızı takım', _team == 'red', () => setState(() => _team = 'red'), color: kPkRed),
-                        _chip('Mavi takım', _team == 'blue', () => setState(() => _team = 'blue'), color: kPkBlue),
+                        _chip(tx('Kırmızı takım'), _team == 'red', () => setState(() => _team = 'red'), color: kPkRed),
+                        _chip(tx('Mavi takım'), _team == 'blue', () => setState(() => _team = 'blue'), color: kPkBlue),
                       ]),
                     )
                   : const SizedBox(width: double.infinity),
             ),
             const SizedBox(height: 6),
-            Text(_partisan ? 'Oda sahibine gelen hediyeler seçtiği takıma puan olur.' : 'Oda sahibi hakemdir; ona gelen hediyeler puana sayılmaz.',
+            Text(_partisan ? tx('Oda sahibine gelen hediyeler seçtiği takıma puan olur.') : tx('Oda sahibi hakemdir; ona gelen hediyeler puana sayılmaz.'),
                 textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: Colors.white54)),
             const SizedBox(height: 18),
             GestureDetector(
@@ -167,7 +167,7 @@ class _RoomPkSetupState extends State<_RoomPkSetup> {
                 ),
                 child: _busy
                     ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white))
-                    : const Text('PK MODUNU AÇ', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic, color: Colors.white, letterSpacing: 1.5)),
+                    : Text(tx('PK MODUNU AÇ'), style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic, color: Colors.white, letterSpacing: 1.5)),
               ),
             ),
           ]),
@@ -253,8 +253,8 @@ class _RoomPkBarState extends State<RoomPkBar> with SingleTickerProviderStateMix
       backgroundColor: const Color(0xFF1C1C1F),
       builder: (c) => SafeArea(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          ListTile(leading: const Icon(Icons.flag, color: Colors.amber), title: const Text('PK\'yı şimdi bitir'), subtitle: const Text('O anki skorla kazanan ve MVP belirlenir'), onTap: () => Navigator.pop(c, 'end')),
-          ListTile(leading: const Icon(Icons.cancel_outlined, color: Colors.redAccent), title: const Text('PK\'yı iptal et'), subtitle: const Text('Sonuçsuz kapanır'), onTap: () => Navigator.pop(c, 'cancel')),
+          ListTile(leading: const Icon(Icons.flag, color: Colors.amber), title: Text(tx('PK\'yı şimdi bitir')), subtitle: Text(tx('O anki skorla kazanan ve MVP belirlenir')), onTap: () => Navigator.pop(c, 'end')),
+          ListTile(leading: const Icon(Icons.cancel_outlined, color: Colors.redAccent), title: Text(tx('PK\'yı iptal et')), subtitle: Text(tx('Sonuçsuz kapanır')), onTap: () => Navigator.pop(c, 'cancel')),
         ]),
       ),
     );
@@ -350,7 +350,7 @@ class _RoomPkBarState extends State<RoomPkBar> with SingleTickerProviderStateMix
         const SizedBox(height: 5),
         Row(children: [
           Expanded(child: _supporters(listOf(red['supporters']), true, kPkRed)),
-          Text(pk['mode'] == 'partisan' ? (pk['ownerTeam'] == 'blue' ? 'Taraflı · sahip Mavi' : 'Taraflı · sahip Kırmızı') : 'Tarafsız',
+          Text(pk['mode'] == 'partisan' ? (pk['ownerTeam'] == 'blue' ? tx('Taraflı · sahip Mavi') : tx('Taraflı · sahip Kırmızı')) : tx('Tarafsız'),
               style: const TextStyle(fontSize: 10, color: Colors.white54)),
           Expanded(child: _supporters(listOf(blue['supporters']), false, kPkBlue)),
         ]),
@@ -422,6 +422,8 @@ class PkBarPainter extends CustomPainter {
 /// hüzmeleri. Hareketli PK logosu yaylanarak belirir, altında altın harfli "PK BAŞLADI!" harf harf düşer ve üzerinden
 /// parıltı geçer. [left] / [right]: iki yanın adı (sesli oda: KIRMIZI / MAVİ, görüntülü PK: BİZ / RAKİP).
 Future<void> showRoomPkStart(BuildContext context, {String left = 'KIRMIZI', String right = 'MAVİ'}) async {
+  left = tx(left);
+  right = tx(right);
   final overlay = Overlay.maybeOf(context);
   if (overlay == null) return;
   _insertStart(overlay, left, right);
@@ -515,7 +517,7 @@ class _PkStartFxState extends State<_PkStartFx> with SingleTickerProviderStateMi
                     top: cy + slabH / 2 + 18,
                     left: 12,
                     right: 12,
-                    child: _DropText(text: 'PK BAŞLADI!', t: t, start: _hit + 0.12, size: textSize),
+                    child: _DropText(text: tx('PK BAŞLADI!'), t: t, start: _hit + 0.12, size: textSize),
                   ),
                 ]),
               ),
@@ -765,7 +767,7 @@ Future<void> showRoomPkResult(BuildContext context, Map<String, dynamic> pk) {
   return showGeneralDialog<void>(
     context: context,
     barrierDismissible: true,
-    barrierLabel: 'PK sonucu',
+    barrierLabel: tx('PK sonucu'),
     barrierColor: Colors.black54,
     transitionDuration: const Duration(milliseconds: 420),
     pageBuilder: (c, _, __) => _PkResult(pk: pk),
@@ -810,7 +812,7 @@ class _PkResultState extends State<_PkResult> with SingleTickerProviderStateMixi
     final w = pk['winner']?.toString() ?? 'draw';
     final draw = w == 'draw';
     final color = draw ? const Color(0xFFFFD54F) : pkTeamColor(w);
-    final title = draw ? 'BERABERE' : (w == 'red' ? 'KIRMIZI TAKIM KAZANDI' : 'MAVİ TAKIM KAZANDI');
+    final title = draw ? 'BERABERE' : (w == 'red' ? tx('KIRMIZI TAKIM KAZANDI') : tx('MAVİ TAKIM KAZANDI'));
     final mvp = mapOf(pk['mvp']);
     final red = mapOf(pk['red']) ?? {};
     final blue = mapOf(pk['blue']) ?? {};
@@ -870,7 +872,7 @@ class _PkResultState extends State<_PkResult> with SingleTickerProviderStateMixi
                       const SizedBox(height: 4),
                       Text((mvp['displayName'] ?? '').toString(), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800, color: Colors.white)),
                     ] else
-                      const Text('Bu PK\'da hediye gönderilmedi.', style: TextStyle(color: Colors.white70)),
+                      Text(tx('Bu PK\'da hediye gönderilmedi.'), style: TextStyle(color: Colors.white70)),
                   ]),
                 ),
               ),
@@ -1341,14 +1343,14 @@ class _RoomPkPanelState extends State<RoomPkPanel> with SingleTickerProviderStat
           if (active)
             ListTile(
               leading: const Icon(Icons.flag, color: Colors.amber),
-              title: const Text('Turu şimdi bitir'),
-              subtitle: const Text('O anki skorla kazanan ve MVP belirlenir, yeni tur hazırlanır'),
+              title: Text(tx('Turu şimdi bitir')),
+              subtitle: Text(tx('O anki skorla kazanan ve MVP belirlenir, yeni tur hazırlanır')),
               onTap: () => Navigator.pop(c, 'end'),
             ),
           ListTile(
             leading: const Icon(Icons.power_settings_new, color: Colors.redAccent),
-            title: const Text('PK modunu kapat'),
-            subtitle: Text(active ? 'Süren tur sonuçsuz kapanır, koltuklar normale döner' : 'Koltuklar normale döner'),
+            title: Text(tx('PK modunu kapat')),
+            subtitle: Text(active ? tx('Süren tur sonuçsuz kapanır, koltuklar normale döner') : tx('Koltuklar normale döner')),
             onTap: () => Navigator.pop(c, 'cancel'),
           ),
         ]),
@@ -1379,7 +1381,7 @@ class _RoomPkPanelState extends State<RoomPkPanel> with SingleTickerProviderStat
   Widget _center(String status, bool urgent) {
     if (status == 'preparing') {
       if (!widget.canManage) {
-        return _pill(const Text('Hazırlanıyor', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Colors.white)), const [Color(0xFF3A2F5C), Color(0xFF231B3D)]);
+        return _pill(Text(tx('Hazırlanıyor'), style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Colors.white)), const [Color(0xFF3A2F5C), Color(0xFF231B3D)]);
       }
       return GestureDetector(
         onTap: _begin,
@@ -1398,7 +1400,7 @@ class _RoomPkPanelState extends State<RoomPkPanel> with SingleTickerProviderStat
             ),
             child: _busy
                 ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF5A3300)))
-                : const Text('Başla', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: Color(0xFF5A3300))),
+                : Text(tx('Başla'), style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: Color(0xFF5A3300))),
           ),
         ),
       );
@@ -1406,7 +1408,7 @@ class _RoomPkPanelState extends State<RoomPkPanel> with SingleTickerProviderStat
     if (status == 'finished') {
       final w = widget.pk['winner']?.toString() ?? 'draw';
       return _pill(
-        Text(w == 'draw' ? 'BERABERE' : (w == 'red' ? 'KIRMIZI KAZANDI' : 'MAVİ KAZANDI'), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Colors.white)),
+        Text(w == 'draw' ? 'BERABERE' : (w == 'red' ? tx('KIRMIZI KAZANDI') : tx('MAVİ KAZANDI')), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Colors.white)),
         w == 'draw' ? const [Color(0xFFFFB300), Color(0xFFE08A12)] : [pkTeamColor(w), Color.lerp(pkTeamColor(w), Colors.black, 0.4)!],
       );
     }
@@ -1482,11 +1484,11 @@ class _RoomPkPanelState extends State<RoomPkPanel> with SingleTickerProviderStat
               ),
               Positioned(
                 left: 8,
-                child: preparing ? const Text('Hazırlanıyor', style: labelStyle) : Text(fmtNumber(sr.toString()), style: labelStyle),
+                child: preparing ? Text(tx('Hazırlanıyor'), style: labelStyle) : Text(fmtNumber(sr.toString()), style: labelStyle),
               ),
               Positioned(
                 right: 8,
-                child: preparing ? const Text('Hazırlanıyor', style: labelStyle) : Text(fmtNumber(sb.toString()), style: labelStyle),
+                child: preparing ? Text(tx('Hazırlanıyor'), style: labelStyle) : Text(fmtNumber(sb.toString()), style: labelStyle),
               ),
               _center(status, _left <= 10 && status == 'active'),
             ]),
@@ -1506,7 +1508,7 @@ class _RoomPkPanelState extends State<RoomPkPanel> with SingleTickerProviderStat
                   border: Border.all(color: Colors.white38),
                 ),
                 child: Text(
-                  pk['mode'] == 'partisan' ? (pk['ownerTeam'] == 'blue' ? 'Takım Savaşı · sahip Mavi' : 'Takım Savaşı · sahip Kırmızı') : 'Takım Savaşı',
+                  pk['mode'] == 'partisan' ? (pk['ownerTeam'] == 'blue' ? tx('Takım Savaşı · sahip Mavi') : tx('Takım Savaşı · sahip Kırmızı')) : tx('Takım Savaşı'),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: Colors.white),
@@ -1540,6 +1542,8 @@ class _RoomPkPanelState extends State<RoomPkPanel> with SingleTickerProviderStat
 /// "Başla"ya basılınca: "PK BAŞLIYOR" ve büyük altın 3 → 2 → 1, ardından "PK BAŞLADI!" çarpışma animasyonu.
 /// [stillVisible]: geri sayım bitince oda hâlâ ekrandaysa VS oynar (çıkıldıysa / küçültüldüyse oynamaz).
 Future<void> showRoomPkCountdown(BuildContext context, {String left = 'KIRMIZI', String right = 'MAVİ', bool Function()? stillVisible}) async {
+  left = tx(left);
+  right = tx(right);
   final overlay = Overlay.maybeOf(context);
   if (overlay == null) return;
   late OverlayEntry entry;
@@ -1609,7 +1613,7 @@ class _PkCountdownFxState extends State<_PkCountdownFx> with SingleTickerProvide
                     scale: 0.6 + 0.4 * titleIn,
                     child: FittedBox(
                       fit: BoxFit.scaleDown,
-                      child: _GoldText('PK BAŞLIYOR', size: titleSize, shine: ((_c.value * 1.5) % 1.0) * 1.4 - 0.2),
+                      child: _GoldText(tx('PK BAŞLIYOR'), size: titleSize, shine: ((_c.value * 1.5) % 1.0) * 1.4 - 0.2),
                     ),
                   ),
                 ),

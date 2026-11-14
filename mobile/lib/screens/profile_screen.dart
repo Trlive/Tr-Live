@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/l10n.dart';
 import '../widgets/daily_checkin.dart';
 import '../services/screen_guard.dart';
 import '../services/api.dart';
@@ -58,22 +59,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _changePassword() async {
     // Google/Facebook hesabının şifresi yoktur: ilk kez şifre belirlenir (mevcut şifre sorulmaz).
     final has = Session.me.value?['hasPassword'] != false;
-    final current = has ? await askText(context, 'Mevcut şifre', obscure: true) : '';
+    final current = has ? await askText(context, tx('Mevcut şifre'), obscure: true) : '';
     if (current == null || !mounted) return;
-    final next = await askText(context, 'Yeni şifre (en az 6 karakter)', obscure: true);
+    final next = await askText(context, tx('Yeni şifre (en az 6 karakter)'), obscure: true);
     if (next == null || !mounted) return;
     final r = await guard(context, () => Api.post('/api/me/password', {'currentPassword': current, 'newPassword': next}));
     if (r != null) {
-      if (mounted) toast(context, 'Şifre değişti. Lütfen yeniden giriş yapın.');
+      if (mounted) toast(context, tx('Şifre değişti. Lütfen yeniden giriş yapın.'));
       await _goLogin();
     }
   }
 
   Future<void> _deleteAccount() async {
-    if (!await confirm(context, 'Hesabınız ve kişisel verileriniz kalıcı olarak silinir. Bu işlem geri alınamaz.', action: 'Devam')) return;
+    if (!await confirm(context, tx('Hesabınız ve kişisel verileriniz kalıcı olarak silinir. Bu işlem geri alınamaz.'), action: tx('Devam'))) return;
     if (!mounted) return;
     final has = Session.me.value?['hasPassword'] != false;
-    final answer = has ? await askText(context, 'Onay için şifrenizi girin', obscure: true) : await askText(context, 'Onay için SİL yazın');
+    final answer = has ? await askText(context, tx('Onay için şifrenizi girin'), obscure: true) : await askText(context, tx('Onay için SİL yazın'));
     if (answer == null || !mounted) return;
     final r = await guard(context, () => Api.delete('/api/me', has ? {'password': answer} : {'confirm': answer}));
     if (r != null) await _goLogin();
@@ -110,13 +111,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
               );
           return SafeArea(
             child: Column(mainAxisSize: MainAxisSize.min, children: [
-              const Padding(padding: EdgeInsets.only(bottom: 4), child: Text('Bildirimler', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800))),
-              sw('friend', 'Arkadaşlık', 'Arkadaşlık isteği geldiğinde ve kabul edildiğinde'),
-              sw('follow', 'Yeni takipçi', 'Biri seni takip etmeye başladığında'),
-              sw('room', 'Arkadaşım oda açınca', 'Arkadaşın oda açtığında (aynı kişiden 30 dakikada bir)'),
-              const Padding(
+              Padding(padding: EdgeInsets.only(bottom: 4), child: Text(tx('Bildirimler'), style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800))),
+              sw('friend', tx('Arkadaşlık'), tx('Arkadaşlık isteği geldiğinde ve kabul edildiğinde')),
+              sw('follow', tx('Yeni takipçi'), tx('Biri seni takip etmeye başladığında')),
+              sw('room', tx('Arkadaşım oda açınca'), tx('Arkadaşın oda açtığında (aynı kişiden 30 dakikada bir)')),
+              Padding(
                 padding: EdgeInsets.fromLTRB(16, 4, 16, 16),
-                child: Text('Uygulama açıkken ya da arka planda çalışırken bildirim hemen gelir; tamamen kapalıysa uygulamayı açınca gösterilir.',
+                child: Text(tx('Uygulama açıkken ya da arka planda çalışırken bildirim hemen gelir; tamamen kapalıysa uygulamayı açınca gösterilir.'),
                     style: TextStyle(color: Pal.textDim, fontSize: 12)),
               ),
             ]),
@@ -220,10 +221,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
           decoration: BoxDecoration(color: Pal.surface, borderRadius: BorderRadius.circular(16), border: Border.all(color: Pal.outline)),
           child: Row(children: [
             // Dört liste tek sayfada; yana kaydırarak aralarında geçilir.
-            stat('TAKİP EDİLEN', p['following'], 0, () => _open(SocialListsScreen(userId: '${p['id']}', initialTab: 0))),
-            stat('FANLAR', p['followers'], b['followers'] ?? 0, () => _open(SocialListsScreen(userId: '${p['id']}', initialTab: 1))),
-            stat('ZİYARETÇİLER', p['visitorCount'], b['visitors'] ?? 0, () => _open(SocialListsScreen(userId: '${p['id']}', initialTab: 2))),
-            stat('ARKADAŞLAR', p['friends'], b['friends'] ?? 0, () => _open(SocialListsScreen(userId: '${p['id']}', initialTab: 3))),
+            stat(tx('TAKİP EDİLEN'), p['following'], 0, () => _open(SocialListsScreen(userId: '${p['id']}', initialTab: 0))),
+            stat(tx('FANLAR'), p['followers'], b['followers'] ?? 0, () => _open(SocialListsScreen(userId: '${p['id']}', initialTab: 1))),
+            stat(tx('ZİYARETÇİLER'), p['visitorCount'], b['visitors'] ?? 0, () => _open(SocialListsScreen(userId: '${p['id']}', initialTab: 2))),
+            stat(tx('ARKADAŞLAR'), p['friends'], b['friends'] ?? 0, () => _open(SocialListsScreen(userId: '${p['id']}', initialTab: 3))),
           ]),
         );
       },
@@ -258,7 +259,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Row(children: [
         card(const [Color(0xFFFFE259), Color(0xFFFFC107)], const Icon(Icons.monetization_on, color: Color(0xFFB26A00), size: 34), p['coins'], 'Coins', const Color(0xFF3B2A00), () => _open(const WalletScreen())),
         const SizedBox(width: 10),
-        card(const [Color(0xFF3A2E14), Color(0xFF6B5320)], const Icon(Icons.diamond, color: Colors.cyanAccent, size: 32), p['diamonds'], 'Gelir Merkezi', Colors.white, () => _open(const IncomeCenterScreen())),
+        card(const [Color(0xFF3A2E14), Color(0xFF6B5320)], const Icon(Icons.diamond, color: Colors.cyanAccent, size: 32), p['diamonds'], tx('Gelir Merkezi'), Colors.white, () => _open(const IncomeCenterScreen())),
       ]),
     );
   }
@@ -296,10 +297,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         // Aileme katılma isteği geldiyse (yönetici) kırmızı rozet.
         ValueListenableBuilder<Map<String, int>>(
           valueListenable: Inbox.badges,
-          builder: (_, b, __) => tile(Icons.groups, Colors.orangeAccent, 'Aile', () => _open(const FamilyScreen()), badge: b['family'] ?? 0),
+          builder: (_, b, __) => tile(Icons.groups, Colors.orangeAccent, tx('Aile'), () => _open(const FamilyScreen()), badge: b['family'] ?? 0),
         ),
         tile(Icons.workspace_premium, Pal.cyan, wip == null ? 'WIP' : wipLabel(wipLevelOf(wip['level'])), () => _open(const WipScreen())),
-        tile(Icons.checkroom, Pal.cyan, 'Görünüm', () => _open(const AppearanceScreen())),
+        tile(Icons.checkroom, Pal.cyan, tx('Görünüm'), () => _open(const AppearanceScreen())),
       ]),
     );
   }
@@ -321,19 +322,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
       margin: const EdgeInsets.fromLTRB(12, 10, 12, 0),
       decoration: BoxDecoration(color: Pal.surface, borderRadius: BorderRadius.circular(16), border: Border.all(color: Pal.outline)),
       child: Column(children: [
-        row(Icons.storefront, Colors.orangeAccent, 'Mağaza', () => _open(const StoreScreen())),
+        row(Icons.storefront, Colors.orangeAccent, tx('Mağaza'), () => _open(const StoreScreen())),
         // Yayıncı Merkezi: yalnızca ajans davetini kabul etmiş (onaylı) yayıncılar. Başvuru yok; davet Mesajlar'a düşer.
-        if (isBroadcaster) row(Icons.podcasts, Pal.cyan, 'Yayıncı Merkezi', () => _open(const AgencyScreen(mode: 'broadcaster'))),
+        if (isBroadcaster) row(Icons.podcasts, Pal.cyan, tx('Yayıncı Merkezi'), () => _open(const AgencyScreen(mode: 'broadcaster'))),
         // Ajans Merkezi: yalnızca ajans sahibi (ajansı yönetici açar). Ajans sahibi aynı zamanda yayıncı da olabilir.
         if (agencyOwned != null)
-          row(Icons.business, Pal.cyan, 'Ajans Merkezi', () => _open(const AgencyCenterScreen()),
+          row(Icons.business, Pal.cyan, tx('Ajans Merkezi'), () => _open(const AgencyCenterScreen()),
               sub: '${agencyOwned['name']} · ${const {'pending': 'İnceleniyor', 'active': 'Aktif', 'suspended': 'Askıda', 'rejected': 'Reddedildi'}[agencyOwned['status']] ?? agencyOwned['status']}')
         else if (agencyAssistant != null)
-          row(Icons.support_agent, Pal.cyan, 'Ajans Merkezi', () => _open(const AgencyCenterScreen()), sub: '${agencyAssistant['agencyName']} · Asistan'),
-        row(Icons.shield_outlined, const Color(0xFFFF4FA8), 'Koruyuculuğum', () => _open(MyGuardianScreen(profileBuilder: (id) => UserProfileScreen(userId: id))), sub: 'Koruyucuların ve koruduğun kişiler'),
-        row(Icons.event_available, Pal.gold, 'Günlük Giriş', () => showCheckinDialog(context)),
-        if (isDealer) row(Icons.store_mall_directory, Pal.cyan, 'Bayi paneli', () => _open(const DealerScreen())),
-        if (Session.isStaff) row(Icons.admin_panel_settings, Colors.redAccent, Session.isAdmin ? 'Yönetim paneli' : 'Yardımcı admin paneli', () => _open(const AdminScreen())),
+          row(Icons.support_agent, Pal.cyan, tx('Ajans Merkezi'), () => _open(const AgencyCenterScreen()), sub: '${agencyAssistant['agencyName']} · ${tx('Asistan')}'),
+        row(Icons.shield_outlined, const Color(0xFFFF4FA8), tx('Koruyuculuğum'), () => _open(MyGuardianScreen(profileBuilder: (id) => UserProfileScreen(userId: id))), sub: tx('Koruyucuların ve koruduğun kişiler')),
+        row(Icons.event_available, Pal.gold, tx('Günlük Giriş'), () => showCheckinDialog(context)),
+        if (isDealer) row(Icons.store_mall_directory, Pal.cyan, tx('Bayi paneli'), () => _open(const DealerScreen())),
+        if (Session.isStaff) row(Icons.admin_panel_settings, Colors.redAccent, Session.isAdmin ? tx('Yönetim paneli') : tx('Yardımcı admin paneli'), () => _open(const AdminScreen())),
       ]),
     );
   }
@@ -359,8 +360,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 top: 0,
                 right: 4,
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  IconButton(tooltip: 'Müşteri hizmetleri', icon: const Icon(Icons.headset_mic_outlined, size: 22), onPressed: () => _open(const CustomerServiceScreen())),
-                  IconButton(tooltip: 'Profilim', icon: const Icon(Icons.account_circle_outlined, size: 23), onPressed: () => _open(UserProfileScreen(userId: Session.id))),
+                  IconButton(tooltip: tx('Müşteri hizmetleri'), icon: const Icon(Icons.headset_mic_outlined, size: 22), onPressed: () => _open(const CustomerServiceScreen())),
+                  IconButton(tooltip: tx('Profilim'), icon: const Icon(Icons.account_circle_outlined, size: 23), onPressed: () => _open(UserProfileScreen(userId: Session.id))),
                 ]),
               ),
             ]),
@@ -386,7 +387,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: ListTile(
                 dense: true,
                 leading: Container(width: 36, height: 36, decoration: BoxDecoration(color: Pal.cyan.withValues(alpha: 0.18), borderRadius: BorderRadius.circular(10)), child: const Icon(Icons.settings, color: Pal.cyan, size: 20)),
-                title: const Text('Ayarlar', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14.5)),
+                title: Text(tx('Ayarlar'), style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14.5)),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => _openSettings(p, isDealer),
               ),

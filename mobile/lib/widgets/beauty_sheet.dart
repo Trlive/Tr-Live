@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n.dart';
 import '../services/beauty.dart';
 
 /// Güzellik penceresi: alttan açılır, arkadaki kamera görüntüsü değişikliği anında gösterir.
@@ -87,21 +88,21 @@ class _BeautySheetState extends State<_BeautySheet> {
               padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
               child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 Row(children: [
-                  _tabBtn('Güzellik', 0),
-                  _tabBtn('Filtre', 1),
+                  _tabBtn(tx('Güzellik'), 0),
+                  _tabBtn(tx('Filtre'), 1),
                   const Spacer(),
                   TextButton.icon(
                     onPressed: () => Beauty.update(s.isOff ? BeautySettings.natural : const BeautySettings(), save: false),
                     icon: Icon(s.isOff ? Icons.auto_fix_high : Icons.restart_alt, size: 18, color: Colors.white70),
-                    label: Text(s.isOff ? 'Doğal güzellik' : 'Sıfırla', style: const TextStyle(color: Colors.white70)),
+                    label: Text(s.isOff ? tx('Doğal güzellik') : tx('Sıfırla'), style: const TextStyle(color: Colors.white70)),
                   ),
                 ]),
                 ValueListenableBuilder<bool?>(
                   valueListenable: Beauty.supported,
                   builder: (_, ok, __) => ok == false
-                      ? const Padding(
+                      ? Padding(
                           padding: EdgeInsets.only(bottom: 6),
-                          child: Text('Bu cihazda güzellik filtresi kameraya bağlanamadı.', style: TextStyle(fontSize: 12, color: Colors.orangeAccent)),
+                          child: Text(tx('Bu cihazda güzellik filtresi kameraya bağlanamadı.'), style: TextStyle(fontSize: 12, color: Colors.orangeAccent)),
                         )
                       : const SizedBox.shrink(),
                 ),
@@ -140,7 +141,7 @@ class _BeautySheetState extends State<_BeautySheet> {
                             child: Icon(icon, color: _sel == k ? _pink : Colors.white, size: 26),
                           ),
                           const SizedBox(height: 6),
-                          Text(label, style: TextStyle(fontSize: 12, color: _sel == k ? Colors.white : Colors.white70, fontWeight: FontWeight.w700)),
+                          Text(tx(label), style: TextStyle(fontSize: 12, color: _sel == k ? Colors.white : Colors.white70, fontWeight: FontWeight.w700)),
                         ]),
                       ),
                   ]),
@@ -166,7 +167,7 @@ class _BeautySheetState extends State<_BeautySheet> {
                                 child: s.tone == tone ? const Icon(Icons.check, color: Colors.white) : null,
                               ),
                               const SizedBox(height: 6),
-                              Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: s.tone == tone ? Colors.white : Colors.white70)),
+                              Text(tx(label), style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: s.tone == tone ? Colors.white : Colors.white70)),
                             ]),
                           ),
                         ),

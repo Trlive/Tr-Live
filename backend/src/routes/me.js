@@ -4,6 +4,7 @@ import express from 'express';
 import { query, tx } from '../database.js';
 import { requireAuth, checkPassword, hashPassword, passwordRules } from '../auth.js';
 import { fail, text, oneOf } from '../http.js';
+import { REGIONS, regionForCountry } from '../regions.js';
 import { levelInfo, levelExp } from '../levels.js';
 import { loadProfile } from '../services/profile.js';
 import { activeWip, requireFeature } from '../services/wip.js';
@@ -108,11 +109,14 @@ router.patch('/', async (req, res) => {
     }
   }
   if (b.country !== undefined) set('country', text(b.country, 'Ülke', { max: 60 }));
-  // Ülke kodu (ISO, ör. TR): kayıt ekranındaki bayraklı seçim.
+  // Ülke kodu (ISO, ör. TR): kayıt ekranındaki bayraklı seçim. Bölge ayrıca verilmezse ülkeden belirlenir.
   if (b.countryCode !== undefined) {
     if (b.countryCode !== null && (typeof b.countryCode !== 'string' || !/^[A-Z]{2}$/.test(b.countryCode))) throw fail('Ülke kodu geçersiz.');
     set('country_code', b.countryCode);
+    if (b.region === undefined && b.countryCode) set('region', regionForCountry(b.countryCode));
   }
+  // Bölge (ana sayfa sekmesi: odan bu bölgede listelenir).
+  if (b.region !== undefined) set('region', oneOf(b.region, REGIONS, 'Bölge'));
   // Kayıt ekranı bitti (yalnızca true kabul edilir).
   if (b.setupDone !== undefined) {
     if (b.setupDone !== true) throw fail('setupDone yalnızca true olabilir.');

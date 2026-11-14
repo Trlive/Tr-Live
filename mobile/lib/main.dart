@@ -19,6 +19,8 @@ import 'widgets/app_theme.dart';
 import 'widgets/common.dart';
 import 'services/effect_prefs.dart';
 import 'services/screen_guard.dart';
+import 'l10n/delegates.dart';
+import 'l10n/l10n.dart';
 import 'widgets/nav_guard.dart';
 import 'widgets/tr_localizations.dart';
 
@@ -59,6 +61,7 @@ Future<void> _boot() async {
   // Açılış hiçbir koşulda takılmasın: hazırlık adımları hata verse / gecikse de uygulama ekranı açılır.
   // Efekt ayarları (hediye animasyonu, araç, şerit, global bildirim) telefondan okunur.
   await EffectPrefs.load().timeout(const Duration(seconds: 2), onTimeout: () {});
+  await L10n.init().timeout(const Duration(seconds: 2), onTimeout: () {}); // dil: kayıtlı seçim ya da telefonun dili
   // Uygulama ekranda mı: arka plandayken periyodik sorgular durur (pil/internet).
   AppVisibility.instance.init();
   try {
@@ -99,6 +102,14 @@ Future<void> _boot() async {
   };
   PresenceService.init();
   ScreenGuard.init(); // uygulama içi ekran görüntüsü bildirimi (Android)
+  // Dil değişince açık sayfalar yeni dille baştan açılır (oturum korunur; ana sayfa ya da giriş ekranı).
+  // Kişinin bölgesi öğrenilince (oturum / kayıt ekranındaki ülke) dil bölgeye göre ayarlanır (bkz. L10n).
+  Session.me.addListener(() => L10n.applyRegion(Session.me.value?['region']?.toString()));
+  L10n.lang.addListener(() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      navigatorKey.currentState?.pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const _Boot()), (_) => false);
+    });
+  });
   runApp(const TRLiveApp());
   // Yönetimden "herkese telefon bildirimi". İzin penceresi açılış ekranı çizilmeden açılırsa bazı telefonlarda
   // uygulama logoda takılı kalıyordu: ilk kare çizildikten birkaç saniye sonra başlatılır.
@@ -114,6 +125,11 @@ class TRLiveApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Dil değişince yerleşik metinler (tarih seçici vb.) yeni dile geçer; sayfalar main() içindeki dinleyiciyle baştan açılır.
+    return ValueListenableBuilder<String>(valueListenable: L10n.lang, builder: (context, lang, _) => _app(lang));
+  }
+
+  Widget _app(String lang) {
     return MaterialApp(
       navigatorKey: navigatorKey,
       // Aynı sayfanın art arda iki kez açılmasını engeller.
@@ -122,9 +138,16 @@ class TRLiveApp extends StatelessWidget {
       title: 'TR Live',
       theme: buildAppTheme(),
       themeMode: ThemeMode.dark,
-      locale: const Locale('tr'),
-      supportedLocales: const [Locale('tr')],
-      localizationsDelegates: const [TrMaterialLocalizations.delegate, TrMaterialLocalizations.cupertinoDelegate, DefaultWidgetsLocalizations.delegate],
+      locale: Locale(lang),
+      supportedLocales: const [Locale('tr'), Locale('en'), Locale('ar'), Locale('hi')],
+      // Türkçe: kendi çevirimiz; İngilizce: Flutter'ın yerleşik metinleri.
+      localizationsDelegates: const [
+        TrMaterialLocalizations.delegate,
+        TrMaterialLocalizations.cupertinoDelegate,
+        AppFallbackLocalizations.material,
+        AppFallbackLocalizations.cupertino,
+        AppFallbackLocalizations.widgets, // Arapça: sağdan sola
+      ],
       // Kısa listelerde de aşağı çekip yenileme çalışsın.
       scrollBehavior: const _AppScroll(),
       builder: appFrame,

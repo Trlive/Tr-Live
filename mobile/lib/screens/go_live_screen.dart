@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import '../l10n/l10n.dart';
 import 'package:flutter/material.dart';
 import 'package:livekit_client/livekit_client.dart' as lk;
 import '../services/api.dart';
@@ -88,10 +89,10 @@ class _GoLiveScreenState extends State<GoLiveScreen> {
   Future<void> _rulesReminder() => showDialog<void>(
         context: context,
         builder: (c) => AlertDialog(
-          title: const Text('İpuçları', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.w900)),
-          content: const Text(
-            'Hatırlatma: Yayın sırasında lütfen platform kurallarına uy. Uygunsuz veya yasak içerik dahil kuralların '
-            'herhangi bir ihlali, yayının sonlandırılmasına ve hesabının yasaklanmasına yol açar.',
+          title: Text(tx('İpuçları'), textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.w900)),
+          content: Text(
+            tx('Hatırlatma: Yayın sırasında lütfen platform kurallarına uy. Uygunsuz veya yasak içerik dahil kuralların '
+            'herhangi bir ihlali, yayının sonlandırılmasına ve hesabının yasaklanmasına yol açar.'),
             style: TextStyle(height: 1.45),
           ),
           actions: [
@@ -101,7 +102,7 @@ class _GoLiveScreenState extends State<GoLiveScreen> {
               child: FilledButton(
                 style: FilledButton.styleFrom(shape: const StadiumBorder()),
                 onPressed: () => Navigator.pop(c),
-                child: const Text('Tamam', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+                child: Text(tx('Tamam'), style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
               ),
             ),
           ],
@@ -201,11 +202,11 @@ class _GoLiveScreenState extends State<GoLiveScreen> {
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('Oda teması', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+              Text(tx('Oda teması'), style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
               const SizedBox(height: 12),
               ThemePicker(value: theme, onChanged: (v) => setS(() => theme = v)),
               const SizedBox(height: 16),
-              SizedBox(width: double.infinity, child: FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Uygula'))),
+              SizedBox(width: double.infinity, child: FilledButton(onPressed: () => Navigator.pop(c, true), child: Text(tx('Uygula')))),
             ]),
           ),
         ),
@@ -227,7 +228,7 @@ class _GoLiveScreenState extends State<GoLiveScreen> {
     final voice = _voice;
     final title = (voice ? _titleA : _titleV).text.trim();
     if (title.length < 2) {
-      toast(context, 'Yayın başlığı en az 2 karakter olmalı.', error: true);
+      toast(context, tx('Yayın başlığı en az 2 karakter olmalı.'), error: true);
       return;
     }
     setState(() {
@@ -257,7 +258,7 @@ class _GoLiveScreenState extends State<GoLiveScreen> {
         final up = await Api.putBytes('/api/rooms/${room['id']}/cover', cover.bytes, cover.mime);
         room['coverUrl'] = up['url'];
       } catch (e) {
-        if (mounted) toast(context, 'Oda açıldı ama fotoğraf yüklenemedi: ${errorText(e)}', error: true);
+        if (mounted) toast(context, tx('Oda açıldı ama fotoğraf yüklenemedi: {v1}', {'v1': errorText(e)}), error: true);
       }
     }
     await _stopCam();
@@ -338,10 +339,10 @@ class _GoLiveScreenState extends State<GoLiveScreen> {
       ),
       // Kapak + başlık + yayın isim kartı (+ sesli odada duyuru)
       Positioned(left: m, top: infoTop, width: coverS, height: coverS, child: _coverBox(coverS)),
-      Positioned(left: pillsLeft, right: m, top: pillsTop, height: pillH, child: _fieldPill(pillH, _voice ? _titleA : _titleV, 'Yayın başlığı giriniz', 60)),
+      Positioned(left: pillsLeft, right: m, top: pillsTop, height: pillH, child: _fieldPill(pillH, _voice ? _titleA : _titleV, tx('Yayın başlığı giriniz'), 60)),
       Positioned(left: pillsLeft, right: m, top: pillsTop + pillH + pillGap, height: pillH, child: _cardPill(pillH)),
       if (_voice)
-        Positioned(left: m, right: m, top: annTop, height: pillH, child: _fieldPill(pillH, _annA, 'Oda duyurusu (isteğe bağlı)', 200, icon: Icons.campaign_outlined)),
+        Positioned(left: m, right: m, top: annTop, height: pillH, child: _fieldPill(pillH, _annA, tx('Oda duyurusu (isteğe bağlı)'), 200, icon: Icons.campaign_outlined)),
       // Çoklu: kişi sayısı
       if (_mode == LiveMode.multi) Positioned(left: 0, right: 0, top: chipsTop, height: chipH, child: _seatChips(chipH)),
       // Tür düğmeleri
@@ -384,8 +385,8 @@ class _GoLiveScreenState extends State<GoLiveScreen> {
             ? Column(mainAxisSize: MainAxisSize.min, children: [
                 const Icon(Icons.videocam_off, color: Colors.white54, size: 48),
                 const SizedBox(height: 10),
-                const Text('Kamera açılamadı. Kamera iznini kontrol et.', style: TextStyle(color: Colors.white70)),
-                TextButton(onPressed: _startCam, child: const Text('Tekrar dene')),
+                Text(tx('Kamera açılamadı. Kamera iznini kontrol et.'), style: TextStyle(color: Colors.white70)),
+                TextButton(onPressed: _startCam, child: Text(tx('Tekrar dene'))),
               ])
             : const CircularProgressIndicator(),
       ),
@@ -489,7 +490,7 @@ class _GoLiveScreenState extends State<GoLiveScreen> {
       h,
       Row(children: [
         Expanded(
-          child: Text('Yayın isim kartı', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.white, fontSize: h * 0.46, fontWeight: FontWeight.w600)),
+          child: Text(tx('Yayın isim kartı'), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.white, fontSize: h * 0.46, fontWeight: FontWeight.w600)),
         ),
         CategoryChip(category: cat, height: h * 0.64),
         SizedBox(width: h * 0.12),
@@ -693,17 +694,17 @@ class _GoLiveScreenState extends State<GoLiveScreen> {
     }
 
     return Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-      item(LiveMode.multi, Icons.groups_outlined, 'Çoklu Yayın'),
-      item(LiveMode.live, Icons.video_camera_front_outlined, 'Canlı Yayın'),
-      item(LiveMode.voice, Icons.mic_none, 'Sesli Yayın'),
+      item(LiveMode.multi, Icons.groups_outlined, tx('Çoklu Yayın')),
+      item(LiveMode.live, Icons.video_camera_front_outlined, tx('Canlı Yayın')),
+      item(LiveMode.voice, Icons.mic_none, tx('Sesli Yayın')),
     ]);
   }
 
   Widget _startRow(double h, double gap) {
     final label = switch (_mode) {
-      LiveMode.multi => 'Çoklu yayına başla',
-      LiveMode.live => 'Canlı yayına başla',
-      LiveMode.voice => 'Sesli yayına başla',
+      LiveMode.multi => tx('Çoklu yayına başla'),
+      LiveMode.live => tx('Canlı yayına başla'),
+      LiveMode.voice => tx('Sesli yayına başla'),
     };
     Widget side(IconData icon, String tip, VoidCallback onTap) => Tooltip(
           message: tip,
@@ -714,9 +715,9 @@ class _GoLiveScreenState extends State<GoLiveScreen> {
           ),
         );
     return Row(children: [
-      side(Icons.face_retouching_natural, 'Güzellik', () {
+      side(Icons.face_retouching_natural, tx('Güzellik'), () {
         if (_voice) {
-          toast(context, 'Güzellik filtresi görüntülü yayında kullanılır.');
+          toast(context, tx('Güzellik filtresi görüntülü yayında kullanılır.'));
           return;
         }
         if (_cam != null) Beauty.attach(_cam);
@@ -741,7 +742,7 @@ class _GoLiveScreenState extends State<GoLiveScreen> {
         ),
       ),
       SizedBox(width: gap),
-      side(Icons.auto_fix_high, 'Oda teması', _pickTheme),
+      side(Icons.auto_fix_high, tx('Oda teması'), _pickTheme),
     ]);
   }
 }

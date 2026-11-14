@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import '../l10n/l10n.dart';
 
 /// Doğum günü mikrofon modunun süsleri (hepsi kodla çizilir, görsel dosyası gerekmez; dokunmaları geçirir).
 // Palet: uygulamanın siyah-altın tarzı. Şampanya / rose-gold / altın, vurgu olarak gece moru, parlak siyah.
@@ -20,7 +21,7 @@ class BirthdayBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final n = (name ?? '').trim();
-    final text = n.isEmpty ? 'Doğum Günün Kutlu Olsun!' : 'İyi ki doğdun $n!';
+    final text = n.isEmpty ? tx('Doğum Günün Kutlu Olsun!') : tx('İyi ki doğdun {name}!', {'name': n});
     final h = width * 0.2;
     return IgnorePointer(
       child: SizedBox(

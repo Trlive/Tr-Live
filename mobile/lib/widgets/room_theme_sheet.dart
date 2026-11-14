@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/l10n.dart';
 import '../services/api.dart';
 import '../services/session.dart';
 import 'app_theme.dart';
@@ -71,8 +72,10 @@ class _ThemeSheetState extends State<_ThemeSheet> with SingleTickerProviderState
     final again = t.owned;
     final ok = await confirm(
       context,
-      '"${t.label}" temasını ${fmtNumber(t.priceCoins)} Coin karşılığında ${again ? '${t.durationDays} gün uzatmak' : '${t.durationDays} gün kullanmak'} istiyor musunuz?',
-      action: again ? 'Uzat' : 'Satın al',
+      again
+          ? tx('"{name}" temasını {coins} Coin karşılığında {days} gün uzatmak istiyor musunuz?', {'name': t.label, 'coins': fmtNumber(t.priceCoins), 'days': t.durationDays})
+          : tx('"{name}" temasını {coins} Coin karşılığında {days} gün kullanmak istiyor musunuz?', {'name': t.label, 'coins': fmtNumber(t.priceCoins), 'days': t.durationDays}),
+      action: again ? tx('Uzat') : tx('Satın al'),
     );
     if (!ok || !mounted) return;
     setState(() => _busy = t.key);
@@ -83,7 +86,7 @@ class _ThemeSheetState extends State<_ThemeSheet> with SingleTickerProviderState
     Session.refresh();
     await _reload();
     if (!mounted) return;
-    toast(context, again ? '"${t.label}" süresi uzatıldı.' : '"${t.label}" hesabına eklendi. "Kullan" ile odana uygulayabilirsin.');
+    toast(context, again ? tx('"{name}" süresi uzatıldı.', {'name': t.label}) : tx('"{name}" hesabına eklendi. "Kullan" ile odana uygulayabilirsin.', {'name': t.label}));
   }
 
   Future<void> _uploadCustom(CustomTheme c) async {
@@ -94,7 +97,7 @@ class _ThemeSheetState extends State<_ThemeSheet> with SingleTickerProviderState
     if (!mounted) return;
     setState(() => _busy = null);
     if (r == null) return;
-    toast(context, 'Görselin incelemeye gönderildi. Onaylanınca ${c.days} gün kullanabilirsin.');
+    toast(context, tx('Görselin incelemeye gönderildi. Onaylanınca {n} gün kullanabilirsin.', {'n': c.days}));
     await _reload();
   }
 
@@ -127,7 +130,7 @@ class _ThemeSheetState extends State<_ThemeSheet> with SingleTickerProviderState
         labelStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
         unselectedLabelStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
         indicator: const UnderlineTabIndicator(borderSide: BorderSide(color: Pal.cyan, width: 4), borderRadius: BorderRadius.all(Radius.circular(4)), insets: EdgeInsets.symmetric(horizontal: 46)),
-        tabs: const [Tab(text: 'Müsait'), Tab(text: 'Mağaza')],
+        tabs: [Tab(text: tx('Müsait')), Tab(text: tx('Mağaza'))],
       ),
       const SizedBox(height: 4),
       Expanded(
@@ -180,7 +183,7 @@ class _ThemeSheetState extends State<_ThemeSheet> with SingleTickerProviderState
                 : Row(mainAxisSize: MainAxisSize.min, children: [
                     Icon(inUse ? Icons.check_circle : Icons.play_arrow_rounded, size: 17, color: inUse ? Pal.cyan : Pal.onBright),
                     const SizedBox(width: 4),
-                    Text(inUse ? 'Kullanılıyor' : 'Kullan', style: TextStyle(color: inUse ? Pal.cyan : Pal.onBright, fontSize: 14, fontWeight: FontWeight.w800)),
+                    Text(inUse ? tx('Kullanılıyor') : tx('Kullan'), style: TextStyle(color: inUse ? Pal.cyan : Pal.onBright, fontSize: 14, fontWeight: FontWeight.w800)),
                   ]),
           ),
         ),
@@ -213,17 +216,17 @@ class _ThemeSheetState extends State<_ThemeSheet> with SingleTickerProviderState
     final free = RoomThemes.all.where((t) => t.free).toList();
     final mine = <Widget>[
       for (final c in customs)
-        if (c.active) _ownedTile(key: kCustomThemeKey, image: c.imageUrl, label: 'Özel tema', days: c.daysLeft) else _customState(c),
-      if (!self && active != null) _ownedTile(key: kCustomThemeKey, image: active.imageUrl, label: 'Özel tema', days: active.daysLeft),
+        if (c.active) _ownedTile(key: kCustomThemeKey, image: c.imageUrl, label: tx('Özel tema'), days: c.daysLeft) else _customState(c),
+      if (!self && active != null) _ownedTile(key: kCustomThemeKey, image: active.imageUrl, label: tx('Özel tema'), days: active.daysLeft),
       for (final t in owned) _ownedTile(key: t.key, image: t.thumbUrl, colors: t.colors, label: t.label, days: t.daysLeft, animated: t.animated),
     ];
     const grid = SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, mainAxisSpacing: 12, crossAxisSpacing: 12, childAspectRatio: 0.62);
     return CustomScrollView(slivers: [
       if (mine.isNotEmpty) ...[
-        SliverToBoxAdapter(child: _header('Satın aldıklarım')),
+        SliverToBoxAdapter(child: _header(tx('Satın aldıklarım'))),
         SliverPadding(padding: const EdgeInsets.symmetric(horizontal: 14), sliver: SliverGrid(delegate: SliverChildListDelegate(mine), gridDelegate: grid)),
       ],
-      SliverToBoxAdapter(child: _header('Ücretsiz temalar')),
+      SliverToBoxAdapter(child: _header(tx('Ücretsiz temalar'))),
       SliverPadding(
         padding: const EdgeInsets.fromLTRB(14, 0, 14, 24),
         sliver: SliverGrid(
@@ -248,7 +251,7 @@ class _ThemeSheetState extends State<_ThemeSheet> with SingleTickerProviderState
               child: Stack(fit: StackFit.expand, children: [
                 _thumb(image, colors),
                 const DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.center, end: Alignment.bottomCenter, colors: [Colors.transparent, Color(0xB3000000)]))),
-                Positioned(right: 6, top: 6, child: _chip(Icons.schedule, '$days gün')),
+                Positioned(right: 6, top: 6, child: _chip(Icons.schedule, tx('{n} gün', {'n': days}))),
                 if (animated) const Positioned(right: 6, bottom: 24, child: Icon(Icons.auto_awesome, size: 16, color: Pal.gold)),
                 Positioned(left: 8, right: 8, bottom: 6, child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700))),
                 if (sel) _selectedMark(),
@@ -284,9 +287,9 @@ class _ThemeSheetState extends State<_ThemeSheet> with SingleTickerProviderState
 
   Widget _customState(CustomTheme c) {
     final (icon, title, sub, canUpload) = switch (c.status) {
-      'pending' => (Icons.hourglass_top_rounded, 'İncelemede', 'Onay bekleniyor', false),
-      'rejected' => (Icons.refresh_rounded, 'Reddedildi', c.reviewNote?.isNotEmpty == true ? c.reviewNote! : 'Yeni görsel yükle', true),
-      _ => (Icons.add_photo_alternate_outlined, 'Özel tema', '${c.days} gün · görsel yükle', true),
+      'pending' => (Icons.hourglass_top_rounded, tx('İncelemede'), tx('Onay bekleniyor'), false),
+      'rejected' => (Icons.refresh_rounded, tx('Reddedildi'), c.reviewNote?.isNotEmpty == true ? c.reviewNote! : tx('Yeni görsel yükle'), true),
+      _ => (Icons.add_photo_alternate_outlined, tx('Özel tema'), tx('{n} gün · görsel yükle', {'n': c.days}), true),
     };
     return GestureDetector(
       onTap: canUpload && _busy == null ? () => _uploadCustom(c) : null,
@@ -316,12 +319,12 @@ class _ThemeSheetState extends State<_ThemeSheet> with SingleTickerProviderState
   // ---------------- Mağaza ----------------
   Widget _store() {
     final list = RoomThemes.all.where((t) => !t.free).toList();
-    if (list.isEmpty) return const Center(child: Text('Mağazada şu an tema yok.', style: TextStyle(color: Pal.textDim)));
+    if (list.isEmpty) return Center(child: Text(tx('Mağazada şu an tema yok.'), style: TextStyle(color: Pal.textDim)));
     return Column(children: [
       if (!RoomThemes.self)
-        const Padding(
+        Padding(
           padding: EdgeInsets.fromLTRB(16, 4, 16, 6),
-          child: Text('Temalar oda sahibinin hesabına alınır. Satın almayı oda sahibi yapabilir; alınmış temaları kullanabilirsin.', style: TextStyle(color: Pal.textDim, fontSize: 12)),
+          child: Text(tx('Temalar oda sahibinin hesabına alınır. Satın almayı oda sahibi yapabilir; alınmış temaları kullanabilirsin.'), style: TextStyle(color: Pal.textDim, fontSize: 12)),
         ),
       Expanded(
         child: GridView.builder(
@@ -349,18 +352,18 @@ class _ThemeSheetState extends State<_ThemeSheet> with SingleTickerProviderState
               child: Stack(fit: StackFit.expand, children: [
                 _thumb(t.thumbUrl, t.colors),
                 const DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment(0, 0.2), end: Alignment.bottomCenter, colors: [Colors.transparent, Color(0xB3000000)]))),
-                Positioned(left: 8, top: 8, child: _chip(Icons.schedule, t.owned ? '${t.daysLeft} gün kaldı' : '${t.durationDays} gün')),
+                Positioned(left: 8, top: 8, child: _chip(Icons.schedule, t.owned ? tx('{n} gün kaldı', {'n': t.daysLeft}) : tx('{n} gün', {'n': t.durationDays}))),
                 Positioned(
                   right: 4,
                   top: 2,
                   child: IconButton(
-                    tooltip: 'Önizle',
+                    tooltip: tx('Önizle'),
                     visualDensity: VisualDensity.compact,
                     onPressed: () => _preview(t),
                     icon: const Icon(Icons.remove_red_eye_outlined, color: Colors.white, size: 24),
                   ),
                 ),
-                if (t.animated) Positioned(right: 8, bottom: 32, child: _chip(Icons.auto_awesome, 'Hareketli')),
+                if (t.animated) Positioned(right: 8, bottom: 32, child: _chip(Icons.auto_awesome, tx('Hareketli'))),
                 Positioned(left: 10, right: 10, bottom: 8, child: Text(t.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70, fontSize: 12))),
                 Positioned(
                   left: 10,
@@ -382,7 +385,7 @@ class _ThemeSheetState extends State<_ThemeSheet> with SingleTickerProviderState
                   color: Pal.surfaceHi,
                   child: InkWell(
                     onTap: canBuy ? () => _buy(t) : null,
-                    child: Center(child: Text('Uzat', style: TextStyle(color: canBuy ? Pal.text : Pal.textDim, fontSize: 13, fontWeight: FontWeight.w700))),
+                    child: Center(child: Text(tx('Uzat'), style: TextStyle(color: canBuy ? Pal.text : Pal.textDim, fontSize: 13, fontWeight: FontWeight.w700))),
                   ),
                 ),
               ),
@@ -398,7 +401,7 @@ class _ThemeSheetState extends State<_ThemeSheet> with SingleTickerProviderState
                   child: Center(
                     child: busy
                         ? _spinner()
-                        : Text('Satın al', style: TextStyle(color: RoomThemes.self ? Pal.onBright : Pal.textDim, fontSize: 16, fontWeight: FontWeight.w800)),
+                        : Text(tx('Satın al'), style: TextStyle(color: RoomThemes.self ? Pal.onBright : Pal.textDim, fontSize: 16, fontWeight: FontWeight.w800)),
                   ),
                 ),
               ),
@@ -452,7 +455,7 @@ class _ThemePreview extends StatelessWidget {
                   child: FilledButton(
                     style: FilledButton.styleFrom(backgroundColor: Pal.cyan, foregroundColor: Pal.onBright, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
                     onPressed: onBuy,
-                    child: Text('${theme.owned ? 'Süreyi uzat' : 'Satın al'} · ${fmtNumber(theme.priceCoins)} Coin · ${theme.durationDays} gün', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+                    child: Text('${theme.owned ? tx('Süreyi uzat') : tx('Satın al')} · ${fmtNumber(theme.priceCoins)} Coin · ${tx('{n} gün', {'n': theme.durationDays})}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
                   ),
                 ),
               ),

@@ -112,7 +112,8 @@ router.get('/', optionalAuth, async (req, res) => {
   const like = q ? `%${q.replace(/[\\%_]/g, (m) => `\\${m}`)}%` : null;
   // Yoho gibi: oda kimliği = sahibinin kimliği. Rakamla aranınca sahibin normal / özel ID'si (veya eski oda numarası) tam eşleşir.
   const idq = /^\d{3,12}$/.test(q) ? q : null;
-  const region = ['tr', 'other', 'friends', 'near'].includes(req.query.region) ? req.query.region : null;
+  // Bölge sekmeleri (uz / ar / in / eu: oda sahibinin bölgesi), eski 'tr' / 'other', takip ettiklerim, yakındakiler.
+  const region = ['uz', 'ar', 'in', 'eu', 'tr', 'other', 'friends', 'near'].includes(req.query.region) ? req.query.region : null;
   if ((region === 'friends' || region === 'near') && !req.user) throw fail('Arkadaşları görmek için giriş yapın.', 401);
   // "Yeni yayıncı" süzgeci (Yoho): hesabı son 30 günde açılmış kişilerin odaları.
   const fresh = req.query.fresh === '1' || req.query.fresh === 'true';
@@ -145,6 +146,7 @@ router.get('/', optionalAuth, async (req, res) => {
               OR (u.is_hidden = FALSE AND (u.public_id = $7
                 OR EXISTS (SELECT 1 FROM special_ids si WHERE si.user_id = u.id AND si.special_id = $7 AND si.expires_at > NOW()))))))
        AND ($5::text IS NULL
+            OR ($5 IN ('uz', 'ar', 'in', 'eu') AND u.region = $5)
             OR ($5 = 'tr' AND lower(COALESCE(u.country, '')) IN ('türkiye', 'turkiye', 'turkey', 'tr', 'türkiye cumhuriyeti'))
             OR ($5 = 'other' AND lower(COALESCE(u.country, '')) NOT IN ('türkiye', 'turkiye', 'turkey', 'tr', 'türkiye cumhuriyeti'))
             OR ($5 = 'friends' AND u.is_hidden = FALSE AND EXISTS (SELECT 1 FROM follows f WHERE f.follower_id = $3::uuid AND f.followed_id = r.owner_id))

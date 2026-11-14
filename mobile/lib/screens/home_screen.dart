@@ -1,6 +1,8 @@
 import 'dart:async';
+import '../l10n/l10n.dart';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/app_visibility.dart';
 import '../services/background_service.dart';
 import '../services/music_service.dart';
@@ -99,7 +101,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final roomId = data['roomId']?.toString();
       final userId = data['userId']?.toString();
       if (kind == 'room_open' && roomId != null) {
-        openRoom(context, RoomRequest(roomId: roomId, name: (data['roomName'] ?? 'Oda').toString()));
+        openRoom(context, RoomRequest(roomId: roomId, name: (data['roomName'] ?? tx('Oda')).toString()));
       } else if (userId != null) {
         Navigator.of(context).push(MaterialPageRoute(builder: (_) => UserProfileScreen(userId: userId)));
       }
@@ -107,36 +109,36 @@ class _HomeScreenState extends State<HomeScreen> {
     _cpSub = SocketService.instance.events.listen((e) {
       if (!mounted) return;
       if (e['type'] == 'agency_invite') {
-        final a = (mapOf(e['agency'])?['name'] ?? 'Bir ajans').toString();
-        toast(context, '$a seni yayıncı olarak davet etti (Mesajlar → Ajans daveti)');
+        final a = (mapOf(e['agency'])?['name'] ?? tx('Bir ajans')).toString();
+        toast(context, tx('{a} seni yayıncı olarak davet etti (Mesajlar → Ajans daveti)', {'a': a}));
         return;
       }
       if (e['type'] == 'agency_assistant_invite') {
-        final a = (mapOf(e['agency'])?['name'] ?? 'Bir ajans').toString();
-        toast(context, '$a seni ajans asistanı olarak davet etti (Mesajlar → Ajans daveti)');
+        final a = (mapOf(e['agency'])?['name'] ?? tx('Bir ajans')).toString();
+        toast(context, tx('{a} seni ajans asistanı olarak davet etti (Mesajlar → Ajans daveti)', {'a': a}));
         return;
       }
       if (e['type'] == 'event_reward') {
-        toast(context, '🏆 ${e['title'] ?? 'Etkinlik'} oldun!${e['rewarded'] == true ? ' Ödüllerin hesabına eklendi.' : ''}');
+        toast(context, '🏆 ${tx('{t} oldun!', {'t': e['title'] ?? tx('Etkinlik')})}${e['rewarded'] == true ? ' ${tx('Ödüllerin hesabına eklendi.')}' : ''}');
         return;
       }
       if (e['type'] == 'agency_created') {
-        final a = (mapOf(e['agency'])?['name'] ?? 'Ajans').toString();
-        toast(context, '"$a" ajansının sahibi oldun 🎉 (Profil → Ajans Merkezi)');
+        final a = (mapOf(e['agency'])?['name'] ?? tx('Ajans')).toString();
+        toast(context, tx('"{a}" ajansının sahibi oldun 🎉 (Profil → Ajans Merkezi)', {'a': a}));
         return;
       }
       if (e['type'] != 'cp_request') return;
-      final name = (mapOf(e['from'])?['displayName'] ?? 'Biri').toString();
-      toast(context, '$name seni ${cpRelationLabel(e['kind']?.toString())} olarak seçti ❤ (Mesajlar → Arkadaşlık isteği, 24 saat içinde yanıtla)');
+      final name = (mapOf(e['from'])?['displayName'] ?? tx('Biri')).toString();
+      toast(context, tx('{name} seni {rel} olarak seçti ❤ (Mesajlar → Arkadaşlık isteği, 24 saat içinde yanıtla)', {'name': name, 'rel': cpRelationLabel(e['kind']?.toString())}));
     });
   }
 
   Future<void> _joinByCode() async {
-    final code = await askText(context, 'Gizli oda davet kodu', hint: '6 karakter');
+    final code = await askText(context, tx('Gizli oda davet kodu'), hint: tx('6 karakter'));
     if (code == null || !mounted) return;
     final r = await guard(context, () => Api.post('/api/rooms/by-code', {'code': code}));
     if (r == null || !mounted) return;
-    await openRoom(context, RoomRequest(roomId: r['roomId'].toString(), name: (r['name'] ?? 'Oda').toString(), code: code.trim().toUpperCase()));
+    await openRoom(context, RoomRequest(roomId: r['roomId'].toString(), name: (r['name'] ?? tx('Oda')).toString(), code: code.trim().toUpperCase()));
   }
 
   @override
@@ -261,14 +263,14 @@ class _HomeScreenState extends State<HomeScreen> {
     return Container(
       decoration: const BoxDecoration(color: Pal.surface, border: Border(top: BorderSide(color: Pal.outline, width: 0.8))),
       child: SafeArea(top: false, child: Row(children: [
-        item(0, Icons.mic_none, Icons.mic, 'Sesli'),
-        item(1, Icons.dynamic_feed_outlined, Icons.dynamic_feed, 'Akış'),
-        item(2, Icons.videocam_outlined, Icons.videocam, 'Görüntülü'),
+        item(0, Icons.mic_none, Icons.mic, tx('Sesli')),
+        item(1, Icons.dynamic_feed_outlined, Icons.dynamic_feed, tx('Akış')),
+        item(2, Icons.videocam_outlined, Icons.videocam, tx('Görüntülü')),
         item(
           3,
           Icons.chat_bubble_outline,
           Icons.chat_bubble,
-          'Mesajlar',
+          tx('Mesajlar'),
           badge: ValueListenableBuilder<int>(
             valueListenable: Inbox.unread,
             builder: (_, n, __) => Badge(label: Text('$n'), isLabelVisible: n > 0, child: Icon(_index == 3 ? Icons.chat_bubble : Icons.chat_bubble_outline, color: _index == 3 ? Pal.cyan : Pal.textDim, size: 28)),
@@ -278,7 +280,7 @@ class _HomeScreenState extends State<HomeScreen> {
           4,
           Icons.person_outline,
           Icons.person,
-          'Profil',
+          tx('Profil'),
           badge: ValueListenableBuilder<Map<String, int>>(
             valueListenable: Inbox.badges,
             builder: (_, b, __) => Badge(smallSize: 9, isLabelVisible: (b['total'] ?? 0) > 0, child: Icon(_index == 4 ? Icons.person : Icons.person_outline, color: _index == 4 ? Pal.cyan : Pal.textDim, size: 28)),
@@ -327,11 +329,14 @@ Future<bool> confirmLeaveCurrentRoom(BuildContext context, String? nextRoomId) a
   return confirm(
     context,
     RoomDock.myRole == 'owner'
-        ? 'Başka odaya geçerseniz kendi odanızdan çıkarsınız; içeride yardımcı sahip yoksa odanız kapanır. Devam edilsin mi?'
-        : 'Bulunduğunuz odada sahip ya da başka yardımcı sahip yok; başka odaya geçerseniz oda herkes için kapanır. Devam edilsin mi?',
-    action: 'Geç',
+        ? tx('Başka odaya geçerseniz kendi odanızdan çıkarsınız; içeride yardımcı sahip yoksa odanız kapanır. Devam edilsin mi?')
+        : tx('Bulunduğunuz odada sahip ya da başka yardımcı sahip yok; başka odaya geçerseniz oda herkes için kapanır. Devam edilsin mi?'),
+    action: tx('Geç'),
   );
 }
+
+/// Ana sayfa bölgeleri: (kod, bayrak, etiket). Türkiye ve Orta Asya ülkeleri Uzbekistan sekmesindedir.
+const kRegions = [('uz', '🇺🇿', 'Uzbekistan'), ('ar', '🇸🇦', 'Arap'), ('in', '🇮🇳', 'Hindistan'), ('eu', '🇪🇺', 'Avrupa')];
 
 class RoomsTab extends StatefulWidget {
   final String type; // audio | video
@@ -350,6 +355,10 @@ class RoomsTabState extends State<RoomsTab> {
   Timer? _debounce;
   Timer? _auto; // sıralama canlı: hediye atılan oda yukarı çıkar (Yoho / Mico)
   String _mode = 'popular'; // popular (Popüler) | friends (Takip: takip ettiğin yayıncılar)
+  /// Bölge sekmesi (Popüler modunda): uz (Uzbekistan; Türkiye de burada) | ar | in | eu. İlk açılışta kullanıcının kendi bölgesi.
+  String _region = 'uz';
+  static const _regionKey = 'home_region';
+  bool _regionPicked = false; // kullanıcı kendisi seçtiyse profil bölgesi değişince üzerine yazılmaz
   bool _searching = false;
 
   void toggleSearch() => setState(() {
@@ -369,6 +378,10 @@ class RoomsTabState extends State<RoomsTab> {
     super.initState();
     RoomDock.request.addListener(_dockChanged);
     RoomDock.minimized.addListener(_dockChanged);
+    final mine = '${Session.me.value?['region'] ?? ''}';
+    if (kRegions.any((r) => r.$1 == mine)) _region = mine;
+    Session.me.addListener(_meChanged);
+    _loadRegion();
     refresh();
     // Liste 20 saniyede bir sessizce yenilenir (yalnızca bu sekme görünürken, uygulama öndeyken ve oda tam ekran değilken).
     _auto = Timer.periodic(const Duration(seconds: 20), (_) {
@@ -384,12 +397,76 @@ class RoomsTabState extends State<RoomsTab> {
   void dispose() {
     RoomDock.request.removeListener(_dockChanged);
     RoomDock.minimized.removeListener(_dockChanged);
+    Session.me.removeListener(_meChanged);
     _debounce?.cancel();
     _auto?.cancel();
     super.dispose();
   }
 
   int _seq = 0; // geç gelen eski yanıt yeni listeyi ezmesin
+
+  Future<void> _loadRegion() async {
+    try {
+      final saved = (await SharedPreferences.getInstance()).getString(_regionKey);
+      if (!mounted || saved == null || !kRegions.any((r) => r.$1 == saved)) return;
+      _regionPicked = true;
+      if (saved == _region) return;
+      setState(() => _region = saved);
+      refresh();
+    } catch (_) {/* kayıt okunamazsa kendi bölgesi */}
+  }
+
+  /// Kayıt ekranında ülke seçilince (bölge sunucuda belirlenir) kullanıcı henüz sekme seçmediyse kendi bölgesine geçilir.
+  void _meChanged() {
+    final mine = '${Session.me.value?['region'] ?? ''}';
+    if (!mounted || _regionPicked || mine == _region || !kRegions.any((r) => r.$1 == mine)) return;
+    setState(() => _region = mine);
+    refresh();
+  }
+
+  void _pickRegion(String id) {
+    _regionPicked = true;
+    if (id == _region) return;
+    setState(() {
+      _region = id;
+      _loading = _rooms.isEmpty;
+    });
+    refresh();
+    SharedPreferences.getInstance().then((p) => p.setString(_regionKey, id)).catchError((_) => false);
+  }
+
+  /// Bölge sekmeleri: Uzbekistan · Arap · Hindistan · Avrupa (uygulama renkleri: altın seçili, koyu yüzey).
+  Widget _regionBar(double m) => SizedBox(
+        height: 34,
+        child: ListView(
+          scrollDirection: Axis.horizontal,
+          padding: EdgeInsets.symmetric(horizontal: m),
+          children: [
+            for (final (id, flag, label) in kRegions)
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: GestureDetector(
+                  onTap: () => _pickRegion(id),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(17),
+                      gradient: id == _region ? const LinearGradient(colors: [Pal.amber, Pal.cyan]) : null,
+                      color: id == _region ? null : Pal.surface,
+                      border: Border.all(color: id == _region ? Pal.cyan : Pal.outline),
+                    ),
+                    child: Text(
+                      '$flag ${tx(label)}',
+                      style: TextStyle(fontSize: 13, fontWeight: id == _region ? FontWeight.w900 : FontWeight.w600, color: id == _region ? Pal.onBright : Pal.text),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      );
 
   Future<void> refresh() async {
     final my = ++_seq;
@@ -398,6 +475,8 @@ class RoomsTabState extends State<RoomsTab> {
         'type': widget.type,
         if (_q.isNotEmpty) 'q': _q,
         if (_mode == 'friends') 'region': 'friends',
+        // Arama tüm bölgelerde yapılır; liste seçili bölgenin odalarını gösterir.
+        if (_mode == 'popular' && _q.isEmpty) 'region': _region,
       });
       if (!mounted || my != _seq) return;
       setState(() {
@@ -501,8 +580,8 @@ class RoomsTabState extends State<RoomsTab> {
             fit: BoxFit.scaleDown,
             alignment: Alignment.topLeft,
             child: Row(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-              _topTab('popular', 'Popüler'),
-              _topTab('friends', 'Takip'),
+              _topTab('popular', tx('Popüler')),
+              _topTab('friends', tx('Takip')),
             ]),
           ),
         ),
@@ -512,16 +591,16 @@ class RoomsTabState extends State<RoomsTab> {
           child: Row(mainAxisSize: MainAxisSize.min, children: [
             Semantics(
               button: true,
-              label: 'Sıralamalar',
+              label: tx('Sıralamalar'),
               child: InkWell(
                 customBorder: const CircleBorder(),
                 onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const LeaderboardScreen())),
                 child: const Padding(padding: EdgeInsets.all(6), child: CrownIcon(size: 24)),
               ),
             ),
-            icon(_searching ? Icons.close : Icons.search, 'Oda ara', toggleSearch),
+            icon(_searching ? Icons.close : Icons.search, tx('Oda ara'), toggleSearch),
             Tooltip(
-              message: video ? 'Görüntülü yayın aç' : 'Sesli oda aç',
+              message: video ? tx('Görüntülü yayın aç') : tx('Sesli oda aç'),
               child: InkWell(
                 customBorder: const CircleBorder(),
                 onTap: createRoom,
@@ -552,12 +631,17 @@ class RoomsTabState extends State<RoomsTab> {
     final cw = (w - 2 * m - gap * (cols - 1)) / cols;
     final ratio = cw / (cw + RoomCard.titleAreaFor(w));
     final empty = _mode == 'friends'
-        ? 'Takip ettiğin kişilerin açık odası yok.'
-        : (_q.isEmpty ? 'Şu an açık oda yok. İlk odayı sen aç!' : 'Aramanıza uyan oda yok.');
+        ? tx('Takip ettiğin kişilerin açık odası yok.')
+        : (_q.isEmpty ? tx('Şu an açık oda yok. İlk odayı sen aç!') : tx('Aramanıza uyan oda yok.'));
     final head = <Widget>[
       const BannerCarousel(),
-      // Banner ile odalar arasında bir satırlık ek boşluk.
-      SizedBox(height: gap + 16),
+      if (_mode == 'popular' && _q.isEmpty) ...[
+        const SizedBox(height: 12),
+        MediaQuery(data: MediaQuery.of(context).copyWith(textScaler: TextScaler.noScaling), child: _regionBar(m)),
+        SizedBox(height: gap + 6),
+      ] else
+        // Banner ile odalar arasında bir satırlık ek boşluk.
+        SizedBox(height: gap + 16),
     ];
     final Widget body;
     if (_loading) {
@@ -601,17 +685,17 @@ class RoomsTabState extends State<RoomsTab> {
             autofocus: true,
             decoration: InputDecoration(
               prefixIcon: const Icon(Icons.search),
-              hintText: 'Oda, yayıncı veya etiket ara',
+              hintText: tx('Oda, yayıncı veya etiket ara'),
               isDense: true,
               // Kullanıcı arama ve gizli odaya kodla giriş (eski ⋮ menüsündeydi) arama kutusunun sağında.
               suffixIcon: Row(mainAxisSize: MainAxisSize.min, children: [
                 IconButton(
-                  tooltip: 'Gizli odaya kodla gir',
+                  tooltip: tx('Gizli odaya kodla gir'),
                   icon: const Icon(Icons.vpn_key_outlined),
                   onPressed: widget.onJoinCode,
                 ),
                 IconButton(
-                  tooltip: 'Kullanıcı ara',
+                  tooltip: tx('Kullanıcı ara'),
                   icon: const Icon(Icons.person_search),
                   onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const UserSearchScreen())),
                 ),

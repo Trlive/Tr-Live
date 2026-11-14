@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/l10n.dart';
 import '../services/api.dart';
 import '../widgets/common.dart';
 
@@ -16,7 +17,7 @@ Future<void> showPkChallengeSheet(BuildContext context, {required String roomId}
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(children: [
-              const Text('PK süresi'),
+              Text(tx('PK süresi')),
               const Spacer(),
               DropdownButton<int>(
                 value: seconds,
@@ -25,27 +26,27 @@ Future<void> showPkChallengeSheet(BuildContext context, {required String roomId}
               ),
             ]),
           ),
-          const Padding(padding: EdgeInsets.symmetric(horizontal: 16), child: Align(alignment: Alignment.centerLeft, child: Text('Meydan okunacak oda', style: TextStyle(fontWeight: FontWeight.bold)))),
+          Padding(padding: EdgeInsets.symmetric(horizontal: 16), child: Align(alignment: Alignment.centerLeft, child: Text(tx('Meydan okunacak oda'), style: TextStyle(fontWeight: FontWeight.bold)))),
           Expanded(
             child: AsyncBody<List<Map<String, dynamic>>>(
               load: () async => listOf((await Api.get('/api/pk/rooms'))['rooms']),
               builder: (c2, rooms, reload) => rooms.isEmpty
-                  ? const Center(child: Text('Uygun oda yok.'))
+                  ? Center(child: Text(tx('Uygun oda yok.')))
                   : ListView(children: [
                       for (final r in rooms)
                         ListTile(
                           leading: const Icon(Icons.sports_mma),
                           title: Text(r['name'].toString()),
-                          subtitle: Text('${r['ownerName']} · ${r['memberCount']} kişi'),
+                          subtitle: Text(tx('{ownerName} · {memberCount} kişi', {'ownerName': r['ownerName'], 'memberCount': r['memberCount']})),
                           trailing: FilledButton.tonal(
                             onPressed: () async {
                               final res = await guard(context, () => Api.post('/api/pk/challenge', {'roomId': roomId, 'targetRoomId': r['id'], 'durationSeconds': seconds}));
                               if (res != null && c.mounted) {
                                 Navigator.pop(c);
-                                toast(context, 'PK daveti gönderildi.');
+                                toast(context, tx('PK daveti gönderildi.'));
                               }
                             },
-                            child: const Text('Davet et'),
+                            child: Text(tx('Davet et')),
                           ),
                         ),
                     ]),
@@ -64,11 +65,11 @@ Future<void> showPkInviteDialog(BuildContext context, Map<String, dynamic> pk) a
   final accept = await showDialog<bool>(
     context: context,
     builder: (c) => AlertDialog(
-      title: const Text('PK daveti'),
-      content: Text('${host?['displayName'] ?? 'Bir oda sahibi'} ("${a['roomName']}") sizi ${((pk['durationSeconds'] as num?) ?? 0) ~/ 60} dakikalık PK\'ya davet etti.'),
+      title: Text(tx('PK daveti')),
+      content: Text(tx('{displayName} ("{roomName}") sizi {durationSeconds} dakikalık PK\'ya davet etti.', {'displayName': host?['displayName'] ?? tx('Bir oda sahibi'), 'roomName': a['roomName'], 'durationSeconds': ((pk['durationSeconds'] as num?) ?? 0) ~/ 60})),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Reddet')),
-        FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Kabul et')),
+        TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tx('Reddet'))),
+        FilledButton(onPressed: () => Navigator.pop(c, true), child: Text(tx('Kabul et'))),
       ],
     ),
   );

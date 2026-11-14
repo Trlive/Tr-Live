@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/l10n.dart';
 import '../services/api.dart';
 import 'common.dart';
 
@@ -18,8 +19,8 @@ Future<void> reportDialog(BuildContext context, {required String kind, String? t
   final reason = await showDialog<String>(
     context: context,
     builder: (c) => SimpleDialog(
-      title: const Text('Şikâyet nedeni'),
-      children: [for (final e in reportReasons.entries) SimpleDialogOption(onPressed: () => Navigator.pop(c, e.key), child: Text(e.value))],
+      title: Text(tx('Şikâyet nedeni')),
+      children: [for (final e in reportReasons.entries) SimpleDialogOption(onPressed: () => Navigator.pop(c, e.key), child: Text(tx(e.value)))],
     ),
   );
   if (reason == null || !context.mounted) return;
@@ -30,14 +31,14 @@ Future<void> reportDialog(BuildContext context, {required String kind, String? t
         if (roomId != null) 'roomId': roomId,
         if (messageId != null) 'messageId': messageId,
       }));
-  if (r != null && context.mounted) toast(context, 'Şikâyetiniz alındı. İnceleyeceğiz, teşekkürler.');
+  if (r != null && context.mounted) toast(context, tx('Şikâyetiniz alındı. İnceleyeceğiz, teşekkürler.'));
 }
 
 /// Engelleme: karşılıklı takip kaldırılır, mesajlaşma ve aramada görünmezsiniz.
 Future<bool> blockUserDialog(BuildContext context, String userId, String name) async {
-  if (!await confirm(context, '$name engellensin mi? Birbirinizi takip etmezsiniz ve mesajlaşamazsınız.', action: 'Engelle')) return false;
+  if (!await confirm(context, tx('{name} engellensin mi? Birbirinizi takip etmezsiniz ve mesajlaşamazsınız.', {'name': name}), action: tx('Engelle'))) return false;
   if (!context.mounted) return false;
   final r = await guard(context, () => Api.post('/api/blocks/$userId'));
-  if (r != null && context.mounted) toast(context, 'Kullanıcı engellendi.');
+  if (r != null && context.mounted) toast(context, tx('Kullanıcı engellendi.'));
   return r != null;
 }

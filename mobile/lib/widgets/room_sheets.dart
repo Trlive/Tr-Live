@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/l10n.dart';
 import 'package:flutter/services.dart';
 import '../services/api.dart';
 import 'app_theme.dart';
@@ -12,7 +13,7 @@ import 'room_categories.dart';
 import '../screens/user_screens.dart';
 
 const _yellow = Color(0xFFFFE100);
-const roleLabels = {'owner': 'Oda sahibi', 'cohost': 'Yardımcı sahip', 'moderator': 'Moderatör', 'user': 'Üye'};
+Map<String, String> get roleLabels => {'owner': tx('Oda sahibi'), 'cohost': tx('Yardımcı sahip'), 'moderator': tx('Moderatör'), 'user': tx('Üye')};
 final presetTags = [for (final c in kRoomCategories) c.label];
 
 /// Sunucudaki etiket (küçük harf) → ekranda gösterilen ad ("eğlence" → "Eğlence").
@@ -79,7 +80,7 @@ void showViewers(BuildContext context, List<Map<String, dynamic>> members, void 
     backgroundColor: Colors.transparent,
     builder: (c) => _sheetShell(
       c,
-      'İzleyiciler (${members.length})',
+      tx('İzleyiciler ({length})', {'length': members.length}),
       ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 16), children: [
         for (final m in members)
           ListTile(
@@ -124,7 +125,7 @@ void showContributions(BuildContext context, String roomId) {
             padding: const EdgeInsets.fromLTRB(16, 12, 12, 4),
             child: Row(children: [
               const SizedBox(width: 40),
-              const Expanded(child: Text('Katkı Listesi', textAlign: TextAlign.center, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Colors.white))),
+              Expanded(child: Text(tx('Katkı Listesi'), textAlign: TextAlign.center, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Colors.white))),
               InkWell(
                 customBorder: const CircleBorder(),
                 onTap: () => Navigator.pop(c),
@@ -181,7 +182,7 @@ class _ContributionsState extends State<_Contributions> {
         padding: EdgeInsets.all(2 * k),
         decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(19 * k)),
         child: Row(children: [
-          for (final (label, total) in const [('24 Saat', false), ('Toplam', true)])
+          for (final (label, total) in [(tx('24 Saat'), false), (tx('Toplam'), true)])
             Expanded(
               child: GestureDetector(
                 onTap: () => _set(total),
@@ -388,7 +389,7 @@ void showRoomCard(
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   decoration: BoxDecoration(color: _yellow, borderRadius: BorderRadius.circular(18)),
-                  child: const Text('Düzenle', style: TextStyle(color: Colors.black, fontWeight: FontWeight.w800)),
+                  child: Text(tx('Düzenle'), style: TextStyle(color: Colors.black, fontWeight: FontWeight.w800)),
                 ),
               ),
             const SizedBox(width: 10),
@@ -405,7 +406,7 @@ void showRoomCard(
             GestureDetector(
               onTap: () {
                 Clipboard.setData(ClipboardData(text: roomIdOf(room, owner ?? mapOf(room['owner']))));
-                toast(context, 'Oda ID kopyalandı.');
+                toast(context, tx('Oda ID kopyalandı.'));
               },
               child: Padding(
                 padding: const EdgeInsets.only(top: 4),
@@ -413,15 +414,15 @@ void showRoomCard(
               ),
             ),
           const SizedBox(height: 14),
-          const Text('Oda Duyurusu', style: TextStyle(fontWeight: FontWeight.w800)),
+          Text(tx('Oda Duyurusu'), style: TextStyle(fontWeight: FontWeight.w800)),
           const SizedBox(height: 4),
-          Text(announcement.isEmpty ? 'Henüz duyuru yok.' : announcement, style: const TextStyle(color: Colors.white70)),
+          Text(announcement.isEmpty ? tx('Henüz duyuru yok.') : announcement, style: const TextStyle(color: Colors.white70)),
           const SizedBox(height: 14),
-          const Text('Oda İsim Kartı', style: TextStyle(fontWeight: FontWeight.w800)),
+          Text(tx('Oda İsim Kartı'), style: TextStyle(fontWeight: FontWeight.w800)),
           const SizedBox(height: 6),
-          Wrap(spacing: 6, runSpacing: 6, children: [for (final t in tags) tagChip(t, selected: false), if (tags.isEmpty) const Text('Etiket yok', style: TextStyle(color: Colors.white54))]),
+          Wrap(spacing: 6, runSpacing: 6, children: [for (final t in tags) tagChip(t, selected: false), if (tags.isEmpty) Text(tx('Etiket yok'), style: TextStyle(color: Colors.white54))]),
           const SizedBox(height: 14),
-          const Text('Oda Yöneticileri', style: TextStyle(fontWeight: FontWeight.w800)),
+          Text(tx('Oda Yöneticileri'), style: TextStyle(fontWeight: FontWeight.w800)),
           const SizedBox(height: 4),
           for (final m in managers)
             ListTile(
@@ -436,7 +437,7 @@ void showRoomCard(
             TextButton.icon(
               onPressed: () { Navigator.pop(c); onSettings(); },
               icon: const Icon(Icons.settings, size: 18),
-              label: const Text('Oda ayarları (kilit, gizleme, tema…)'),
+              label: Text(tx('Oda ayarları (kilit, gizleme, tema…)')),
             ),
         ]),
       ),
@@ -486,14 +487,14 @@ class _RoomEditScreenState extends State<RoomEditScreen> {
 
   Future<void> _removeManager(Map<String, dynamic> m) async {
     final u = mapOf(m['user']);
-    if (!await confirm(context, '${u?['displayName'] ?? 'Kullanıcı'} yönetici listesinden çıkarılsın mı?', action: 'Sil')) return;
+    if (!await confirm(context, tx('{displayName} yönetici listesinden çıkarılsın mı?', {'displayName': u?['displayName'] ?? tx('Kullanıcı')}), action: tx('Sil'))) return;
     if (!mounted) return;
     final r = await guard(context, () => Api.delete('/api/rooms/${widget.roomId}/staff/${u?['id']}'));
     if (r != null && mounted) setState(() => _managers.removeWhere((x) => mapOf(x['user'])?['id'] == u?['id']));
   }
 
   Future<void> _save() async {
-    if (_name.text.trim().length < 2) return toast(context, 'Oda başlığı en az 2 karakter olmalı.', error: true);
+    if (_name.text.trim().length < 2) return toast(context, tx('Oda başlığı en az 2 karakter olmalı.'), error: true);
     setState(() => _busy = true);
     final r = await guard(context, () => Api.patch('/api/rooms/${widget.roomId}', {'name': _name.text.trim(), 'announcement': _ann.text.trim(), 'tags': _tags.take(3).toList()}));
     if (!mounted) return;
@@ -508,11 +509,11 @@ class _RoomEditScreenState extends State<RoomEditScreen> {
     final h = Theme.of(context).textTheme.titleMedium!.copyWith(fontWeight: FontWeight.w800);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Bilgileri Düzenle'),
-        actions: [TextButton(onPressed: _busy ? null : _save, child: const Text('Onayla', style: TextStyle(color: _yellow, fontWeight: FontWeight.w800, fontSize: 16)))],
+        title: Text(tx('Bilgileri Düzenle')),
+        actions: [TextButton(onPressed: _busy ? null : _save, child: Text(tx('Onayla'), style: TextStyle(color: _yellow, fontWeight: FontWeight.w800, fontSize: 16)))],
       ),
       body: ListView(padding: const EdgeInsets.all(16), children: [
-        Text('Yayın kapak resmini düzenle', style: h),
+        Text(tx('Yayın kapak resmini düzenle'), style: h),
         const SizedBox(height: 8),
         Align(
           alignment: Alignment.centerLeft,
@@ -531,14 +532,14 @@ class _RoomEditScreenState extends State<RoomEditScreen> {
           ),
         ),
         const SizedBox(height: 22),
-        Text('Oda başlığını düzenle', style: h),
+        Text(tx('Oda başlığını düzenle'), style: h),
         const SizedBox(height: 6),
         TextField(controller: _name, maxLength: 60, decoration: const InputDecoration(border: OutlineInputBorder())),
-        Text('Oda duyurusunu düzenle', style: h),
+        Text(tx('Oda duyurusunu düzenle'), style: h),
         const SizedBox(height: 6),
-        TextField(controller: _ann, maxLength: 200, maxLines: 3, decoration: const InputDecoration(border: OutlineInputBorder(), hintText: 'Odadakilere duyuru yaz…')),
+        TextField(controller: _ann, maxLength: 200, maxLines: 3, decoration: InputDecoration(border: OutlineInputBorder(), hintText: tx('Odadakilere duyuru yaz…'))),
         const SizedBox(height: 8),
-        Text('Oda isim kartını düzenle (en fazla 3)', style: h),
+        Text(tx('Oda isim kartını düzenle (en fazla 3)'), style: h),
         const SizedBox(height: 8),
         Wrap(spacing: 8, runSpacing: 8, children: [
           for (final t in tagList)
@@ -551,7 +552,7 @@ class _RoomEditScreenState extends State<RoomEditScreen> {
                 })),
         ]),
         const SizedBox(height: 22),
-        Text('Oda yöneticilerini düzenle', style: h),
+        Text(tx('Oda yöneticilerini düzenle'), style: h),
         const SizedBox(height: 4),
         for (final m in _managers)
           ListTile(
@@ -561,7 +562,7 @@ class _RoomEditScreenState extends State<RoomEditScreen> {
             subtitle: Text(roleLabels['${m['role']}'] ?? '', style: const TextStyle(color: Colors.white54, fontSize: 12)),
             trailing: (widget.isOwner && m['role'] != 'owner') ? IconButton(icon: const Icon(Icons.delete_outline, color: Colors.redAccent), onPressed: () => _removeManager(m)) : null,
           ),
-        if (_managers.length <= 1) const Text('Henüz yönetici yok. Odada bir kullanıcıya dokunup moderatör veya yardımcı sahip yapabilirsin.', style: TextStyle(color: Colors.white54, fontSize: 12)),
+        if (_managers.length <= 1) Text(tx('Henüz yönetici yok. Odada bir kullanıcıya dokunup moderatör veya yardımcı sahip yapabilirsin.'), style: TextStyle(color: Colors.white54, fontSize: 12)),
       ]),
     );
   }

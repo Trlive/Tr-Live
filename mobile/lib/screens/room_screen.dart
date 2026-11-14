@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../l10n/l10n.dart';
 import '../services/screen_guard.dart';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
@@ -54,7 +55,7 @@ import 'inbox_screens.dart';
 import '../widgets/level_badge.dart';
 import 'user_screens.dart';
 
-const _roleLabels = {'owner': 'Oda sahibi', 'cohost': 'Yardımcı sahip', 'moderator': 'Moderatör', 'user': 'Üye'};
+Map<String, String> get _roleLabels => {'owner': tx('Oda sahibi'), 'cohost': tx('Yardımcı sahip'), 'moderator': tx('Moderatör'), 'user': tx('Üye')};
 const _roleLevel = {'user': 1, 'moderator': 2, 'cohost': 3, 'owner': 4};
 
 class RoomScreen extends StatefulWidget {
@@ -178,7 +179,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       } on ApiException catch (e) {
         if (!mounted || _closing) return;
         if (e.statusCode == 404) {
-          _exit('Oda kapandı.');
+          _exit(tx('Oda kapandı.'));
         } else if (e.statusCode == 409) {
           _exit(e.message); // başka odaya geçilmiş: geri katılınmaz
         } else if (e.statusCode == 403) {
@@ -302,7 +303,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       if (widget.locked) {
         await WidgetsBinding.instance.endOfFrame; // initState içinde hemen diyalog açılmasın (ilk kare çizilsin)
         if (!mounted) return;
-        password = await askText(context, 'Oda şifresi', obscure: true);
+        password = await askText(context, tx('Oda şifresi'), obscure: true);
         if (password == null) {
           if (mounted) RoomDock.closeIf(_dockSerial);
           return;
@@ -430,11 +431,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final id = u['id']?.toString();
     if (id == null || _welcomed.contains(id)) return;
     if (!_chatOpen) {
-      toast(context, 'Bu odada yazılı sohbet kapalı.', error: true);
+      toast(context, tx('Bu odada yazılı sohbet kapalı.'), error: true);
       return;
     }
     setState(() => _welcomed.add(id));
-    final r = await guard(context, () => Api.post('/api/rooms/${widget.roomId}/messages', {'text': 'Hoş geldin ${u['displayName'] ?? ''}', 'welcome': id}));
+    final r = await guard(context, () => Api.post('/api/rooms/${widget.roomId}/messages', {'text': tx('Hoş geldin {displayName}', {'displayName': u['displayName'] ?? ''}), 'welcome': id}));
     if (r == null && mounted) setState(() => _welcomed.remove(id));
   }
 
@@ -463,8 +464,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       toast(
         context,
         _isLive
-            ? 'Konuk isteğin yayıncıya gönderildi. Kabul ederse kameran açılarak yayına bağlanacaksın.'
-            : (_micRequest ? 'Mikrofon isteğin gönderildi. Yetkili onaylayınca mikrofona çıkabilirsin.' : 'Sıraya girdiniz. Sıra size gelince haber verilir.'),
+            ? tx('Konuk isteğin yayıncıya gönderildi. Kabul ederse kameran açılarak yayına bağlanacaksın.')
+            : (_micRequest ? tx('Mikrofon isteğin gönderildi. Yetkili onaylayınca mikrofona çıkabilirsin.') : tx('Sıraya girdiniz. Sıra size gelince haber verilir.')),
       );
     }
   }
@@ -475,7 +476,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final r = await guard(context, () => _fav ? Api.delete('/api/rooms/hosts/$ownerId/favorite') : Api.post('/api/rooms/hosts/$ownerId/favorite'));
     if (r == null || !mounted) return;
     setState(() => _fav = r['favorite'] == true);
-    toast(context, _fav ? 'Yayıncı favorilere eklendi.' : 'Favorilerden çıkarıldı.');
+    toast(context, _fav ? tx('Yayıncı favorilere eklendi.') : tx('Favorilerden çıkarıldı.'));
   }
 
   /// Yukarı kaydır → sonraki oda, aşağı kaydır → önceki oda (sahip kendi odasından ayrılamaz).
@@ -488,12 +489,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       if (!mounted) return;
       final cur = list.indexWhere((x) => x['id'] == widget.roomId);
       final others = list.where((x) => x['id'] != widget.roomId).toList();
-      if (others.isEmpty) return toast(context, 'Geçilecek başka oda yok.');
+      if (others.isEmpty) return toast(context, tx('Geçilecek başka oda yok.'));
       final all = list;
       final i = cur < 0 ? (dir > 0 ? 0 : all.length - 1) : (cur + dir + all.length) % all.length;
       final t = all[i];
       if (t['id'] == widget.roomId) return;
-      RoomDock.open(RoomRequest(roomId: t['id'].toString(), name: (t['name'] ?? 'Oda').toString()));
+      RoomDock.open(RoomRequest(roomId: t['id'].toString(), name: (t['name'] ?? tx('Oda')).toString()));
     } catch (e) {
       if (mounted) toast(context, errorText(e), error: true);
     } finally {
@@ -651,10 +652,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       final ok = await confirm(
         context,
         _myRole == 'owner'
-            ? 'Odadan ayrılırsanız ve içeride yardımcı sahip yoksa oda kapanır. Yardımcı sahip varsa oda açık kalır; '
-                'döndüğünüzde yine oda sahibi olarak girersiniz. Odayı tamamen kapatmak için menüden "Odayı kapat"ı kullanın.'
-            : 'Odada sahip ya da başka yardımcı sahip yok; ayrılırsanız oda herkes için kapanır. Devam edilsin mi?',
-        action: 'Ayrıl',
+            ? tx('Odadan ayrılırsanız ve içeride yardımcı sahip yoksa oda kapanır. Yardımcı sahip varsa oda açık kalır; '
+                'döndüğünüzde yine oda sahibi olarak girersiniz. Odayı tamamen kapatmak için menüden "Odayı kapat"ı kullanın.')
+            : tx('Odada sahip ya da başka yardımcı sahip yok; ayrılırsanız oda herkes için kapanır. Devam edilsin mi?'),
+        action: tx('Ayrıl'),
       );
       if (!ok || !mounted) return;
     }
@@ -679,7 +680,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   Future<void> _muteSeat(int index, bool muted) async {
     final r = await guard(context, () => Api.post('/api/rooms/${widget.roomId}/seats/$index/mute', {'muted': muted}));
-    if (r != null && mounted) toast(context, muted ? 'Koltuk susturuldu.' : 'Koltuğun sesi açıldı.');
+    if (r != null && mounted) toast(context, muted ? tx('Koltuk susturuldu.') : tx('Koltuğun sesi açıldı.'));
   }
 
   /// Koltuktaki "susturuldu" işareti (pembe daire, üstü çizili mikrofon).
@@ -707,17 +708,17 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
     // Tek oda kuralı: başka odaya girdin / kendi odanı açtın (ör. başka cihazdan): bu oda ekranı kapanır, geri katılmaz.
     if (type == 'room_moved' && e['roomId'] == widget.roomId) {
-      _exit('Başka bir odaya geçtiğin için bu odadan çıktın.');
+      _exit(tx('Başka bir odaya geçtiğin için bu odadan çıktın.'));
       return;
     }
     if (type == 'mic_request_declined' && e['roomId'] == widget.roomId) {
-      if (mounted) toast(context, _isLive ? 'Yayıncı konuk isteğini şimdilik kabul etmedi.' : 'Mikrofon isteğin kabul edilmedi.');
+      if (mounted) toast(context, _isLive ? tx('Yayıncı konuk isteğini şimdilik kabul etmedi.') : tx('Mikrofon isteğin kabul edilmedi.'));
       return;
     }
     // Konuk isteği kabul edildi: sormadan yayına bağlanır (kamera ve mikrofon açılır).
     if (type == 'mic_invite' && e['roomId'] == widget.roomId && e['requested'] == true && _isLive && !_onSeat) {
       if (mounted && !_takingMic) {
-        toast(context, 'Yayıncı konuk isteğini kabul etti, yayına bağlanıyorsun…');
+        toast(context, tx('Yayıncı konuk isteğini kabul etti, yayına bağlanıyorsun…'));
         setState(() {
           _camOn = true;
           _micOn = true;
@@ -733,11 +734,13 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         showDialog<bool>(
           context: context,
           builder: (c) => AlertDialog(
-            title: const Text('Mikrofon daveti'),
-            content: Text('${e['fromName'] ?? 'Oda yetkilisi'} sizi mikrofona davet ediyor${seat != null ? ' (${seat + 1}. koltuk)' : ''}.'),
+            title: Text(tx('Mikrofon daveti')),
+            content: Text(seat != null
+                ? tx('{name} sizi mikrofona davet ediyor ({n}. koltuk).', {'name': e['fromName'] ?? tx('Oda yetkilisi'), 'n': seat + 1})
+                : tx('{name} sizi mikrofona davet ediyor.', {'name': e['fromName'] ?? tx('Oda yetkilisi')})),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Reddet')),
-              FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Mikrofona çık')),
+              TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tx('Reddet'))),
+              FilledButton(onPressed: () => Navigator.pop(c, true), child: Text(tx('Mikrofona çık'))),
             ],
           ),
         ).then((ok) {
@@ -818,7 +821,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         final wasActive = _pk?['id'] == pk['id'] && _pk?['status'] == 'active';
         setState(() => _pk = pk);
         // Davet kabul edilip PK başladı: çarpışma animasyonu (oda küçültülmüşken değil).
-        if (st == 'active' && !wasActive && mounted && !RoomDock.minimized.value) showRoomPkStart(context, left: 'BİZ', right: 'RAKİP');
+        if (st == 'active' && !wasActive && mounted && !RoomDock.minimized.value) showRoomPkStart(context, left: tx('BİZ'), right: tx('RAKİP'));
         if (st == 'finished' || st == 'declined' || st == 'cancelled') {
           Future.delayed(const Duration(seconds: 8), () {
             if (mounted && _pk?['id'] == pk['id'] && _pk?['status'] != 'active') setState(() => _pk = null);
@@ -839,7 +842,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         break;
       case 'room_chat_cleared':
         setState(() => _messages.clear());
-        _addSystemMessage('Sohbetler temizlendi.', color: const Color(0xFF34D399));
+        _addSystemMessage(tx('Sohbetler temizlendi.'), color: const Color(0xFF34D399));
         break;
       case 'lucky_bag_new':
         final nb = mapOf(e['bag']);
@@ -849,7 +852,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         // Çantadan pay alan, odada uçan yazı gibi sağdan sola kayarak geçer.
         final claimer = mapOf(e['user']);
         if (claimer != null && (e['roomId'] == null || e['roomId']?.toString() == widget.roomId)) {
-          _fly.add({'user': claimer, 'text': 'şanslı çantadan ${fmtNumber(e['amount'])} Coin aldı 🪙', 'bagClaim': true});
+          _fly.add({'user': claimer, 'text': tx('şanslı çantadan {amount} Coin aldı 🪙', {'amount': fmtNumber(e['amount'])}), 'bagClaim': true});
         }
         setState(() {
           final i = _bags.indexWhere((b) => b['id'] == e['bagId']);
@@ -924,7 +927,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             _guestToastAt[id] = now;
             final m = _members.where((x) => x['userId']?.toString() == id).firstOrNull;
             final name = mapOf(m?['user'])?['displayName']?.toString();
-            toast(context, '${name ?? 'Bir izleyici'} konuk olmak istiyor. ∞ düğmesinden kabul edebilirsin.');
+            toast(context, tx('{v1} konuk olmak istiyor. ∞ düğmesinden kabul edebilirsin.', {'v1': name ?? tx('Bir izleyici')}));
           }
         }
         break;
@@ -935,7 +938,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         setState(() => _room = {...?_room, 'mutedSeats': e['mutedSeats']});
         if (_seatMuted != wasMuted) {
           _syncPublish();
-          toast(context, _seatMuted ? 'Mikrofonun yetkili tarafından kapatıldı.' : 'Mikrofonunun sesi açıldı.');
+          toast(context, _seatMuted ? tx('Mikrofonun yetkili tarafından kapatıldı.') : tx('Mikrofonunun sesi açıldı.'));
         }
         break;
       case 'room_role_changed':
@@ -960,7 +963,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         break;
       case 'room_chat_muted':
         setState(() => _chatMuted = (e['minutes'] as num? ?? 0) > 0);
-        toast(context, _chatMuted ? 'Bu odada sohbette susturuldunuz.' : 'Sohbet yasağınız kaldırıldı.');
+        toast(context, _chatMuted ? tx('Bu odada sohbette susturuldunuz.') : tx('Sohbet yasağınız kaldırıldı.'));
         break;
       case 'room_mic_emoji':
         final emUser = e['userId']?.toString();
@@ -973,7 +976,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         break;
       case 'room_settings':
         if (e['seatCount'] != null && e['seatCount'] != _room?['seatCount']) {
-          _addSystemMessage('Oda sahibi yeni bir mikrofon moduna geçmiştir. Geçerli mikrofon konumu değiştirilecektir.');
+          _addSystemMessage(tx('Oda sahibi yeni bir mikrofon moduna geçmiştir. Geçerli mikrofon konumu değiştirilecektir.'));
         }
         setState(() => _room = {
               ...?_room,
@@ -993,13 +996,13 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         if (ms != null) MusicService.instance.apply(ms);
         break;
       case 'room_closed':
-        _exit('Oda kapatıldı.');
+        _exit(tx('Oda kapatıldı.'));
         break;
       case 'room_kicked':
-        _exit('Odadan çıkarıldınız.');
+        _exit(tx('Odadan çıkarıldınız.'));
         break;
       case 'room_blocked':
-        _exit('Bu odadan engellendiniz.');
+        _exit(tx('Bu odadan engellendiniz.'));
         break;
     }
   }
@@ -1082,7 +1085,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       final t = await Api.post('/api/rooms/${widget.roomId}/livekit-token');
       final url = t['url'] as String?;
       final token = t['token'] as String?;
-      if (url == null || url.isEmpty || token == null) throw ApiException('Ses sunucusu yapılandırılmamış.');
+      if (url == null || url.isEmpty || token == null) throw ApiException(tx('Ses sunucusu yapılandırılmamış.'));
       await _loadNoisePref();
       await HeadsetAudio.instance.start(); // kulaklık takılıysa yüksek kaliteli ses modu (bağlanmadan önce)
       room = lk.Room(roomOptions: lk.RoomOptions(
@@ -1126,7 +1129,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       } else {
         _lkRetries = 0;
         final raw = errorText(e);
-        final msg = raw.contains('Timeout') ? 'Ses sunucusuna ulaşılamadı. İnternetinizi kontrol edip Tekrar\'a dokunun.' : raw;
+        final msg = raw.contains('Timeout') ? tx('Ses sunucusuna ulaşılamadı. İnternetinizi kontrol edip Tekrar\'a dokunun.') : raw;
         if (mounted) setState(() => _lkError = msg);
       }
     } finally {
@@ -1153,7 +1156,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
     if (mounted) {
       setState(() {}); // görüntülü PK'da rakibin sesi de aramaya göre kapanır / açılır
-      toast(context, call ? '📞 Arama: oda sesi kapatıldı' : 'Arama bitti, oda sesi açıldı');
+      toast(context, call ? tx('📞 Arama: oda sesi kapatıldı') : tx('Arama bitti, oda sesi açıldı'));
     }
   }
 
@@ -1176,7 +1179,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         await Future.delayed(const Duration(milliseconds: 800));
       }
     }
-    if (mounted && _onSeat) toast(context, 'Mikrofon açılamadı. Mikrofon/kamera iznini kontrol edin.', error: true);
+    if (mounted && _onSeat) toast(context, tx('Mikrofon açılamadı. Mikrofon/kamera iznini kontrol edin.'), error: true);
   }
 
   bool _isSpeaking(String userId) {
@@ -1226,7 +1229,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         _camPos = next;
         unawaited(Beauty.attach(t)); // kamera çevrilince takip yenilenir
       } catch (e) {
-        if (mounted) toast(context, 'Kamera çevrilemedi: ${errorText(e)}', error: true);
+        if (mounted) toast(context, tx('Kamera çevrilemedi: {v1}', {'v1': errorText(e)}), error: true);
       }
       return;
     }
@@ -1243,7 +1246,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
     if (_micRequest && !invited && !_onSeat && !_canSeatManage) {
       if (_inQueue) {
-        toast(context, 'İsteğin zaten gönderildi; yetkili onayını bekle.');
+        toast(context, tx('İsteğin zaten gönderildi; yetkili onayını bekle.'));
       } else {
         await _toggleQueue();
       }
@@ -1291,8 +1294,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           final list = [for (final id in _queue) _members.where((m) => m['userId'] == id).firstOrNull].whereType<Map<String, dynamic>>().toList();
           return SafeArea(
             child: Column(mainAxisSize: MainAxisSize.min, children: [
-              const Padding(padding: EdgeInsets.only(bottom: 6), child: Text('Mikrofon istekleri', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800))),
-              if (list.isEmpty) const Padding(padding: EdgeInsets.all(24), child: Text('Bekleyen istek yok.', style: TextStyle(color: Colors.white54))),
+              Padding(padding: EdgeInsets.only(bottom: 6), child: Text(tx('Mikrofon istekleri'), style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800))),
+              if (list.isEmpty) Padding(padding: EdgeInsets.all(24), child: Text(tx('Bekleyen istek yok.'), style: TextStyle(color: Colors.white54))),
               Flexible(
                 child: ListView(shrinkWrap: true, children: [
                   for (final m in list)
@@ -1301,7 +1304,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       title: UserName(user: mapOf(m['user'])),
                       trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                         IconButton(
-                          tooltip: 'Reddet',
+                          tooltip: tx('Reddet'),
                           icon: const Icon(Icons.close, color: Colors.redAccent),
                           onPressed: () async {
                             final r = await guard(context, () => Api.delete('/api/rooms/${widget.roomId}/mic/queue/${m['userId']}'));
@@ -1312,9 +1315,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         FilledButton(
                           onPressed: () async {
                             final r = await guard(context, () => Api.post('/api/rooms/${widget.roomId}/members/${m['userId']}/mic-invite', {}));
-                            if (r != null && mounted) toast(context, 'Mikrofona davet gönderildi.');
+                            if (r != null && mounted) toast(context, tx('Mikrofona davet gönderildi.'));
                           },
-                          child: const Text('Onayla'),
+                          child: Text(tx('Onayla')),
                         ),
                       ]),
                     ),
@@ -1336,7 +1339,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       return;
     }
     if (_onSeat) {
-      confirm(context, 'Konukluktan ayrılıp izleyiciye dönülsün mü?', action: 'Ayrıl').then((ok) {
+      confirm(context, tx('Konukluktan ayrılıp izleyiciye dönülsün mü?'), action: tx('Ayrıl')).then((ok) {
         if (ok && mounted) _leaveMic();
       });
       return;
@@ -1356,14 +1359,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               UserAvatar(user: host, radius: 28),
             ]),
             const SizedBox(height: 12),
-            Text(_inQueue ? 'İsteğin yayıncıya iletildi' : 'Konuk olarak katıl',
+            Text(_inQueue ? tx('İsteğin yayıncıya iletildi') : tx('Konuk olarak katıl'),
                 style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: Colors.white)),
             const SizedBox(height: 6),
             Text(
               _inQueue
-                  ? 'Yayıncı kabul edince kameran ve mikrofonun açılarak yayına bağlanacaksın.'
-                  : 'Yayıncıya konuk olma isteği gönder. Kabul ederse kameran ve mikrofonun açılarak yayında sağdaki pencerede görünürsün.'
-                      '${_noFreeSeat ? '\nŞu an konuk yerleri dolu; yer açılınca kabul edebilir.' : ''}',
+                  ? tx('Yayıncı kabul edince kameran ve mikrofonun açılarak yayına bağlanacaksın.')
+                  : tx('Yayıncıya konuk olma isteği gönder. Kabul ederse kameran ve mikrofonun açılarak yayında sağdaki pencerede görünürsün.') +
+                      '${_noFreeSeat ? tx('\nŞu an konuk yerleri dolu; yer açılınca kabul edebilir.') : ''}',
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 13, color: Colors.white70),
             ),
@@ -1377,7 +1380,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                   Navigator.pop(c);
                   _toggleQueue();
                 },
-                child: Text(_inQueue ? 'İsteği geri al' : 'İstek gönder', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+                child: Text(_inQueue ? tx('İsteği geri al') : tx('İstek gönder'), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
               ),
             ),
           ]),
@@ -1401,10 +1404,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           final free = _freeGuestSeats;
           return SafeArea(
             child: Column(mainAxisSize: MainAxisSize.min, children: [
-              Text('Konuk istekleri (${requests.length})', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+              Text(tx('Konuk istekleri ({n})', {'n': requests.length}), style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
               const SizedBox(height: 2),
-              Text(free > 0 ? '$free konuk yeri boş' : 'Konuk yerleri dolu', style: TextStyle(fontSize: 12, color: free > 0 ? Colors.white54 : Colors.orangeAccent)),
-              if (requests.isEmpty) const Padding(padding: EdgeInsets.all(20), child: Text('Bekleyen istek yok. İzleyiciler alttaki ∞ düğmesinden istek gönderir.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white54))),
+              Text(free > 0 ? tx('{free} konuk yeri boş', {'free': free}) : tx('Konuk yerleri dolu'), style: TextStyle(fontSize: 12, color: free > 0 ? Colors.white54 : Colors.orangeAccent)),
+              if (requests.isEmpty) Padding(padding: EdgeInsets.all(20), child: Text(tx('Bekleyen istek yok. İzleyiciler alttaki ∞ düğmesinden istek gönderir.'), textAlign: TextAlign.center, style: TextStyle(color: Colors.white54))),
               Flexible(
                 child: ListView(shrinkWrap: true, children: [
                   for (final m in requests)
@@ -1413,7 +1416,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       title: UserName(user: mapOf(m['user'])),
                       trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                         IconButton(
-                          tooltip: 'Reddet',
+                          tooltip: tx('Reddet'),
                           icon: const Icon(Icons.close, color: Colors.redAccent),
                           onPressed: () async {
                             final r = await guard(context, () => Api.delete('/api/rooms/${widget.roomId}/mic/queue/${m['userId']}'));
@@ -1427,7 +1430,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                               ? null
                               : () async {
                                   if (_noFreeSeat) {
-                                    toast(context, 'Konuk yerleri dolu. Önce bir konuğu çıkarın.', error: true);
+                                    toast(context, tx('Konuk yerleri dolu. Önce bir konuğu çıkarın.'), error: true);
                                     return;
                                   }
                                   final id = m['userId'].toString();
@@ -1436,14 +1439,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                   // Konuk oturana (ya da 20 sn) kadar ikinci kez kabul gönderilmez.
                                   Future.delayed(const Duration(seconds: 20), () => _accepting.remove(id));
                                   if (r == null) _accepting.remove(id);
-                                  if (r != null && mounted) toast(context, 'Kabul edildi; konuk yayına bağlanıyor.');
+                                  if (r != null && mounted) toast(context, tx('Kabul edildi; konuk yayına bağlanıyor.'));
                                   if (c.mounted) setS(() {});
                                 },
-                          child: Text(_accepting.contains(m['userId']) ? 'Bağlanıyor' : 'Kabul et'),
+                          child: Text(_accepting.contains(m['userId']) ? tx('Bağlanıyor') : tx('Kabul et')),
                         ),
                       ]),
                     ),
-                  if (guests.isNotEmpty) const Padding(padding: EdgeInsets.fromLTRB(16, 10, 16, 2), child: Text('Yayındaki konuklar', style: TextStyle(fontWeight: FontWeight.w800, color: Colors.white70))),
+                  if (guests.isNotEmpty) Padding(padding: EdgeInsets.fromLTRB(16, 10, 16, 2), child: Text(tx('Yayındaki konuklar'), style: TextStyle(fontWeight: FontWeight.w800, color: Colors.white70))),
                   for (final g in guests)
                     ListTile(
                       leading: UserAvatar(user: mapOf(g['user']), radius: 20),
@@ -1453,7 +1456,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                           Navigator.pop(c);
                           await _moderate(g['userId'].toString(), 'mic-off');
                         },
-                        child: const Text('Konukluktan çıkar', style: TextStyle(color: Colors.redAccent)),
+                        child: Text(tx('Konukluktan çıkar'), style: TextStyle(color: Colors.redAccent)),
                       ),
                     ),
                 ]),
@@ -1487,7 +1490,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _closeRoom() async {
-    if (!await confirm(context, 'Oda kapatılsın mı? Herkes odadan çıkarılır.', action: 'Kapat')) return;
+    if (!await confirm(context, tx('Oda kapatılsın mı? Herkes odadan çıkarılır.'), action: tx('Kapat'))) return;
     if (!mounted) return;
     await guard(context, () => Api.post('/api/rooms/${widget.roomId}/close'));
   }
@@ -1596,12 +1599,17 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   Future<void> _micMode() async {
     try {
       final theme = (_room?['theme'] ?? 'default').toString();
+      final canBirthday = _myRole == 'owner' && !_isLive && !_isVideo;
       await showMicModeSheet(
         context,
         current: _seatCount,
         requestMode: _micRequest,
         video: _isVideo,
         colors: theme == 'default' ? null : themeOf(theme).colors,
+        // Doğum günü modu mikrofon modlarının içinde: yalnızca sesli odada oda sahibine (satın alma / uygulama).
+        birthday: canBirthday ? _birthdaySkin() : null,
+        birthdayActive: _birthday,
+        onBirthday: canBirthday ? _openBirthday : null,
         onSelect: (n) async {
           final old = _seatCount;
           try {
@@ -1609,28 +1617,28 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             final room = mapOf(r['room']);
             if (!mounted) return false;
             if (n != old && _room?['seatCount'] == old) {
-              _addSystemMessage('Oda sahibi yeni bir mikrofon moduna geçmiştir. Geçerli mikrofon konumu değiştirilecektir.');
+              _addSystemMessage(tx('Oda sahibi yeni bir mikrofon moduna geçmiştir. Geçerli mikrofon konumu değiştirilecektir.'));
             }
             setState(() => _room = {...?_room, ...?room, 'seatCount': n});
             await _loadMembers(); // taşan koltuktakiler dinleyiciye inmiş olabilir
             return true;
           } catch (e) {
-            if (mounted) toast(context, 'Mikrofon modu değişmedi: ${errorText(e)}', error: true);
+            if (mounted) toast(context, tx('Mikrofon modu değişmedi: {v1}', {'v1': errorText(e)}), error: true);
             return false;
           }
         },
         onRequestMode: (on) => _patchRoom({'micRequest': on}),
       );
     } catch (e) {
-      if (mounted) toast(context, 'Mikrofon modu penceresi açılamadı: $e', error: true);
+      if (mounted) toast(context, tx('Mikrofon modu penceresi açılamadı: {e}', {'e': e}), error: true);
     }
   }
 
   Future<void> _shareRoom() async {
     final code = _room?['joinCode']?.toString();
     final name = (_room?['name'] ?? widget.initialName).toString();
-    await Clipboard.setData(ClipboardData(text: '🎙 TR Live — "$name" odasına gel!${code != null ? '\nOda kodu: $code' : ''}'));
-    if (mounted) toast(context, 'Oda daveti kopyalandı. İstediğin yere yapıştırıp paylaş.');
+    await Clipboard.setData(ClipboardData(text: tx('🎙 TR Live — "{name}" odasına gel!{v1}', {'name': name, 'v1': code != null ? '\n${tx('Oda kodu: {code}', {'code': code})}' : ''})));
+    if (mounted) toast(context, tx('Oda daveti kopyalandı. İstediğin yere yapıştırıp paylaş.'));
   }
 
   // ---------- Gürültü engelleme ----------
@@ -1704,29 +1712,29 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(c).height * 0.8),
               child: SingleChildScrollView(
                 child: Column(mainAxisSize: MainAxisSize.min, children: [
-                  const Padding(
+                  Padding(
                     padding: EdgeInsets.only(top: 16, bottom: 4),
-                    child: Text('Efekt ve ses', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                    child: Text(tx('Efekt ve ses'), style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
                   ),
-                  section('Efekt ayarları'),
-                  sw('Hediye görsel efekti', EffectPrefs.giftAnim, (v) => EffectPrefs.set('fx_gift_anim', v)),
-                  sw('Araç ve giriş efektleri', EffectPrefs.entranceFx, (v) => EffectPrefs.set('fx_entrance', v), note: 'SWIP araçları gizlenemez.'),
-                  sw('Hediye kanalı', EffectPrefs.giftRibbon, (v) => EffectPrefs.set('fx_gift_ribbon', v)),
-                  sw('Global bildirim', EffectPrefs.globalNotice, (v) => EffectPrefs.set('fx_global_notice', v)),
-                  section('Ses ayarları'),
-                  sw('Hediye ve araç sesleri', EffectPrefs.giftSound, (v) => EffectPrefs.set('fx_gift_sound', v)),
-                  sw('Mikrofon gürültüsü engelleme', noise, (v) {
+                  section(tx('Efekt ayarları')),
+                  sw(tx('Hediye görsel efekti'), EffectPrefs.giftAnim, (v) => EffectPrefs.set('fx_gift_anim', v)),
+                  sw(tx('Araç ve giriş efektleri'), EffectPrefs.entranceFx, (v) => EffectPrefs.set('fx_entrance', v), note: tx('SWIP araçları gizlenemez.')),
+                  sw(tx('Hediye kanalı'), EffectPrefs.giftRibbon, (v) => EffectPrefs.set('fx_gift_ribbon', v)),
+                  sw(tx('Global bildirim'), EffectPrefs.globalNotice, (v) => EffectPrefs.set('fx_global_notice', v)),
+                  section(tx('Ses ayarları')),
+                  sw(tx('Hediye ve araç sesleri'), EffectPrefs.giftSound, (v) => EffectPrefs.set('fx_gift_sound', v)),
+                  sw(tx('Mikrofon gürültüsü engelleme'), noise, (v) {
                     noise = v;
                     _setNoiseCancel(v);
                   }),
-                  const ListTile(
+                  ListTile(
                     contentPadding: EdgeInsets.symmetric(horizontal: 20),
                     leading: Icon(Icons.phone_in_talk, color: Colors.white70),
-                    title: Text('Telefon araması gelince oda sesi ve mikrofon kendiliğinden kapanır, arama bitince açılır.', style: TextStyle(fontSize: 13.5, color: Colors.white70)),
+                    title: Text(tx('Telefon araması gelince oda sesi ve mikrofon kendiliğinden kapanır, arama bitince açılır.'), style: TextStyle(fontSize: 13.5, color: Colors.white70)),
                   ),
-                  const Padding(
+                  Padding(
                     padding: EdgeInsets.fromLTRB(20, 4, 20, 16),
-                    child: Text('Görüntüde takılma olursa görsel efektleri kapatmayı deneyin.', style: TextStyle(color: Colors.white38, fontSize: 12.5)),
+                    child: Text(tx('Görüntüde takılma olursa görsel efektleri kapatmayı deneyin.'), style: TextStyle(color: Colors.white38, fontSize: 12.5)),
                   ),
                 ]),
               ),
@@ -1743,20 +1751,20 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final res = await showDialog<String>(
       context: context,
       builder: (c) => AlertDialog(
-        title: Text(locked ? 'Oda kilidi (açık)' : 'Oda kilidi'),
-        content: TextField(controller: ctl, obscureText: true, maxLength: 12, decoration: InputDecoration(labelText: locked ? 'Yeni şifre' : 'Oda şifresi (4-12 karakter)')),
+        title: Text(locked ? tx('Oda kilidi (açık)') : tx('Oda kilidi')),
+        content: TextField(controller: ctl, obscureText: true, maxLength: 12, decoration: InputDecoration(labelText: locked ? tx('Yeni şifre') : tx('Oda şifresi (4-12 karakter)'))),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Vazgeç')),
-          if (locked) TextButton(onPressed: () => Navigator.pop(c, ''), child: const Text('Kilidi kaldır')),
-          FilledButton(onPressed: () => Navigator.pop(c, ctl.text.trim()), child: const Text('Kaydet')),
+          TextButton(onPressed: () => Navigator.pop(c), child: Text(tx('Vazgeç'))),
+          if (locked) TextButton(onPressed: () => Navigator.pop(c, ''), child: Text(tx('Kilidi kaldır'))),
+          FilledButton(onPressed: () => Navigator.pop(c, ctl.text.trim()), child: Text(tx('Kaydet'))),
         ],
       ),
     );
     ctl.dispose();
     if (res == null || !mounted) return;
-    if (res.isNotEmpty && res.length < 4) return toast(context, 'Şifre en az 4 karakter olmalı.', error: true);
+    if (res.isNotEmpty && res.length < 4) return toast(context, tx('Şifre en az 4 karakter olmalı.'), error: true);
     if (res.isEmpty && !locked) return;
-    if (await _patchRoom({'password': res.isEmpty ? null : res}) && mounted) toast(context, res.isEmpty ? 'Oda kilidi kaldırıldı.' : 'Oda şifreyle kilitlendi.');
+    if (await _patchRoom({'password': res.isEmpty ? null : res}) && mounted) toast(context, res.isEmpty ? tx('Oda kilidi kaldırıldı.') : tx('Oda şifreyle kilitlendi.'));
   }
 
   /// Tema penceresi (Müsait / Mağaza). Dokunulan tema hemen uygulanır; oda sesi kesilmez.
@@ -1770,11 +1778,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   Future<void> _toggleHidden() async {
     final hide = _room?['hidden'] != true;
-    if (!await confirm(context, hide ? 'Oda listeden gizlensin mi? Yalnızca davet koduyla girilebilir.' : 'Oda herkese açık listeye geri dönsün mü?', action: hide ? 'Gizle' : 'Göster')) return;
+    if (!await confirm(context, hide ? tx('Oda listeden gizlensin mi? Yalnızca davet koduyla girilebilir.') : tx('Oda herkese açık listeye geri dönsün mü?'), action: hide ? tx('Gizle') : tx('Göster'))) return;
     if (!mounted) return;
     if (await _patchRoom({'hidden': hide}) && mounted) {
       final code = _room?['joinCode']?.toString();
-      toast(context, hide ? 'Oda gizlendi.${code != null ? ' Kod: $code' : ''}' : 'Oda herkese açıldı.');
+      toast(context, hide ? tx('Oda gizlendi.{v1}', {'v1': code != null ? ' Kod: $code' : ''}) : tx('Oda herkese açıldı.'));
     }
   }
 
@@ -1791,7 +1799,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
         void need(bool ok, VoidCallback f) {
           if (ok) return run(f);
-          toast(context, 'Bu aracı kullanma yetkiniz yok.', error: true);
+          toast(context, tx('Bu aracı kullanma yetkiniz yok.'), error: true);
         }
 
         // Temel araç: renkli yuvarlak düğme (beyaz simge) + iki satır etiket. [tint]: düğmenin rengi.
@@ -1867,37 +1875,36 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         final tools = <Widget>[
           // Sıra: Odayı temizle, Sohbet yasağı, Oda kilitleme, Oda gizleme, Ses ve efektler, Müzik, Mikrofon Modu, Tema,
           // Odayı paylaş, Odayı kapat. (Oda sesini kapatma alt çubukta.)
-          if (_isManager) feature(Icons.cleaning_services, 'Odayı\nTemizle', () => need(_isManager, _clearChat), tint: cPink),
-          if (_isOwnerOrCohost) feature(chatOn ? Icons.speaker_notes_off : Icons.chat, chatOn ? 'Sohbet\nYasağı' : 'Sohbeti\nAç', () => need(_isOwnerOrCohost, () => _patchRoom({'chatEnabled': !chatOn})), tint: cCyan, active: !chatOn),
-          if (_myRole == 'owner') feature(locked ? Icons.lock : Icons.lock_open, 'Oda\nKilitleme', () => need(_myRole == 'owner', _roomPassword), tint: cGreen, active: locked),
-          if (_myRole == 'owner') feature(hidden ? Icons.visibility_off : Icons.visibility, 'Oda\nGizleme', () => need(_myRole == 'owner', _toggleHidden), tint: cPink, active: hidden),
-          feature(Icons.graphic_eq, 'Ses ve\nEfektler', () => run(_effectsAndSound), tint: cPurple),
-          if (_isManager) feature(Icons.library_music, 'Müzik', () => run(_openMusic), tint: cGreen, active: MusicService.instance.state.value?['status'] == 'playing'),
-          if (_isOwnerOrCohost && !_isLive) feature(Icons.mic_external_on, _isVideo ? 'Yayın\nModu' : 'Mikrofon\nModu', () {
+          if (_isManager) feature(Icons.cleaning_services, tx('Odayı\nTemizle'), () => need(_isManager, _clearChat), tint: cPink),
+          if (_isOwnerOrCohost) feature(chatOn ? Icons.speaker_notes_off : Icons.chat, chatOn ? tx('Sohbet\nYasağı') : tx('Sohbeti\nAç'), () => need(_isOwnerOrCohost, () => _patchRoom({'chatEnabled': !chatOn})), tint: cCyan, active: !chatOn),
+          if (_myRole == 'owner') feature(locked ? Icons.lock : Icons.lock_open, tx('Oda\nKilitleme'), () => need(_myRole == 'owner', _roomPassword), tint: cGreen, active: locked),
+          if (_myRole == 'owner') feature(hidden ? Icons.visibility_off : Icons.visibility, tx('Oda\nGizleme'), () => need(_myRole == 'owner', _toggleHidden), tint: cPink, active: hidden),
+          feature(Icons.graphic_eq, tx('Ses ve\nEfektler'), () => run(_effectsAndSound), tint: cPurple),
+          if (_isManager) feature(Icons.library_music, tx('Müzik'), () => run(_openMusic), tint: cGreen, active: MusicService.instance.state.value?['status'] == 'playing'),
+          if (_isOwnerOrCohost && !_isLive) feature(Icons.mic_external_on, _isVideo ? tx('Yayın\nModu') : tx('Mikrofon\nModu'), () {
             Navigator.pop(sheet);
             // Alt pencerenin kapanma animasyonu bitmeden yenisini açmak bazı cihazlarda açılmıyor; kısa bekle.
             Future.delayed(const Duration(milliseconds: 300), () {
               if (mounted) _micMode();
             });
           }, tint: cPurple),
-          if (_myRole == 'owner' && !_isLive && !_isVideo) feature(Icons.cake, 'Doğum\nGünü', () => run(_openBirthday), tint: cPink, active: _birthday),
-          if (_isOwnerOrCohost) feature(Icons.palette, 'Tema', () => need(_isOwnerOrCohost, _roomThemes), tint: cPink),
-          feature(Icons.share, 'Odayı\nPaylaş', () => run(_shareRoom), tint: cBlue),
-          if (_myRole == 'owner') feature(Icons.power_settings_new, 'Odayı\nKapat', () => run(_closeRoom), tint: cRed),
+          if (_isOwnerOrCohost) feature(Icons.palette, tx('Tema'), () => need(_isOwnerOrCohost, _roomThemes), tint: cPink),
+          feature(Icons.share, tx('Odayı\nPaylaş'), () => run(_shareRoom), tint: cBlue),
+          if (_myRole == 'owner') feature(Icons.power_settings_new, tx('Odayı\nKapat'), () => run(_closeRoom), tint: cRed),
           // Koltuk / kamera araçları (duruma göre).
           if (_onSeat && _isVideo)
-            feature(_camOn ? Icons.videocam : Icons.videocam_off, 'Kamera', () => run(() {
+            feature(_camOn ? Icons.videocam : Icons.videocam_off, tx('Kamera'), () => run(() {
                   setState(() => _camOn = !_camOn);
                   _syncPublish();
                 }), tint: cOrange, active: _camOn),
-          if (_onSeat && _isVideo && _camOn) feature(Icons.cameraswitch, 'Kamerayı\nÇevir', () => run(_flipCamera), tint: cTeal),
-          if (_onSeat && _isVideo && _camOn) feature(Icons.face_retouching_natural, 'Güzellik', () => run(_openBeauty), tint: cPink),
+          if (_onSeat && _isVideo && _camOn) feature(Icons.cameraswitch, tx('Kamerayı\nÇevir'), () => run(_flipCamera), tint: cTeal),
+          if (_onSeat && _isVideo && _camOn) feature(Icons.face_retouching_natural, tx('Güzellik'), () => run(_openBeauty), tint: cPink),
           if (queueMode)
-            feature(_inQueue ? Icons.hourglass_bottom : Icons.front_hand, _inQueue ? (_micRequest ? 'İsteği\nGeri Al' : 'Sıradan\nÇık') : (_micRequest ? 'Mikrofon\nİste' : 'Sıraya\nGir'), () => run(_toggleQueue), tint: _inQueue ? cOrange : cGreen, active: _inQueue),
-          if (_onSeat) feature(Icons.mic_off, 'Mikrofondan\nİn', () => run(_leaveMic), tint: cRed),
-          if (_canSeatManage && _micRequest && !_isLive) feature(Icons.how_to_reg, 'Mikrofon\nİstekleri', () => run(_micRequestsSheet), tint: cGreen),
-          if (_canSeatManage && _isLive) feature(Icons.all_inclusive, 'Konuk\nİstekleri', () => run(_guestRequestsSheet), tint: cGreen),
-          if (_isLive && !_canSeatManage && !_onSeat) feature(Icons.all_inclusive, _inQueue ? 'İsteği\nGeri Al' : 'Konuk\nOl', () => run(_guestTap), tint: cPink, active: _inQueue),
+            feature(_inQueue ? Icons.hourglass_bottom : Icons.front_hand, _inQueue ? (_micRequest ? tx('İsteği\nGeri Al') : tx('Sıradan\nÇık')) : (_micRequest ? tx('Mikrofon\nİste') : tx('Sıraya\nGir')), () => run(_toggleQueue), tint: _inQueue ? cOrange : cGreen, active: _inQueue),
+          if (_onSeat) feature(Icons.mic_off, tx('Mikrofondan\nİn'), () => run(_leaveMic), tint: cRed),
+          if (_canSeatManage && _micRequest && !_isLive) feature(Icons.how_to_reg, tx('Mikrofon\nİstekleri'), () => run(_micRequestsSheet), tint: cGreen),
+          if (_canSeatManage && _isLive) feature(Icons.all_inclusive, tx('Konuk\nİstekleri'), () => run(_guestRequestsSheet), tint: cGreen),
+          if (_isLive && !_canSeatManage && !_onSeat) feature(Icons.all_inclusive, _inQueue ? tx('İsteği\nGeri Al') : 'Konuk\nOl', () => run(_guestTap), tint: cPink, active: _inQueue),
         ];
         return ConstrainedBox(
           constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(sheet).height * 0.82),
@@ -1909,7 +1916,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
                 child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Row(children: [
-                    const Expanded(child: Text('İnteraktif Özellikler', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.white))),
+                    Expanded(child: Text(tx('İnteraktif Özellikler'), style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.white))),
                     InkResponse(onTap: () => Navigator.pop(sheet), radius: 18, child: const Icon(Icons.close, size: 22, color: Colors.white)),
                   ]),
                   const SizedBox(height: 10),
@@ -1920,18 +1927,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         const PkLogo(size: 46),
                         'PK',
                         () => !pkFree
-                            ? toast(context, _roomPk != null ? 'PK modu zaten açık. Kapatmak için PK çubuğundaki X\'e dokunun.' : 'Zaten bir PK sürüyor.', error: true)
+                            ? toast(context, _roomPk != null ? tx('PK modu zaten açık. Kapatmak için PK çubuğundaki X\'e dokunun.') : tx('Zaten bir PK sürüyor.'), error: true)
                             : (!_isVideo && _seatCount != kRoomPkSeats)
-                                ? toast(context, 'PK modu yalnızca 9\'lu koltukta açılır. Önce Mikrofon Modu\'ndan 9 koltuğu seçin.', error: true)
+                                ? toast(context, tx('PK modu yalnızca 9\'lu koltukta açılır. Önce Mikrofon Modu\'ndan 9 koltuğu seçin.'), error: true)
                                 : run(() => _isVideo ? showPkChallengeSheet(context, roomId: widget.roomId) : showRoomPkSetup(context, roomId: widget.roomId, seatCount: _seatCount)),
                         colors: const [Color(0xFF1A237E), Color(0xFF0D0D1A), Color(0xFFB71C1C)],
                       ),
                     tile(const Text('🎲', style: TextStyle(fontSize: 30)), 'Ludo', () => run(_openGames), colors: kGoldDeep),
-                    if (_activitiesOn) tile(const Icon(Icons.celebration, size: 30, color: Colors.white), 'Etkinlikler', () => run(_openRoomActivities), colors: const [Color(0xFF14506B), Color(0xFF0A1F2B)]),
-                    tile(Image.asset('assets/images/lucky_pouch.webp', width: 48, height: 48), 'Şanslı Çanta', () => run(() => showBagSend(context, widget.roomId)), colors: const [Color(0xFF3A1010), Color(0xFF1A0808)]),
+                    if (_activitiesOn) tile(const Icon(Icons.celebration, size: 30, color: Colors.white), tx('Etkinlikler'), () => run(_openRoomActivities), colors: const [Color(0xFF14506B), Color(0xFF0A1F2B)]),
+                    tile(Image.asset('assets/images/lucky_pouch.webp', width: 48, height: 48), tx('Şanslı Çanta'), () => run(() => showBagSend(context, widget.roomId)), colors: const [Color(0xFF3A1010), Color(0xFF1A0808)]),
                   ]),
                   const SizedBox(height: 16),
-                  const Text('Temel Araçlar', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.white)),
+                  Text(tx('Temel Araçlar'), style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.white)),
                   const SizedBox(height: 8),
                   LayoutBuilder(builder: (context, box) {
                     final per = (box.maxWidth / 62).floor().clamp(4, 6);
@@ -1961,45 +1968,45 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       context: context,
       builder: (c) => StatefulBuilder(
         builder: (c, setS) => AlertDialog(
-          title: const Text('Oda ayarları'),
+          title: Text(tx('Oda ayarları')),
           content: SingleChildScrollView(
             child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Padding(padding: EdgeInsets.only(bottom: 8), child: Text('Oda adı ve etiketleri için oda adına dokunun.', style: TextStyle(color: Colors.white54, fontSize: 12))),
+              Padding(padding: EdgeInsets.only(bottom: 8), child: Text(tx('Oda adı ve etiketleri için oda adına dokunun.'), style: TextStyle(color: Colors.white54, fontSize: 12))),
               if (_myRole == 'owner') ...[
-                TextField(controller: pwCtl, obscureText: true, maxLength: 12, enabled: !removePw, decoration: InputDecoration(labelText: _room?['locked'] == true ? 'Yeni şifre (boş = değişmez)' : 'Oda şifresi (isteğe bağlı)')),
-                if (_room?['locked'] == true) CheckboxListTile(dense: true, value: removePw, title: const Text('Şifreyi kaldır'), onChanged: (v) => setS(() => removePw = v == true)),
-                SwitchListTile(dense: true, title: const Text('Odayı gizle (yalnızca kodla girilir)'), value: hidden, onChanged: (v) => setS(() => hidden = v)),
+                TextField(controller: pwCtl, obscureText: true, maxLength: 12, enabled: !removePw, decoration: InputDecoration(labelText: _room?['locked'] == true ? tx('Yeni şifre (boş = değişmez)') : tx('Oda şifresi (isteğe bağlı)'))),
+                if (_room?['locked'] == true) CheckboxListTile(dense: true, value: removePw, title: Text(tx('Şifreyi kaldır')), onChanged: (v) => setS(() => removePw = v == true)),
+                SwitchListTile(dense: true, title: Text(tx('Odayı gizle (yalnızca kodla girilir)')), value: hidden, onChanged: (v) => setS(() => hidden = v)),
                 if (hidden && code != null)
                   ListTile(
                     dense: true,
                     contentPadding: EdgeInsets.zero,
-                    title: Text('Davet kodu: $code', style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 2)),
-                    trailing: IconButton(icon: const Icon(Icons.copy), onPressed: () { Clipboard.setData(ClipboardData(text: code)); toast(context, 'Kod kopyalandı.'); }),
+                    title: Text(tx('Davet kodu: {code}', {'code': code}), style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 2)),
+                    trailing: IconButton(icon: const Icon(Icons.copy), onPressed: () { Clipboard.setData(ClipboardData(text: code)); toast(context, tx('Kod kopyalandı.')); }),
                   ),
-                if (hidden && code != null) CheckboxListTile(dense: true, value: regen, title: const Text('Kodu yenile'), onChanged: (v) => setS(() => regen = v == true)),
+                if (hidden && code != null) CheckboxListTile(dense: true, value: regen, title: Text(tx('Kodu yenile')), onChanged: (v) => setS(() => regen = v == true)),
               ],
-              SwitchListTile(dense: true, title: const Text('Yazılı sohbet açık'), value: chatEnabled, onChanged: (v) => setS(() => chatEnabled = v)),
-              SwitchListTile(dense: true, title: const Text('Koltuk hediye sayacı'), value: scoreboard, onChanged: (v) => setS(() => scoreboard = v)),
+              SwitchListTile(dense: true, title: Text(tx('Yazılı sohbet açık')), value: chatEnabled, onChanged: (v) => setS(() => chatEnabled = v)),
+              SwitchListTile(dense: true, title: Text(tx('Koltuk hediye sayacı')), value: scoreboard, onChanged: (v) => setS(() => scoreboard = v)),
               const SizedBox(height: 8),
-              const Text('Oda teması'),
+              Text(tx('Oda teması')),
               const SizedBox(height: 6),
               ThemePicker(value: theme, onChanged: (v) => setS(() => theme = v)),
-              TextField(controller: imgCtl, decoration: const InputDecoration(labelText: 'Özel arka plan görseli (https, WIP 4+)')),
+              TextField(controller: imgCtl, decoration: InputDecoration(labelText: tx('Özel arka plan görseli (https, WIP 4+)'))),
               if (scoreboard)
                 TextButton.icon(
                   onPressed: () async {
-                    if (await confirm(c, 'Tüm koltuk hediye sayaçları sıfırlansın mı?', action: 'Sıfırla') && mounted) {
+                    if (await confirm(c, tx('Tüm koltuk hediye sayaçları sıfırlansın mı?'), action: tx('Sıfırla')) && mounted) {
                       await guard(context, () => Api.post('/api/rooms/${widget.roomId}/scoreboard/reset'));
                     }
                   },
                   icon: const Icon(Icons.restart_alt),
-                  label: const Text('Sayaçları sıfırla'),
+                  label: Text(tx('Sayaçları sıfırla')),
                 ),
             ]),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Vazgeç')),
-            FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Kaydet')),
+            TextButton(onPressed: () => Navigator.pop(c, false), child: Text(tx('Vazgeç'))),
+            FilledButton(onPressed: () => Navigator.pop(c, true), child: Text(tx('Kaydet'))),
           ],
         ),
       ),
@@ -2032,7 +2039,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   static void _noop() {}
 
   Future<void> _clearChat() async {
-    if (!await confirm(context, 'Odadaki tüm sohbet mesajları herkes için silinsin mi?', action: 'Temizle')) return;
+    if (!await confirm(context, tx('Odadaki tüm sohbet mesajları herkes için silinsin mi?'), action: tx('Temizle'))) return;
     if (!mounted) return;
     await guard(context, () => Api.delete('/api/rooms/${widget.roomId}/messages'));
   }
@@ -2041,7 +2048,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   void _openRoomActivities() => showAppWebViewSheet(
         context,
         url: '${Api.baseUrl}/room-activities?roomId=${Uri.encodeQueryComponent(widget.roomId)}',
-        title: 'Etkinlikler',
+        title: tx('Etkinlikler'),
       );
 
   void _openGames() => Navigator.push(context, MaterialPageRoute(builder: (_) => LudoScreen(roomId: widget.roomId, canManage: _isManager)));
@@ -2090,7 +2097,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           child: Row(mainAxisSize: MainAxisSize.min, children: [
             Icon(Icons.verified, size: h * 0.7, color: const Color(0xFFFFD54F)),
             const SizedBox(width: 2),
-            Text('Doğrulanmış', style: TextStyle(fontSize: h * 0.56, height: 1.0, fontWeight: FontWeight.w800, fontStyle: FontStyle.italic, color: Colors.white)),
+            Text(tx('Doğrulanmış'), style: TextStyle(fontSize: h * 0.56, height: 1.0, fontWeight: FontWeight.w800, fontStyle: FontStyle.italic, color: Colors.white)),
           ]),
         ),
     ];
@@ -2118,10 +2125,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             border: Border.all(color: const Color(0x55FFD54F)),
           ),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-            const Row(mainAxisSize: MainAxisSize.min, children: [
+            Row(mainAxisSize: MainAxisSize.min, children: [
               Icon(Icons.shield_rounded, size: 16, color: Color(0xFFFFD54F)),
               SizedBox(width: 5),
-              Text('TR Live Sistem Duyurusu', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: Color(0xFFFFD54F))),
+              Text(tx('TR Live Sistem Duyurusu'), style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: Color(0xFFFFD54F))),
             ]),
             const SizedBox(height: 4),
             Text(_appNotice, style: const TextStyle(fontSize: 13, height: 1.35, color: Color(0xFFE5E7EB))),
@@ -2143,7 +2150,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           child: Text.rich(
             TextSpan(children: [
               const WidgetSpan(alignment: PlaceholderAlignment.middle, child: Padding(padding: EdgeInsets.only(right: 4), child: Icon(Icons.campaign_rounded, size: 16, color: Colors.amberAccent))),
-              const TextSpan(text: 'Oda duyurusu: ', style: TextStyle(fontWeight: FontWeight.w800, color: Colors.amberAccent)),
+              TextSpan(text: tx('Oda duyurusu: '), style: TextStyle(fontWeight: FontWeight.w800, color: Colors.amberAccent)),
               TextSpan(text: ann),
             ]),
             style: const TextStyle(fontSize: 14, height: 1.3, color: Colors.white),
@@ -2170,7 +2177,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           child: Row(mainAxisSize: MainAxisSize.min, children: [
             const Icon(Icons.add, color: Colors.white, size: 24),
             const SizedBox(width: 8),
-            const Flexible(child: Text('Bu yayıncıyı takip edin, eğlenceyi kaçırmayın!', style: TextStyle(color: Colors.white, fontSize: 14, height: 1.25, fontWeight: FontWeight.w600))),
+            Flexible(child: Text(tx('Bu yayıncıyı takip edin, eğlenceyi kaçırmayın!'), style: TextStyle(color: Colors.white, fontSize: 14, height: 1.25, fontWeight: FontWeight.w600))),
             const SizedBox(width: 8),
             Container(padding: const EdgeInsets.all(1.5), decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.white), child: UserAvatar(user: ou, radius: 15)),
           ]),
@@ -2186,7 +2193,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final head = Wrap(spacing: 4, runSpacing: 2, crossAxisAlignment: WrapCrossAlignment.center, children: [
       _badgeRow(ju, h: 15),
       _nameText(ju),
-      const Text('odaya girdi', style: TextStyle(fontSize: 13, color: Colors.white70)),
+      Text(tx('odaya girdi'), style: TextStyle(fontSize: 13, color: Colors.white70)),
     ]);
     if (!isNew) {
       return Align(
@@ -2214,12 +2221,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
               margin: const EdgeInsets.only(right: 6),
               decoration: BoxDecoration(color: const Color(0xFFFF3D71), borderRadius: BorderRadius.circular(6)),
-              child: const Text('YENİ', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.white)),
+              child: Text(tx('YENİ'), style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.white)),
             ),
             Flexible(child: head),
           ]),
           const SizedBox(height: 5),
-          const Text('Bu kullanıcı yakın zamanda kayıt oldu.', style: TextStyle(fontSize: 14, color: Color(0xFFFFE27A), fontWeight: FontWeight.w600)),
+          Text(tx('Bu kullanıcı yakın zamanda kayıt oldu.'), style: TextStyle(fontSize: 14, color: Color(0xFFFFE27A), fontWeight: FontWeight.w600)),
           const SizedBox(height: 8),
           GestureDetector(
             onTap: done
@@ -2236,7 +2243,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                   gradient: const LinearGradient(colors: [Color(0xFF7C3AED), Color(0xFF2563EB)]),
                   border: Border.all(color: const Color(0xFFFDE047), width: 1.5),
                 ),
-                child: Text(done ? '👏 Selam gönderildi' : '👏 Hoş geldiniz', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 14)),
+                child: Text(done ? tx('👏 Selam gönderildi') : tx('👏 Hoş geldiniz'), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 14)),
               ),
             ),
           ),
@@ -2277,7 +2284,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                   child: Row(mainAxisSize: MainAxisSize.min, children: [
                     const Icon(Icons.keyboard_double_arrow_down, size: 16, color: Colors.black),
                     const SizedBox(width: 3),
-                    Text('$_unseen yeni mesaj', style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w800, fontSize: 12)),
+                    Text(tx('{n} yeni mesaj', {'n': _unseen}), style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w800, fontSize: 12)),
                   ]),
                 ),
               ),
@@ -2402,7 +2409,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   void _openInput() {
     if (!_chatOpen) {
-      toast(context, 'Bu odada yazılı sohbet kapalı.', error: true);
+      toast(context, tx('Bu odada yazılı sohbet kapalı.'), error: true);
       return;
     }
     _kbSeen = false;
@@ -2425,7 +2432,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         GestureDetector(
           onTap: () {
             setState(() => _flyMode = !_flyMode);
-            if (_flyMode) toast(context, _flyCost > 0 ? 'Uçan yazı açık: her mesaj $_flyCost Coin.' : 'Uçan yazı açık.');
+            if (_flyMode) toast(context, _flyCost > 0 ? tx('Uçan yazı açık: her mesaj {flyCost} Coin.', {'flyCost': _flyCost}) : tx('Uçan yazı açık.'));
           },
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 180),
@@ -2457,7 +2464,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             decoration: InputDecoration(
               isDense: true,
               counterText: '',
-              hintText: _chatMuted ? 'Sohbette susturuldunuz' : (_flyMode ? (_flyCost > 0 ? 'Uçan yazı · $_flyCost Coin' : 'Uçan yazı') : 'Bir şeyler yaz...'),
+              hintText: _chatMuted ? tx('Sohbette susturuldunuz') : (_flyMode ? (_flyCost > 0 ? tx('Uçan yazı · {flyCost} Coin', {'flyCost': _flyCost}) : tx('Uçan yazı')) : tx('Bir şeyler yaz...')),
               hintStyle: const TextStyle(color: Colors.white38),
               filled: true,
               fillColor: const Color(0x1AFFFFFF),
@@ -2501,7 +2508,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           if (mine || _isManager)
             ListTile(
               leading: const Icon(Icons.delete_outline),
-              title: const Text('Mesajı sil'),
+              title: Text(tx('Mesajı sil')),
               onTap: () {
                 Navigator.pop(c);
                 guard(context, () => Api.delete('/api/rooms/${widget.roomId}/messages/${m['id']}'));
@@ -2510,7 +2517,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           if (!mine)
             ListTile(
               leading: const Icon(Icons.flag_outlined),
-              title: const Text('Mesajı şikâyet et'),
+              title: Text(tx('Mesajı şikâyet et')),
               onTap: () {
                 Navigator.pop(c);
                 reportDialog(context, kind: 'room_message', targetUserId: u?['id'] as String?, roomId: widget.roomId, messageId: m['id'] as String?);
@@ -2532,7 +2539,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   /// Kendi koltuğuma dokununca (Zula gibi): koltuğu sessize al / koltuktan kalk / iptal.
   void _selfSeatSheet(Map<String, dynamic> m, int index) {
     final user = mapOf(m['user']);
-    final roleName = const {'owner': 'Oda Sahibi', 'cohost': 'Yardımcı', 'admin': 'Yönetici'}[(m['role'] ?? '').toString()] ?? 'Üye';
+    final roleName = {'owner': tx('Oda Sahibi'), 'cohost': tx('Yardımcı'), 'admin': tx('Yönetici')}[(m['role'] ?? '').toString()] ?? tx('Üye');
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -2541,7 +2548,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           ListTile(
             leading: UserAvatar(user: user, radius: 22),
             title: Text((user?['displayName'] ?? '').toString(), style: const TextStyle(fontWeight: FontWeight.bold)),
-            subtitle: Text('Koltuk #${index + 1} • $roleName'),
+            subtitle: Text('${tx('Koltuk')} #${index + 1} • $roleName'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () {
               Navigator.pop(c);
@@ -2551,11 +2558,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           const Divider(height: 1),
           ListTile(
             leading: Icon(_micOn && !_seatMuted ? Icons.mic_off : Icons.mic),
-            title: Text(_seatMuted ? 'Koltuğun susturuldu' : (_micOn ? 'Koltuğu sessize al' : 'Sesi aç')),
+            title: Text(_seatMuted ? tx('Koltuğun susturuldu') : (_micOn ? tx('Koltuğu sessize al') : tx('Sesi aç'))),
             onTap: () {
               Navigator.pop(c);
               if (_seatMuted) {
-                toast(context, 'Koltuğun yetkili tarafından susturuldu; mikrofonu açamazsın.', error: true);
+                toast(context, tx('Koltuğun yetkili tarafından susturuldu; mikrofonu açamazsın.'), error: true);
                 return;
               }
               setState(() => _micOn = !_micOn);
@@ -2565,7 +2572,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           if (_isVideo)
             ListTile(
               leading: Icon(_camOn ? Icons.videocam_off : Icons.videocam),
-              title: Text(_camOn ? 'Kamerayı kapat' : 'Kamerayı aç'),
+              title: Text(_camOn ? tx('Kamerayı kapat') : tx('Kamerayı aç')),
               onTap: () {
                 Navigator.pop(c);
                 setState(() => _camOn = !_camOn);
@@ -2575,7 +2582,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           if (_isVideo && _camOn)
             ListTile(
               leading: const Icon(Icons.cameraswitch),
-              title: const Text('Kamerayı çevir'),
+              title: Text(tx('Kamerayı çevir')),
               onTap: () {
                 Navigator.pop(c);
                 _flipCamera();
@@ -2584,7 +2591,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           if (_isVideo && _camOn)
             ListTile(
               leading: const Icon(Icons.face_retouching_natural, color: Color(0xFFFF4F9A)),
-              title: const Text('Güzellik ve filtre'),
+              title: Text(tx('Güzellik ve filtre')),
               onTap: () {
                 Navigator.pop(c);
                 _openBeauty();
@@ -2592,13 +2599,13 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             ),
           ListTile(
             leading: const Icon(Icons.logout, color: Colors.redAccent),
-            title: const Text('Koltuktan Kalk', style: TextStyle(color: Colors.redAccent)),
+            title: Text(tx('Koltuktan Kalk'), style: TextStyle(color: Colors.redAccent)),
             onTap: () {
               Navigator.pop(c);
               _leaveMic();
             },
           ),
-          ListTile(leading: const Icon(Icons.close), title: const Text('İptal'), onTap: () => Navigator.pop(c)),
+          ListTile(leading: const Icon(Icons.close), title: Text(tx('İptal')), onTap: () => Navigator.pop(c)),
         ]),
       ),
     );
@@ -2717,7 +2724,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                 child: Row(mainAxisSize: MainAxisSize.min, children: [
                                   UserAvatar(user: mapOf(mapOf(profile?['guardian'])?['user']), radius: 9),
                                   const SizedBox(width: 4),
-                                  Text('Koruyucu: ${mapOf(mapOf(profile?['guardian'])?['user'])?['displayName'] ?? ''}', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
+                                  Text('${tx('Koruyucu')}: ${mapOf(mapOf(profile?['guardian'])?['user'])?['displayName'] ?? ''}', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
                                 ]),
                               ),
                           ]),
@@ -2725,9 +2732,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                           if (user?['isHidden'] == true) ...[
                             IdBadge(user: user, fontSize: 13),
                             if (hiddenUser)
-                              const Padding(
+                              Padding(
                                 padding: EdgeInsets.only(top: 8),
-                                child: Text('Bu kullanıcı kimliğini gizliyor; profili görüntülenemez.',
+                                child: Text(tx('Bu kullanıcı kimliğini gizliyor; profili görüntülenemez.'),
                                     textAlign: TextAlign.center, style: TextStyle(color: Colors.white54, fontSize: 12.5)),
                               ),
                           ] else if ((profile?['specialId'] ?? user?['specialId'] ?? profile?['publicId'] ?? user?['publicId']) != null)
@@ -2745,7 +2752,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                             InkWell(
                               onTap: () {
                                 Clipboard.setData(ClipboardData(text: username));
-                                toast(context, 'Kimlik kopyalandı.');
+                                toast(context, tx('Kimlik kopyalandı.'));
                               },
                               child: Row(mainAxisSize: MainAxisSize.min, children: [
                                 Text('ID: $username', style: const TextStyle(color: Colors.white70)),
@@ -2786,7 +2793,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                               ),
                             const SizedBox(height: 10),
                             Row(children: [
-                              for (final (label, v) in [('Takipçi', profile['followers']), ('Takip', profile['following']), ('Arkadaş', profile['friends'])])
+                              for (final (label, v) in [(tx('Takipçi'), profile['followers']), (tx('Takip'), profile['following']), (tx('Arkadaş'), profile['friends'])])
                                 Expanded(
                                   child: Column(mainAxisSize: MainAxisSize.min, children: [
                                     Text(fmtCompact(v ?? 0), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
@@ -2860,41 +2867,41 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                             const SizedBox(height: 10),
                             Row(children: [
                               if (canRole)
-                                action(Icons.manage_accounts, 'Yönetici', () {
+                                action(Icons.manage_accounts, tx('Yönetici'), () {
                                   close();
                                   _roleChoice(userId, role);
                                 }),
                               if (canMod)
                                 seat != null
                                     ? (_mutedSeats.contains(seat)
-                                        ? action(Icons.mic, 'Sesi Aç', () { close(); _muteSeat(seat, false); })
-                                        : action(Icons.mic_off, 'Sustur', () { close(); _muteSeat(seat, true); }, color: Colors.white70))
-                                    : action(Icons.mic, 'Mic Aç', () { close(); _moderate(userId, 'mic-invite', body: {}); }),
-                              if (canMod) action(Icons.comments_disabled, 'Sohbet', () { close(); _muteChoice(userId); }),
-                              if (canMod && seat != null) action(Icons.event_seat, 'Koltuk', () { close(); _moderate(userId, 'mic-off'); _lockSeat(seat, true); }),
-                              if (canMod) action(Icons.exit_to_app, 'Odadan At', () async {
+                                        ? action(Icons.mic, tx('Sesi Aç'), () { close(); _muteSeat(seat, false); })
+                                        : action(Icons.mic_off, tx('Sustur'), () { close(); _muteSeat(seat, true); }, color: Colors.white70))
+                                    : action(Icons.mic, tx('Mic Aç'), () { close(); _moderate(userId, 'mic-invite', body: {}); }),
+                              if (canMod) action(Icons.comments_disabled, tx('Sohbet'), () { close(); _muteChoice(userId); }),
+                              if (canMod && seat != null) action(Icons.event_seat, tx('Koltuk'), () { close(); _moderate(userId, 'mic-off'); _lockSeat(seat, true); }),
+                              if (canMod) action(Icons.exit_to_app, tx('Odadan At'), () async {
                                 close();
-                                if (await confirm(this.context, '${user?['displayName'] ?? 'Kullanıcı'} odadan atılsın mı?', action: 'At')) _moderate(userId, 'kick');
+                                if (await confirm(this.context, tx('{displayName} odadan atılsın mı?', {'displayName': user?['displayName'] ?? tx('Kullanıcı')}), action: tx('At'))) _moderate(userId, 'kick');
                               }),
                             ]),
                           ],
                           const SizedBox(height: 8),
                           const Divider(height: 1, color: Colors.white12),
                           Row(children: [
-                            bigAction(Icons.alternate_email, 'Etiketle', () {
+                            bigAction(Icons.alternate_email, tx('Etiketle'), () {
                               close();
                               final name = (user?['displayName'] ?? '').toString();
                               _chatCtl.text = '${_chatCtl.text}@$name ';
                               _chatCtl.selection = TextSelection.collapsed(offset: _chatCtl.text.length);
                             }),
-                            bigAction(Icons.card_giftcard, 'Hediye Gönder', () {
+                            bigAction(Icons.card_giftcard, tx('Hediye Gönder'), () {
                               close();
                               _openGifts(userId);
                             }),
                             if (hiddenUser)
                               const SizedBox.shrink()
                             else if (!isSelf)
-                              bigAction(following ? Icons.check : Icons.add, following ? 'Takipte' : 'Takip Et', () async {
+                              bigAction(following ? Icons.check : Icons.add, following ? tx('Takipte') : tx('Takip Et'), () async {
                                 final ok = await guard<bool>(this.context, () async {
                                   if (following) {
                                     await Api.delete('/api/users/$userId/follow');
@@ -2906,7 +2913,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                 if (ok == true) setS(() => following = !following);
                               })
                             else
-                              bigAction(Icons.person, 'Profilim', () {
+                              bigAction(Icons.person, tx('Profilim'), () {
                                 close();
                                 Navigator.push(this.context, MaterialPageRoute(builder: (_) => UserProfileScreen(userId: userId)));
                               }),
@@ -2932,18 +2939,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         top: 10,
                         left: 12,
                         child: IconButton(
-                          tooltip: 'Şikâyet / engelle',
+                          tooltip: tx('Şikâyet / engelle'),
                           icon: const Icon(Icons.error_outline, color: Pal.amber, size: 30),
                           onPressed: () {
                             close();
-                            _reportMenu(userId, (user?['displayName'] ?? 'Kullanıcı').toString(), canMod);
+                            _reportMenu(userId, (user?['displayName'] ?? tx('Kullanıcı')).toString(), canMod);
                           },
                         ),
                       ),
                     Positioned(
                       top: 10,
                       right: 12,
-                      child: IconButton(tooltip: 'Kapat', icon: const CircleAvatar(radius: 16, backgroundColor: Pal.amber, child: Icon(Icons.close, color: Colors.black, size: 20)), onPressed: close),
+                      child: IconButton(tooltip: tx('Kapat'), icon: const CircleAvatar(radius: 16, backgroundColor: Pal.amber, child: Icon(Icons.close, color: Colors.black, size: 20)), onPressed: close),
                     ),
                   ]),
                 ),
@@ -2970,9 +2977,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       showDragHandle: true,
       builder: (c) => SafeArea(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          if (role != 'moderator') ListTile(leading: const Icon(Icons.shield), title: const Text('Moderatör yap'), onTap: () { Navigator.pop(c); _moderate(userId, 'role', body: {'role': 'moderator'}); }),
-          if (_myRole == 'owner' && role != 'cohost') ListTile(leading: const Icon(Icons.stars), title: const Text('Yardımcı sahip yap'), onTap: () { Navigator.pop(c); _moderate(userId, 'role', body: {'role': 'cohost'}); }),
-          if (role != 'user') ListTile(leading: const Icon(Icons.remove_moderator), title: const Text('Yetkiyi al'), onTap: () { Navigator.pop(c); _moderate(userId, 'role', body: {'role': 'user'}); }),
+          if (role != 'moderator') ListTile(leading: const Icon(Icons.shield), title: Text(tx('Moderatör yap')), onTap: () { Navigator.pop(c); _moderate(userId, 'role', body: {'role': 'moderator'}); }),
+          if (_myRole == 'owner' && role != 'cohost') ListTile(leading: const Icon(Icons.stars), title: Text(tx('Yardımcı sahip yap')), onTap: () { Navigator.pop(c); _moderate(userId, 'role', body: {'role': 'cohost'}); }),
+          if (role != 'user') ListTile(leading: const Icon(Icons.remove_moderator), title: Text(tx('Yetkiyi al')), onTap: () { Navigator.pop(c); _moderate(userId, 'role', body: {'role': 'user'}); }),
         ]),
       ),
     );
@@ -2987,10 +2994,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           for (final mins in const [10, 60, 1440])
             ListTile(
               leading: const Icon(Icons.comments_disabled),
-              title: Text('Sohbette sustur (${mins == 1440 ? '1 gün' : (mins == 60 ? '1 saat' : '$mins dk')})'),
+              title: Text(tx('Sohbette sustur ({t})', {'t': mins == 1440 ? tx('1 gün') : (mins == 60 ? tx('1 saat') : tx('{n} dk', {'n': mins}))})),
               onTap: () { Navigator.pop(c); _moderate(userId, 'chat-mute', body: {'minutes': mins}); },
             ),
-          ListTile(leading: const Icon(Icons.chat), title: const Text('Susturmayı kaldır'), onTap: () { Navigator.pop(c); _moderate(userId, 'chat-mute', body: {'minutes': 0}); }),
+          ListTile(leading: const Icon(Icons.chat), title: Text(tx('Susturmayı kaldır')), onTap: () { Navigator.pop(c); _moderate(userId, 'chat-mute', body: {'minutes': 0}); }),
         ]),
       ),
     );
@@ -3004,50 +3011,50 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       builder: (c) => SafeArea(
         child: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-          ListTile(leading: const Icon(Icons.flag_outlined), title: const Text('Şikâyet et'), onTap: () { Navigator.pop(c); reportDialog(context, kind: 'user', targetUserId: userId, roomId: widget.roomId); }),
-          ListTile(leading: const Icon(Icons.person_off_outlined), title: const Text('Kullanıcıyı engelle'), onTap: () { Navigator.pop(c); blockUserDialog(context, userId, name); }),
+          ListTile(leading: const Icon(Icons.flag_outlined), title: Text(tx('Şikâyet et')), onTap: () { Navigator.pop(c); reportDialog(context, kind: 'user', targetUserId: userId, roomId: widget.roomId); }),
+          ListTile(leading: const Icon(Icons.person_off_outlined), title: Text(tx('Kullanıcıyı engelle')), onTap: () { Navigator.pop(c); blockUserDialog(context, userId, name); }),
           if (canRoomBlock) ...[
             ListTile(
               leading: const Icon(Icons.block, color: Colors.orangeAccent),
-              title: const Text('Odadan banla'),
-              subtitle: const Text('Bu odaya bir daha giremez'),
+              title: Text(tx('Odadan banla')),
+              subtitle: Text(tx('Bu odaya bir daha giremez')),
               onTap: () async {
                 Navigator.pop(c);
-                if (await confirm(context, '$name bu odadan banlansın mı?', action: 'Banla', destructive: true)) _moderate(userId, 'block');
+                if (await confirm(context, tx('{name} bu odadan banlansın mı?', {'name': name}), action: tx('Banla'), destructive: true)) _moderate(userId, 'block');
               },
             ),
-            ListTile(leading: const Icon(Icons.exit_to_app), title: const Text('Odadan at'), onTap: () async {
+            ListTile(leading: const Icon(Icons.exit_to_app), title: Text(tx('Odadan at')), onTap: () async {
               Navigator.pop(c);
-              if (await confirm(context, '$name odadan atılsın mı?', action: 'At')) _moderate(userId, 'kick');
+              if (await confirm(context, tx('{name} odadan atılsın mı?', {'name': name}), action: tx('At'))) _moderate(userId, 'kick');
             }),
-            ListTile(leading: const Icon(Icons.comments_disabled), title: const Text('Sohbette sustur'), onTap: () { Navigator.pop(c); _muteChoice(userId); }),
+            ListTile(leading: const Icon(Icons.comments_disabled), title: Text(tx('Sohbette sustur')), onTap: () { Navigator.pop(c); _muteChoice(userId); }),
           ],
           // Uygulama yöneticisi / yardımcı admin kısayolları (yetkiyi sunucu ayrıca denetler).
           if (Session.isStaff) ...[
             const Divider(height: 1),
-            const Padding(
+            Padding(
               padding: EdgeInsets.fromLTRB(16, 10, 16, 2),
-              child: Align(alignment: Alignment.centerLeft, child: Text('Yönetici kısayolları', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w800, fontSize: 13))),
+              child: Align(alignment: Alignment.centerLeft, child: Text(tx('Yönetici kısayolları'), style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w800, fontSize: 13))),
             ),
             ListTile(
               leading: const Icon(Icons.gavel, color: Colors.redAccent),
-              title: const Text('Kullanıcıyı banla', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w700)),
+              title: Text(tx('Kullanıcıyı banla'), style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w700)),
               onTap: () { Navigator.pop(c); _staffBan(userId, name); },
             ),
             if (Session.isAdmin)
               ListTile(
                 leading: const Icon(Icons.speaker_notes_off_outlined),
-                title: const Text('Uygulamada sohbet yasağı'),
+                title: Text(tx('Uygulamada sohbet yasağı')),
                 onTap: () { Navigator.pop(c); _staffChatBan(userId, name); },
               ),
             ListTile(
               leading: const Icon(Icons.drive_file_rename_outline),
-              title: const Text('Adını değiştir'),
+              title: Text(tx('Adını değiştir')),
               onTap: () { Navigator.pop(c); _staffRename(userId, name); },
             ),
             ListTile(
               leading: const Icon(Icons.no_photography_outlined),
-              title: const Text('Profil fotoğrafını kaldır'),
+              title: Text(tx('Profil fotoğrafını kaldır')),
               onTap: () { Navigator.pop(c); _staffRemoveAvatar(userId, name); },
             ),
           ],
@@ -3059,35 +3066,36 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   /// Yönetici kısayolu: süre seçilir, neden (isteğe bağlı) yazılır, onaylanınca hesap banlanır.
   Future<void> _staffBan(String userId, String name) async {
-    const options = <(String, int?)>[('1 saat', 1), ('1 gün', 24), ('7 gün', 168), ('30 gün', 720), ('Süresiz', null)];
+    final options = <(String, int?)>[(tx('1 saat'), 1), (tx('1 gün'), 24), (tx('7 gün'), 168), (tx('30 gün'), 720), (tx('Süresiz'), null)];
     final picked = await showModalBottomSheet<(String, int?)>(
       context: context,
       showDragHandle: true,
       builder: (c) => SafeArea(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Padding(padding: const EdgeInsets.only(bottom: 6), child: Text('$name · ban süresi', style: const TextStyle(fontWeight: FontWeight.w800))),
+          Padding(padding: const EdgeInsets.only(bottom: 6), child: Text(tx('{name} · ban süresi', {'name': name}), style: const TextStyle(fontWeight: FontWeight.w800))),
           for (final o in options)
             ListTile(leading: Icon(o.$2 == null ? Icons.block : Icons.timer_outlined, color: Colors.redAccent), title: Text(o.$1), onTap: () => Navigator.pop(c, o)),
         ]),
       ),
     );
     if (picked == null || !mounted) return;
-    final f = await formDialog(context, 'Ban nedeni (isteğe bağlı)', ['Neden']);
+    final reasonField = tx('Neden');
+    final f = await formDialog(context, tx('Ban nedeni (isteğe bağlı)'), [reasonField]);
     if (f == null || !mounted) return;
-    if (!await confirm(context, '$name ${picked.$2 == null ? 'süresiz' : picked.$1} banlansın mı? Tüm oturumları kapanır ve odalardan çıkarılır.', action: 'Banla', destructive: true)) return;
+    if (!await confirm(context, tx('{name} {v1} banlansın mı? Tüm oturumları kapanır ve odalardan çıkarılır.', {'name': name, 'v1': picked.$2 == null ? tx('süresiz') : picked.$1}), action: tx('Banla'), destructive: true)) return;
     if (!mounted) return;
-    final r = await guard(context, () => Api.post('/api/admin/users/$userId/ban', {if (picked.$2 != null) 'hours': picked.$2, 'reason': (f['Neden'] ?? '').trim()}));
-    if (r != null && mounted) toast(context, '$name banlandı (${picked.$1}).');
+    final r = await guard(context, () => Api.post('/api/admin/users/$userId/ban', {if (picked.$2 != null) 'hours': picked.$2, 'reason': (f[reasonField] ?? '').trim()}));
+    if (r != null && mounted) toast(context, tx('{name} banlandı ({v1}).', {'name': name, 'v1': picked.$1}));
   }
 
   Future<void> _staffChatBan(String userId, String name) async {
-    const options = <(String, int)>[('1 saat', 60), ('1 gün', 1440), ('7 gün', 10080), ('Yasağı kaldır', 0)];
+    final options = <(String, int)>[(tx('1 saat'), 60), (tx('1 gün'), 1440), (tx('7 gün'), 10080), (tx('Yasağı kaldır'), 0)];
     final picked = await showModalBottomSheet<(String, int)>(
       context: context,
       showDragHandle: true,
       builder: (c) => SafeArea(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Padding(padding: const EdgeInsets.only(bottom: 6), child: Text('$name · sohbet yasağı', style: const TextStyle(fontWeight: FontWeight.w800))),
+          Padding(padding: const EdgeInsets.only(bottom: 6), child: Text(tx('{name} · sohbet yasağı', {'name': name}), style: const TextStyle(fontWeight: FontWeight.w800))),
           for (final o in options)
             ListTile(leading: Icon(o.$2 == 0 ? Icons.chat : Icons.speaker_notes_off_outlined), title: Text(o.$1), onTap: () => Navigator.pop(c, o)),
         ]),
@@ -3095,21 +3103,22 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     );
     if (picked == null || !mounted) return;
     final r = await guard(context, () => Api.post('/api/admin/users/$userId/chat-restriction', {'minutes': picked.$2}));
-    if (r != null && mounted) toast(context, picked.$2 == 0 ? 'Sohbet yasağı kaldırıldı.' : '$name ${picked.$1} sohbet edemeyecek.');
+    if (r != null && mounted) toast(context, picked.$2 == 0 ? tx('Sohbet yasağı kaldırıldı.') : tx('{name} {t} sohbet edemeyecek.', {'name': name, 't': picked.$1}));
   }
 
   Future<void> _staffRename(String userId, String name) async {
-    final f = await formDialog(context, 'Görünen adı değiştir', ['Yeni ad'], initial: {'Yeni ad': name});
+    final nameField = tx('Yeni ad');
+    final f = await formDialog(context, tx('Görünen adı değiştir'), [nameField], initial: {nameField: name});
     if (f == null || !mounted) return;
-    final r = await guard(context, () => Api.post('/api/admin/users/$userId/display-name', {'displayName': (f['Yeni ad'] ?? '').trim()}));
-    if (r != null && mounted) toast(context, 'Ad değiştirildi.');
+    final r = await guard(context, () => Api.post('/api/admin/users/$userId/display-name', {'displayName': (f[nameField] ?? '').trim()}));
+    if (r != null && mounted) toast(context, tx('Ad değiştirildi.'));
   }
 
   Future<void> _staffRemoveAvatar(String userId, String name) async {
-    if (!await confirm(context, '$name adlı kullanıcının profil fotoğrafı kaldırılsın mı?', action: 'Kaldır', destructive: true)) return;
+    if (!await confirm(context, tx('{name} adlı kullanıcının profil fotoğrafı kaldırılsın mı?', {'name': name}), action: tx('Kaldır'), destructive: true)) return;
     if (!mounted) return;
     final r = await guard(context, () => Api.post('/api/admin/users/$userId/avatar', {'avatarUrl': null}));
-    if (r != null && mounted) toast(context, 'Profil fotoğrafı kaldırıldı.');
+    if (r != null && mounted) toast(context, tx('Profil fotoğrafı kaldırıldı.'));
   }
 
   void _membersSheet() => showViewers(context, _members, _memberSheet);
@@ -3154,6 +3163,16 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     );
   }
 
+  /// Doğum günü tasarımının fiyatı ve kişinin hakkı (mikrofon modu penceresindeki kart için). Alınamazsa null.
+  Future<Map<String, dynamic>?> _birthdaySkin() async {
+    try {
+      final r = await Api.get('/api/mic-skins');
+      return listOf(r['skins']).where((x) => x['key'] == kBirthdaySkin).firstOrNull;
+    } catch (_) {
+      return null;
+    }
+  }
+
   void _openBirthday() => showBirthdaySheet(
         context,
         currentName: _room?['micSkinText']?.toString(),
@@ -3171,22 +3190,22 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         showDragHandle: true,
         builder: (c) => SafeArea(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            ListTile(leading: const Icon(Icons.mic), title: const Text('Bu koltuğa otur'), onTap: () { Navigator.pop(c); _takeMic(index); }),
+            ListTile(leading: const Icon(Icons.mic), title: Text(tx('Bu koltuğa otur')), onTap: () { Navigator.pop(c); _takeMic(index); }),
             ListTile(
               leading: Icon(_mutedSeats.contains(index) ? Icons.mic : Icons.mic_off),
-              title: Text(_mutedSeats.contains(index) ? 'Koltuğun sesini aç' : 'Koltuğu sustur'),
+              title: Text(_mutedSeats.contains(index) ? tx('Koltuğun sesini aç') : tx('Koltuğu sustur')),
               onTap: () { Navigator.pop(c); _muteSeat(index, !_mutedSeats.contains(index)); },
             ),
             ListTile(
               leading: Icon(locked ? Icons.lock_open : Icons.lock),
-              title: Text(locked ? 'Koltuğun kilidini aç' : 'Koltuğu kilitle'),
+              title: Text(locked ? tx('Koltuğun kilidini aç') : tx('Koltuğu kilitle')),
               onTap: () { Navigator.pop(c); _lockSeat(index, !locked); },
             ),
           ]),
         ),
       );
     } else if (locked) {
-      toast(context, 'Bu koltuk kilitli.', error: true);
+      toast(context, tx('Bu koltuk kilitli.'), error: true);
     } else {
       _takeMic(index);
     }
@@ -3405,7 +3424,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(color: const Color(0xFF22C55E), borderRadius: BorderRadius.circular(16), boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 6)]),
-                child: Text('Mikrofon istekleri (${_queue.length})', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
+                child: Text(tx('Mikrofon istekleri ({n})', {'n': _queue.length}), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
               ),
             ),
           ),
@@ -3530,7 +3549,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     if (_pkLive) {
       content = const SizedBox.shrink(); // yayıncı PK bölünmüş ekranında görünür
     } else if (host == null) {
-      content = const Center(child: Text('Yayıncı şu an kamerada değil', style: TextStyle(color: Colors.white70, fontSize: 15)));
+      content = Center(child: Text(tx('Yayıncı şu an kamerada değil'), style: TextStyle(color: Colors.white70, fontSize: 15)));
     } else {
       final uid = host['userId'].toString();
       content = KeyedSubtree(
@@ -3540,7 +3559,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               child: Column(mainAxisSize: MainAxisSize.min, children: [
                 UserAvatar(user: mapOf(host['user']), radius: 56),
                 const SizedBox(height: 10),
-                const Text('Kamera kapalı', style: TextStyle(color: Colors.white60)),
+                Text(tx('Kamera kapalı'), style: TextStyle(color: Colors.white60)),
               ]),
             ),
       );
@@ -3620,7 +3639,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(color: const Color(0xFF22C55E), borderRadius: BorderRadius.circular(16), boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 6)]),
-              child: Text('Konuk istekleri (${_queue.length})', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
+              child: Text(tx('Konuk istekleri ({n})', {'n': _queue.length}), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
             ),
           ),
         ),
@@ -3633,11 +3652,22 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final spec = seatLayoutFor(_seatCount, skin: _micSkin);
     // topGap: başlığın altından ilk satırdaki DAİRENİN üst kenarına (Yoho ölçümü); +8 dp dokunma payı merkeze katılmaz.
     var cy = spec.topGap * w * sc + (spec.rows.first.dia * w * sc) / 2;
-    for (final p in spec.pitch) {
-      cy += p * w * sc;
+    for (var r = 0; r < spec.pitch.length; r++) {
+      cy += _rowStep(spec, r, w, sc);
     }
     final labels = 2 + _seatNameH + (score ? _seatScoreH + 2 : 0);
     return cy + ((spec.rows.last.dia + seatCircleBoost) * w * sc + 8) / 2 + labels + 8;
+  }
+
+  /// [r]. satırın merkezinden bir sonrakine uzaklık (piksel). Doğum günü tasarımında satırlar en az
+  /// "yarım koltuk + ad satırı + yarım koltuk + 4 dp" aralıklıdır: ad yazısı sabit boyutta olduğu için ölçek küçülse de
+  /// koltuk numarası / ad alttaki koltuğun altında kalmaz. Diğer modlar Yoho ölçüsündedir (değişmedi).
+  double _rowStep(SeatLayoutSpec spec, int r, double w, double sc) {
+    final base = spec.pitch[r] * w * sc;
+    if (!identical(spec, birthdayLayout)) return base;
+    final a = (spec.rows[r].dia + seatCircleBoost) * w * sc + 8;
+    final b = (spec.rows[r + 1].dia + seatCircleBoost) * w * sc + 8;
+    return math.max(base, a / 2 + 2 + _seatNameH + b / 2 + 4);
   }
 
   /// Koltuk ölçeği: koltuklar normalde tam Yoho ölçüsündedir (1). Yalnızca çok kısa ekranlarda, sohbete en az ~110 dp
@@ -3693,7 +3723,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             SizedBox(
               height: _seatNameH,
               child: Center(
-                child: Text(user == null ? (team == 'red' ? 'Kırmızı MVP' : 'Mavi MVP') : (user['displayName'] ?? '').toString(),
+                child: Text(user == null ? (team == 'red' ? tx('Kırmızı MVP') : tx('Mavi MVP')) : (user['displayName'] ?? '').toString(),
                     maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: _seatCompact ? 9.5 : 10.5, color: Colors.white, fontWeight: FontWeight.w700)),
               ),
             ),
@@ -3748,15 +3778,17 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           ));
         }
       }
-      if (r < spec.pitch.length) cy += spec.pitch[r] * w * sc;
+      if (r < spec.pitch.length) cy += _rowStep(spec, r, w, sc);
     }
     if (_birthday && rowCy.length >= 4) {
       // Üstte kutlama şeridi (sahibin yazdığı isimle), ortada pasta.
-      final bw = 0.78 * w * sc;
-      tiles.insert(0, Positioned(left: (w - bw) / 2, top: 0.012 * w * sc, width: bw, height: bw * 0.2, child: BirthdayBanner(name: _room?['micSkinText']?.toString(), width: bw)));
-      final cakeTop = rowCy[1] - 0.075 * w * sc;
-      final cakeH = (rowCy[3] - rowCy[1]) + 0.15 * w * sc;
-      final cakeW = 0.36 * w * sc;
+      // Şerit taçlı koltuğun tacının üstünde biter; pasta taçlı koltuğun ad satırının altından başlar, iki yandaki
+      // koltukların ad yazılarına değmeyecek genişlikte (yan koltuklar 0,27 / 0,73'te).
+      final bw = 0.70 * w * sc;
+      tiles.insert(0, Positioned(left: (w - bw) / 2, top: 0.006 * w * sc, width: bw, height: bw * 0.2, child: BirthdayBanner(name: _room?['micSkinText']?.toString(), width: bw)));
+      final cakeTop = rowCy[1] - 0.03 * w * sc;
+      final cakeH = (rowCy[3] - rowCy[1]) + 0.10 * w * sc;
+      final cakeW = 0.30 * w * sc;
       tiles.insert(0, Positioned(left: (w - cakeW) / 2, top: cakeTop, width: cakeW, height: cakeH, child: BirthdayCake(width: cakeW, height: cakeH)));
     }
     // CP (5. kademe): aynı odada mikrofonda oturan CP'ler. Yan yana (aynı sıra, bitişik koltuk) olanlarda aralarında kalp atışı
@@ -3970,9 +4002,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       if (Session.me.value?['ghostActive'] == true && !_onSeat) ...[
         const SizedBox(width: 6),
         chip(
-          Text('👻 Hayalet', style: TextStyle(fontSize: fs, fontWeight: FontWeight.w800, color: const Color(0xFFC9B8FF), height: 1.0)),
+          Text(tx('👻 Hayalet'), style: TextStyle(fontSize: fs, fontWeight: FontWeight.w800, color: const Color(0xFFC9B8FF), height: 1.0)),
           color: const Color(0xFF2A1A4A),
-          onTap: () => toast(context, 'Hayalet moddasın: odadakiler seni görmüyor. Mikrofona çıkarsan görünürsün.'),
+          onTap: () => toast(context, tx('Hayalet moddasın: odadakiler seni görmüyor. Mikrofona çıkarsan görünürsün.')),
         ),
       ],
       if (!isOwnerHere) ...[
@@ -3981,7 +4013,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           Row(mainAxisSize: MainAxisSize.min, children: [
             Icon(_fav ? Icons.star : Icons.star_border, size: h * 0.7, color: Colors.white),
             const SizedBox(width: 3),
-            Text(_fav ? 'Favoride' : 'Favori', style: TextStyle(fontSize: fs, fontWeight: FontWeight.w800, color: Colors.white, height: 1.0)),
+            Text(_fav ? tx('Favoride') : tx('Favori'), style: TextStyle(fontSize: fs, fontWeight: FontWeight.w800, color: Colors.white, height: 1.0)),
           ]),
           onTap: _toggleFavorite,
           color: _fav ? Colors.orange.shade800 : Colors.orange,
@@ -4032,15 +4064,15 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       showDragHandle: true,
       builder: (c) => SafeArea(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          ListTile(leading: const Icon(Icons.share), title: const Text('Odayı paylaş'), onTap: () { Navigator.pop(c); _shareRoom(); }),
-          ListTile(leading: const Icon(Icons.info_outline), title: const Text('Oda bilgisi'), onTap: () { Navigator.pop(c); _roomInfo(); }),
+          ListTile(leading: const Icon(Icons.share), title: Text(tx('Odayı paylaş')), onTap: () { Navigator.pop(c); _shareRoom(); }),
+          ListTile(leading: const Icon(Icons.info_outline), title: Text(tx('Oda bilgisi')), onTap: () { Navigator.pop(c); _roomInfo(); }),
           if (_room?['ownerId']?.toString() != Session.id)
             ListTile(
               leading: const Icon(Icons.flag_outlined),
-              title: const Text('Odayı şikâyet et'),
+              title: Text(tx('Odayı şikâyet et')),
               onTap: () { Navigator.pop(c); reportDialog(context, kind: 'room', roomId: widget.roomId); },
             ),
-          ListTile(leading: const Icon(Icons.close_fullscreen), title: const Text('Küçült'), onTap: () { Navigator.pop(c); RoomDock.minimize(); }),
+          ListTile(leading: const Icon(Icons.close_fullscreen), title: Text(tx('Küçült')), onTap: () { Navigator.pop(c); RoomDock.minimize(); }),
         ]),
       ),
     );
@@ -4086,7 +4118,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     showGeneralDialog<void>(
       context: context,
       barrierDismissible: true,
-      barrierLabel: 'Kapat',
+      barrierLabel: tx('Kapat'),
       barrierColor: Colors.black87,
       pageBuilder: (c, _, __) {
         Widget big(IconData icon, String label, VoidCallback onTap) => InkWell(
@@ -4101,12 +4133,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           child: Stack(children: [
             Center(
               child: Column(mainAxisSize: MainAxisSize.min, children: [
-                big(Icons.close_fullscreen, 'Küçült', () {
+                big(Icons.close_fullscreen, tx('Küçült'), () {
                   Navigator.pop(c);
                   RoomDock.minimize();
                 }),
                 const SizedBox(height: 56),
-                big(Icons.power_settings_new, 'Çıkış', () {
+                big(Icons.power_settings_new, tx('Çıkış'), () {
                   Navigator.pop(c);
                   _onBack();
                 }),
@@ -4125,7 +4157,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     // Oda sesi kapalıyken oda müziği ve hediye / araç sesleri de susar.
     EffectPrefs.roomMuted.value = _roomMuted;
     _applyRoomSound();
-    toast(context, _roomMuted ? 'Oda sesi kapatıldı (yalnızca sizde).' : 'Oda sesi açıldı.');
+    toast(context, _roomMuted ? tx('Oda sesi kapatıldı (yalnızca sizde).') : tx('Oda sesi açıldı.'));
   }
 
   /// Uzaktaki konuşmacıların sesini bu cihazda kapatır / açar.
@@ -4185,7 +4217,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            const Text('Mikrofon emojisi', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+            Text(tx('Mikrofon emojisi'), style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
             const SizedBox(height: 12),
             Flexible(
               child: GridView.count(
@@ -4218,7 +4250,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                   _emojiSheet();
                 },
                 icon: const Icon(Icons.chat_bubble_outline, size: 18),
-                label: const Text('Sohbete emoji yaz'),
+                label: Text(tx('Sohbete emoji yaz')),
               ),
           ]),
         ),
@@ -4282,7 +4314,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           );
 
       final gift = Tooltip(
-        message: 'Hediye gönder',
+        message: tx('Hediye gönder'),
         child: InkWell(
           customBorder: const CircleBorder(),
           onTap: _members.isEmpty ? null : () => _openGifts(),
@@ -4303,19 +4335,19 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           label: Text('$n'),
           offset: const Offset(-2, 2),
           // Yoho: alttan açılan "Sohbet" penceresi; oda arkada çalışmaya devam eder.
-          child: circle(Icons.mail_outline, 'Mesajlar', () => showInboxSheet(context)),
+          child: circle(Icons.mail_outline, tx('Mesajlar'), () => showInboxSheet(context)),
         ),
       );
       // Oda sesi (yalnızca bu cihazda): konuşanlar, müzik ve hediye sesleri. Oyunlar araçlar menüsünde.
-      final sound = circle(_roomMuted ? Icons.volume_off : Icons.volume_up, _roomMuted ? 'Oda sesini aç' : 'Oda sesini kapat', _toggleRoomSound,
+      final sound = circle(_roomMuted ? Icons.volume_off : Icons.volume_up, _roomMuted ? tx('Oda sesini aç') : tx('Oda sesini kapat'), _toggleRoomSound,
           color: _roomMuted ? Colors.redAccent : null);
-      final menu = circle(Icons.grid_view_rounded, 'Oda araçları', _openTools);
+      final menu = circle(Icons.grid_view_rounded, tx('Oda araçları'), _openTools);
       final micBtn = GestureDetector(
         // Canlı yayında yayıncı uzun basarak yanlışlıkla yayın koltuğundan inmesin.
         onLongPress: _isLive && _myRole == 'owner' ? null : _leaveMic,
-        child: circle(_micOn && !_seatMuted ? Icons.mic : Icons.mic_off, 'Mikrofon (uzun bas: mikrofondan in)', () {
+        child: circle(_micOn && !_seatMuted ? Icons.mic : Icons.mic_off, tx('Mikrofon (uzun bas: mikrofondan in)'), () {
           if (_seatMuted) {
-            toast(context, 'Koltuğun yetkili tarafından susturuldu; mikrofonu açamazsın.', error: true);
+            toast(context, tx('Koltuğun yetkili tarafından susturuldu; mikrofonu açamazsın.'), error: true);
             return;
           }
           setState(() => _micOn = !_micOn);
@@ -4332,7 +4364,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           offset: const Offset(-2, 2),
           child: circle(
             Icons.all_inclusive,
-            _canSeatManage ? 'Konuk istekleri' : (_onSeat ? 'Konukluktan ayrıl' : (_inQueue ? 'Konuk isteğin gönderildi' : 'Konuk ol')),
+            _canSeatManage ? tx('Konuk istekleri') : (_onSeat ? tx('Konukluktan ayrıl') : (_inQueue ? tx('Konuk isteğin gönderildi') : tx('Konuk ol'))),
             _guestTap,
             color: _inQueue || (_onSeat && !_canSeatManage) ? const Color(0xFFFF4F9A) : null,
           ),
@@ -4341,11 +4373,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           message: 'PK',
           child: InkWell(
             customBorder: const CircleBorder(),
-            onTap: () => pkFree ? showPkChallengeSheet(context, roomId: widget.roomId) : toast(context, 'Zaten bir PK sürüyor.', error: true),
+            onTap: () => pkFree ? showPkChallengeSheet(context, roomId: widget.roomId) : toast(context, tx('Zaten bir PK sürüyor.'), error: true),
             child: PkLogo(size: d * 1.3),
           ),
         );
-        final chat = circle(Icons.chat_bubble_outline, 'Sohbet', _openInput);
+        final chat = circle(Icons.chat_bubble_outline, tx('Sohbet'), _openInput);
         final List<Widget> items;
         if (_myRole == 'owner') {
           items = [chat, pkBtn, micBtn, guestBtn, gift, menu];
@@ -4373,7 +4405,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       final List<Widget> left;
       if (_onSeat) {
         left = [
-          at(0.5 - step * 3, circle(Icons.chat_bubble_outline, 'Sohbet', _openInput)),
+          at(0.5 - step * 3, circle(Icons.chat_bubble_outline, tx('Sohbet'), _openInput)),
           at(0.5 - step * 2, micBtn),
           at(0.5 - step, circle(Icons.sentiment_satisfied_alt, 'Emoji', _micEmojiSheet)),
         ];
@@ -4395,7 +4427,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                   const SizedBox(width: 10),
                   const Icon(Icons.chat_bubble_outline, size: 22),
                   const SizedBox(width: 8),
-                  Expanded(child: Text(_chatOpen ? 'Selam...' : 'Sohbet kapalı', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15))),
+                  Expanded(child: Text(_chatOpen ? 'Selam...' : tx('Sohbet kapalı'), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15))),
                 ]),
               ),
             ),
@@ -4479,8 +4511,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       child: ListTile(
                         dense: true,
                         leading: const Icon(Icons.error_outline),
-                        title: Text('Ses/görüntü bağlanamadı: $_lkError', style: const TextStyle(fontSize: 12)),
-                        trailing: TextButton(onPressed: _connectLivekit, child: const Text('Tekrar')),
+                        title: Text(tx('Ses/görüntü bağlanamadı: {lkError}', {'lkError': _lkError}), style: const TextStyle(fontSize: 12)),
+                        trailing: TextButton(onPressed: _connectLivekit, child: Text(tx('Tekrar'))),
                       ),
                     ),
                   ),

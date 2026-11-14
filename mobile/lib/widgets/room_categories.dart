@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/l10n.dart';
 import 'common.dart';
 
 /// "Yayın isim kartı": odanın türü. Oda kartında sol alttaki renkli etiket olarak görünür.
@@ -51,7 +52,7 @@ class CategoryChip extends StatelessWidget {
         border: selected ? Border.all(color: Colors.white, width: 1.6) : null,
       ),
       child: Text(
-        category.label,
+        tx(category.label),
         maxLines: 1,
         overflow: TextOverflow.fade,
         softWrap: false,

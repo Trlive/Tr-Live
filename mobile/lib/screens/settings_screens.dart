@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import '../l10n/l10n.dart';
 import 'package:flutter/services.dart';
 import '../services/api.dart';
 import '../services/beauty.dart';
 import '../services/effect_prefs.dart';
 import '../services/session.dart';
+import '../services/room_dock.dart';
 import '../version.dart';
 import '../widgets/app_theme.dart';
 import '../widgets/common.dart';
@@ -56,7 +58,7 @@ Widget _row(IconData icon, Color color, String title, {String? value, Color? val
   );
 }
 
-PreferredSizeWidget _bar(String title) => AppBar(backgroundColor: Pal.bg, title: Text(title));
+PreferredSizeWidget _bar(String title) => AppBar(backgroundColor: Pal.bg, title: Text(tx(title)));
 
 // Simge renkleri (görseldeki gibi canlı).
 const _cBlue = Color(0xFF2E9BFF);
@@ -75,9 +77,9 @@ const _cRed = Color(0xFFFF4D4F);
   if (p['hasPassword'] != false) score++;
   if ('${p['phone'] ?? ''}'.isNotEmpty) score++;
   if (p['kycStatus'] == 'approved') score++;
-  if (score >= 3) return ('Yüksek', _cGreen, score);
-  if (score == 2) return ('Orta', _cAmber, score);
-  return ('Düşük', _cRed, score);
+  if (score >= 3) return (tx('Yüksek'), _cGreen, score);
+  if (score == 2) return (tx('Orta'), _cAmber, score);
+  return (tx('Düşük'), _cRed, score);
 }
 
 // ---------- Ayarlar ----------
@@ -110,27 +112,40 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (mounted) setState(() {});
   }
 
+  /// Dil seçimi (Türkçe / English). İlk açılışta telefonun diline göre seçilir; değişince uygulama yeni dille açılır.
   Future<void> _language() async {
-    await showModalBottomSheet<void>(
+    final picked = await showModalBottomSheet<String>(
       context: context,
       backgroundColor: Pal.surface,
       showDragHandle: true,
       builder: (c) => SafeArea(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Padding(padding: EdgeInsets.only(bottom: 4), child: Text('Dil', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800))),
-          ListTile(
-            leading: const Text('🇹🇷', style: TextStyle(fontSize: 22)),
-            title: const Text('Türkçe', style: TextStyle(fontWeight: FontWeight.w700)),
-            trailing: const Icon(Icons.check_circle, color: _cGreen),
-            onTap: () => Navigator.pop(c),
-          ),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
-            child: Text('Uygulama şu an Türkçe kullanılabiliyor.', style: TextStyle(color: Pal.textDim, fontSize: 12)),
+          Padding(padding: const EdgeInsets.only(bottom: 4), child: Text(tx('Dil'), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800))),
+          for (final code in L10n.supported)
+            ListTile(
+              leading: Text(L10n.flags[code]!, style: const TextStyle(fontSize: 22)),
+              title: Text(L10n.names[code]!, style: const TextStyle(fontWeight: FontWeight.w700)),
+              trailing: L10n.lang.value == code ? const Icon(Icons.check_circle, color: Pal.cyan) : null,
+              onTap: () => Navigator.pop(c, code),
+            ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+            child: Text(tx('Dil seçmezsen telefonunun dili kullanılır; uygulamada yoksa bölgenin dili.'), style: const TextStyle(color: Pal.textDim, fontSize: 12)),
           ),
         ]),
       ),
     );
+    if (picked == null || picked == L10n.lang.value || !mounted) return;
+    // Dil değişince uygulama baştan çizilir: açık oda varsa kapanır.
+    if (RoomDock.isOpen) {
+      if (!await confirm(context, tx('Dil değişince uygulama yeniden açılır ve bulunduğun odadan çıkarsın. Devam edilsin mi?'), action: tx('Devam'))) return;
+      // Oda ekranı kapanınca "odadan ayrıl" isteğini kendisi gönderir; ardından uygulama yeni dille çizilir.
+      RoomDock.close();
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+    }
+    await L10n.set(picked);
+    // Sunucu da bilsin (bildirim metinleri vb. için); bağlantı yoksa önemli değil.
+    Api.patch('/api/me', {'language': picked}).catchError((_) => <String, dynamic>{});
   }
 
   Future<void> _share() async {
@@ -140,18 +155,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } catch (_) {/* bağlantı yoksa adres olmadan */}
     final id = (p['specialId'] ?? p['publicId'] ?? '').toString();
     final text = [
-      '🎙 TR Live\'da sesli sohbet odalarında buluşalım!',
-      if (id.isNotEmpty) 'Beni bul: ID $id',
+      tx('🎙 TR Live\'da sesli sohbet odalarında buluşalım!'),
+      if (id.isNotEmpty) tx('Beni bul: ID {id}', {'id': id}),
       if (url != null && url.isNotEmpty) url,
     ].join('\n');
     await Clipboard.setData(ClipboardData(text: text));
-    if (mounted) toast(context, 'Davet metni kopyalandı. İstediğin yere yapıştırıp paylaş.');
+    if (mounted) toast(context, tx('Davet metni kopyalandı. İstediğin yere yapıştırıp paylaş.'));
   }
 
   Future<void> _powerSave(bool on) async {
     await EffectPrefs.setPowerSave(on);
     await Beauty.update(Beauty.settings.value, save: false); // pürüzsüzleştirme hemen kapanır / açılır
-    if (mounted) toast(context, on ? 'Şarj tüketimi azaltıldı. Görüntülü odada kamera bir sonraki girişte 360p yayınlar.' : 'Şarj tüketimi modu kapatıldı.');
+    if (mounted) toast(context, on ? tx('Şarj tüketimi azaltıldı. Görüntülü odada kamera bir sonraki girişte 360p yayınlar.') : tx('Şarj tüketimi modu kapatıldı.'));
   }
 
   @override
@@ -162,18 +177,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
       appBar: _bar('Ayarlar'),
       body: ListView(padding: const EdgeInsets.only(bottom: 28), children: [
         _group([
-          _row(Icons.verified_user_outlined, _cBlue, 'Hesap & Güvenlik', value: sec.$1, valueColor: sec.$2, onTap: () => _push(AccountSecurityScreen(profile: p, onChangePassword: widget.onChangePassword, onDeleteAccount: widget.onDeleteAccount))),
-          _row(Icons.lock_outline_rounded, _cOrange, 'Gizlilik', onTap: () => _push(PrivacyScreen(profile: p))),
-          _row(Icons.notifications_none_rounded, _cPink, 'Bildirimler', onTap: widget.onNotifyPrefs),
-          _row(Icons.language_rounded, _cGreen, 'Dil', value: 'Türkçe', onTap: _language),
-          _row(Icons.share_outlined, _cSky, 'Paylaş', onTap: _share),
+          _row(Icons.verified_user_outlined, _cBlue, tx('Hesap & Güvenlik'), value: sec.$1, valueColor: sec.$2, onTap: () => _push(AccountSecurityScreen(profile: p, onChangePassword: widget.onChangePassword, onDeleteAccount: widget.onDeleteAccount))),
+          _row(Icons.lock_outline_rounded, _cOrange, tx('Gizlilik'), onTap: () => _push(PrivacyScreen(profile: p))),
+          _row(Icons.notifications_none_rounded, _cPink, tx('Bildirimler'), onTap: widget.onNotifyPrefs),
+          _row(Icons.language_rounded, _cGreen, tx('Dil'), value: L10n.names[L10n.lang.value], onTap: _language),
+          _row(Icons.share_outlined, _cSky, tx('Paylaş'), onTap: _share),
         ]),
         _group([
-          _row(Icons.help_outline_rounded, _cAmber, 'Yardım', onTap: () => _push(const CustomerServiceScreen())),
-          _row(Icons.mail_outline_rounded, _cSky, 'Geri bildirim', onTap: () => _push(const SupportChatScreen(category: 'Diğer'))),
-          _row(Icons.gavel_rounded, _cViolet, 'Sözleşmeler ve politikalar', onTap: () => _push(const LegalHubScreen())),
-          _row(Icons.sentiment_satisfied_alt_rounded, _cGreen, 'Hakkında', value: 'v$kAppVersion', onTap: () => _push(const AboutScreen())),
-          _row(Icons.swap_horiz_rounded, _cCyan, 'Takas', value: 'Cüzdan · Elmas', onTap: () => _push(const WalletScreen())),
+          _row(Icons.help_outline_rounded, _cAmber, tx('Yardım'), onTap: () => _push(const CustomerServiceScreen())),
+          _row(Icons.mail_outline_rounded, _cSky, tx('Geri bildirim'), onTap: () => _push(const SupportChatScreen(category: 'Diğer'))),
+          _row(Icons.gavel_rounded, _cViolet, tx('Sözleşmeler ve politikalar'), onTap: () => _push(const LegalHubScreen())),
+          _row(Icons.sentiment_satisfied_alt_rounded, _cGreen, tx('Hakkında'), value: 'v$kAppVersion', onTap: () => _push(const AboutScreen())),
+          _row(Icons.swap_horiz_rounded, _cCyan, tx('Takas'), value: tx('Cüzdan · Elmas'), onTap: () => _push(const WalletScreen())),
         ]),
         _group([
           // Şarj tüketimi: animasyonlar kısılır, kamera 360p, güzellik pürüzsüzleştirmesi kapalı.
@@ -186,11 +201,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 child: Row(children: [
                   const Icon(Icons.speed_rounded, color: _cViolet, size: 26),
                   const SizedBox(width: 16),
-                  const Expanded(
+                  Expanded(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text('Şarj Tüketimi', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Pal.text)),
+                      Text(tx('Şarj Tüketimi'), style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Pal.text)),
                       SizedBox(height: 3),
-                      Text('Isınmayı ve şarj tüketimini azaltır', style: TextStyle(fontSize: 12.5, color: Pal.textDim)),
+                      Text(tx('Isınmayı ve şarj tüketimini azaltır'), style: TextStyle(fontSize: 12.5, color: Pal.textDim)),
                     ]),
                   ),
                   Switch(value: on, onChanged: _powerSave),
@@ -206,12 +221,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
           decoration: BoxDecoration(color: Pal.surface, borderRadius: BorderRadius.circular(16), border: Border.all(color: Pal.outline.withValues(alpha: 0.55))),
           child: InkWell(
             onTap: widget.onLogout,
-            child: const Padding(
+            child: Padding(
               padding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
               child: Row(children: [
                 Icon(Icons.logout_rounded, color: _cRed, size: 26),
                 SizedBox(width: 16),
-                Text('Oturumu kapat', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: _cRed)),
+                Text(tx('Oturumu kapat'), style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: _cRed)),
               ]),
             ),
           ),
@@ -240,7 +255,7 @@ class _AccountSecurityScreenState extends State<AccountSecurityScreen> {
     final r = await guard(context, () => Api.post('/api/me/kyc/request'));
     if (r == null || !mounted) return;
     setState(() => p['kycStatus'] = 'pending');
-    toast(context, 'Kimlik doğrulama başvurun alındı.');
+    toast(context, tx('Kimlik doğrulama başvurun alındı.'));
   }
 
   Widget _check(bool ok, String title, String detail, {String? action, VoidCallback? onAction}) => Padding(
@@ -250,7 +265,7 @@ class _AccountSecurityScreenState extends State<AccountSecurityScreen> {
           const SizedBox(width: 12),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(title, style: const TextStyle(fontWeight: FontWeight.w700, color: Pal.text)),
+              Text(tx(title), style: const TextStyle(fontWeight: FontWeight.w700, color: Pal.text)),
               Text(detail, style: const TextStyle(fontSize: 12, color: Pal.textDim)),
             ]),
           ),
@@ -285,27 +300,27 @@ class _AccountSecurityScreenState extends State<AccountSecurityScreen> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    const Text('Hesap güvenliği', style: TextStyle(color: Pal.textDim, fontSize: 12)),
+                    Text(tx('Hesap güvenliği'), style: TextStyle(color: Pal.textDim, fontSize: 12)),
                     Text(sec.$1, style: TextStyle(color: sec.$2, fontSize: 22, fontWeight: FontWeight.w900)),
                   ]),
                 ),
                 Text('${sec.$3}/3', style: const TextStyle(color: Pal.textDim, fontWeight: FontWeight.w700)),
               ]),
             ),
-            _check(hasPassword, 'Şifre', hasPassword ? 'Belirlendi' : 'Belirlenmedi (Google/Facebook hesabı)', action: hasPassword ? null : 'Belirle', onAction: widget.onChangePassword),
-            _check(phone.isNotEmpty, 'Telefon numarası', phone.isNotEmpty ? masked : 'Bağlı değil'),
-            _check(kyc == 'approved', 'Kimlik doğrulama', kycText[kyc] ?? kyc, action: kyc == 'none' || kyc == 'rejected' ? 'Başvur' : null, onAction: _kyc),
+            _check(hasPassword, 'Şifre', hasPassword ? tx('Belirlendi') : tx('Belirlenmedi (Google/Facebook hesabı)'), action: hasPassword ? null : tx('Belirle'), onAction: widget.onChangePassword),
+            _check(phone.isNotEmpty, 'Telefon numarası', phone.isNotEmpty ? masked : tx('Bağlı değil')),
+            _check(kyc == 'approved', 'Kimlik doğrulama', tx(kycText[kyc] ?? kyc), action: kyc == 'none' || kyc == 'rejected' ? tx('Başvur') : null, onAction: _kyc),
             const SizedBox(height: 6),
           ]),
         ),
         _group([
-          _row(Icons.edit_outlined, _cBlue, 'Profili düzenle', onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const EditProfileScreen()))),
-          _row(Icons.lock_reset_rounded, _cOrange, hasPassword ? 'Şifre değiştir' : 'Şifre belirle', onTap: widget.onChangePassword),
-          _row(Icons.devices_rounded, _cSky, 'Oturumlarım', value: 'Cihazlar', onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SessionsScreen()))),
+          _row(Icons.edit_outlined, _cBlue, tx('Profili düzenle'), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const EditProfileScreen()))),
+          _row(Icons.lock_reset_rounded, _cOrange, hasPassword ? tx('Şifre değiştir') : tx('Şifre belirle'), onTap: widget.onChangePassword),
+          _row(Icons.devices_rounded, _cSky, tx('Oturumlarım'), value: tx('Cihazlar'), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SessionsScreen()))),
         ]),
         _group([
           // Önce neler silinir / saklanır bilgisi, sonra onay.
-          _row(Icons.delete_forever_rounded, _cRed, 'Hesabı sil',
+          _row(Icons.delete_forever_rounded, _cRed, tx('Hesabı sil'),
               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AccountDeletionInfoScreen(onDelete: widget.onDeleteAccount)))),
         ]),
       ]),
@@ -366,7 +381,7 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
   }
 
   Future<void> _locked(String feature) async {
-    final ok = await confirm(context, 'Bu ayar ${_tier(feature)} ve üzeri üyelere özel bir ayrıcalıktır.', action: 'WIP\'e göz at');
+    final ok = await confirm(context, tx('Bu ayar {tier} ve üzeri üyelere özel bir ayrıcalıktır.', {'tier': _tier(feature)}), action: tx('WIP\'e göz at'));
     if (ok && mounted) await Navigator.push(context, MaterialPageRoute(builder: (_) => const WipScreen()));
   }
 
@@ -391,7 +406,7 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
     }
     setState(() {});
     final msg = on ? doneOn : doneOff;
-    if (msg != null) toast(context, msg);
+    if (msg != null) toast(context, tx(msg));
   }
 
   Future<void> _who() async {
@@ -402,10 +417,10 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
       showDragHandle: true,
       builder: (c) => SafeArea(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Padding(padding: EdgeInsets.only(bottom: 4), child: Text('Bana kimler mesaj gönderebilir?', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800))),
+          Padding(padding: EdgeInsets.only(bottom: 4), child: Text(tx('Bana kimler mesaj gönderebilir?'), style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800))),
           for (final e in _whoText.entries)
             ListTile(
-              title: Text(e.value, style: const TextStyle(fontWeight: FontWeight.w700)),
+              title: Text(tx(e.value), style: const TextStyle(fontWeight: FontWeight.w700)),
               trailing: e.key == cur ? const Icon(Icons.check_circle, color: _cGreen) : null,
               onTap: () => Navigator.pop(c, e.key),
             ),
@@ -460,7 +475,7 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
           child: Text.rich(
             TextSpan(children: [
               TextSpan(text: '$desc '),
-              TextSpan(text: '(${_tier(feature)} ayrıcalığı)', style: const TextStyle(color: Pal.cyan, fontWeight: FontWeight.w700)),
+              TextSpan(text: tx('({tier} ayrıcalığı)', {'tier': _tier(feature)}), style: const TextStyle(color: Pal.cyan, fontWeight: FontWeight.w700)),
             ]),
             style: const TextStyle(fontSize: 12.5, color: Pal.textDim, height: 1.35),
           ),
@@ -477,44 +492,44 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
       appBar: _bar('Gizlilik'),
       body: ListView(padding: const EdgeInsets.only(bottom: 28), children: [
         _group([
-          _row(Icons.forum_outlined, _cSky, 'İletişim izni', value: _whoText[who] ?? 'Herkes', onTap: _who),
-          _row(Icons.block_rounded, _cRed, 'Engellenen kullanıcılar', onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BlockedUsersScreen()))),
+          _row(Icons.forum_outlined, _cSky, tx('İletişim izni'), value: tx(_whoText[who] ?? 'Herkes'), onTap: _who),
+          _row(Icons.block_rounded, _cRed, tx('Engellenen kullanıcılar'), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BlockedUsersScreen()))),
         ]),
-        const Padding(
+        Padding(
           padding: EdgeInsets.fromLTRB(18, 6, 18, 0),
-          child: Text('İletişim izni: sana kimlerin özel mesaj gönderebileceği.', style: TextStyle(fontSize: 12, color: Pal.textDim)),
+          child: Text(tx('İletişim izni: sana kimlerin özel mesaj gönderebileceği.'), style: TextStyle(fontSize: 12, color: Pal.textDim)),
         ),
         _toggle(
           key: 'country',
           feature: 'hideCountry',
-          title: 'Ülke/Bölgeyi gizle',
-          desc: 'Etkinleştirildiğinde profilinde ülken ve şehrin başkalarına "Bilinmiyor" olarak görünür.',
+          title: tx('Ülke/Bölgeyi gizle'),
+          desc: tx('Etkinleştirildiğinde profilinde ülken ve şehrin başkalarına "Bilinmiyor" olarak görünür.'),
           value: p['hideCountry'] == true,
           onChanged: (v) => _patch('country', {'hideCountry': v}, on: v),
         ),
         _toggle(
           key: 'online',
           feature: 'hideOnline',
-          title: 'Çevrimiçi saati gizle',
-          desc: 'Etkinleştirildiğinde kimse çevrimiçi olduğunu ve son görülme zamanını göremez; yeşil nokta görünmez.',
+          title: tx('Çevrimiçi saati gizle'),
+          desc: tx('Etkinleştirildiğinde kimse çevrimiçi olduğunu ve son görülme zamanını göremez; yeşil nokta görünmez.'),
           value: p['showPresence'] == false,
           onChanged: (v) => _patch('online', {'showPresence': !v}, on: v),
         ),
         _toggle(
           key: 'visits',
           feature: 'invisibleVisit',
-          title: 'Görüntüleme geçmişini gizle',
-          desc: 'Etkinleştirildiğinde başkalarının profiline girdiğinde ziyaretçi listelerinde görünmezsin.',
+          title: tx('Görüntüleme geçmişini gizle'),
+          desc: tx('Etkinleştirildiğinde başkalarının profiline girdiğinde ziyaretçi listelerinde görünmezsin.'),
           value: p['hideVisits'] != false,
           onChanged: (v) => _patch('visits', {'hideVisits': v}, on: v),
         ),
         _toggle(
           key: 'hidden',
           feature: 'hiddenUser',
-          title: 'Gizli kullanıcı',
-          desc: 'Etkinleştirildiğinde odalarda, sohbette ve listelerde "Gizli Kullanıcı" olarak görünürsün: sana her açışta yeni bir '
-              'gizli ID verilir, sana dokunan profilini göremez, aramada çıkmazsın. Odadayken açılıp kapatılamaz; önce odadan çık.'
-              '${p['isHidden'] == true && '${p['hiddenId'] ?? ''}'.isNotEmpty ? '\nŞu anki gizli ID\'n: ${p['hiddenId']}' : ''}',
+          title: tx('Gizli kullanıcı'),
+          desc: tx('Etkinleştirildiğinde odalarda, sohbette ve listelerde "Gizli Kullanıcı" olarak görünürsün: sana her açışta yeni bir '
+                  'gizli ID verilir, sana dokunan profilini göremez, aramada çıkmazsın. Odadayken açılıp kapatılamaz; önce odadan çık.') +
+              (p['isHidden'] == true && '${p['hiddenId'] ?? ''}'.isNotEmpty ? '\n${tx('Şu anki gizli ID\'n: {id}', {'id': p['hiddenId']})}' : ''),
           value: p['isHidden'] == true,
           onChanged: (v) => _patch('hidden', {'isHidden': v},
               on: v, doneOn: 'Gizli kullanıcı açık: odalarda ve listelerde "Gizli Kullanıcı" ve gizli ID\'nle görünürsün.', doneOff: 'Gizli kullanıcı kapandı.'),
@@ -522,14 +537,14 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
         _toggle(
           key: 'ghost',
           feature: 'ghostMode',
-          title: 'Hayalet mod 👻',
-          desc: 'Etkinleştirildiğinde odaya girişin duyurulmaz; dinleyici listesinde, kişi sayısında ve çevrimiçi listelerde görünmezsin (mikrofona çıkınca görünürsün).',
+          title: tx('Hayalet mod 👻'),
+          desc: tx('Etkinleştirildiğinde odaya girişin duyurulmaz; dinleyici listesinde, kişi sayısında ve çevrimiçi listelerde görünmezsin (mikrofona çıkınca görünürsün).'),
           value: p['ghostMode'] == true,
           onChanged: (v) => _patch('ghost', {'ghostMode': v}, on: v, doneOn: '👻 Hayalet mod açık.', doneOff: 'Hayalet mod kapandı.'),
         ),
-        const Padding(
+        Padding(
           padding: EdgeInsets.fromLTRB(18, 14, 18, 0),
-          child: Text('WIP üyeliğin bitince bu ayrıcalıklarla açtığın ayarlar kendiliğinden kapanır.', style: TextStyle(fontSize: 12, color: Pal.textDim)),
+          child: Text(tx('WIP üyeliğin bitince bu ayrıcalıklarla açtığın ayarlar kendiliğinden kapanır.'), style: TextStyle(fontSize: 12, color: Pal.textDim)),
         ),
       ]),
     );
@@ -570,19 +585,19 @@ class AboutScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          const Center(child: Text('TR Live', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Pal.text))),
+          Center(child: Text(tx('TR Live'), style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Pal.text))),
           const SizedBox(height: 4),
-          const Center(child: Text('Sesli ve görüntülü sohbet odaları', style: TextStyle(color: Pal.textDim))),
+          Center(child: Text(tx('Sesli ve görüntülü sohbet odaları'), style: TextStyle(color: Pal.textDim))),
           _group([
-            _row(Icons.phone_android_rounded, _cGreen, 'Uygulama sürümü', value: kAppVersion, chevron: false),
-            if (c['serverVersion'] != null) _row(Icons.dns_outlined, _cSky, 'Sunucu sürümü', value: '${c['serverVersion']}', chevron: false),
+            _row(Icons.phone_android_rounded, _cGreen, tx('Uygulama sürümü'), value: kAppVersion, chevron: false),
+            if (c['serverVersion'] != null) _row(Icons.dns_outlined, _cSky, tx('Sunucu sürümü'), value: '${c['serverVersion']}', chevron: false),
             if (c['latestAppVersion'] != null && '${c['latestAppVersion']}'.isNotEmpty)
-              _row(Icons.system_update_rounded, _cAmber, 'Son sürüm', value: '${c['latestAppVersion']}', chevron: false),
+              _row(Icons.system_update_rounded, _cAmber, tx('Son sürüm'), value: '${c['latestAppVersion']}', chevron: false),
           ]),
           _group([
-            _row(Icons.bug_report_outlined, _cOrange, 'Hata kaydı', onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ErrorLogScreen()))),
+            _row(Icons.bug_report_outlined, _cOrange, tx('Hata kaydı'), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ErrorLogScreen()))),
             // Kullanılan açık kaynak yazılım ve görsellerin lisansları (ör. hareketli emojiler, CC BY 4.0).
-            _row(Icons.description_outlined, _cSky, 'Lisanslar', onTap: () => showLicensePage(context: context, applicationName: 'TR Live', applicationVersion: kAppVersion)),
+            _row(Icons.description_outlined, _cSky, tx('Lisanslar'), onTap: () => showLicensePage(context: context, applicationName: 'TR Live', applicationVersion: kAppVersion)),
           ]),
         ]),
       ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/l10n.dart';
 import '../services/api.dart';
 import 'app_theme.dart';
 import 'room_categories.dart';
@@ -57,11 +58,11 @@ class RoomCard extends StatelessWidget {
     ];
     // Yayın isim kartı (tür) varsa kendi renkleriyle; yoksa ilk etiket / oda türü.
     final cat = roomCategoryOf(tags.isNotEmpty ? tags.first : null);
-    final tag = cat?.label ?? (tags.isNotEmpty ? tags.first : (isVideo ? (room['layout'] == 'live' ? 'Canlı' : 'Görüntülü') : 'Sohbet'));
+    final tag = cat?.label ?? (tags.isNotEmpty ? tags.first : (isVideo ? (room['layout'] == 'live' ? tx('Canlı') : tx('Görüntülü')) : tx('Sohbet')));
     final tagColors = cat?.colors ?? (isVideo ? const [Color(0xFFFF9F0A), Color(0xFFFF9F0A)] : const [Color(0xFF16C25B), Color(0xFF16C25B)]);
     return Semantics(
       button: true,
-      label: '$name, $count kişi',
+      label: tx('{name}, {count} kişi', {'name': name, 'count': count}),
       child: InkWell(
         borderRadius: BorderRadius.circular(10),
         onTap: onTap,
@@ -147,7 +148,7 @@ class RoomCard extends StatelessWidget {
                                   Flexible(
                                     child: Padding(
                                       padding: EdgeInsets.only(left: tagH * 0.1),
-                                      child: Text('Yükseliyor',
+                                      child: Text(tx('Yükseliyor'),
                                           maxLines: 1,
                                           overflow: TextOverflow.clip,
                                           style: TextStyle(color: Colors.white, fontSize: tagH * 0.6, height: 1, fontWeight: FontWeight.w800)),

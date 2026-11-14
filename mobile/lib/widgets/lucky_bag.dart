@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../l10n/l10n.dart';
 import 'daily_checkin.dart';
 import 'package:flutter/material.dart';
 import '../services/api.dart';
@@ -50,19 +51,15 @@ void _bagRules(BuildContext context) {
           color: const Color(0xFFE8258A),
         ),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text('Şanslı çanta kuralları', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 19)),
+          Text(tx('Şanslı çanta kuralları'), style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 19)),
           const SizedBox(height: 14),
-          const Text(
-            '1- Bir şanslı çanta gönderdiğinizde, seçtiğiniz miktarda Coin bakiyenizden harcanır. Şanslı çanta atıldığında '
-            'oda içerisindeki kullanıcılar şanslı çantadan Coin alır.\n\n'
-            '2- Şanslı çantayı açtığınızda rastgele miktarda Coin alırsınız.\n\n'
-            '3- Süresi dolunca açılmamış Coinler gönderen kullanıcıya iade edilir.\n\n'
-            '4- Şanslı çanta göndermek EXP değerinize etki etmez.\n\n'
-            '5- Herhangi bir reklam içeriği yasaktır, aksi taktirde sonsuza dek yasaklanırsınız!',
+          Text(
+            tx('1- Bir şanslı çanta gönderdiğinizde, seçtiğiniz miktarda Coin bakiyenizden harcanır. Şanslı çanta atıldığında '
+            'oda içerisindeki kullanıcılar şanslı çantadan Coin alır.\n\n2- Şanslı çantayı açtığınızda rastgele miktarda Coin alırsınız.\n\n3- Süresi dolunca açılmamış Coinler gönderen kullanıcıya iade edilir.\n\n4- Şanslı çanta göndermek EXP değerinize etki etmez.\n\n5- Herhangi bir reklam içeriği yasaktır, aksi taktirde sonsuza dek yasaklanırsınız!'),
             style: TextStyle(color: Colors.white, fontSize: 13.5, height: 1.4),
           ),
           const SizedBox(height: 18),
-          _yellowButton('Tamam', () => Navigator.pop(c), height: 40),
+          _yellowButton(tx('Tamam'), () => Navigator.pop(c), height: 40),
         ]),
       ),
     ),
@@ -125,7 +122,7 @@ Future<void> showBagSend(BuildContext context, String roomId) async {
                     Text(fmtNumber(x.$3), style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15, color: Colors.white)),
                   ]),
                   const SizedBox(height: 2),
-                  Text(x.$2 ? '$slots kişi' : '${x.$4} kişi', style: const TextStyle(fontSize: 11.5, color: Color(0xFFFFF3B0), fontWeight: FontWeight.w600)),
+                  Text(x.$2 ? tx('{slots} kişi', {'slots': slots}) : tx('{v1} kişi', {'v1': x.$4}), style: const TextStyle(fontSize: 11.5, color: Color(0xFFFFF3B0), fontWeight: FontWeight.w600)),
                 ]),
               ),
             ]),
@@ -147,14 +144,14 @@ Future<void> showBagSend(BuildContext context, String roomId) async {
                 SizedBox(
                   height: 44,
                   child: Stack(alignment: Alignment.center, children: [
-                    Text(isSuper ? 'Süper Şanslı Çanta' : 'Şanslı Çanta', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Colors.white)),
+                    Text(isSuper ? tx('Süper Şanslı Çanta') : tx('Şanslı Çanta'), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Colors.white)),
                     Positioned(
                       right: 0,
-                      child: IconButton(tooltip: 'Kurallar', onPressed: () => _bagRules(c), icon: const Icon(Icons.help_outline, color: Colors.white)),
+                      child: IconButton(tooltip: tx('Kurallar'), onPressed: () => _bagRules(c), icon: const Icon(Icons.help_outline, color: Colors.white)),
                     ),
                   ]),
                 ),
-                Row(children: [tab('Şanslı Çanta', false), const SizedBox(width: 10), tab('Süper Şanslı Çanta', true)]),
+                Row(children: [tab(tx('Şanslı Çanta'), false), const SizedBox(width: 10), tab(tx('Süper Şanslı Çanta'), true)]),
                 const SizedBox(height: 18),
                 Row(children: [
                   for (var i = 0; i < list.length; i++) ...[
@@ -164,7 +161,7 @@ Future<void> showBagSend(BuildContext context, String roomId) async {
                 ]),
                 if (isSuper) ...[
                   const SizedBox(height: 16),
-                  const Align(alignment: Alignment.centerLeft, child: Text('Kaç kişi açabilsin?', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700))),
+                  Align(alignment: Alignment.centerLeft, child: Text(tx('Kaç kişi açabilsin?'), style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700))),
                   const SizedBox(height: 6),
                   Row(children: [
                     for (final n in const [50, 100, 150, 200])
@@ -191,7 +188,7 @@ Future<void> showBagSend(BuildContext context, String roomId) async {
                     maxLength: 100,
                     style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
-                      hintText: 'Çanta notu (açmak isteyenler sohbete yazar)',
+                      hintText: tx('Çanta notu (açmak isteyenler sohbete yazar)'),
                       hintStyle: const TextStyle(color: Colors.white70, fontSize: 13),
                       filled: true,
                       fillColor: Colors.white24,
@@ -200,7 +197,7 @@ Future<void> showBagSend(BuildContext context, String roomId) async {
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
                     ),
                   ),
-                  const Text('Süper çanta tüm odalarda duyurulur; geri sayım bitince açılır.', style: TextStyle(color: Color(0xFFFFF3B0), fontSize: 12)),
+                  Text(tx('Süper çanta tüm odalarda duyurulur; geri sayım bitince açılır.'), style: TextStyle(color: Color(0xFFFFF3B0), fontSize: 12)),
                 ],
                 const SizedBox(height: 18),
                 _yellowButton(
@@ -218,7 +215,7 @@ Future<void> showBagSend(BuildContext context, String roomId) async {
                   child: sending
                       ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: Color(0xFFE5257E)))
                       : Row(mainAxisSize: MainAxisSize.min, children: [
-                          const Text('Gönder  ', style: TextStyle(color: Color(0xFFE5257E), fontWeight: FontWeight.w900, fontSize: 17)),
+                          Text(tx('Gönder  '), style: TextStyle(color: Color(0xFFE5257E), fontWeight: FontWeight.w900, fontSize: 17)),
                           const Fig('bag_coin', width: 18, height: 18),
                           const SizedBox(width: 3),
                           Text(fmtNumber(t.$3), style: const TextStyle(color: Color(0xFFE5257E), fontWeight: FontWeight.w900, fontSize: 17)),
@@ -353,7 +350,7 @@ class _ClaimDialogState extends State<_ClaimDialog> {
         if (l.isNotEmpty) _claims = _sorted(l);
       } else {
         // Figma: "Üzgünüm, bu şanslı çanta zaten açılmış..." (süresi dolan / tükenen çanta).
-        _failed = fail ?? 'Üzgünüm, bu şanslı çanta zaten açılmış...';
+        _failed = fail ?? tx('Üzgünüm, bu şanslı çanta zaten açılmış...');
       }
     });
     _t?.cancel();
@@ -405,7 +402,7 @@ class _ClaimDialogState extends State<_ClaimDialog> {
     );
   }
 
-  Widget _okButton() => _yellowButton('Tamam', () => Navigator.of(context).maybePop(), height: 44);
+  Widget _okButton() => _yellowButton(tx('Tamam'), () => Navigator.of(context).maybePop(), height: 44);
 
   @override
   Widget build(BuildContext context) {
@@ -436,9 +433,9 @@ class _ClaimDialogState extends State<_ClaimDialog> {
         ),
         Text('x${fmtNumber(_won)}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 27)),
         const SizedBox(height: 2),
-        const Text('Tebrikler!', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 21)),
+        Text(tx('Tebrikler!'), style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 21)),
         const SizedBox(height: 6),
-        Text('$name takip et ve bir sonrakini kaçırma!', textAlign: TextAlign.center, maxLines: 2, style: const TextStyle(color: Color(0xFFFFF3B0), fontWeight: FontWeight.w600, fontSize: 14.5)),
+        Text(tx('{name} takip et ve bir sonrakini kaçırma!', {'name': name}), textAlign: TextAlign.center, maxLines: 2, style: const TextStyle(color: Color(0xFFFFF3B0), fontWeight: FontWeight.w600, fontSize: 14.5)),
         // Alanların geçiş şeridi artık çantanın içinde değil, odada uçan yazı gibi kayar (room_screen).
         const SizedBox(height: 12),
         _okButton(),
@@ -448,7 +445,7 @@ class _ClaimDialogState extends State<_ClaimDialog> {
         const Fig('bag_sad', width: 84, height: 84),
         const SizedBox(height: 12),
         Text(
-          _failed == null || _failed!.contains('tükendi') || _failed!.contains('doldu') ? 'Üzgünüm, bu şanslı çanta zaten açılmış...' : _failed!,
+          _failed == null || _failed!.contains('tükendi') || _failed!.contains('doldu') ? tx('Üzgünüm, bu şanslı çanta zaten açılmış...') : _failed!,
           textAlign: TextAlign.center,
           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 16),
         ),
@@ -474,14 +471,14 @@ class _ClaimDialogState extends State<_ClaimDialog> {
             LevelPill(level: sender?['giftLevel'] ?? 1, send: false, height: 16),
           ]),
         const SizedBox(height: 4),
-        Text(_super ? 'Süper şanslı çanta gönderdi' : 'Şanslı çanta gönderdi', style: const TextStyle(color: Color(0xFFFFF3B0), fontSize: 14.5, fontWeight: FontWeight.w700)),
+        Text(_super ? tx('Süper şanslı çanta gönderdi') : tx('Şanslı çanta gönderdi'), style: const TextStyle(color: Color(0xFFFFF3B0), fontSize: 14.5, fontWeight: FontWeight.w700)),
         const SizedBox(height: 8),
         Row(mainAxisSize: MainAxisSize.min, children: [
           const Fig('bag_coin', width: 27, height: 27),
           const SizedBox(width: 6),
           Text(fmtNumber(_b['totalCoins']), style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: Colors.white)),
         ]),
-        Text('${_b['claimed']}/${_b['slots']} kişi açtı', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+        Text(tx('{claimed}/{slots} kişi açtı', {'claimed': _b['claimed'], 'slots': _b['slots']}), style: const TextStyle(color: Colors.white70, fontSize: 13)),
         if (showNote) ...[
           const SizedBox(height: 8),
           // Not bir kez gönderilir; gönderilince gri olur ve yeniden dokunulamaz.
@@ -500,7 +497,7 @@ class _ClaimDialogState extends State<_ClaimDialog> {
                 textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
               ),
               onPressed: _busy || !needNote ? null : _sendNote,
-              child: Text(needNote ? 'Notu sohbete gönder' : 'Not gönderildi ✓'),
+              child: Text(needNote ? tx('Notu sohbete gönder') : tx('Not gönderildi ✓')),
             ),
           ),
         ],
@@ -521,7 +518,7 @@ class _ClaimDialogState extends State<_ClaimDialog> {
               ),
               child: _busy
                   ? const SizedBox(width: 26, height: 26, child: CircularProgressIndicator(strokeWidth: 3, color: Color(0xFFE5257E)))
-                  : Text(counting ? _mmss(_toOpen) : 'AÇ', style: TextStyle(color: const Color(0xFFE5257E), fontWeight: FontWeight.w900, fontSize: counting ? 18 : 25)),
+                  : Text(counting ? _mmss(_toOpen) : tx('AÇ'), style: TextStyle(color: const Color(0xFFE5257E), fontWeight: FontWeight.w900, fontSize: counting ? 18 : 25)),
             ),
           ),
         ),

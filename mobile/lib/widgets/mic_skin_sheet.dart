@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import '../l10n/l10n.dart';
 import '../services/api.dart';
 import '../services/session.dart';
 import 'app_theme.dart';
 import 'common.dart';
+import 'seat_picker.dart';
 
 /// Doğum günü mikrofon modu penceresi (oda sahibi): fiyat / süre, Coin ile satın alma, kimin doğum günü olduğunu yazma,
 /// uygulama ve kapatma. Hak yönetimce de hediye edilebilir; süre bitince oda normal moda döner.
@@ -76,21 +78,29 @@ class _BirthdaySheetState extends State<_BirthdaySheet> {
     return '${two(d.day)}.${two(d.month)}.${d.year} ${two(d.hour)}:${two(d.minute)}';
   }
 
-  Future<void> _buy() async {
+  /// Coin ile satın alır (ya da süre ekler). Başarılıysa true.
+  Future<bool> _buy() async {
     final s = _skin;
-    if (s == null) return;
+    if (s == null) return false;
     final price = fmtNumber(s['priceCoins']);
-    if (!await confirm(context, '$price Coin karşılığında ${s['durationDays']} günlük Doğum Günü modu satın alınsın mı?', action: 'Satın al')) return;
-    if (!mounted) return;
+    if (!await confirm(context, tx('{price} Coin karşılığında {durationDays} günlük Doğum Günü modu satın alınsın mı?', {'price': price, 'durationDays': s['durationDays']}), action: tx('Satın al'))) return false;
+    if (!mounted) return false;
     setState(() => _busy = true);
     final r = await guard(context, () => Api.postOnce('/api/mic-skins/birthday/buy', {}));
-    if (!mounted) return;
+    if (!mounted) return false;
     setState(() => _busy = false);
-    if (r != null) {
-      Session.setCoins((r['balance'] ?? Session.coins).toString());
-      toast(context, 'Doğum Günü modu alındı.');
-      await _load();
-    }
+    if (r == null) return false;
+    Session.setCoins((r['balance'] ?? Session.coins).toString());
+    toast(context, tx('Doğum Günü modu alındı.'));
+    await _load();
+    return true;
+  }
+
+  /// Hakkı yoksa önce satın alır, ardından odaya uygular (tek dokunuş).
+  Future<void> _buyAndApply() async {
+    if (!_owned && !await _buy()) return;
+    if (!mounted || !_owned) return;
+    await _apply();
   }
 
   Future<void> _apply() async {
@@ -115,53 +125,113 @@ class _BirthdaySheetState extends State<_BirthdaySheet> {
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: Container(
-        decoration: const BoxDecoration(color: Color(0xFF1C1C1F), borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+        decoration: const BoxDecoration(
+          color: Pal.surface,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+          border: Border(top: BorderSide(color: Pal.outline)),
+        ),
         child: SafeArea(
           top: false,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-            child: _loading
-                ? const SizedBox(height: 120, child: Center(child: CircularProgressIndicator()))
-                : (s == null
-                    ? Padding(padding: const EdgeInsets.all(16), child: Text(_error ?? 'Doğum Günü modu şu an mevcut değil.', style: const TextStyle(color: Colors.white70)))
-                    : Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          child: _loading
+              ? const SizedBox(height: 160, child: Center(child: CircularProgressIndicator(color: Pal.cyan)))
+              : (s == null
+                  ? Padding(padding: const EdgeInsets.all(24), child: Text(_error ?? tx('Doğum Günü modu şu an mevcut değil.'), style: const TextStyle(color: Pal.textDim)))
+                  : SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+                      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                         Row(children: [
                           const Text('🎂', style: TextStyle(fontSize: 26)),
                           const SizedBox(width: 8),
-                          const Expanded(child: Text('Doğum Günü Mikrofon Modu', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.white))),
-                          InkResponse(onTap: () => Navigator.pop(context), child: const Icon(Icons.close, color: Colors.white70)),
+                          Expanded(child: Text(tx('Doğum Günü Mikrofon Modu'), style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900, color: Pal.cyan))),
+                          InkResponse(onTap: () => Navigator.pop(context), child: const Icon(Icons.close, color: Pal.textDim)),
                         ]),
-                        const SizedBox(height: 8),
-                        Text('${s['seatCount']} mikrofon, pasta ve kutlama şeridi. Ortadaki taçlı koltuğa mikrofona isteyen oturabilir; şeritte yazdığın isim görünür.',
-                            style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.3)),
+                        const SizedBox(height: 12),
+                        // Önizleme: odadaki yerleşimin küçük hâli (şerit, pasta, 25 mikrofon).
+                        Center(
+                          child: Container(
+                            width: 150,
+                            height: 190,
+                            decoration: BoxDecoration(borderRadius: BorderRadius.circular(14), border: Border.all(color: widget.active ? Pal.cyan : Pal.outline, width: widget.active ? 2.5 : 1)),
+                            padding: const EdgeInsets.all(1),
+                            child: ClipRRect(borderRadius: BorderRadius.circular(12), child: const SeatModeThumb(kBirthdaySeats, skin: kBirthdaySkin)),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(tx('{seatCount} mikrofon, pasta ve kutlama şeridi. Ortadaki taçlı koltuğa mikrofona isteyen oturabilir; şeritte yazdığın isim görünür.', {'seatCount': s['seatCount']}),
+                            style: const TextStyle(color: Pal.textDim, fontSize: 13, height: 1.35)),
                         const SizedBox(height: 12),
                         if (_owned)
                           Container(
                             padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(color: Pal.green.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(10)),
+                            decoration: BoxDecoration(color: Pal.green.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(10), border: Border.all(color: Pal.green.withValues(alpha: 0.4))),
                             child: Row(children: [
                               const Icon(Icons.check_circle, color: Pal.green, size: 18),
                               const SizedBox(width: 8),
-                              Expanded(child: Text('Hakkın var · bitiş: ${_fmtDate(_until!)}', style: const TextStyle(color: Colors.white, fontSize: 13))),
+                              Expanded(child: Text(tx('Hakkın var · bitiş: {v1}', {'v1': _fmtDate(_until!)}), style: const TextStyle(color: Pal.text, fontSize: 13))),
                             ]),
                           )
                         else
-                          Text('${fmtNumber(s['priceCoins'])} Coin · ${s['durationDays']} gün', style: const TextStyle(color: Pal.gold, fontWeight: FontWeight.w800, fontSize: 16)),
-                        const SizedBox(height: 12),
-                        if (_owned) ...[
-                          TextField(
-                            controller: _name,
-                            maxLength: 40,
-                            style: const TextStyle(color: Colors.white),
-                            decoration: const InputDecoration(labelText: 'Kimin doğum günü?', hintText: 'Örn. Merdo21', border: OutlineInputBorder()),
+                          Row(children: [
+                            const Text('🪙', style: TextStyle(fontSize: 18)),
+                            const SizedBox(width: 6),
+                            Text(tx('{priceCoins} Coin · {durationDays} gün', {'priceCoins': fmtNumber(s['priceCoins']), 'durationDays': s['durationDays']}), style: const TextStyle(color: Pal.gold, fontWeight: FontWeight.w900, fontSize: 16)),
+                          ]),
+                        const SizedBox(height: 14),
+                        TextField(
+                          controller: _name,
+                          maxLength: 40,
+                          style: const TextStyle(color: Pal.text),
+                          cursorColor: Pal.cyan,
+                          decoration: InputDecoration(
+                            labelText: tx('Kimin doğum günü?'),
+                            hintText: tx('Örn. Merdo21'),
+                            prefixIcon: const Icon(Icons.celebration, color: Pal.amber),
+                            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Pal.outline)),
+                            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Pal.cyan, width: 1.6)),
                           ),
-                          FilledButton.icon(onPressed: _busy ? null : _apply, icon: const Icon(Icons.cake), label: Text(widget.active ? 'Güncelle' : 'Uygula')),
-                          if (widget.active) TextButton(onPressed: _busy ? null : _off, child: const Text('Normal moda dön')),
-                          TextButton(onPressed: _busy ? null : _buy, child: Text('Süre ekle (${fmtNumber(s['priceCoins'])} Coin)')),
-                        ] else
-                          FilledButton.icon(onPressed: _busy ? null : _buy, icon: const Icon(Icons.shopping_bag), label: Text('Satın al · ${fmtNumber(s['priceCoins'])} Coin')),
-                      ])),
-          ),
+                        ),
+                        const SizedBox(height: 4),
+                        SizedBox(
+                          height: 48,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(colors: _busy ? const [Pal.outline, Pal.outline] : const [Pal.amber, Pal.cyan]),
+                              borderRadius: BorderRadius.circular(24),
+                            ),
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(24),
+                                onTap: _busy ? null : (_owned ? _apply : _buyAndApply),
+                                child: Center(
+                                  child: _busy
+                                      ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: Pal.onBright))
+                                      : Text(
+                                          _owned
+                                              ? (widget.active ? tx('Güncelle') : tx('Uygula'))
+                                              : tx('Satın al ve uygula · {priceCoins} Coin', {'priceCoins': fmtNumber(s['priceCoins'])}),
+                                          style: const TextStyle(color: Pal.onBright, fontWeight: FontWeight.w900, fontSize: 15),
+                                        ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        if (_owned) ...[
+                          const SizedBox(height: 6),
+                          Row(children: [
+                            if (widget.active)
+                              Expanded(child: TextButton(onPressed: _busy ? null : _off, child: Text(tx('Normal moda dön'), style: const TextStyle(color: Pal.textDim)))),
+                            Expanded(
+                              child: TextButton(
+                                onPressed: _busy ? null : () => _buy(),
+                                child: Text(tx('Süre ekle ({priceCoins} Coin)', {'priceCoins': fmtNumber(s['priceCoins'])}), style: const TextStyle(color: Pal.cyan)),
+                              ),
+                            ),
+                          ]),
+                        ],
+                      ]),
+                    )),
         ),
       ),
     );

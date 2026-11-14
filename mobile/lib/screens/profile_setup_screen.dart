@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/l10n.dart';
 import '../data/countries.dart';
 import '../services/api.dart';
 import '../services/session.dart';
@@ -22,7 +23,8 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   final _password = TextEditingController();
   late String? _gender = _me['gender'] == 'female' ? 'female' : (_me['gender'] == 'male' ? 'male' : null);
   late DateTime? _birth = DateTime.tryParse('${_me['birthDate'] ?? ''}');
-  late Country _country = countryByCode(_me['countryCode']?.toString()) ?? kCountries.first;
+  // Kayıtlı ülke yoksa telefonun bölge ayarı (ör. en_DE → Almanya), o da yoksa Türkiye.
+  late Country _country = countryByCode(_me['countryCode']?.toString()) ?? countryByCode(WidgetsBinding.instance.platformDispatcher.locale.countryCode) ?? kCountries.first;
   bool _showPassword = false;
   bool _busy = false;
   bool _uploading = false;
@@ -59,7 +61,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       initialDate: _birth ?? DateTime(now.year - 25, 1, 1),
       firstDate: DateTime(now.year - 100),
       lastDate: last,
-      helpText: 'Doğum günü',
+      helpText: tx('Doğum günü'),
       initialEntryMode: DatePickerEntryMode.calendarOnly,
     );
     if (d != null) setState(() => _birth = d);
@@ -83,13 +85,13 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     final pw = _password.text;
     String? err;
     if (name.isEmpty) {
-      err = 'Takma adını yaz.';
+      err = tx('Takma adını yaz.');
     } else if (_gender == null) {
-      err = 'Cinsiyetini seç.';
+      err = tx('Cinsiyetini seç.');
     } else if (_birth == null) {
-      err = 'Doğum gününü seç.';
+      err = tx('Doğum gününü seç.');
     } else if (!_hasPassword && pw.isNotEmpty && pw.length < 6) {
-      err = 'Şifre en az 6 karakter olmalı (ya da boş bırak).';
+      err = tx('Şifre en az 6 karakter olmalı (ya da boş bırak).');
     }
     if (err != null) {
       toast(context, err, error: true);
@@ -210,7 +212,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
         ]),
       ),
       const SizedBox(height: 12),
-      const Text('Profil fotoğrafı yükle', style: TextStyle(color: Pal.text, fontSize: 17, fontWeight: FontWeight.w800)),
+      Text(tx('Profil fotoğrafı yükle'), style: TextStyle(color: Pal.text, fontSize: 17, fontWeight: FontWeight.w800)),
     ]);
   }
 
@@ -234,58 +236,58 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
               padding: const EdgeInsets.fromLTRB(22, 18, 22, 28),
               children: [
                 _avatar(),
-                _label('Takma ad'),
+                _label(tx('Takma ad')),
                 TextField(
                   controller: _name,
                   maxLength: 30,
                   style: const TextStyle(color: Pal.text, fontSize: 16),
                   textInputAction: TextInputAction.done,
                   onChanged: (_) => setState(() {}),
-                  decoration: _field('Adını yaz'),
+                  decoration: _field(tx('Adını yaz')),
                 ),
-                _label('Cinsiyet'),
+                _label(tx('Cinsiyet')),
                 Row(children: [
-                  _genderOption('male', 'Erkek', Icons.male),
+                  _genderOption('male', tx('Erkek'), Icons.male),
                   const SizedBox(width: 12),
-                  _genderOption('female', 'Kadın', Icons.female),
+                  _genderOption('female', tx('Kadın'), Icons.female),
                 ]),
-                _label('Doğum günü'),
+                _label(tx('Doğum günü')),
                 _pill(
                   onTap: _pickBirth,
                   child: Row(children: [
                     Expanded(
-                      child: Text(_birth == null ? 'Doğum gününü seç' : _fmtDate(_birth!), style: TextStyle(color: _birth == null ? Pal.textDim : Pal.text, fontSize: 16)),
+                      child: Text(_birth == null ? tx('Doğum gününü seç') : _fmtDate(_birth!), style: TextStyle(color: _birth == null ? Pal.textDim : Pal.text, fontSize: 16)),
                     ),
                     const Icon(Icons.keyboard_arrow_down_rounded, color: Pal.textDim),
                   ]),
                 ),
                 if (!_hasPassword) ...[
-                  _label('Giriş şifresi'),
+                  _label(tx('Giriş şifresi')),
                   TextField(
                     controller: _password,
                     obscureText: !_showPassword,
                     maxLength: 72,
                     style: const TextStyle(color: Pal.text, fontSize: 16),
                     decoration: _field(
-                      'Şifre belirle',
+                      tx('Şifre belirle'),
                       suffix: IconButton(
                         onPressed: () => setState(() => _showPassword = !_showPassword),
                         icon: Icon(_showPassword ? Icons.visibility_outlined : Icons.visibility_off_outlined, color: Pal.textDim),
                       ),
                     ),
                   ),
-                  const Padding(
+                  Padding(
                     padding: EdgeInsets.fromLTRB(6, 8, 6, 0),
-                    child: Text('*Şifre en az 6 karakter olmalı. İstersen boş bırakabilirsin.', style: TextStyle(color: Pal.gold, fontSize: 13)),
+                    child: Text(tx('*Şifre en az 6 karakter olmalı. İstersen boş bırakabilirsin.'), style: TextStyle(color: Pal.gold, fontSize: 13)),
                   ),
                 ],
-                _label('Ülke'),
+                _label(tx('Ülke')),
                 _pill(
                   onTap: _pickCountry,
                   child: Row(children: [
                     Text(_country.flag, style: const TextStyle(fontSize: 22)),
                     const SizedBox(width: 10),
-                    Expanded(child: Text('${_country.name}  (${_country.code}) ${_country.dial}', style: const TextStyle(color: Pal.text, fontSize: 16))),
+                    Expanded(child: Text('${_country.label}  (${_country.code}) ${_country.dial}', style: const TextStyle(color: Pal.text, fontSize: 16))),
                     const Icon(Icons.arrow_drop_down, color: Pal.textDim),
                   ]),
                 ),
@@ -306,7 +308,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                         child: Center(
                           child: _busy
                               ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2.6, color: Pal.onBright))
-                              : const Text('Devam et', style: TextStyle(color: Pal.onBright, fontSize: 18, fontWeight: FontWeight.w900)),
+                              : Text(tx('Devam et'), style: TextStyle(color: Pal.onBright, fontSize: 18, fontWeight: FontWeight.w900)),
                         ),
                       ),
                     ),
@@ -337,15 +339,15 @@ class _CountrySheetState extends State<_CountrySheet> {
     final q = _q.trim().toLowerCase();
     final list = q.isEmpty
         ? kCountries
-        : kCountries.where((c) => c.name.toLowerCase().contains(q) || c.code.toLowerCase() == q || c.dial.contains(q)).toList();
+        : kCountries.where((c) => c.name.toLowerCase().contains(q) || c.label.toLowerCase().contains(q) || c.code.toLowerCase() == q || c.dial.contains(q)).toList();
     return SizedBox(
       height: MediaQuery.sizeOf(context).height * 0.8,
       child: Column(children: [
         const SizedBox(height: 8),
         Container(width: 38, height: 4, decoration: BoxDecoration(color: Pal.outline, borderRadius: BorderRadius.circular(2))),
-        const Padding(
+        Padding(
           padding: EdgeInsets.fromLTRB(20, 14, 20, 8),
-          child: Align(alignment: Alignment.centerLeft, child: Text('Ülke seç', style: TextStyle(color: Pal.text, fontSize: 20, fontWeight: FontWeight.w900))),
+          child: Align(alignment: Alignment.centerLeft, child: Text(tx('Ülke seç'), style: TextStyle(color: Pal.text, fontSize: 20, fontWeight: FontWeight.w900))),
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
@@ -353,7 +355,7 @@ class _CountrySheetState extends State<_CountrySheet> {
             onChanged: (v) => setState(() => _q = v),
             style: const TextStyle(color: Pal.text),
             decoration: InputDecoration(
-              hintText: 'Ülke ara',
+              hintText: tx('Ülke ara'),
               hintStyle: const TextStyle(color: Pal.textDim),
               prefixIcon: const Icon(Icons.search, color: Pal.textDim),
               filled: true,
@@ -371,7 +373,7 @@ class _CountrySheetState extends State<_CountrySheet> {
               final c = list[i];
               return ListTile(
                 leading: Text(c.flag, style: const TextStyle(fontSize: 26)),
-                title: Text(c.name, style: const TextStyle(color: Pal.text, fontWeight: FontWeight.w600)),
+                title: Text(c.label, style: const TextStyle(color: Pal.text, fontWeight: FontWeight.w600)),
                 trailing: Text(c.dial, style: const TextStyle(color: Pal.gold, fontWeight: FontWeight.w700)),
                 onTap: () => Navigator.pop(context, c),
               );

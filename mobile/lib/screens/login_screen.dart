@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import '../l10n/l10n.dart';
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../widgets/common.dart';
@@ -54,7 +55,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   /// Onay kutusu işaretli değilse uyarır (true: devam edilebilir).
   bool _needConsent() {
     if (_accepted) return true;
-    toast(context, 'Devam etmek için 18 yaşından büyük olduğunu ve sözleşmeleri kabul ettiğini onayla.', error: true);
+    toast(context, tx('Devam etmek için 18 yaşından büyük olduğunu ve sözleşmeleri kabul ettiğini onayla.'), error: true);
     setState(() => _flash = true);
     Future.delayed(const Duration(milliseconds: 1600), () {
       if (mounted) setState(() => _flash = false);
@@ -89,15 +90,15 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     final id = _id.text.trim();
     if (_mode == _Mode.phone) {
       final digits = id.replaceAll(RegExp(r'[^0-9]'), '');
-      if (digits.length < 10) return 'Telefon numaranızı girin (ör. 0555 123 45 67).';
-      if (_register && _displayName.text.trim().isEmpty) return 'Görünen adınızı yazın.';
+      if (digits.length < 10) return tx('Telefon numaranızı girin (ör. 0555 123 45 67).');
+      if (_register && _displayName.text.trim().isEmpty) return tx('Görünen adınızı yazın.');
     } else {
-      if (id.length < 3) return 'Kullanıcı adınızı girin.';
+      if (id.length < 3) return tx('Kullanıcı adınızı girin.');
       if (_register && !RegExp(r'^[a-zA-Z0-9._]{3,30}$').hasMatch(id)) {
-        return 'Kullanıcı adı 3-30 karakter olmalı; yalnızca harf, rakam, nokta ve alt çizgi kullanılabilir.';
+        return tx('Kullanıcı adı 3-30 karakter olmalı; yalnızca harf, rakam, nokta ve alt çizgi kullanılabilir.');
       }
     }
-    if (_password.text.length < 6) return 'Şifre en az 6 karakter olmalı.';
+    if (_password.text.length < 6) return tx('Şifre en az 6 karakter olmalı.');
     return null;
   }
 
@@ -141,7 +142,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     });
     // Bekleme penceresi: kullanıcı tarayıcıda onay verip dönünce kendiliğinden kapanır.
     var dialogOpen = true;
-    final hint = ValueNotifier<String>('$label ile girişi tarayıcıda tamamlayın.\nOnay verdikten sonra uygulamaya dönün.');
+    final hint = ValueNotifier<String>(tx('{p} ile girişi tarayıcıda tamamlayın.\nOnay verdikten sonra uygulamaya dönün.', {'p': label}));
     showDialog<void>(
       context: context,
       barrierDismissible: false,
@@ -162,7 +163,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
               dialogOpen = false;
               Navigator.pop(d);
             },
-            child: const Text('Vazgeç'),
+            child: Text(tx('Vazgeç')),
           ),
         ],
       ),
@@ -172,7 +173,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
       await AuthService.social(
         provider,
         cancelled: () => _socialCancelled || !mounted,
-        onWaitingApp: () => hint.value = 'Onay alındı. Tarayıcıya dönüp "TR Live\'a dön" düğmesine dokunun.',
+        onWaitingApp: () => hint.value = tx('Onay alındı. Tarayıcıya dönüp "TR Live\'a dön" düğmesine dokunun.'),
       );
       if (!mounted) return;
       if (dialogOpen) Navigator.of(context).pop();
@@ -237,11 +238,11 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
       );
 
   Widget _start() => Column(key: const ValueKey('start'), mainAxisSize: MainAxisSize.min, children: [
-        _goldButton(icon: Icons.phone_iphone_rounded, text: 'Telefon numarası ile', onTap: _busy ? null : () => _setMode(_Mode.phone)),
+        _goldButton(icon: Icons.phone_iphone_rounded, text: tx('Telefon numarası ile'), onTap: _busy ? null : () => _setMode(_Mode.phone)),
         const SizedBox(height: 14),
         _outlineButton(
           leading: const Icon(Icons.person_rounded, color: _Gold.light, size: 22),
-          text: 'Kullanıcı adı ile',
+          text: tx('Kullanıcı adı ile'),
           onTap: _busy ? null : () => _setMode(_Mode.username),
         ),
         if (_providers['google'] == true || _providers['facebook'] == true) ...[
@@ -252,7 +253,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
         if (_providers['google'] == true) ...[
           _outlineButton(
             leading: const Text('G', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Color(0xFF4285F4))),
-            text: 'Google ile devam et',
+            text: tx('Google ile devam et'),
             fill: Colors.white,
             fg: const Color(0xFF1F2937),
             onTap: _busy ? null : () => _social('google', 'Google'),
@@ -262,7 +263,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
         if (_providers['facebook'] == true)
           _outlineButton(
             leading: const Text('f', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: Colors.white, height: 1.1)),
-            text: 'Facebook ile devam et',
+            text: tx('Facebook ile devam et'),
             fill: const Color(0xFF1877F2),
             fg: Colors.white,
             onTap: _busy ? null : () => _social('facebook', 'Facebook'),
@@ -312,7 +313,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                     gradient: _register == reg ? const LinearGradient(colors: [_Gold.light, _Gold.mid, _Gold.deep]) : null,
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Text(reg ? 'Kayıt ol' : 'Giriş yap',
+                  child: Text(reg ? tx('Kayıt ol') : tx('Giriş yap'),
                       style: TextStyle(fontWeight: FontWeight.w800, color: _register == reg ? _Gold.ink : const Color(0xFFB9A57A))),
                 ),
               ),
@@ -326,7 +327,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
         style: const TextStyle(color: Colors.white, fontSize: 16),
         keyboardType: phone ? TextInputType.phone : TextInputType.text,
         textInputAction: TextInputAction.next,
-        decoration: _field(phone ? 'Telefon numarası' : 'Kullanıcı adı', phone ? Icons.phone_iphone_rounded : Icons.person_rounded, hint: phone ? '0555 123 45 67' : null),
+        decoration: _field(phone ? tx('Telefon numarası') : tx('Kullanıcı adı'), phone ? Icons.phone_iphone_rounded : Icons.person_rounded, hint: phone ? '0555 123 45 67' : null),
       ),
       const SizedBox(height: 12),
       if (_register) ...[
@@ -336,7 +337,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
           style: const TextStyle(color: Colors.white, fontSize: 16),
           textInputAction: TextInputAction.next,
           maxLength: 60,
-          decoration: _field(phone ? 'Görünen ad' : 'Görünen ad (isteğe bağlı)', Icons.badge_outlined),
+          decoration: _field(phone ? tx('Görünen ad') : tx('Görünen ad (isteğe bağlı)'), Icons.badge_outlined),
         ),
         const SizedBox(height: 12),
       ],
@@ -347,7 +348,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
         style: const TextStyle(color: Colors.white, fontSize: 16),
         onSubmitted: (_) => _submit(),
         decoration: _field(
-          _register ? 'Şifre belirle' : 'Şifre',
+          _register ? tx('Şifre belirle') : tx('Şifre'),
           Icons.lock_rounded,
           suffix: IconButton(
             icon: Icon(_showPassword ? Icons.visibility_off_rounded : Icons.visibility_rounded, color: const Color(0xFFB9A57A)),
@@ -357,20 +358,20 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
       ),
       if (_register) _consent(),
       const SizedBox(height: 22),
-      _goldButton(icon: _register ? Icons.how_to_reg_rounded : Icons.login_rounded, text: _register ? 'Kayıt ol' : 'Giriş yap', onTap: _busy ? null : _submit, busy: _busy),
+      _goldButton(icon: _register ? Icons.how_to_reg_rounded : Icons.login_rounded, text: _register ? tx('Kayıt ol') : tx('Giriş yap'), onTap: _busy ? null : _submit, busy: _busy),
       const SizedBox(height: 8),
       TextButton.icon(
         style: TextButton.styleFrom(foregroundColor: const Color(0xFFB9A57A)),
         onPressed: _busy ? null : () => _setMode(_Mode.start),
         icon: const Icon(Icons.arrow_back_rounded, size: 18),
-        label: const Text('Diğer giriş seçenekleri'),
+        label: Text(tx('Diğer giriş seçenekleri')),
       ),
     ]);
   }
 
   String get _subtitle => _mode == _Mode.start
-      ? 'Hoş geldin'
-      : (_mode == _Mode.username ? (_register ? 'Kullanıcı adıyla kayıt' : 'Kullanıcı adıyla giriş') : (_register ? 'Telefonla kayıt' : 'Telefonla giriş'));
+      ? tx('Hoş geldin')
+      : (_mode == _Mode.username ? (_register ? tx('Kullanıcı adıyla kayıt') : tx('Kullanıcı adıyla giriş')) : (_register ? tx('Telefonla kayıt') : tx('Telefonla giriş')));
 
   @override
   Widget build(BuildContext context) {
@@ -449,7 +450,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                     const SizedBox(height: 18),
                     // Topluluk Kuralları (Kullanıcı Sözleşmesi'nin parçası) ve Çocuk Güvenliği bağlantıları.
                     Wrap(alignment: WrapAlignment.center, spacing: 14, children: [
-                      for (final (page, label) in const [('community.html', 'Topluluk Kuralları'), ('child-safety.html', 'Çocuk Güvenliği')])
+                      for (final (page, label) in [('community.html', tx('Topluluk Kuralları')), ('child-safety.html', tx('Çocuk Güvenliği'))])
                         GestureDetector(
                           onTap: () => openLegal(context, page),
                           child: Text(label, style: const TextStyle(color: Color(0xFF8C7F66), fontSize: 12, decoration: TextDecoration.underline, decorationColor: Color(0xFF8C7F66))),

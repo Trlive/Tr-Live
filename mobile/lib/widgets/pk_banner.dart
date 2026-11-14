@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../l10n/l10n.dart';
 import 'package:flutter/material.dart';
 import '../services/api.dart';
 import 'common.dart';
@@ -63,13 +64,13 @@ class _PkBannerState extends State<PkBanner> {
     final result = pk['result']?.toString();
     String title;
     if (status == 'pending') {
-      title = 'PK daveti bekleniyor...';
+      title = tx('PK daveti bekleniyor...');
     } else if (status == 'finished') {
-      title = result == 'draw' ? 'PK berabere' : ((result == 'a') == mineIsA ? 'Kazandınız! 🎉' : 'Rakip kazandı');
+      title = result == 'draw' ? tx('PK berabere') : ((result == 'a') == mineIsA ? tx('Kazandınız! 🎉') : tx('Rakip kazandı'));
     } else if (status == 'active') {
       title = 'PK  ${_clock(_left)}';
     } else {
-      title = 'PK sona erdi';
+      title = tx('PK sona erdi');
     }
     Widget side(Map<String, dynamic> x, bool left) => Expanded(
           child: Column(children: [
@@ -91,7 +92,7 @@ class _PkBannerState extends State<PkBanner> {
           Row(children: [
             Expanded(child: Text(title, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold))),
             if (widget.onCancel != null && (status == 'pending' || status == 'active'))
-              IconButton(visualDensity: VisualDensity.compact, tooltip: status == 'pending' ? 'Daveti geri çek' : 'PK\'yı bitir', icon: const Icon(Icons.close, size: 18), onPressed: widget.onCancel),
+              IconButton(visualDensity: VisualDensity.compact, tooltip: status == 'pending' ? tx('Daveti geri çek') : tx('PK\'yı bitir'), icon: const Icon(Icons.close, size: 18), onPressed: widget.onCancel),
           ]),
           Row(crossAxisAlignment: CrossAxisAlignment.start, children: [side(a, true), const Text('VS', style: TextStyle(fontWeight: FontWeight.bold)), side(b, false)]),
           const SizedBox(height: 4),

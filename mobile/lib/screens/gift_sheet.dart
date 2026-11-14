@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../l10n/l10n.dart';
 import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
@@ -39,7 +40,7 @@ class _GiftSheet extends StatefulWidget {
 }
 
 class _GiftSheetState extends State<_GiftSheet> with SingleTickerProviderStateMixin {
-  static const _tabs = [('event', 'Etkinlik'), ('popular', 'Popüler'), ('lucky', 'Şanslı'), ('cp', 'CP'), ('private', 'Kişiye Özel'), ('vip', 'Vip')];
+  static List<(String, String)> get _tabs => [('event', tx('Etkinlik')), ('popular', tx('Popüler')), ('lucky', tx('Şanslı')), ('cp', 'CP'), ('private', tx('Kişiye Özel')), ('vip', 'Vip')];
   static const _quantities = [1, 5, 10, 20, 50, 100, 500, 1000];
   static const _perPage = 8;
 
@@ -225,7 +226,7 @@ class _GiftSheetState extends State<_GiftSheet> with SingleTickerProviderStateMi
       return;
     }
     final targets = _targets;
-    if (targets.isEmpty) return toast(context, _scope == null ? 'Alıcı seçin.' : 'Bu seçimde başka kimse yok.', error: true);
+    if (targets.isEmpty) return toast(context, _scope == null ? tx('Alıcı seçin.') : tx('Bu seçimde başka kimse yok.'), error: true);
     setState(() => _sending = true);
     final String dist = _scope == 'mic' ? 'all_mic' : (_scope == 'room' ? 'all_room' : (targets.length == 1 ? 'single' : 'each'));
     final body = <String, dynamic>{
@@ -296,7 +297,7 @@ class _GiftSheetState extends State<_GiftSheet> with SingleTickerProviderStateMi
           margin: const EdgeInsets.only(top: 6),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
           decoration: BoxDecoration(color: const Color(0xE6263238), borderRadius: BorderRadius.circular(20)),
-          child: const Text('🔔 Bu sefer çıkmadı, şansını tekrar dene!', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13)),
+          child: Text(tx('🔔 Bu sefer çıkmadı, şansını tekrar dene!'), style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13)),
         ),
       );
     }
@@ -333,7 +334,7 @@ class _GiftSheetState extends State<_GiftSheet> with SingleTickerProviderStateMi
                 shadows: const [Shadow(color: Color(0xAA000000), blurRadius: 4)],
               ),
             ),
-            Text('+${fmtNumber(win.toString())} Coin kazandın!', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 13.5)),
+            Text(tx('+{v1} Coin kazandın!', {'v1': fmtNumber(win.toString())}), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 13.5)),
           ]),
         ]),
       ),
@@ -380,14 +381,14 @@ class _GiftSheetState extends State<_GiftSheet> with SingleTickerProviderStateMi
     await showDialog<void>(
       context: context,
       builder: (c) => AlertDialog(
-        title: const Text('Şanslı hediye olasılıkları'),
+        title: Text(tx('Şanslı hediye olasılıkları')),
         content: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('Gönderdiğin her şanslı hediye adedi için ayrı bir çekiliş yapılır. Çıkan çarpan × hediye fiyatı kadar Coin hesabına eklenir.',
+            Text(tx('Gönderdiğin her şanslı hediye adedi için ayrı bir çekiliş yapılır. Çıkan çarpan × hediye fiyatı kadar Coin hesabına eklenir.'),
                 style: TextStyle(fontSize: 13, height: 1.35)),
             const SizedBox(height: 12),
             if (odds.isEmpty)
-              const Text('Olasılık bilgisi şu an alınamadı. Lütfen daha sonra tekrar dene.', style: TextStyle(fontSize: 13))
+              Text(tx('Olasılık bilgisi şu an alınamadı. Lütfen daha sonra tekrar dene.'), style: TextStyle(fontSize: 13))
             else ...[
               for (final o in odds)
                 Padding(
@@ -399,19 +400,19 @@ class _GiftSheetState extends State<_GiftSheet> with SingleTickerProviderStateMi
                 ),
               const Divider(),
               Row(children: [
-                const Expanded(child: Text('Ödül çıkmaması', style: TextStyle(fontWeight: FontWeight.w700))),
+                Expanded(child: Text(tx('Ödül çıkmaması'), style: TextStyle(fontWeight: FontWeight.w700))),
                 Text(_pct(none < 0 ? 0 : none)),
               ]),
             ],
             const SizedBox(height: 12),
             Text(
-              'Sonuçlar rastgeledir ve garanti edilmez. Kazanılan ödüller yalnızca Coin olarak verilir; nakde çevrilemez.'
-              '${_luckyMaxWin != null ? ' Tek gönderimde en fazla ${fmtNumber(_luckyMaxWin)} Coin kazanılabilir.' : ''}',
+              tx('Sonuçlar rastgeledir ve garanti edilmez. Kazanılan ödüller yalnızca Coin olarak verilir; nakde çevrilemez.') +
+              '${_luckyMaxWin != null ? tx(' Tek gönderimde en fazla {v1} Coin kazanılabilir.', {'v1': fmtNumber(_luckyMaxWin)}) : ''}',
               style: const TextStyle(fontSize: 12, color: Colors.white60, height: 1.35),
             ),
           ]),
         ),
-        actions: [TextButton(onPressed: () => Navigator.pop(c), child: const Text('Tamam'))],
+        actions: [TextButton(onPressed: () => Navigator.pop(c), child: Text(tx('Tamam')))],
       ),
     );
   }
@@ -462,8 +463,7 @@ class _GiftSheetState extends State<_GiftSheet> with SingleTickerProviderStateMi
           child: Row(children: [
             Expanded(
               child: Text(
-                'Her adet bir şans: x${_luckyMultipliers.reversed.join(', x')} kat Coin geri kazanabilirsin. '
-                'Alıcıya hediye değerinin %$_luckyShare kadarı Elmas olarak geçer.',
+                tx('Her adet bir şans: x{v1} kat Coin geri kazanabilirsin. Alıcıya hediye değerinin %{luckyShare} kadarı Elmas olarak geçer.', {'v1': _luckyMultipliers.reversed.join(', x'), 'luckyShare': _luckyShare}),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontSize: 11, color: Colors.white60, height: 1.25),
@@ -473,12 +473,12 @@ class _GiftSheetState extends State<_GiftSheet> with SingleTickerProviderStateMi
             InkWell(
               borderRadius: BorderRadius.circular(14),
               onTap: _showLuckyOdds,
-              child: const Padding(
+              child: Padding(
                 padding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
                   Icon(Icons.info_outline, size: 15, color: Color(0xFFFFD54F)),
                   SizedBox(width: 3),
-                  Text('Olasılıklar', style: TextStyle(fontSize: 11, color: Color(0xFFFFD54F), fontWeight: FontWeight.w700)),
+                  Text(tx('Olasılıklar'), style: TextStyle(fontSize: 11, color: Color(0xFFFFD54F), fontWeight: FontWeight.w700)),
                 ]),
               ),
             ),
@@ -543,7 +543,7 @@ class _GiftSheetState extends State<_GiftSheet> with SingleTickerProviderStateMi
     return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Expanded(
         child: list.isEmpty
-            ? const SizedBox(height: 52, child: Align(alignment: Alignment.centerLeft, child: Text('Mikrofonda kimse yok. Ok ile odadakileri göster.', style: TextStyle(color: Colors.white54, fontSize: 12))))
+            ? SizedBox(height: 52, child: Align(alignment: Alignment.centerLeft, child: Text(tx('Mikrofonda kimse yok. Ok ile odadakileri göster.'), style: TextStyle(color: Colors.white54, fontSize: 12))))
             : _expanded
                 ? ConstrainedBox(
                     constraints: const BoxConstraints(maxHeight: 112),
@@ -593,21 +593,21 @@ class _GiftSheetState extends State<_GiftSheet> with SingleTickerProviderStateMi
           ),
         ),
       PopupMenuButton<String?>(
-        tooltip: 'Toplu seçim',
+        tooltip: tx('Toplu seçim'),
         onSelected: (v) => setState(() {
           _stopCombo();
           _scope = v == _scope ? null : v;
         }),
-        itemBuilder: (_) => const [
-          PopupMenuItem(value: 'mic', child: Text('Tüm Koltuk')),
-          PopupMenuItem(value: 'room', child: Text('Tüm Oda')),
+        itemBuilder: (_) => [
+          PopupMenuItem(value: 'mic', child: Text(tx('Tüm Koltuk'))),
+          PopupMenuItem(value: 'room', child: Text(tx('Tüm Oda'))),
         ],
         child: Container(
           margin: const EdgeInsets.only(left: 6),
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(border: Border.all(color: _scope == null ? Colors.white30 : Pal.pink), borderRadius: BorderRadius.circular(6)),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Text(_scope == 'mic' ? 'Tüm Koltuk' : (_scope == 'room' ? 'Tüm Oda' : 'Listele'), style: TextStyle(fontSize: 12, color: _scope == null ? Colors.white70 : Pal.pink)),
+            Text(_scope == 'mic' ? tx('Tüm Koltuk') : (_scope == 'room' ? tx('Tüm Oda') : tx('Listele')), style: TextStyle(fontSize: 12, color: _scope == null ? Colors.white70 : Pal.pink)),
             const Icon(Icons.arrow_drop_down, size: 18, color: Colors.white70),
           ]),
         ),
@@ -627,7 +627,7 @@ class _GiftSheetState extends State<_GiftSheet> with SingleTickerProviderStateMi
       final tileH = math.min(tileW * _tileRatio, fitH).clamp(20.0, 400.0).toDouble();
       // Her sayfa ve sekme 2 satırlık yer kaplar (hediye az da olsa yok da olsa yükseklik aynı); sayfa noktaları için de yer ayrılır.
       if (gifts.isEmpty) {
-        return SizedBox(height: tileH * 2 + gap + 14, child: const Center(child: Text('Bu sekmede hediye yok.', style: TextStyle(color: Colors.white54))));
+        return SizedBox(height: tileH * 2 + gap + 14, child: Center(child: Text(tx('Bu sekmede hediye yok.'), style: TextStyle(color: Colors.white54))));
       }
       return Column(children: [
         SizedBox(
@@ -759,7 +759,7 @@ class _GiftSheetState extends State<_GiftSheet> with SingleTickerProviderStateMi
       if (n > 1 || _quantity > 1)
         SizedBox(
           height: 16,
-          child: Text('Toplam ${fmtNumber(_total.toString())} Coin · $n kişi × $_quantity adet', style: const TextStyle(fontSize: 11, color: Colors.white54)),
+          child: Text(tx('Toplam {v1} Coin · {n} kişi × {quantity} adet', {'v1': fmtNumber(_total.toString()), 'n': n, 'quantity': _quantity}), style: const TextStyle(fontSize: 11, color: Colors.white54)),
         ),
       Row(children: [
         Expanded(
@@ -781,7 +781,7 @@ class _GiftSheetState extends State<_GiftSheet> with SingleTickerProviderStateMi
           decoration: BoxDecoration(border: Border.all(color: Pal.pink, width: 1.4), borderRadius: BorderRadius.circular(10)),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
             PopupMenuButton<int>(
-              tooltip: 'Adet',
+              tooltip: tx('Adet'),
               onSelected: (v) => setState(() {
                 if (v != _quantity) _stopCombo();
                 _quantity = v;
@@ -805,7 +805,7 @@ class _GiftSheetState extends State<_GiftSheet> with SingleTickerProviderStateMi
                 ),
                 child: _combo > 0 ? _comboLabel() : (_sending
                     ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : const Text('Gönder', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15))),
+                    : Text(tx('Gönder'), style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15))),
               ),
             ),
           ]),

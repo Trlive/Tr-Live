@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/l10n.dart';
 import '../services/api.dart';
 import '../services/session.dart';
 import 'app_theme.dart';
@@ -19,7 +20,7 @@ Future<void> showCheckinDialog(BuildContext context, {Map<String, dynamic>? init
   return showGeneralDialog<void>(
     context: context,
     barrierDismissible: true,
-    barrierLabel: 'Kapat',
+    barrierLabel: tx('Kapat'),
     barrierColor: const Color(0xB3000000),
     transitionDuration: const Duration(milliseconds: 220),
     pageBuilder: (_, __, ___) => _CheckinDialog(initial: initial),
@@ -73,7 +74,7 @@ class _CheckinDialogState extends State<_CheckinDialog> {
     final items = (r['items'] as List? ?? const []).whereType<Map>().map((m) => (m['name'] ?? '').toString()).where((x) => x.isNotEmpty).toList();
     final coins = int.tryParse('${r['coins'] ?? 0}') ?? 0;
     final parts = [if (coins > 0) '${fmtNumber(coins)} Coin', ...items];
-    toast(context, parts.isEmpty ? 'Giriş yapıldı!' : '🎉 ${parts.join(' + ')} hesabına eklendi!');
+    toast(context, parts.isEmpty ? tx('Giriş yapıldı!') : '🎉 ${tx('{x} hesabına eklendi!', {'x': parts.join(' + ')})}');
   }
 
   @override
@@ -135,7 +136,7 @@ class _CheckinDialogState extends State<_CheckinDialog> {
             gradient: const LinearGradient(colors: kGoldLight, begin: Alignment.topCenter, end: Alignment.bottomCenter),
             boxShadow: const [BoxShadow(color: Color(0x88000000), blurRadius: 10, offset: Offset(0, 4))],
           ),
-          child: const Text('Günlük Giriş', style: TextStyle(color: Pal.onBright, fontSize: 26, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
+          child: Text(tx('Günlük Giriş'), style: TextStyle(color: Pal.onBright, fontSize: 26, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
         ),
         const Positioned(left: 4, top: 0, child: Text('🎁', style: TextStyle(fontSize: 30))),
         const Positioned(right: 4, top: 0, child: Text('🎁', style: TextStyle(fontSize: 30))),
@@ -172,9 +173,9 @@ class _CheckinDialogState extends State<_CheckinDialog> {
     return Column(mainAxisSize: MainAxisSize.min, children: [
       Text.rich(
         TextSpan(children: [
-          const TextSpan(text: 'Bu seri '),
+          TextSpan(text: tx('Bu seri ')),
           TextSpan(text: '$signed', style: const TextStyle(color: Pal.gold, fontWeight: FontWeight.w900)),
-          const TextSpan(text: ' gün giriş yaptın'),
+          TextSpan(text: tx(' gün giriş yaptın')),
         ]),
         style: const TextStyle(color: Pal.text, fontSize: 17, fontWeight: FontWeight.w600),
       ),
@@ -199,7 +200,7 @@ class _CheckinDialogState extends State<_CheckinDialog> {
       _button(today),
       if (today) ...[
         const SizedBox(height: 8),
-        const Text('Bugünün ödülünü aldın. Yarın tekrar gel!', style: TextStyle(color: Pal.textDim, fontSize: 12)),
+        Text(tx('Bugünün ödülünü aldın. Yarın tekrar gel!'), style: TextStyle(color: Pal.textDim, fontSize: 12)),
       ],
     ]);
   }
@@ -230,7 +231,7 @@ class _CheckinDialogState extends State<_CheckinDialog> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    '${it['category'] == 'vehicle' ? 'Araç' : 'Çerçeve'}/${it['days'] ?? 7} gün',
+                    '${it['category'] == 'vehicle' ? tx('Araç') : tx('Çerçeve')}/${tx('{n} gün', {'n': it['days'] ?? 7})}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(color: Pal.text, fontSize: 11, fontWeight: FontWeight.w800),
@@ -268,7 +269,7 @@ class _CheckinDialogState extends State<_CheckinDialog> {
           child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
             if (signed) const Icon(Icons.check_circle, size: 15, color: Pal.cyan),
             if (signed) const SizedBox(width: 3),
-            Text('$n. gün', style: TextStyle(color: signed ? Pal.cyan : Pal.textDim, fontSize: 13, fontWeight: FontWeight.w800)),
+            Text(tx('{n}. gün', {'n': n}), style: TextStyle(color: signed ? Pal.cyan : Pal.textDim, fontSize: 13, fontWeight: FontWeight.w800)),
           ]),
         ),
       ]),
@@ -294,7 +295,7 @@ class _CheckinDialogState extends State<_CheckinDialog> {
             child: Center(
               child: _busy
                   ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.6, color: Pal.onBright))
-                  : Text(done ? 'Alındı ✓' : 'Giriş yap', style: TextStyle(color: done ? Pal.textDim : Pal.onBright, fontSize: 18, fontWeight: FontWeight.w900)),
+                  : Text(done ? tx('Alındı ✓') : tx('Giriş yap'), style: TextStyle(color: done ? Pal.textDim : Pal.onBright, fontSize: 18, fontWeight: FontWeight.w900)),
             ),
           ),
         ),
