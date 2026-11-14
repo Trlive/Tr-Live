@@ -624,7 +624,6 @@ class _UsersTabState extends State<_UsersTab> {
     await _run(() => Api.post('/api/admin/users/${_user!['id']}/wip', {'level': level, 'days': days}), 'WIP verildi.');
   }
 
-  /// Özel ID: numara boş bırakılırsa göz alıcı 6 haneli numara otomatik verilir. Var olan özel ID'nin süresi uzar.
   /// Ödül: katalogdaki bir oda temasını süreli hediye eder (süre boşsa temanın kendi süresi).
   Future<void> _giftTheme() async {
     final id = _user?['id'];
@@ -632,7 +631,10 @@ class _UsersTabState extends State<_UsersTab> {
     await RoomThemes.load(force: true);
     if (!mounted) return;
     final themes = RoomThemes.all.where((t) => !t.free).toList();
-    if (themes.isEmpty) return toast(context, 'Coin\'li tema yok.', error: true);
+    if (themes.isEmpty) {
+      toast(context, 'Coin\'li tema yok.', error: true);
+      return;
+    }
     var key = themes.first.key;
     final days = TextEditingController();
     final ok = await showDialog<bool>(
@@ -642,7 +644,7 @@ class _UsersTabState extends State<_UsersTab> {
           title: const Text('Oda teması hediye et'),
           content: Column(mainAxisSize: MainAxisSize.min, children: [
             DropdownButtonFormField<String>(
-              value: key,
+              initialValue: key,
               isExpanded: true,
               decoration: const InputDecoration(labelText: 'Tema'),
               items: [for (final t in themes) DropdownMenuItem(value: t.key, child: Text('${t.label}${t.animated ? ' (hareketli)' : ''} · ${t.durationDays} gün'))],
@@ -685,10 +687,14 @@ class _UsersTabState extends State<_UsersTab> {
     final d = int.tryParse(days.text.trim()) ?? 0;
     days.dispose();
     if (ok != true || !mounted) return;
-    if (d < 1 || d > 365) return toast(context, 'Gün 1-365 arası olmalı.', error: true);
+    if (d < 1 || d > 365) {
+      toast(context, 'Gün 1-365 arası olmalı.', error: true);
+      return;
+    }
     await _run(() => Api.post('/api/admin/room-themes/custom/grant', {'userId': id, 'days': d}), 'Özel tema hakkı verildi; kullanıcıya bildirildi.');
   }
 
+  /// Özel ID: numara boş bırakılırsa göz alıcı 6 haneli numara otomatik verilir. Var olan özel ID'nin süresi uzar.
   Future<void> _specialId() async {
     const lId = 'Özel ID (2-7 hane; boş = otomatik)';
     const lDays = 'Gün';

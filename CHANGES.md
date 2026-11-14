@@ -1,3 +1,10 @@
+## v2.96.4 — APK derlemesi: lint denetimi
+- Yayın derlemesinde Android "lint vital" denetimi kapatıldı (mobile/yerel/trlive_capture/android/build.gradle): lint
+  aracının kendisi çökerek (LintDriver.handleDetectorError) assembleRelease'i durduruyordu. APK'nın içeriği değişmez;
+  Dart kod analizi iş akışında çalışmaya devam eder.
+- İnceleme düzeltmeleri: WebView alt penceresinde yuvarlak köşe + tek kenar çizgisi (Flutter'da çizim hatası riski)
+  kaldırıldı; WebView hata kontrolü paket sürümünden bağımsız yazıldı; yönetim ekranında yer değiştiren açıklama düzeltildi.
+
 ## v2.96.3 — APK derlemesi doğru klasörü bulsun
 - APK iş akışı Flutter projesini alfabetik ilk pubspec.yaml'dan seçtiği için mobile/packages/trlive_capture'ı uygulama
   sandı. Eklenti mobile/yerel/trlive_capture'a taşındı (artık mobile/pubspec.yaml önce bulunur).

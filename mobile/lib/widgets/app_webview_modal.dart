@@ -62,7 +62,7 @@ class _AppWebViewModalState extends State<AppWebViewModal> {
         onProgress: (p) => _progress.value = p,
         onPageFinished: (_) => _progress.value = 100,
         onWebResourceError: (e) {
-          if (e.isForMainFrame ?? true) {
+          if (e.isForMainFrame != false) {
             _progress.value = 100;
             if (mounted) setState(() => _failed = true);
           }
@@ -201,7 +201,6 @@ Future<void> showAppWebViewSheet(
       decoration: const BoxDecoration(
         color: Pal.bg,
         borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-        border: Border(top: BorderSide(color: Pal.outline)),
       ),
       clipBehavior: Clip.antiAlias,
       child: AppWebViewModal(url: url, title: title, onRefreshBalance: onRefreshBalance),

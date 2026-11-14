@@ -33,3 +33,12 @@ android {
         minSdk = 21
     }
 }
+
+// Yayın derlemesinde Android "lint vital" denetimi atlanır. Bu adım APK'yı değiştirmez; yalnızca derlemeden önce ek
+// bir kontrol yapar. Son derlemelerde lint aracının kendisi çökerek (LintDriver.handleDetectorError) derlemeyi
+// durdurduğu için kapatıldı. Dart kod analizi (flutter analyze) iş akışında ayrıca çalışmaya devam eder.
+rootProject.allprojects { p ->
+    p.tasks.matching { it.name.startsWith("lintVital") }.configureEach { t ->
+        t.enabled = false
+    }
+}
