@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../services/screen_guard.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/api.dart';
@@ -361,7 +362,9 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ScreenTag(screen: 'chat', userId: widget.peer['id']?.toString(), child: _guardedBuild(context));
+
+  Widget _guardedBuild(BuildContext context) {
     final peer = widget.peer;
     final w = MediaQuery.sizeOf(context).width;
     final nameColor = parseColor(peer['nameColor'] as String?);

@@ -102,7 +102,7 @@ router.get('/rooms/:roomId/pk', async (req, res) => {
 // PK için aday odalar: açık, PK'sı olmayan, gizli olmayan odalar.
 router.get('/pk/rooms', async (req, res) => {
   const r = await query(
-    `SELECT r.id, r.name, r.owner_id, u.username, u.display_name, u.is_hidden,
+    `SELECT r.id, r.name, r.owner_id, u.username, u.display_name,
             (SELECT COUNT(*)::int FROM room_members m WHERE m.room_id = r.id AND (m.microphone OR m.user_id NOT IN (SELECT id FROM active_ghosts))) AS members
      FROM rooms r JOIN users u ON u.id = r.owner_id
      WHERE r.is_active = TRUE AND r.is_hidden = FALSE AND r.owner_id <> $1 AND r.room_type = 'video'
@@ -111,7 +111,7 @@ router.get('/pk/rooms', async (req, res) => {
      ORDER BY members DESC, r.created_at DESC LIMIT 50`,
     [req.user.id],
   );
-  res.json({ rooms: r.rows.map((x) => ({ id: x.id, name: x.name, ownerId: x.owner_id, ownerName: x.is_hidden ? 'Gizli Kullanıcı' : (x.display_name || x.username), memberCount: x.members })) });
+  res.json({ rooms: r.rows.map((x) => ({ id: x.id, name: x.name, ownerId: x.owner_id, ownerName: x.display_name || x.username, memberCount: x.members })) });
 });
 
 // ---------------- Görüntülü PK: rakip yayının görüntüsü ----------------
@@ -131,7 +131,7 @@ router.post('/pk/:id/peer-token', userLimit('pk_peer', 30, 60e3), async (req, re
   if ((await query(`SELECT 1 FROM room_blocks WHERE room_id = $1 AND blocked_user_id = $2`, [other, req.user.id])).rowCount) {
     throw fail('Rakip odadan engellendiğiniz için rakip yayını izleyemezsiniz.', 403);
   }
-  const jwt = await livekitToken({ identity: `pk-${req.user.id}`, name: 'PK izleyici', room: other, canPublish: false, hidden: true });
+  const jwt = await livekitToken({ identity: `pk-${req.user.id}`, name: 'PK izleyici', room: other, canPublish: false, hidden: true, ttl: '1h' });
   res.json({ token: jwt, url: process.env.LIVEKIT_URL, roomId: other, hostId: mine === b.room_a ? b.host_b : b.host_a });
 });
 

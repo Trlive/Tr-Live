@@ -57,7 +57,9 @@ class SeatLayoutPicker extends StatelessWidget {
 class SeatRowSpec {
   final List<double> xs;
   final double dia;
-  const SeatRowSpec(this.xs, this.dia);
+  /// İsteğe bağlı koltuk başına çap ([xs] ile aynı uzunlukta); verilmezse hepsi [dia].
+  final List<double>? dias;
+  const SeatRowSpec(this.xs, this.dia, {this.dias});
 }
 
 /// Bir mikrofon modunun yerleşimi (Yoho ölçüleri, ekran genişliğine oranla):
@@ -121,8 +123,29 @@ class RoomGeom {
 // v2.38.2: Yoho ile yan yana ölçümde %1'lik pay daireleri Yoho'dan ~%9 büyük gösteriyordu; kaldırıldı (birebir ölçü).
 const double seatCircleBoost = 0.0;
 
-/// Bilinmeyen sayı gelirse en yakın büyük mod kullanılır.
-SeatLayoutSpec seatLayoutFor(int n) {
+const _xbTop = [0.16, 0.5, 0.84];
+const _xbSide = [0.08, 0.265, 0.735, 0.92];
+
+/// Doğum günü modu (özel tasarım, 25 mikrofon). Koltuk sırası soldan sağa, yukarıdan aşağıya:
+///  0 = oda sahibi (sol üst), 1 = doğum günü koltuğu (ortada büyük, taçlı), 2 = sağ üst,
+///  ardından pastanın iki yanında 3 sıra × 4 koltuk, en altta 5'erli iki sıra.
+const birthdayLayout = SeatLayoutSpec(0.175, [
+  SeatRowSpec(_xbTop, 0.17, dias: [0.112, 0.17, 0.112]),
+  SeatRowSpec(_xbSide, 0.104),
+  SeatRowSpec(_xbSide, 0.104),
+  SeatRowSpec(_xbSide, 0.104),
+  SeatRowSpec(_x5, 0.1),
+  SeatRowSpec(_x5, 0.1),
+], [0.185, 0.132, 0.132, 0.145, 0.135]);
+
+const kBirthdaySkin = 'birthday';
+const kBirthdaySeats = 25;
+/// Ortadaki taçlı doğum günü koltuğu (herkes oturabilir). 0 numara oda sahibine ayrılıdır.
+const kBirthdaySeat = 1;
+
+/// Bilinmeyen sayı gelirse en yakın büyük mod kullanılır. [skin] özel tasarım anahtarı (ör. 'birthday').
+SeatLayoutSpec seatLayoutFor(int n, {String? skin}) {
+  if (skin == kBirthdaySkin && n == kBirthdaySeats) return birthdayLayout;
   final exact = seatLayouts[n];
   if (exact != null) return exact;
   final keys = seatLayouts.keys.toList()..sort();

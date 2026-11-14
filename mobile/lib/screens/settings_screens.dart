@@ -512,13 +512,12 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
           key: 'hidden',
           feature: 'hiddenUser',
           title: 'Gizli kullanıcı',
-          desc: 'Etkinleştirildiğinde odalarda "Gizli Kullanıcı" olarak görünürsün: her açışta sana yeni bir gizli ID verilir, odada '
-              'sana dokunan profilini göremez; hediye şeritlerinde ve sıralamalarda da adın görünmez, çevrimiçi ve hangi odada '
-              'olduğun gösterilmez. Mesajlarda, akışta ve profilinde kendi adınla görünürsün. Odadayken açılıp kapatılamaz; önce odadan çık.'
+          desc: 'Etkinleştirildiğinde odalarda, sohbette ve listelerde "Gizli Kullanıcı" olarak görünürsün: sana her açışta yeni bir '
+              'gizli ID verilir, sana dokunan profilini göremez, aramada çıkmazsın. Odadayken açılıp kapatılamaz; önce odadan çık.'
               '${p['isHidden'] == true && '${p['hiddenId'] ?? ''}'.isNotEmpty ? '\nŞu anki gizli ID\'n: ${p['hiddenId']}' : ''}',
           value: p['isHidden'] == true,
           onChanged: (v) => _patch('hidden', {'isHidden': v},
-              on: v, doneOn: 'Gizli kullanıcı açık: odalarda "Gizli Kullanıcı" ve gizli ID\'nle görünürsün.', doneOff: 'Gizli kullanıcı kapandı.'),
+              on: v, doneOn: 'Gizli kullanıcı açık: odalarda ve listelerde "Gizli Kullanıcı" ve gizli ID\'nle görünürsün.', doneOff: 'Gizli kullanıcı kapandı.'),
         ),
         _toggle(
           key: 'ghost',

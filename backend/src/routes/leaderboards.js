@@ -4,7 +4,7 @@ import { requireAuth } from '../auth.js';
 import { oneOf } from '../http.js';
 import { periodStartIso } from '../periods.js';
 import { loadPublicRows } from '../services/users.js';
-import { anonUser, publicUser } from '../views.js';
+import { publicUser } from '../views.js';
 import { cpLevelFor } from '../levels.js';
 
 export const router = Router();
@@ -90,15 +90,14 @@ router.get('/', async (req, res) => {
     return res.json({
       type, period,
       entries: rows.filter((x) => people.has(x.user_a) && people.has(x.user_b))
-        .map((x, i) => ({ rank: i + 1, // CP eşleri profilde zaten açık: gizlemek eşi üzerinden kişiyi ele verirdi.
-        user: publicUser(people.get(x.user_a), req.user.id), partner: publicUser(people.get(x.user_b), req.user.id), total: String(x.total), level: cpLevelFor(x.total) })),
+        .map((x, i) => ({ rank: i + 1, user: publicUser(people.get(x.user_a), req.user.id), partner: publicUser(people.get(x.user_b), req.user.id), total: String(x.total), level: cpLevelFor(x.total) })),
     });
   }
   if (type === 'families') {
     return res.json({ type, period, entries: rows.map((x, i) => ({ rank: i + 1, family: { id: x.id, name: x.name, logoUrl: x.logo_url, level: x.level }, total: String(x.total) })) });
   }
   const users = new Map((await loadPublicRows(rows.map((x) => x.user_id))).map((u) => [u.id, u]));
-  const entries = rows.filter((x) => users.has(x.user_id)).map((x, i) => ({ rank: i + 1, user: anonUser(users.get(x.user_id), req.user.id), total: String(x.total) }));
+  const entries = rows.filter((x) => users.has(x.user_id)).map((x, i) => ({ rank: i + 1, user: publicUser(users.get(x.user_id), req.user.id), total: String(x.total) }));
   // Benim sıram (listede yoksa "50+") ve dönem toplamım.
   const mineIn = entries.find((e) => e.user.id === req.user.id);
   let me = null;

@@ -50,9 +50,7 @@ async function noteSaid(b, viewerId, c = { query }) {
 }
 
 async function bagJson(b, viewerId, c = { query }) {
-  // Çantayı atan o an gizliyse (gizli ID'siyle) öyle kalır; sonradan gizliliği kapatsa da gerçek kimliği görünmez.
-  const row = await loadPublicRow(b.sender_id);
-  const sender = row && b.sender_hidden ? { ...row, is_hidden: true, hidden_alias: b.sender_alias } : row;
+  const sender = await loadPublicRow(b.sender_id);
   const mine = (await c.query(`SELECT amount FROM lucky_bag_claims WHERE bag_id = $1 AND user_id = $2`, [b.id, viewerId])).rows[0];
   return {
     id: b.id, roomId: b.room_id, kind: b.kind, tier: b.tier, totalCoins: String(b.total_coins), slots: b.slots, claimed: b.claimed_count,
@@ -107,10 +105,9 @@ router.post('/rooms/:roomId/lucky-bags', userLimit('lucky_send', 6, 10 * 60e3), 
     // Üst üste çanta atılabilir (sıklık sınırı: 10 dakikada en fazla 6).
     await c.query(`UPDATE users SET coins = coins - $2, updated_at = NOW() WHERE id = $1`, [userId, String(tier.total)]);
     const bag = (await c.query(
-      `INSERT INTO lucky_bags(room_id, sender_id, kind, tier, total_coins, slots, amounts, note, opens_at, expires_at, sender_hidden, sender_alias)
-       VALUES($1,$2,$3,$4,$5,$6,$7,$8, NOW() + make_interval(secs => $9::int), NOW() + make_interval(secs => $10::int), $11, $12) RETURNING *`,
-      [roomId, userId, tier.kind, req.body.tier, String(tier.total), slots, splitBag(tier.total, slots).map(String), note, tier.countdown, tier.countdown + tier.window,
-        Boolean(req.user.is_hidden), req.user.is_hidden ? (req.user.hidden_alias ?? null) : null],
+      `INSERT INTO lucky_bags(room_id, sender_id, kind, tier, total_coins, slots, amounts, note, opens_at, expires_at)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8, NOW() + make_interval(secs => $9::int), NOW() + make_interval(secs => $10::int)) RETURNING *`,
+      [roomId, userId, tier.kind, req.body.tier, String(tier.total), slots, splitBag(tier.total, slots).map(String), note, tier.countdown, tier.countdown + tier.window],
     )).rows[0];
     await c.query(
       `INSERT INTO wallet_transactions(user_id, transaction_type, coin_amount, reference_id, description) VALUES($1,'lucky_bag_sent',$2,$3,$4)`,
@@ -121,9 +118,7 @@ router.post('/rooms/:roomId/lucky-bags', userLimit('lucky_send', 6, 10 * 60e3), 
   const json = await bagJson(out.bag, userId);
   hub.broadcastRoom(roomId, { type: 'lucky_bag_new', roomId, bag: { ...json, mine: null } });
   if (out.bag.kind === 'super' && !out.hidden) {
-    // Tüm uygulamaya giden şeritte gizli ID gönderilmez (hediye şeridi gibi).
-    const sender = json.sender?.isHidden ? { ...json.sender, hiddenId: null } : json.sender;
-    hub.broadcastGlobal({ type: 'lucky_bag_global', roomId, roomName: out.roomName, sender, totalCoins: json.totalCoins, slots: json.slots, bagId: json.id });
+    hub.broadcastGlobal({ type: 'lucky_bag_global', roomId, roomName: out.roomName, sender: json.sender, totalCoins: json.totalCoins, slots: json.slots, bagId: json.id });
   }
   res.status(201).json({ bag: json });
 });

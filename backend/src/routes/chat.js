@@ -24,7 +24,7 @@ async function roomAndMember(roomId, userId) {
   if (!room) throw fail('Oda bulunamadı.', 404);
   // Susturma odadan çıkıp girince kaybolmasın: kalıcı kayıt (room_mutes) ile üyelikteki süre birleştirilir.
   const member = (await query(
-    `SELECT m.role, GREATEST(m.chat_muted_until, mu.until) AS chat_muted_until
+    `SELECT m.role, m.joined_at, GREATEST(m.chat_muted_until, mu.until) AS chat_muted_until
      FROM room_members m LEFT JOIN room_mutes mu ON mu.room_id = m.room_id AND mu.user_id = m.user_id
      WHERE m.room_id = $1 AND m.user_id = $2`, [roomId, userId])).rows[0];
   if (!member) throw fail('Önce odaya girin.', 403);
@@ -84,13 +84,14 @@ router.post('/:roomId/messages', userLimit('chat10s', 8, 10e3), userLimit('chat1
 
 router.get('/:roomId/messages', async (req, res) => {
   const roomId = uuid(req.params.roomId, 'Oda');
-  await roomAndMember(roomId, req.user.id);
+  const { member } = await roomAndMember(roomId, req.user.id);
   const limit = req.query.limit ? positiveInt(req.query.limit, 'Limit', 100) : 50;
+  // Yalnızca odaya girdiği andan sonraki mesajlar: girmeden önce konuşulanlar yeni gelene gösterilmez (herkes için aynı).
   const r = await query(
     `SELECT m.id AS message_id, m.body, m.created_at AS message_at, m.sender_hidden, m.sender_alias, ${USER_PUBLIC_COLUMNS}
      FROM room_messages m JOIN users u ON u.id = m.user_id ${USER_PUBLIC_JOINS}
-     WHERE m.room_id = $1 AND m.deleted = FALSE ORDER BY m.created_at DESC LIMIT $2`,
-    [roomId, limit],
+     WHERE m.room_id = $1 AND m.deleted = FALSE AND m.created_at >= $3 ORDER BY m.created_at DESC LIMIT $2`,
+    [roomId, limit, member.joined_at],
   );
   res.json({
     // Gönderirken gizliyse o anki gizli kimliğiyle; şu an gizliyse de maskeli (eski mesajlardan kim olduğu çıkarılamasın).

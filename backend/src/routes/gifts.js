@@ -4,7 +4,7 @@ import { requireAuth } from '../auth.js';
 import { noteTask } from '../services/daily.js';
 import { userLimit } from '../firewall.js';
 import { fail, uuid, uuidArray, positiveInt, oneOf } from '../http.js';
-import { anonUser, roomUser } from '../views.js';
+import { publicUser, roomUser } from '../views.js';
 import { hub } from '../realtime.js';
 import { config } from '../config.js';
 import { distributeGift } from '../gifts_logic.js';
@@ -56,7 +56,7 @@ router.get('/gifts', async (req, res) => {
 // Uygulama açılışında şeridi doldurmak için son global hediyeler.
 router.get('/gifts/global/recent', async (req, res) => {
   const r = await query(
-    `SELECT e.id, e.coin_amount, e.display_level, e.created_at, e.sender_id, e.receiver_id, e.room_id, e.sender_hidden,
+    `SELECT e.id, e.coin_amount, e.display_level, e.created_at, e.sender_id, e.receiver_id, e.room_id,
             g.name AS gift_name, g.icon_url, g.animation_url, g.animation_format, gt.quantity
      FROM global_gift_events e
      JOIN gift_transactions gt ON gt.id = e.gift_transaction_id
@@ -69,9 +69,7 @@ router.get('/gifts/global/recent', async (req, res) => {
     events: r.rows.map((x) => ({
       id: x.id, roomId: x.room_id, coinAmount: String(x.coin_amount), displayLevel: x.display_level, quantity: x.quantity, createdAt: x.created_at,
       gift: { name: x.gift_name, iconUrl: x.icon_url, animationUrl: x.animation_url, animationFormat: x.animation_format },
-      // Gönderen o an gizliyse sonradan gizliliği kapatsa da "Gizli Kullanıcı" kalır.
-      sender: anonUser(x.sender_hidden && users.get(x.sender_id) ? { ...users.get(x.sender_id), is_hidden: true } : users.get(x.sender_id)),
-      receiver: anonUser(users.get(x.receiver_id)),
+      sender: publicUser(users.get(x.sender_id)), receiver: publicUser(users.get(x.receiver_id)),
     })),
   });
 });
@@ -210,9 +208,9 @@ router.post('/rooms/:roomId/gifts/send', userLimit('gift', 60, 60e3), idempotent
       // Gizli odanın kimliği tüm kullanıcılara yayılmasın: global şerit/kayıt yalnızca açık odalarda.
       if (coinAmount >= config.globalGiftMinCoins && !room.is_hidden) {
         await c.query(
-          `INSERT INTO global_gift_events(gift_transaction_id, room_id, sender_id, receiver_id, coin_amount, display_level, sender_hidden)
-           VALUES($1,$2,$3,$4,$5,$6,$7)`,
-          [gt.id, roomId, senderId, item.userId, coinAmount.toString(), giftDisplayLevel(coinAmount), Boolean(req.user.is_hidden)],
+          `INSERT INTO global_gift_events(gift_transaction_id, room_id, sender_id, receiver_id, coin_amount, display_level)
+           VALUES($1,$2,$3,$4,$5,$6)`,
+          [gt.id, roomId, senderId, item.userId, coinAmount.toString(), giftDisplayLevel(coinAmount)],
         );
         qualifying.push({ userId: item.userId, coinAmount, quantity: item.quantity });
       }
@@ -275,7 +273,7 @@ router.post('/rooms/:roomId/gifts/send', userLimit('gift', 60, 60e3), idempotent
   };
   // Odadakilere gizli kullanıcı gizli ID'siyle; tüm uygulamaya giden şeritlerde gizli ID gönderilmez.
   const sender = roomUser(byId.get(senderId));
-  const senderGlobal = anonUser(byId.get(senderId));
+  const senderGlobal = publicUser(byId.get(senderId));
   const receivers = result.transactions.map((t) => ({
     user: roomUser(byId.get(t.receiverId)), quantity: t.quantity, coinAmount: t.coinAmount,
   }));
@@ -311,7 +309,7 @@ router.post('/rooms/:roomId/gifts/send', userLimit('gift', 60, 60e3), idempotent
       quantity: q.reduce((s, x) => s + x.quantity, 0),
       totalCoins: q.reduce((s, x) => s + x.coinAmount, 0n).toString(),
       sender: senderGlobal,
-      receivers: q.map((x) => anonUser(byId.get(x.userId))),
+      receivers: q.map((x) => publicUser(byId.get(x.userId))),
     };
     hub.broadcastGlobal(ribbon);
   }

@@ -36,17 +36,24 @@ export const USER_PUBLIC_JOINS = `LEFT JOIN user_wip uw ON uw.user_id = u.id AND
 const wipItem = (row, type) => row.wip_items?.[type] ?? (row.wip_hidden?.[type] === true ? 0 : null);
 
 /**
- * Gizli kullanıcı (Yoho "gizemli kişi") YALNIZCA oda bağlamında, odadan çıkan yayınlarda ve sıralamalarda gizlenir:
- *  - roomUser: oda içi (üyeler, koltuk, oda sohbeti, hediye, çanta, PK, oyun, oda katkı listesi) → "Gizli Kullanıcı" + gizli ID.
- *  - anonUser: sıralamalar, destekçiler, etkinlik sıralamaları, tüm uygulamaya giden hediye / şans şeritleri → "Gizli Kullanıcı"
- *    (gizli ID yok: oda dışı listede gizli kimlik ID'siyle eşleştirilemesin).
- *  - publicUser: mesajlar, akış, yorumlar, profil, arkadaş, takip, aile, CP, koruyucu… → kişinin KENDİ kimliği. Gizli modda
- *    olduğu bildirilmez (isHidden: false) ve gizli ID hiç gönderilmez; hangi odada olduğu da hiçbir yerde gösterilmez
- *    (çevrimiçi / odada bilgisi gizli kullanıcı için kapalı), böylece odadaki gizli kimlikle eşleştirilemez.
+ * opts.alias: gizli kullanıcının gizli ID'si (hiddenId) yalnızca oda içi verilerde (üyeler, sohbet, hediye, çanta…) gönderilir;
+ * takip / arkadaş / ziyaretçi / paylaşım / mesaj gibi listelerde gönderilmez (gizli kimlik tanıdıklarıyla eşleştirilemesin).
  */
-export function publicUser(row, viewerId = null) {
+export function publicUser(row, viewerId = null, { alias = false } = {}) {
   if (!row) return null;
+  // Gizli kullanıcı herkese — kendisine de — "Gizli Kullanıcı" görünür (odada, sohbette, listelerde tutarlı olsun;
+  // kişi gizli modda olduğunu kendi koltuğundan da görür). Profil düzenleme kendi profil sayfasından yapılır.
   void viewerId;
+  const hidden = Boolean(row.is_hidden);
+  if (hidden) {
+    // Gizli kimlik: ad "Gizli Kullanıcı", gerçek ID yerine gizli ID (hiddenId); seviyeler de gösterilmez (kim olduğu
+    // seviyesinden tahmin edilmesin).
+    return {
+      id: row.id, publicId: null, hiddenId: alias ? (row.hidden_alias ?? null) : null, username: HIDDEN_NAME, displayName: HIDDEN_NAME, avatarUrl: null,
+      coinLevel: null, giftLevel: null, wipLevel: null, nameColor: null, frameUrl: null, isHidden: true,
+      chatBubbleUrl: null, micWaveUrl: null, profileCardUrl: null, roomCardUrl: null, specialId: null, hostBadge: null, idColor: null,
+    };
+  }
   return {
     id: row.id,
     publicId: row.public_id ?? null,
@@ -68,8 +75,7 @@ export function publicUser(row, viewerId = null) {
     micWaveUrl: row.cosmetics?.mic_wave ?? null,
     profileCardUrl: row.cosmetics?.mini_card ?? null,
     roomCardUrl: row.cosmetics?.room_card ?? null,
-    // Oda dışında gizli mod bildirilmez (kişi kendi kimliğiyle görünür).
-    isHidden: false,
+    isHidden: Boolean(row.is_hidden),
     // Yönetimden ayrı verilen ve takılı WIP öğeleri (WIP üyeliğinden bağımsız): çerçeve, sohbet balonu, rozet, giriş efekti.
     // Kullanıcı üyeliğin verdiği öğeyi Görünüm'den çıkardıysa 0 gelir (uygulama 0'ı "yok" sayar, üyelik
     // kademesine geri düşmez).
@@ -86,21 +92,8 @@ export function publicUser(row, viewerId = null) {
   };
 }
 
-// Gizli kimlik: ad "Gizli Kullanıcı", gerçek ID yerine (oda içinde) gizli ID; seviyeler ve görünüm öğeleri de gösterilmez
-// (kim olduğu seviyesinden / çerçevesinden tahmin edilmesin). Gizli kullanıcı kendini de odada böyle görür.
-function maskedUser(row, alias) {
-  return {
-    id: row.id, publicId: null, hiddenId: alias ? (row.hidden_alias ?? null) : null, username: HIDDEN_NAME, displayName: HIDDEN_NAME, avatarUrl: null,
-    coinLevel: null, giftLevel: null, wipLevel: null, nameColor: null, frameUrl: null, isHidden: true,
-    chatBubbleUrl: null, micWaveUrl: null, profileCardUrl: null, roomCardUrl: null, specialId: null, hostBadge: null, idColor: null,
-  };
-}
-
-/** Oda içi gösterim: gizli kullanıcı "Gizli Kullanıcı" ve gizli ID'siyle görünür. */
-export const roomUser = (row, viewerId = null) => (!row ? null : row.is_hidden ? maskedUser(row, true) : publicUser(row, viewerId));
-
-/** Sıralama / destekçi / tüm uygulamaya giden şerit: gizli kullanıcı "Gizli Kullanıcı" (gizli ID'siz). */
-export const anonUser = (row, viewerId = null) => (!row ? null : row.is_hidden ? maskedUser(row, false) : publicUser(row, viewerId));
+/** Oda içi gösterim: gizli kullanıcı gizli ID'siyle görünür. */
+export const roomUser = (row, viewerId = null) => publicUser(row, viewerId, { alias: true });
 
 export function selfUser(row) {
   return {

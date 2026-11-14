@@ -1,7 +1,10 @@
 import 'dart:async';
+import '../services/screen_guard.dart';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../widgets/anim_asset.dart';
+import '../widgets/app_webview_modal.dart';
+import '../widgets/room_theme_sheet.dart';
 import '../widgets/beauty_sheet.dart';
 import 'family_screen.dart';
 import '../widgets/cosmetics.dart';
@@ -29,6 +32,9 @@ import '../services/session.dart';
 import '../services/socket_service.dart';
 import '../widgets/app_theme.dart';
 import '../widgets/common.dart';
+import '../widgets/drag_bubble.dart';
+import '../widgets/birthday_stage.dart';
+import '../widgets/mic_skin_sheet.dart';
 import '../widgets/id_badge.dart';
 import '../widgets/cp_widgets.dart';
 import '../widgets/crown_icon.dart';
@@ -129,6 +135,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   final FlyTextQueue _fly = FlyTextQueue();
   bool _flyMode = false;
   int _flyCost = 99;
+  bool _activitiesOn = true; // yönetimdeki genel "Oda Etkinlikleri" anahtarı
   String _appNotice = '';
   Timer? _followTimer;
   final Set<String> _welcomed = {};
@@ -136,6 +143,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   /// Henüz açmadığım çantalar: açtığım çanta bana görünmez; çanta tamamen bitince herkesten kalkar.
   List<Map<String, dynamic>> get _openBags => _bags.where((b) => b['mine'] == null).toList();
   int get _seatCount => (_room?['seatCount'] as num?)?.toInt() ?? 8;
+  String? get _micSkin => _room?['micSkin']?.toString();
+  bool get _birthday => _micSkin == kBirthdaySkin && _seatCount == kBirthdaySeats;
   String get _myRole => (_me['role'] ?? 'user').toString();
   bool get _onSeat => _me['microphone'] == true;
 
@@ -316,6 +325,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       final meRow = _members.where((m) => m['userId']?.toString() == Session.id);
       final meUser = meRow.isEmpty ? null : mapOf(meRow.first['user']);
       if (meUser != null && EffectPrefs.entranceFx) _entrance.add(meUser);
+      // Kendi "odaya girdi" satırım (sunucu duyurusu abone olmadan önce gittiği için yerelden eklenir).
+      if (meUser != null && !(_me['hidden'] == true)) {
+        _messages.add({'id': 'join-me-${DateTime.now().microsecondsSinceEpoch}', 'join': true, 'user': meUser});
+      }
       // Kendi giriş aracım / efektim: sunucunun odaya duyurusu bize abone olmadan önce gittiği için yanıttan oynatılır.
       final myEntrance = mapOf(r['entrance']);
       final myEffect = mapOf(myEntrance?['effect']);
@@ -407,6 +420,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       setState(() {
         _appNotice = (c['roomNotice'] ?? '').toString().trim();
         _flyCost = (c['flyTextCoins'] as num?)?.toInt() ?? _flyCost;
+        _activitiesOn = c['roomActivitiesEnabled'] != false;
       });
     } catch (_) {}
   }
@@ -512,9 +526,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       final r = await Api.get('/api/rooms/${widget.roomId}/messages');
       if (!mounted) return;
       setState(() {
+        // Geçmiş yüklenirken gelen yerel satırlar (odaya girdi, takip kartı, sistem) silinmez.
+        final local = _messages.where((m) => m['join'] == true || m['follow'] == true || m['system'] == true).toList();
+        final ids = <String>{};
+        final server = listOf(r['messages']).where((m) => ids.add('${m['id']}')).toList();
         _messages
           ..clear()
-          ..addAll(listOf(r['messages']));
+          ..addAll(server)
+          ..addAll(local);
       });
       _scrollChatToEnd(force: true);
     } catch (_) {/* sohbet yüklenemese de oda çalışır */}
@@ -827,6 +846,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         if (nb != null && e['roomId']?.toString() == widget.roomId) setState(() => _bags.add(nb));
         break;
       case 'lucky_bag_claimed':
+        // Çantadan pay alan, odada uçan yazı gibi sağdan sola kayarak geçer.
+        final claimer = mapOf(e['user']);
+        if (claimer != null && (e['roomId'] == null || e['roomId']?.toString() == widget.roomId)) {
+          _fly.add({'user': claimer, 'text': 'şanslı çantadan ${fmtNumber(e['amount'])} Coin aldı 🪙', 'bagClaim': true});
+        }
         setState(() {
           final i = _bags.indexWhere((b) => b['id'] == e['bagId']);
           if (i >= 0) {
@@ -960,6 +984,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               if (e['lockedSeats'] != null) 'lockedSeats': e['lockedSeats'],
               if (e['announcement'] != null) 'announcement': e['announcement'],
               if (e.containsKey('coverUrl')) 'coverUrl': e['coverUrl'],
+              if (e.containsKey('micSkin')) 'micSkin': e['micSkin'],
+              if (e.containsKey('micSkinText')) 'micSkinText': e['micSkinText'],
             });
         break;
       case 'room_music_state':
@@ -1617,7 +1643,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         echoCancellation: true,
         autoGainControl: true,
         highPassFilter: noiseCancel,
-      );
+        // Konuşma odaklı işleme (Yoho gibi): klavye/tık sesi bastırma ve iPhone ses izolasyonu gürültü engellemeyle birlikte açılır.
+        typingNoiseDetection: noiseCancel,
+        voiceIsolation: noiseCancel,
+              );
 
   static Future<void> _loadNoisePref() async {
     if (_noiseLoaded) return;
@@ -1730,23 +1759,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     if (await _patchRoom({'password': res.isEmpty ? null : res}) && mounted) toast(context, res.isEmpty ? 'Oda kilidi kaldırıldı.' : 'Oda şifreyle kilitlendi.');
   }
 
-  Future<void> _roomThemes() async {
-    var theme = (_room?['theme'] ?? 'default').toString();
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (c) => StatefulBuilder(
-        builder: (c, setS) => AlertDialog(
-          title: const Text('Özel Temalar'),
-          content: SingleChildScrollView(child: ThemePicker(value: theme, onChanged: (v) => setS(() => theme = v))),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Vazgeç')),
-            FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Uygula')),
-          ],
-        ),
-      ),
-    );
-    if (ok == true && mounted) await _patchRoom({'theme': theme});
-  }
+  /// Tema penceresi (Müsait / Mağaza). Dokunulan tema hemen uygulanır; oda sesi kesilmez.
+  Future<void> _roomThemes() => showRoomThemeSheet(
+        context,
+        roomId: widget.roomId,
+        current: (_room?['theme'] ?? 'default').toString(),
+        onApply: (key) => _patchRoom({'theme': key}),
+      );
+
 
   Future<void> _toggleHidden() async {
     final hide = _room?['hidden'] != true;
@@ -1860,6 +1880,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               if (mounted) _micMode();
             });
           }, tint: cPurple),
+          if (_myRole == 'owner' && !_isLive && !_isVideo) feature(Icons.cake, 'Doğum\nGünü', () => run(_openBirthday), tint: cPink, active: _birthday),
           if (_isOwnerOrCohost) feature(Icons.palette, 'Tema', () => need(_isOwnerOrCohost, _roomThemes), tint: cPink),
           feature(Icons.share, 'Odayı\nPaylaş', () => run(_shareRoom), tint: cBlue),
           if (_myRole == 'owner') feature(Icons.power_settings_new, 'Odayı\nKapat', () => run(_closeRoom), tint: cRed),
@@ -1906,6 +1927,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         colors: const [Color(0xFF1A237E), Color(0xFF0D0D1A), Color(0xFFB71C1C)],
                       ),
                     tile(const Text('🎲', style: TextStyle(fontSize: 30)), 'Ludo', () => run(_openGames), colors: kGoldDeep),
+                    if (_activitiesOn) tile(const Icon(Icons.celebration, size: 30, color: Colors.white), 'Etkinlikler', () => run(_openRoomActivities), colors: const [Color(0xFF14506B), Color(0xFF0A1F2B)]),
                     tile(Image.asset('assets/images/lucky_pouch.webp', width: 48, height: 48), 'Şanslı Çanta', () => run(() => showBagSend(context, widget.roomId)), colors: const [Color(0xFF3A1010), Color(0xFF1A0808)]),
                   ]),
                   const SizedBox(height: 16),
@@ -2006,12 +2028,21 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   /// Odadaki müzik: alt çubuk (açık) ya da küçültülünce sürüklenebilir dönen plak.
   static final ValueNotifier<bool> _musicBarOpen = ValueNotifier<bool>(true);
+  static final ValueNotifier<Offset?> _discPos = ValueNotifier<Offset?>(null);
+  static void _noop() {}
 
   Future<void> _clearChat() async {
     if (!await confirm(context, 'Odadaki tüm sohbet mesajları herkes için silinsin mi?', action: 'Temizle')) return;
     if (!mounted) return;
     await guard(context, () => Api.delete('/api/rooms/${widget.roomId}/messages'));
   }
+
+  /// Oda içi etkinlikler: kendi sunucumuzdaki sabit H5 sayfası, alt %55'lik pencerede. Sesli yayın kesilmez.
+  void _openRoomActivities() => showAppWebViewSheet(
+        context,
+        url: '${Api.baseUrl}/room-activities?roomId=${Uri.encodeQueryComponent(widget.roomId)}',
+        title: 'Etkinlikler',
+      );
 
   void _openGames() => Navigator.push(context, MaterialPageRoute(builder: (_) => LudoScreen(roomId: widget.roomId, canManage: _isManager)));
 
@@ -2268,11 +2299,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       if (showHeads && _appNotice.isNotEmpty && !overlay) _noticeCard(maxW),
       if (showHeads && ann.isNotEmpty) _announcementCard(ann, maxW),
     ];
-    final head = heads.length;
-    if (_messages.isEmpty && head == 0) return const SizedBox.shrink();
+    const head = 0; // duyurular artık listenin içinde değil, sohbetin en üstünde (aşağıda) durur
+    if (_messages.isEmpty && heads.isEmpty) return const SizedBox.shrink();
     final total = _messages.length + head;
     // Ters liste: en yeni mesaj en altta; ekran dolunca da son yazılan hep görünür.
-    return ListView.builder(
+    final list = ListView.builder(
       controller: _chatScroll,
       reverse: true,
       padding: EdgeInsets.fromLTRB(8, overlay ? 10 : 2, rightPad ?? w * 0.2, 8),
@@ -2352,6 +2383,15 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         );
       },
     );
+    if (heads.isEmpty) return list;
+    // Duyurular (uygulama + oda) sohbetin EN ÜSTÜNDE sabit durur; mesajlar altında akar.
+    return Column(children: [
+      ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.3),
+        child: SingleChildScrollView(padding: EdgeInsets.fromLTRB(8, overlay ? 10 : 2, rightPad ?? w * 0.2, 0), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: heads)),
+      ),
+      Expanded(child: list),
+    ]);
   }
 
   void _closeInput() {
@@ -3114,6 +3154,13 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     );
   }
 
+  void _openBirthday() => showBirthdaySheet(
+        context,
+        currentName: _room?['micSkinText']?.toString(),
+        active: _birthday,
+        patchRoom: _patchRoom,
+      );
+
   void _emptySeatTap(int index, bool reserved, bool locked) {
     if (reserved) return;
     if (index == 0) {
@@ -3300,7 +3347,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       } else {
         // Ölçek yalnızca cihaz ölçüsüne bağlı (oturmak, izleyici, klavye, PK şeridi değiştirmez).
         final sc = _seatScaleFor(w);
-        final scoreRow = _scoreFits(seatLayoutFor(_seatCount), w * sc);
+        final scoreRow = _scoreFits(seatLayoutFor(_seatCount, skin: _micSkin), w * sc);
         _showScoreRow = scoreRow;
         seatH = _seatAreaHeight(w, sc, score: scoreRow);
         seats = _seatGrid(w, sc);
@@ -3583,7 +3630,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   /// Koltuk alanının yüksekliği: son satırın merkezi + yarıçap + ad (ve sığıyorsa puan) satırları.
   /// Puan satırının yeri, oda sahibi puanı kapatsa da ayrılır: sohbetin başladığı yer hiç oynamaz.
   double _seatAreaHeight(double w, double sc, {required bool score}) {
-    final spec = seatLayoutFor(_seatCount);
+    final spec = seatLayoutFor(_seatCount, skin: _micSkin);
     // topGap: başlığın altından ilk satırdaki DAİRENİN üst kenarına (Yoho ölçümü); +8 dp dokunma payı merkeze katılmaz.
     var cy = spec.topGap * w * sc + (spec.rows.first.dia * w * sc) / 2;
     for (final p in spec.pitch) {
@@ -3601,7 +3648,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     if (bodyH <= 0) return 1.0;
     final g = RoomGeom(w);
     final avail = bodyH - MediaQuery.paddingOf(context).top - g.headerH - g.barH - 110 - (_pkStage ? RoomPkPanel.height : 0);
-    final spec = seatLayoutFor(_seatCount);
+    final spec = seatLayoutFor(_seatCount, skin: _micSkin);
     final need = _seatAreaHeight(w, 1, score: _scoreFits(spec, w));
     if (need <= avail) return 1.0;
     if (avail <= 0) return 0.72;
@@ -3624,7 +3671,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       for (final m in _members)
         if (m['seatIndex'] != null) (m['seatIndex'] as num).toInt(): m,
     };
-    final spec = seatLayoutFor(_seatCount);
+    final spec = seatLayoutFor(_seatCount, skin: _micSkin);
     final pkStage = _pkStage && spec.rows.length == 3;
     final tiles = <Widget>[];
     final centers = <int, (Offset, double, int)>{}; // koltuk → (avatar merkezi, yarıçap, satır)
@@ -3657,7 +3704,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     var i = 0;
     // topGap: başlığın altından ilk satırdaki DAİRENİN üst kenarına (Yoho ölçümü); +8 dp dokunma payı merkeze katılmaz.
     var cy = spec.topGap * w * sc + (spec.rows.first.dia * w * sc) / 2;
+    final rowCy = <double>[];
     for (var r = 0; r < spec.rows.length; r++) {
+      rowCy.add(cy);
       final row = spec.rows[r];
       // Daire %1 büyür (seatCircleBoost); artı simgesi eski daire ölçüsüne göre kalır.
       final slot = (row.dia + seatCircleBoost) * w * sc + 8;
@@ -3669,35 +3718,84 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         if (dx < minDx) minDx = dx;
       }
       final tileW = (row.xs.length == 1 ? slot * 1.9 : minDx * w - 2).clamp(slot, slot * 2.2).toDouble();
-      for (final x in row.xs) {
+      for (var k = 0; k < row.xs.length; k++) {
+        final x = row.xs[k];
         if (i >= _seatCount) break;
         // PK sahnesi: solda Kırmızı 2×2, sağda Mavi 2×2 (konum → koltuk eşlemesi).
         final idx = pkStage ? kPkSeatOrder[i++] : i++;
-        centers[idx] = (Offset(x * w, cy), (slot - 8) / 2, r);
+        // Satırda koltuk başına farklı çap olabilir (doğum günü: ortadaki büyük koltuk).
+        final sd = row.dias?[k];
+        final sSlot = sd == null ? slot : (sd + seatCircleBoost) * w * sc + 8;
+        final sPlus = sd == null ? plus : (sd * w * sc) / 2 * 0.95;
+        final sTileW = sd == null ? tileW : math.max(tileW, sSlot * 1.3);
+        centers[idx] = (Offset(x * w, cy), (sSlot - 8) / 2, r);
         tiles.add(Positioned(
-          left: x * w - tileW / 2,
-          top: cy - slot / 2,
-          width: tileW,
-          child: Center(child: _seatTile(idx, bySeat[idx], slot, plusSize: plus)),
+          left: x * w - sTileW / 2,
+          top: cy - sSlot / 2,
+          width: sTileW,
+          child: Center(child: _seatTile(idx, bySeat[idx], sSlot, plusSize: sPlus)),
         ));
+        // Doğum günü tasarımı: koltuk halkası; ortadaki doğum günü koltuğu taçlı altın.
+        if (_birthday) {
+          final d = sSlot;
+          final crown = idx == kBirthdaySeat;
+          tiles.add(Positioned(
+            left: x * w - d / 2,
+            top: cy - d / 2 - (crown ? d * 0.22 : 0) - 1,
+            width: d,
+            height: d * (crown ? 1.22 : 1),
+            child: BirthdaySeatRing(diameter: d, host: crown),
+          ));
+        }
       }
       if (r < spec.pitch.length) cy += spec.pitch[r] * w * sc;
     }
-    // CP (5. kademe): yan yana oturan CP'ler arasında kalp atışı ve avatarların çevresinden çıkan kalpler.
+    if (_birthday && rowCy.length >= 4) {
+      // Üstte kutlama şeridi (sahibin yazdığı isimle), ortada pasta.
+      final bw = 0.78 * w * sc;
+      tiles.insert(0, Positioned(left: (w - bw) / 2, top: 0.012 * w * sc, width: bw, height: bw * 0.2, child: BirthdayBanner(name: _room?['micSkinText']?.toString(), width: bw)));
+      final cakeTop = rowCy[1] - 0.075 * w * sc;
+      final cakeH = (rowCy[3] - rowCy[1]) + 0.15 * w * sc;
+      final cakeW = 0.36 * w * sc;
+      tiles.insert(0, Positioned(left: (w - cakeW) / 2, top: cakeTop, width: cakeW, height: cakeH, child: BirthdayCake(width: cakeW, height: cakeH)));
+    }
+    // CP (5. kademe): aynı odada mikrofonda oturan CP'ler. Yan yana (aynı sıra, bitişik koltuk) olanlarda aralarında kalp atışı
+    // + avatar çevresinde uçuşan kalpler; yan yana OLMAYAN ama mikrofonlarda oturan CP'lerde yalnızca avatarların
+    // çevresinde kalpler uçuşur (aradaki kalp yok).
     for (final e in centers.entries) {
-      final next = centers[e.key + 1];
-      if (next == null || next.$3 != e.value.$3) continue;
       final ua = mapOf(bySeat[e.key]?['user']);
-      final ub = mapOf(bySeat[e.key + 1]?['user']);
-      if (ua == null || ub == null) continue;
+      if (ua == null) continue;
       final ida = ua['id']?.toString();
-      final idb = ub['id']?.toString();
+      final pid = ua['cpPartnerId']?.toString();
       final la = (ua['cpLevel'] as num?)?.toInt() ?? 0;
-      if (ida == null || idb == null || ua['cpPartnerId']?.toString() != idb || ub['cpPartnerId']?.toString() != ida || la < kCpEffectLevel) continue;
-      final a = e.value.$1, b = next.$1, rr = e.value.$2;
+      if (ida == null || pid == null || la < kCpEffectLevel) continue;
+      // Eşin koltuğu.
+      int? partnerSeat;
+      for (final x in centers.keys) {
+        if (x == e.key) continue;
+        final ub = mapOf(bySeat[x]?['user']);
+        if (ub != null && ub['id']?.toString() == pid && ub['cpPartnerId']?.toString() == ida) {
+          partnerSeat = x;
+          break;
+        }
+      }
+      if (partnerSeat == null) continue;
+      final next = centers[e.key + 1];
+      final prev = centers[e.key - 1];
+      // Yan yana çiftin sağdaki yarısı: çift soldaki koltukta tek parça çizildi.
+      if (partnerSeat == e.key - 1 && prev != null && prev.$3 == e.value.$3) continue;
+      final adjacent = partnerSeat == e.key + 1 && next != null && next.$3 == e.value.$3;
+      final a = e.value.$1, rr = e.value.$2;
       final pad = rr * 1.0;
-      final box = Rect.fromLTRB(math.min(a.dx, b.dx) - rr - pad, math.min(a.dy, b.dy) - rr - pad, math.max(a.dx, b.dx) + rr + pad, math.max(a.dy, b.dy) + rr + pad);
-      tiles.add(Positioned.fromRect(rect: box, child: CpSeatHearts(a: a - box.topLeft, b: b - box.topLeft, r: rr)));
+      if (adjacent) {
+        final b = next.$1;
+        final box = Rect.fromLTRB(math.min(a.dx, b.dx) - rr - pad, math.min(a.dy, b.dy) - rr - pad, math.max(a.dx, b.dx) + rr + pad, math.max(a.dy, b.dy) + rr + pad);
+        tiles.add(Positioned.fromRect(rect: box, child: CpSeatHearts(a: a - box.topLeft, b: b - box.topLeft, r: rr)));
+      } else {
+        // Yan yana değil: her iki avatarın çevresinde ayrı kalp bulutu (aradaki kalp yok). İki taraf için ayrı çizilir.
+        final box = Rect.fromLTRB(a.dx - rr - pad, a.dy - rr - pad * 1.6, a.dx + rr + pad, a.dy + rr + pad);
+        tiles.add(Positioned.fromRect(rect: box, child: CpSeatHearts(a: a - box.topLeft, b: a - box.topLeft, r: rr, solo: true)));
+      }
     }
     return Stack(clipBehavior: Clip.none, children: tiles);
   }
@@ -4309,7 +4407,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ScreenTag(screen: 'room', roomId: widget.roomId, child: _guardedBuild(context));
+
+  Widget _guardedBuild(BuildContext context) {
     RoomDock.myRole = _myRole;
     RoomDock.closesOnLeave = _closesOnLeave;
     return ValueListenableBuilder<bool>(
@@ -4337,6 +4437,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 final g = RoomGeom(w);
                 return Stack(key: _stageKey, fit: StackFit.expand, children: [
                 if (_isLive) Positioned.fill(child: _liveBackdrop()),
+                // Doğum günü modu: arka planda yukarıdan aşağı süzülen balonlar (koltukların ve sohbetin arkasında).
+                if (_birthday && !_isLive && !RoomDock.minimized.value) const Positioned.fill(child: BirthdayBalloons()),
                 Padding(
                 padding: EdgeInsets.only(bottom: _inputOpen ? MediaQuery.viewInsetsOf(context).bottom : 0),
                 child: Column(children: [
@@ -4392,10 +4494,15 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       return ValueListenableBuilder<bool>(
                         valueListenable: _musicBarOpen,
                         builder: (context, open, _) => Stack(children: [
-                          Positioned(
-                            left: 14,
-                            top: MediaQuery.paddingOf(context).top + g.headerH + 44,
-                            child: DjDisc(onTap: () => _musicBarOpen.value = !open),
+                          // Küçültülmüş plak: müziği açan kişi istediği yere sürükleyip bırakır; konum oda boyunca korunur.
+                          DragBubble(
+                            pos: _discPos,
+                            snap: false,
+                            size: 50,
+                            initial: Offset(14, MediaQuery.paddingOf(context).top + g.headerH + 44),
+                            safe: EdgeInsets.fromLTRB(4, MediaQuery.paddingOf(context).top + 4, 4, g.barH + MediaQuery.paddingOf(context).bottom + 4),
+                            onTap: () => _musicBarOpen.value = !open,
+                            child: const DjDisc(onTap: _noop),
                           ),
                           if (open && !_inputOpen)
                             Positioned(

@@ -438,7 +438,7 @@ class _ClaimDialogState extends State<_ClaimDialog> {
         const Text('Tebrikler!', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 21)),
         const SizedBox(height: 6),
         Text('$name takip et ve bir sonrakini kaçırma!', textAlign: TextAlign.center, maxLines: 2, style: const TextStyle(color: Color(0xFFFFF3B0), fontWeight: FontWeight.w600, fontSize: 14.5)),
-        if (_claims.isNotEmpty) ...[const SizedBox(height: 10), _claimsStrip()],
+        // Alanların geçiş şeridi artık çantanın içinde değil, odada uçan yazı gibi kayar (room_screen).
         const SizedBox(height: 12),
         _okButton(),
       ]);
@@ -528,7 +528,7 @@ class _ClaimDialogState extends State<_ClaimDialog> {
     }
     // Odanın ortasında kare kart (bir tık büyütüldü; kazanç listesi varken biraz uzar).
     final side = (MediaQuery.sizeOf(context).width * 0.76).clamp(250.0, 330.0);
-    final tall = _won != null && _claims.isNotEmpty ? 56.0 : 0.0;
+    const tall = 0.0;
     return Dialog(
       backgroundColor: Colors.transparent,
       insetPadding: EdgeInsets.zero,

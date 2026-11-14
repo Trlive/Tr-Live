@@ -2,7 +2,6 @@ import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
-import 'push_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'error_log.dart';
 import 'room_dock.dart';
@@ -37,16 +36,11 @@ class BackgroundService with WidgetsBindingObserver {
   }
   String _roomName = 'Oda';
 
-  /// Ön plan servisi yalnızca Android'de: iPhone'da odadaki ses, uygulamanın arka plan ses izniyle (UIBackgroundModes: audio)
-  /// kendiliğinden sürer; servis ve bildirimi gerekmez.
-  static bool get _android => defaultTargetPlatform == TargetPlatform.android;
-
   /// Uygulama açılırken bir kez çağrılır.
   void init() {
     if (_inited) return;
     _inited = true;
     WidgetsBinding.instance.addObserver(this);
-    if (!_android) return;
     try {
       FlutterForegroundTask.initCommunicationPort();
       FlutterForegroundTask.init(
@@ -80,7 +74,7 @@ class BackgroundService with WidgetsBindingObserver {
 
   Future<void> roomOpened(String name) => _queue(() async {
         _roomName = name;
-        if (_running && _android) {
+        if (_running) {
           // Oda değişti: servis açık kalır, yalnız bildirim yazısı güncellenir.
           try {
             await FlutterForegroundTask.updateService(notificationText: '$name odasındasınız · dönmek için dokun');
@@ -116,7 +110,7 @@ class BackgroundService with WidgetsBindingObserver {
 
   /// Servis; mikrofon izni varsa mikrofon + medya türüyle, yoksa yalnız medya türüyle açılır.
   Future<void> _startService() async {
-    if (_running || !_android) return;
+    if (_running) return;
     if (await _micAllowed() && await _tryStart(withMic: true)) return;
     await _tryStart(withMic: false);
   }
@@ -144,7 +138,7 @@ class BackgroundService with WidgetsBindingObserver {
   /// Uygulama ekrana dönünce: servis bir sebeple kapandıysa yeniden açılır; mikrofondayken servis mikrofon türünde
   /// değilse (izin sonradan verildi) şimdi yükseltilir.
   Future<void> _ensureOnResume() => _queue(() async {
-        if (!RoomDock.isOpen || !_foreground || !_android) return;
+        if (!RoomDock.isOpen || !_foreground) return;
         try {
           _running = await FlutterForegroundTask.isRunningService;
         } catch (_) {}
@@ -156,7 +150,6 @@ class BackgroundService with WidgetsBindingObserver {
       });
 
   Future<void> _stopService() async {
-    if (!_android) return;
     try {
       if (await FlutterForegroundTask.isRunningService) await FlutterForegroundTask.stopService();
     } catch (e, s) {
@@ -173,10 +166,6 @@ class BackgroundService with WidgetsBindingObserver {
       final prefs = await SharedPreferences.getInstance();
       if (prefs.getBool('asked_notification') ?? false) return;
       await prefs.setBool('asked_notification', true);
-      if (!_android) {
-        await PushService.requestIosPermission();
-        return;
-      }
       if (await FlutterForegroundTask.checkNotificationPermission() != NotificationPermission.granted) {
         await FlutterForegroundTask.requestNotificationPermission();
       }

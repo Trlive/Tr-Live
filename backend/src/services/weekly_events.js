@@ -2,7 +2,7 @@
 // Hafta Pazartesi 00:00 (Türkiye saati) başlar; biten haftanın ilk 3'ü bir kez ödüllendirilir.
 import { query, tx } from '../database.js';
 import { hub } from '../realtime.js';
-import { anonUser } from '../views.js';
+import { publicUser } from '../views.js';
 import { loadPublicRows, equipIfNone, announceUserChange } from './users.js';
 import { wipLabel } from './wip.js';
 import { nonOverlapping } from '../ticker.js';
@@ -123,9 +123,8 @@ export async function decorate(rows, viewerId) {
   return rows.map((x, i) => ({
     rank: x.rank ?? i + 1,
     score: String(x.score),
-    // Sıralama: gizli kullanıcı "Gizli Kullanıcı" görünür.
-    user: anonUser(users.get(x.user_id), viewerId),
-    partner: x.partner_id ? anonUser(users.get(x.partner_id), viewerId) : null,
+    user: publicUser(users.get(x.user_id), viewerId),
+    partner: x.partner_id ? publicUser(users.get(x.partner_id), viewerId) : null,
   }));
 }
 
@@ -284,7 +283,7 @@ export async function settleWeek(start, end) {
   }
   if (winners.length) {
     const users = new Map((await loadPublicRows([...new Set(winners.map((w) => w.userId))])).map((u) => [u.id, u]));
-    const lines = winners.map((w) => `${w.title} ${anonUser(users.get(w.userId), null)?.displayName ?? ''}`);
+    const lines = winners.map((w) => `${w.title} ${publicUser(users.get(w.userId), null)?.displayName ?? ''}`);
     const body = `Geçen haftanın kazananları:\n${lines.join('\n')}`.slice(0, 2000);
     await query(`INSERT INTO announcements(kind, title, body) VALUES('event', 'Haftalık etkinlik sonuçları', $1)`, [body]).catch((e) => console.error('[etkinlik] duyuru:', e.message));
   }

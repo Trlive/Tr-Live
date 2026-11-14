@@ -28,6 +28,9 @@ class CropSpec {
   /// Mesajlar > duyuru kartı görseli (kartta 1,8:1).
   static const announcement = CropSpec(1.8, 1080, title: 'Duyuru görselini ayarla');
 
+  /// Oda teması: dikey 9:16, 1080x1920 (sunucu da aynı boyuta getirir).
+  static const roomTheme = CropSpec(9 / 16, 1080, title: 'Tema görselini ayarla');
+
   int get outHeight => (outWidth / aspect).round();
 }
 

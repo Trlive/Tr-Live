@@ -1,4 +1,5 @@
 import 'dart:io' show File;
+import '../services/screen_guard.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import '../services/api.dart';
@@ -118,7 +119,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => SecureScreen(child: ScreenTag(screen: 'profile', child: _guardedBuild(context)));
+
+  Widget _guardedBuild(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Profili düzenle'), actions: [
         TextButton(onPressed: _saving ? null : _save, child: _saving ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Kaydet')),

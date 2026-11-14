@@ -31,7 +31,6 @@ class PushService with WidgetsBindingObserver {
       importance: Importance.high,
       priority: Priority.high,
     ),
-    iOS: DarwinNotificationDetails(threadIdentifier: 'trlive_social'),
   );
 
   static const _details = NotificationDetails(
@@ -42,36 +41,15 @@ class PushService with WidgetsBindingObserver {
       importance: Importance.high,
       priority: Priority.high,
     ),
-    iOS: DarwinNotificationDetails(threadIdentifier: 'trlive_announce'),
   );
 
-  // Tek seferlik başlatma: aynı anda iki yerden çağrılsa da bir kez yapılır.
-  static Future<void>? _initF;
-  static Future<void> _init() => _initF ??= _doInit();
-
-  static Future<void> _doInit() async {
+  static Future<void> _init() async {
     if (_ready) return;
     await _plugin.initialize(
-      const InitializationSettings(
-        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
-        // iPhone: izin açılışta sorulmaz; odaya ilk girişte [requestIosPermission] ile istenir.
-        iOS: DarwinInitializationSettings(
-          requestAlertPermission: false,
-          requestBadgePermission: false,
-          requestSoundPermission: false,
-        ),
-      ),
+      const InitializationSettings(android: AndroidInitializationSettings('@mipmap/ic_launcher')),
       onDidReceiveNotificationResponse: (r) => _handleTap(r.payload),
     );
     _ready = true;
-  }
-
-  /// iPhone'da bildirim izni (Android'de izin ön plan servisi üzerinden istenir).
-  static Future<void> requestIosPermission() async {
-    await _init();
-    await _plugin
-        .resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>()
-        ?.requestPermissions(alert: true, badge: true, sound: true);
   }
 
   static void _handleTap(String? payload) {

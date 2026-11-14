@@ -8,7 +8,7 @@ import { endPkForRoom } from './pk.js';
 import { cancelRoomGame, forfeitUserInRoom } from './games.js';
 import { nonOverlapping } from '../ticker.js';
 
-export const SUPPORTED_SEATS = new Set([2, 4, 5, 6, 8, 9, 12, 15, 20, 30]);
+export const SUPPORTED_SEATS = new Set([2, 4, 5, 6, 8, 9, 12, 15, 20, 25, 30]);
 
 // Odayı kapatır: üyeleri temizler, yayın oturumlarını bitirir, herkese bildirir.
 export async function closeRoom(roomId) {

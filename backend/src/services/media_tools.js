@@ -248,3 +248,20 @@ async function prepare(buf, alpha, { frame = false, iconOnly = false } = {}) {
     return { buf: out, alpha: side, converted, scene, icon };
   });
 }
+
+/**
+ * Görseli tam olarak [w]x[h] boyutuna getirir (oranı korur, taşan kısmı ortadan kırpar: "cover"). Hareketli dosyada ilk kare.
+ * Önce webp, olmazsa jpeg üretir. ffmpeg yoksa null döner.
+ */
+export async function fitImage(buf, w, h, { quality = 82 } = {}) {
+  if (!(await ffmpegAvailable())) return null;
+  return withTemp(buf, 'img', async (file) => {
+    const vf = `scale=${w}:${h}:force_original_aspect_ratio=increase:flags=lanczos,crop=${w}:${h}`;
+    try {
+      const out = await run('ffmpeg', ['-v', 'error', '-i', file, '-vf', vf, '-frames:v', '1', '-c:v', 'libwebp', '-quality', String(quality), '-f', 'webp', 'pipe:1'], { timeoutMs: 60000 });
+      if (out.length) return { buf: out, mime: 'image/webp', ext: 'webp' };
+    } catch { /* libwebp yoksa jpeg */ }
+    const out = await run('ffmpeg', ['-v', 'error', '-i', file, '-vf', vf, '-frames:v', '1', '-c:v', 'mjpeg', '-q:v', '3', '-f', 'image2pipe', 'pipe:1'], { timeoutMs: 60000 });
+    return out.length ? { buf: out, mime: 'image/jpeg', ext: 'jpg' } : null;
+  });
+}

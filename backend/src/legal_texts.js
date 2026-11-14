@@ -15,7 +15,7 @@ const C = COMPANY;
 export const PRIVACY_EN = {
   title: 'TR Live Privacy Policy',
   updatedLabel: 'Last updated',
-  updated: 'November 1, 2026',
+  updated: 'November 14, 2026',
   sections: [
     {
       blocks: [
@@ -46,6 +46,7 @@ export const PRIVACY_EN = {
           'Network information: IP address.',
           'Usage information: sign-in times, entering and leaving rooms, time spent on the microphone, gifts sent and received, searches and other in-app interactions.',
           'Error logs: technical records created when the app crashes or an action fails. These are kept in our own systems for a limited time.',
+          'Screenshot records: when you take a screenshot inside the app and your device reports it, we record the time, the screen (for example a room or a profile) and the room or user shown, to protect users and prevent misuse. The screenshot image itself is not sent to us. These records are kept for 90 days. Screens that show profile photos cannot be captured on supported devices.',
           'Location: we do not collect your precise (GPS) location. Your country and city come from what you enter in your profile.',
         ] },
         { h: 'Device permissions' },

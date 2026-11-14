@@ -97,12 +97,9 @@ if [ ! -f "$ENVD/panel.env" ]; then
   PW=${PANEL_PASSWORD:-}
   if [ ${#PW} -lt 10 ] || [ "$PW" = "$PLACEHOLDER" ] || ! [[ $PW =~ ^[A-Za-z0-9._@%+=:,!-]+$ ]]; then
     PW=$(rnd 16)
-    # Şifre yalnızca sunucu konsoluna yazılır; kurulum kaydına (install.log) yazılmaz: o kayıt uygulamadaki yönetim
-    # sayfasında da görünür. Şifre ayrıca /opt/trlive/env/panel.env dosyasındadır (yalnızca root okur).
-    { echo "=================================================================="
-      echo "TR LIVE PANEL SIFRESI (cloud-init sifresi uygun degildi): $PW"
-      echo "=================================================================="; } > /dev/console 2>/dev/null || true
-    log "Panel şifresi üretildi: sunucu konsolunda gösterildi ve $ENVD/panel.env dosyasında saklanıyor."
+    console "=================================================================="
+    console "TR LIVE PANEL SIFRESI (cloud-init sifresi uygun degildi): $PW"
+    console "=================================================================="
   fi
   printf "PANEL_PASSWORD='%s'\n" "$PW" > "$ENVD/panel.env"
 fi

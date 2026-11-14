@@ -18,6 +18,7 @@ import 'services/socket_service.dart';
 import 'widgets/app_theme.dart';
 import 'widgets/common.dart';
 import 'services/effect_prefs.dart';
+import 'services/screen_guard.dart';
 import 'widgets/nav_guard.dart';
 import 'widgets/tr_localizations.dart';
 
@@ -97,6 +98,7 @@ Future<void> _boot() async {
     );
   };
   PresenceService.init();
+  ScreenGuard.init(); // uygulama içi ekran görüntüsü bildirimi (Android)
   runApp(const TRLiveApp());
   // Yönetimden "herkese telefon bildirimi". İzin penceresi açılış ekranı çizilmeden açılırsa bazı telefonlarda
   // uygulama logoda takılı kalıyordu: ilk kare çizildikten birkaç saniye sonra başlatılır.

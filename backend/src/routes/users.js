@@ -5,7 +5,7 @@ import { userLimit } from '../firewall.js';
 import { fail, uuid } from '../http.js';
 import { loadProfile } from '../services/profile.js';
 import { loadPublicRows, attachCurrentRooms } from '../services/users.js';
-import { publicUser, anonUser, USER_PUBLIC_COLUMNS, USER_PUBLIC_JOINS } from '../views.js';
+import { publicUser, USER_PUBLIC_COLUMNS, USER_PUBLIC_JOINS } from '../views.js';
 import { featuresFor } from '../services/wip.js';
 import { isGhost } from '../services/presence.js';
 import { notifyUser } from '../services/notify.js';
@@ -16,13 +16,13 @@ router.use(requireAuth);
 const like = (q) => `%${q.toLowerCase().replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
 const paging = (req) => ({ limit: Math.min(Math.max(Number(req.query.limit) || 30, 1), 100), offset: Math.max(Number(req.query.offset) || 0, 0) });
 
-// Gizli moddaki kullanıcı da kendi kimliğiyle bulunur (gizlilik yalnızca odalarda; hangi odada olduğu gösterilmez).
+// Gizli kullanıcılar aramada çıkmaz.
 router.get('/search', userLimit('user_search', 60, 60e3), async (req, res) => {
   const q = String(req.query.q ?? '').trim();
   if (q.length < 2) throw fail('Arama için en az 2 karakter girin.');
   const r = await query(
     `SELECT ${USER_PUBLIC_COLUMNS} FROM users u ${USER_PUBLIC_JOINS}
-     WHERE u.account_status = 'active' AND u.id <> $3
+     WHERE u.account_status = 'active' AND u.is_hidden = FALSE AND u.id <> $3
        AND (lower(u.username) LIKE $1 ESCAPE '\\' OR lower(u.display_name) LIKE $1 ESCAPE '\\' OR lower(u.public_id) = $2
             OR EXISTS (SELECT 1 FROM special_ids si WHERE si.user_id = u.id AND si.special_id = $2 AND si.expires_at > NOW()))
        AND NOT EXISTS (SELECT 1 FROM user_blocks b WHERE (b.blocker_id = $3 AND b.blocked_id = u.id) OR (b.blocker_id = u.id AND b.blocked_id = $3))
@@ -35,8 +35,9 @@ router.get('/search', userLimit('user_search', 60, 60e3), async (req, res) => {
 // Oda içi profil kartı: "Yakın Arkadaşlarım" (bu kişiye en çok hediye gönderen 5 kişi) ve "Madalyalar" (rozetler).
 router.get('/:userId/card', async (req, res) => {
   const targetId = uuid(req.params.userId, 'Kullanıcı');
-  const t = (await query(`SELECT id FROM users WHERE id = $1 AND account_status <> 'deleted'`, [targetId])).rows[0];
+  const t = (await query(`SELECT id, is_hidden FROM users WHERE id = $1 AND account_status <> 'deleted'`, [targetId])).rows[0];
   if (!t) throw fail('Kullanıcı bulunamadı.', 404);
+  if (t.is_hidden && targetId !== req.user.id) return res.json({ supporters: [], medals: [], gifts: [] });
   const sup = await query(
     `SELECT sender_id, SUM(coin_amount)::text AS coins FROM gift_transactions
      WHERE receiver_id = $1 AND sender_id <> $1 GROUP BY sender_id ORDER BY SUM(coin_amount) DESC LIMIT 5`,
@@ -57,8 +58,7 @@ router.get('/:userId/card', async (req, res) => {
   );
   res.json({
     gifts: gifts.rows.map((g) => ({ name: g.name, iconUrl: g.icon_url, quantity: g.qty })),
-    // Destekçiler bir sıralamadır: gizli gönderen "Gizli Kullanıcı" görünür (odada gönderdiği hediye adıyla eşleşmesin).
-    supporters: sup.rows.filter((x) => users.has(x.sender_id)).map((x) => ({ user: anonUser(users.get(x.sender_id), req.user.id), coins: x.coins })),
+    supporters: sup.rows.filter((x) => users.has(x.sender_id)).map((x) => ({ user: publicUser(users.get(x.sender_id), req.user.id), coins: x.coins })),
     medals: medals.rows.map((m) => ({ name: m.item_name, assetUrl: m.asset_url })),
   });
 });
@@ -82,14 +82,15 @@ router.get('/:userId', async (req, res) => {
 router.post('/:userId/follow', userLimit('follow', 60, 3600e3), async (req, res) => {
   const targetId = uuid(req.params.userId, 'Kullanıcı');
   if (targetId === req.user.id) throw fail('Kendinizi takip edemezsiniz.');
-  const t = (await query(`SELECT account_status FROM users WHERE id = $1`, [targetId])).rows[0];
+  const t = (await query(`SELECT is_hidden, account_status FROM users WHERE id = $1`, [targetId])).rows[0];
   if (!t || t.account_status !== 'active') throw fail('Kullanıcı bulunamadı.', 404);
+  if (t.is_hidden) throw fail('Gizli kullanıcı takip edilemez.', 403);
   const blocked = await query(`SELECT 1 FROM user_blocks WHERE (blocker_id = $1 AND blocked_id = $2) OR (blocker_id = $2 AND blocked_id = $1)`, [req.user.id, targetId]);
   if (blocked.rowCount) throw fail('Bu kullanıcıyı takip edemezsiniz.', 403);
   const ins = await query(`INSERT INTO follows(follower_id, followed_id) VALUES($1,$2) ON CONFLICT (follower_id, followed_id) DO NOTHING RETURNING follower_id`, [req.user.id, targetId]);
   res.json({ ok: true, isFollowing: true });
-  // Yeni takipte bildirim (takip oda dışı bir işlemdir: gizli modda da kişinin kendi adıyla).
-  if (ins.rowCount) {
+  // Yeni takipte bildirim (gizli kullanıcı kimliği açığa çıkmasın diye bildirilmez).
+  if (ins.rowCount && !req.user.is_hidden) {
     notifyUser(targetId, 'follow', '➕ Yeni takipçi', `${req.user.display_name || req.user.username} seni takip etmeye başladı.`, { userId: req.user.id });
   }
 });
@@ -102,6 +103,11 @@ router.delete('/:userId/follow', async (req, res) => {
 
 async function followList(req, res, column, otherColumn) {
   const targetId = uuid(req.params.userId, 'Kullanıcı');
+  // Gizli kullanıcının takip listeleri başkasına verilmez (kim olduğu çevresinden anlaşılmasın).
+  if (targetId !== req.user.id) {
+    const t = (await query(`SELECT is_hidden FROM users WHERE id = $1`, [targetId])).rows[0];
+    if (t?.is_hidden) return res.json({ users: [] });
+  }
   const { limit, offset } = paging(req);
   const r = await query(
     `SELECT ${USER_PUBLIC_COLUMNS} FROM follows f JOIN users u ON u.id = f.${otherColumn} ${USER_PUBLIC_JOINS}

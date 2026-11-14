@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../services/screen_guard.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -378,7 +379,9 @@ class _MessagesHomeState extends State<MessagesHome> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ScreenTag(screen: 'messages', child: _guardedBuild(context));
+
+  Widget _guardedBuild(BuildContext context) {
     final w = MediaQuery.sizeOf(context).width;
     return MediaQuery(
       data: MediaQuery.of(context).copyWith(textScaler: TextScaler.noScaling),

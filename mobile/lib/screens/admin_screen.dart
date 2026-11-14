@@ -9,10 +9,12 @@ import '../services/session.dart';
 import '../widgets/anim_asset.dart';
 import '../widgets/common.dart';
 import '../widgets/id_badge.dart';
+import '../widgets/room_theme.dart';
 import '../widgets/wip_items.dart';
 import 'admin_events.dart';
 import 'admin_content.dart';
 import 'admin_dashboard.dart';
+import 'admin_screenshots_screen.dart';
 import 'admin_payouts.dart';
 import 'support_screens.dart';
 
@@ -623,6 +625,70 @@ class _UsersTabState extends State<_UsersTab> {
   }
 
   /// Özel ID: numara boş bırakılırsa göz alıcı 6 haneli numara otomatik verilir. Var olan özel ID'nin süresi uzar.
+  /// Ödül: katalogdaki bir oda temasını süreli hediye eder (süre boşsa temanın kendi süresi).
+  Future<void> _giftTheme() async {
+    final id = _user?['id'];
+    if (id == null) return;
+    await RoomThemes.load(force: true);
+    if (!mounted) return;
+    final themes = RoomThemes.all.where((t) => !t.free).toList();
+    if (themes.isEmpty) return toast(context, 'Coin\'li tema yok.', error: true);
+    var key = themes.first.key;
+    final days = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, setS) => AlertDialog(
+          title: const Text('Oda teması hediye et'),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            DropdownButtonFormField<String>(
+              value: key,
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: 'Tema'),
+              items: [for (final t in themes) DropdownMenuItem(value: t.key, child: Text('${t.label}${t.animated ? ' (hareketli)' : ''} · ${t.durationDays} gün'))],
+              onChanged: (v) => setS(() => key = v ?? key),
+            ),
+            TextField(controller: days, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Gün (boş = temanın süresi)')),
+          ]),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Vazgeç')),
+            FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Hediye et')),
+          ],
+        ),
+      ),
+    );
+    final d = int.tryParse(days.text.trim());
+    days.dispose();
+    if (ok != true || !mounted) return;
+    await _run(() => Api.post('/api/admin/room-themes/gift', {'userId': id, 'key': key, if (d != null && d > 0) 'days': d}), 'Tema hediye edildi; kullanıcıya bildirildi.');
+  }
+
+  /// Ödül: özel tema hakkı. Kullanıcı kendi görselini yükler; onaylanınca verilen gün kadar odasında kullanır.
+  Future<void> _grantCustomTheme() async {
+    final id = _user?['id'];
+    if (id == null) return;
+    final days = TextEditingController(text: '7');
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Özel tema hakkı ver'),
+        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('Kullanıcı görselini yükler, "Oda temaları > Özel tema talepleri" bölümünden onaylarsınız. Süre onay anında başlar.', style: TextStyle(fontSize: 13)),
+          TextField(controller: days, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Kullanım süresi (gün)')),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Vazgeç')),
+          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Hakkı ver')),
+        ],
+      ),
+    );
+    final d = int.tryParse(days.text.trim()) ?? 0;
+    days.dispose();
+    if (ok != true || !mounted) return;
+    if (d < 1 || d > 365) return toast(context, 'Gün 1-365 arası olmalı.', error: true);
+    await _run(() => Api.post('/api/admin/room-themes/custom/grant', {'userId': id, 'days': d}), 'Özel tema hakkı verildi; kullanıcıya bildirildi.');
+  }
+
   Future<void> _specialId() async {
     const lId = 'Özel ID (2-7 hane; boş = otomatik)';
     const lDays = 'Gün';
@@ -811,6 +877,19 @@ class _UsersTabState extends State<_UsersTab> {
           if (staffOk) OutlinedButton.icon(onPressed: _wip, icon: const Icon(Icons.workspace_premium), label: const Text('WIP ver')),
           if (staffOk) OutlinedButton.icon(onPressed: () => _run(() => Api.delete('/api/admin/users/${u['id']}/wip'), 'WIP kaldırıldı.'), icon: const Icon(Icons.remove_circle_outline), label: const Text('WIP al')),
           if (staffOk) OutlinedButton.icon(onPressed: _inventory, icon: const Icon(Icons.inventory_2), label: const Text('Öğe ver (çerçeve, rozet…)')),
+          if (admin)
+            OutlinedButton.icon(
+              onPressed: () => _run(() => Api.post('/api/admin/mic-skins/gift', {'userId': u['id'], 'key': 'birthday'}), 'Doğum Günü modu hediye edildi (15 gün).'),
+              icon: const Icon(Icons.cake),
+              label: const Text('Doğum Günü modu hediye et'),
+            ),
+          OutlinedButton.icon(
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AdminScreenshotsScreen(userId: u['id']?.toString(), title: 'Aldığı ekran görüntüleri'))),
+            icon: const Icon(Icons.screenshot_monitor),
+            label: const Text('Ekran görüntüleri'),
+          ),
+          if (admin) OutlinedButton.icon(onPressed: _giftTheme, icon: const Icon(Icons.wallpaper), label: const Text('Oda teması hediye et')),
+          if (admin) OutlinedButton.icon(onPressed: _grantCustomTheme, icon: const Icon(Icons.add_photo_alternate_outlined), label: const Text('Özel tema hakkı ver')),
           if (staffOk)
             OutlinedButton.icon(
               onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => GrantItemPage(user: u, initialCategory: 'colored_id'))),

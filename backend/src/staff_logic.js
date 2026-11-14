@@ -62,19 +62,6 @@ export function banMessage(user) {
   return `Hesabınız askıya alındı.${user.ban_reason ? ` Neden: ${user.ban_reason}` : ''}`;
 }
 
-/**
- * ADMIN_USERNAMES (sunucu açılışı): listedeki ada sahip aktif hesap yönetici yapılsın mı?
- *  'other': bu ad daha önce BAŞKA bir hesaba yönetici yetkisi verdi (o hesap silinince / adı değişince boşa çıkan adı
- *           biri almış olabilir) → hayır.
- *  'late':  hesap, ad listeye ilk eklendikten SONRA açıldı (listede olup henüz alınmamış adı biri kapmış olabilir) → hayır.
- *  'grant': evet.
- */
-export function bootstrapDecision({ grantedTo = null, accountId, accountCreatedAt, firstListedAt }) {
-  if (grantedTo) return grantedTo === accountId ? 'grant' : 'other';
-  if (new Date(accountCreatedAt).getTime() >= new Date(firstListedAt).getTime()) return 'late';
-  return 'grant';
-}
-
 // Hedef üzerinde işlem yetkisi:
 //  - Yönetici (admin) hesabına HİÇBİR komut uygulanamaz (başka bir yönetici dahil).
 //  - Yardımcı admine yalnızca yönetici işlem yapabilir.

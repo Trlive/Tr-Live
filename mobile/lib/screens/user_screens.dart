@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../services/screen_guard.dart';
 import 'package:flutter/material.dart';
 import '../services/api.dart';
 import '../widgets/anim_asset.dart';
@@ -496,7 +497,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => SecureScreen(child: ScreenTag(screen: 'profile', userId: widget.userId, child: _guardedBuild(context)));
+
+  Widget _guardedBuild(BuildContext context) {
     return Theme(
       data: Theme.of(context).copyWith(colorScheme: Theme.of(context).colorScheme.copyWith(primary: const Color(0xFFFF4FA8))),
       child: Scaffold(

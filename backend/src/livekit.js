@@ -6,10 +6,8 @@ const configured = () => Boolean(process.env.LIVEKIT_API_KEY && process.env.LIVE
 const httpUrl = () => (process.env.LIVEKIT_API_URL || (process.env.LIVEKIT_URL || '').replace(/^wss:/, 'https:').replace(/^ws:/, 'http:'));
 const client = () => new RoomServiceClient(httpUrl(), process.env.LIVEKIT_API_KEY, process.env.LIVEKIT_API_SECRET);
 
-// hidden: katılımcı odadakilere görünmez (görüntülü PK'da rakip yayını izleyenler). ttl: anahtarın BAĞLANMA için geçerlilik
-// süresi. Bağlı kalan kişinin oturumu süre dolunca kesilmez (LiveKit bağlı katılımcıya yenisini kendisi verir); kısa tutulur ki
-// odadan atılan / engellenen biri eline geçen eski anahtarla ses-görüntü odasına doğrudan yeniden giremesin (eskiden 2 saat).
-export async function token({ identity, name, room, canPublish = true, metadata = '', hidden = false, ttl = '20m' }) {
+// hidden: katılımcı odadakilere görünmez (görüntülü PK'da rakip yayını izleyenler). ttlSeconds: anahtar ömrü.
+export async function token({ identity, name, room, canPublish = true, metadata = '', hidden = false, ttl = '2h' }) {
   if (!configured()) throw Object.assign(new Error('LiveKit yapılandırılmamış.'), { status: 503 });
   const t = new AccessToken(process.env.LIVEKIT_API_KEY, process.env.LIVEKIT_API_SECRET, { identity, name, metadata, ttl });
   t.addGrant({ roomJoin: true, room, canPublish, canSubscribe: true, canPublishData: !hidden, ...(hidden ? { hidden: true } : {}) });

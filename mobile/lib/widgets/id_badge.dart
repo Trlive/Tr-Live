@@ -60,7 +60,7 @@ class HostBadgeChip extends StatelessWidget {
 }
 
 /// Özel ID kapsülü (Yoho "güzel numara" gibi): kısa numara daha nadir → daha gösterişli renk
-/// (3 hane gökkuşağı, 4–5 hane mor-pembe, 6+ hane altın-ateş). Zemin rengi akar, çevresinde dönen altın çerçeve,
+/// (≤3 hane neon aurora, 4–5 hane mor-pembe, 6+ hane altın-ateş). Zemin rengi akar, çevresinde dönen altın çerçeve,
 /// solda taçlı altın madalyon, üzerinden parıltı geçer, iki yıldız sırayla parlar.
 class SpecialIdPill extends StatefulWidget {
   final String id;
@@ -82,7 +82,8 @@ class _SpecialIdPillState extends State<SpecialIdPill> with SingleTickerProvider
 
   List<Color> get _colors {
     final n = widget.id.length;
-    if (n <= 3) return const [Color(0xFFFF4FA8), Color(0xFFFFC43D), Color(0xFF34D399), Color(0xFF38BDF8), Color(0xFFA78BFA), Color(0xFFFF4FA8)];
+    // Kısa (≤3 hane) en nadir: neon aurora — turkuaz → elektrik mavisi → mor → fuşya; düz gökkuşağı değil, serin ve parlak.
+    if (n <= 3) return const [Color(0xFF00F0FF), Color(0xFF2F7BFF), Color(0xFF7A3CFF), Color(0xFFFF2E9A), Color(0xFF7A3CFF), Color(0xFF2F7BFF), Color(0xFF00F0FF)];
     if (n <= 5) return const [Color(0xFFFF6FD8), Color(0xFFB04BFF), Color(0xFF5B21B6), Color(0xFFB04BFF), Color(0xFFFF6FD8)];
     return const [Color(0xFFFFE27A), Color(0xFFFF9F1C), Color(0xFFE5483D), Color(0xFFFF9F1C), Color(0xFFFFE27A)];
   }

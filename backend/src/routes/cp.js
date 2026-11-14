@@ -144,7 +144,7 @@ router.post('/with/:userId/request', userLimit('cpreq', 20, 3600e3), async (req,
   const from = publicUser(fromRow);
   const p = await pairRow(me, other);
   hub.sendToUser(other, { type: 'cp_request', kind, from, level: cpLevelFor(p?.exp ?? 0) });
-  const name = fromRow?.display_name || fromRow?.username || 'Bir kullanıcı';
+  const name = fromRow?.is_hidden ? 'Bir kullanıcı' : (fromRow?.display_name || fromRow?.username || 'Bir kullanıcı');
   notifyUser(other, 'relation_request', `💞 ${KIND_LABEL[kind]} daveti`, `${name} seni ${KIND_LABEL[kind]} olarak seçti. 24 saat içinde yanıtla!`, { userId: me });
   res.json(statusJson(me, p));
 });
@@ -270,6 +270,10 @@ router.get('/wall/:userId', async (req, res) => {
   const me = req.user.id;
   const ownerRow = await loadPublicRow(owner);
   if (!ownerRow) throw fail('Kullanıcı bulunamadı.', 404);
+  // Gizli kullanıcının ilişkileri başkalarına gösterilmez.
+  if (ownerRow.is_hidden && owner !== me) {
+    return res.json({ owner: publicUser(ownerRow, me), cp: null, friend: { count: 0, items: [] }, kanka: { count: 0, items: [] }, costs: costs() });
+  }
   const [cp, friend, kanka, nf, nk] = await Promise.all([
     relationList(owner, me, 'cp', 1),
     relationList(owner, me, 'friend', 3),
@@ -290,8 +294,8 @@ router.get('/wall/:userId/:kind', async (req, res) => {
   const owner = uuid(req.params.userId, 'Kullanıcı');
   const kind = oneOf(req.params.kind, REL_KINDS, 'İlişki');
   if (owner !== req.user.id) {
-    const h = (await query(`SELECT 1 FROM users WHERE id = $1 AND account_status <> 'deleted'`, [owner])).rows[0];
-    if (!h) return res.json({ items: [] });
+    const h = (await query(`SELECT is_hidden FROM users WHERE id = $1`, [owner])).rows[0];
+    if (!h || h.is_hidden) return res.json({ items: [] });
   }
   res.json({ items: await relationList(owner, req.user.id, kind, 200) });
 });

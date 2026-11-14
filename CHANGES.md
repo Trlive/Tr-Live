@@ -1,60 +1,45 @@
-## v2.93.0 — iPhone (iOS) sürümü: test derlemesi
-- Yeni iş akışı "iPhone (iOS) Test Derlemesi" (.github/workflows/ios_build.yml, elle yüklenir): Mac'te imzasız TR-Live.ipa
-  derler, Releases → "Son iPhone - test"e koyar. Yalnızca elle başlar (Mac dakikası 10 kat sayılır). Apple Developer
-  hesabı olmadan Sideloadly ile kendi Apple kimliğinle iPhone'a kurulur (7 gün geçerli). Rehber: docs/IPHONE.md.
-- iOS proje ayarları mobile/native/ios/setup_ios.py'de: izin metinleri (kamera, mikrofon, galeri, müzik), odadayken
-  arka planda ses, Google/Facebook giriş dönüşü (trlive://), dikey ekran, iOS 14+, paket kimliği com.trlive.trlive,
-  uygulama simgesi, uygulama açıkken bildirim gösterimi.
-- Uygulama: iPhone'da bildirimler çalışır (izin odaya ilk girişte sorulur); Android'e özel ön plan servisi iPhone'da
-  çalıştırılmaz; şarkılar Dosyalar uygulamasından seçilir; App Store kuralı gereği iPhone'da bayi paneli ve Coin
-  yükleme sıralaması gizli; güncelleme ekranında APK bağlantısı gösterilmez. Android'de değişiklik yok.
+## v2.96.0 — Oda sohbet geçmişi ve ekran görüntüsü koruması
+- Odaya yeni giren kişi yalnızca **girdiği andan sonraki** mesajları görür (önceki sohbet gösterilmez; çıkıp girince
+  yeniden o andan başlar). Bağlantı kopup aynı oturuma dönen kişi kendi giriş anından beri olanları görmeye devam eder.
+- Profil sayfaları (kendi profili, başkasının profili, profil düzenleme) açıkken ekran görüntüsü ve ekran kaydı
+  engellenir (Android FLAG_SECURE: görüntü siyah çıkar).
+- Uygulama içinde alınan ekran görüntüleri yönetim paneline bildirilir (kim, ne zaman, hangi ekran, hangi oda / kişi;
+  görüntünün kendisi gönderilmez). Yönetim > Ekran görüntüleri ve kullanıcı detayında "Ekran görüntüleri". 90 gün saklanır.
+  Android 14+: sistem bildirimi (DETECT_SCREEN_CAPTURE izni). Android 12 ve öncesi: yalnızca galeri izni zaten verilmişse.
+- Gizlilik Politikası'na ekran görüntüsü kaydı maddesi eklendi; sürüm 2026-11-14 (kullanıcılardan yeniden onay istenir).
+- Migration 064 (screenshot_events).
 
-## v2.92.1 — Gizli kullanıcı yalnızca odalarda gizli (mesaj, akış, profil kendi kimliğiyle)
-- Hata: gizli moddaki kişi her yerde "Gizli Kullanıcı" görünüyordu (mesaj listesi, akış, yorumlar, profil, arama, takip,
-  arkadaş, aile, CP, koruyucu, bildirimler). Artık Yoho'daki "gizemli kişi" gibi yalnızca:
-  * odalarda (üyeler, koltuk, oda sohbeti, hediye, şanslı çanta, PK, oyun, oda katkı listesi): "Gizli Kullanıcı" + gizli ID;
-  * tüm uygulamaya giden hediye / şans / çanta şeritlerinde ve sıralamalarda (liderlik, destekçiler, haftalık etkinlik):
-    "Gizli Kullanıcı" (gizli ID'siz).
-  Mesajlarda, akışta, yorumlarda, profilde, aramada, takip / arkadaş / aile listelerinde, CP ve koruyucuda kişi kendi
-  adıyla, fotoğrafıyla ve ID'siyle görünür; takip edilebilir, koruyucusu olunabilir, beğeni / yorum / takip bildirimleri
-  kendi adıyla gider.
-- Odadaki gizli kimlik ele verilmez: gizli kişinin başkalarına gizli modda olduğu, gizli ID'si, çevrimiçi durumu ve hangi
-  odada olduğu gösterilmez (takip, favori yayıncı, son odalar ve aile odaları listeleri dahil).
-- Gizli kişinin odada gönderdiği büyük hediye şeridi ve şanslı çantası, gönderim anındaki gizlilikle saklanır: odadan çıkıp
-  gizliliği kapatsa da gerçek adı görünmez (059).
-- Ayarlar'daki "Gizli kullanıcı" açıklaması yeni davranışa göre güncellendi.
-- Gizli sahibin odası adıyla aranınca bulunmaz (takip ettiklerim sekmesinde de çıkmaz); odası "son odalar"a yazılmaz,
-  favoriye eklenemez; PK aday listesinde adı "Gizli Kullanıcı"; aile bildirimine odası eklenmez. CP sıralaması gerçek
-  kimlikle (CP eşi profilde zaten açık).
-- Bilinen sınır: toplam sıralamalar (destekçiler, oda katkı, liderlik) kişinin ŞU ANKİ gizliliğine göre gösterilir.
+## v2.95.0 — Oda temaları: Müsait / Mağaza, hareketli temalar, özel tema
+- Oda > Tema artık iki sekmeli alt pencere: **Müsait** (Coin'siz + satın alınan + onaylı özel tema; dokununca uygulanır)
+  ve **Mağaza** (Coin'li, süreli; önizleme, "Satın alma" / "Süreyi uzat"). Oda sesi ve bağlantısı kesilmez.
+- 30 yeni tasarım (kendi çizimimiz, tools/oda_temalari.py): 14 sade Coin'siz, 8 hareketsiz özel, 8 hafif hareketli
+  (kutup ışığı, yıldız kayması, kar, sakura, ateş böcekleri, baloncuk, kor, kozmos). Hareket tek ve hafif bir çizim
+  katmanıdır (~30 kare/sn, en fazla 36 parçacık, blur yok); şarj tasarrufunda kapanır.
+- Tema hakları odanın sahibine aittir; süre bitince oda kendiliğinden Varsayılan temaya döner (dakikada bir denetim).
+- Yönetim > Oda temaları: tema ekle / düzenle / kapat / sil. Yüklenen görsel otomatik olarak 1080x1920 + 360x640
+  küçük resme getirilir (ffmpeg); uygulama her ekrana "cover" ile yerleştirir.
+- Ödül: kullanıcı detayında "Oda teması hediye et" ve "Özel tema hakkı ver". Kullanıcı kendi görselini yükler,
+  "Özel tema talepleri"nden onaylanınca süre başlar; reddedilirse neden gösterilir ve yeniden yükleyebilir. Bildirim gider.
+- Migration 063 (yeni temalar, efekt türleri, silinen tema kaydı).
 
-## v2.92.0 — Güvenlik denetimi: yönetici atama, gizli anahtarlar, yardımcı admin sınırları, sunucu paneli
-- Yönetici atama (ADMIN_USERNAMES) açığı kapatıldı: eskiden listedeki bir ad boşa çıkınca (yöneticinin adı değişince,
-  hesabı silinince ya da listede henüz açılmamış bir ad varken) o adla kayıt olan herkes yönetici oluyordu. Artık kayıtta
-  yalnızca sistemde hiç yönetici yokken (ilk kurulum) yönetici yapılır; sunucu açılışında ad yalnızca listeye eklenmeden önce
-  açılmış hesaba ve yalnızca bir kez yetki verir (yeni tablo bootstrap_admins, 058). Reddedilen deneme güvenlik kaydına düşer.
-  Listeden çıkarıp yeniden eklemek adı kapmış hesabı yönetici yapmaz. Yeni bir yönetici eklemek için önce kişi kayıt olur,
-  sonra adı listeye yazılır. Yönetici hesabı artık uygulamadan silinemez (adı boşa çıkıp başkasına geçmesin).
-- Gizli anahtarlar: NODE_ENV yazılmamışsa sunucu artık üretim sayılır; JWT_SECRET en az 32 karakter olmadan ve örnek değerle
-  (CHANGE_ME …) açılmaz (eskiden NODE_ENV unutulursa herkesin bildiği geliştirme anahtarıyla token imzalanabiliyordu).
-  LiveKit anahtarları örnek değerde bırakılmışsa sunucu açılmaz.
-- Yardımcı admin Coin yükleme: saatlik 30 yükleme sınırı ve yeni 24 saatlik toplam sınır (varsayılan 2.000.000 Coin;
-  sunucu panelinde "Yardımcı admin 24 saatlik Coin yükleme sınırı"; 2.000.000 gibi yazılabilir, 0 = yükleyemez) işlem
-  kaydından sayılır: sunucu yeniden başlayınca sıfırlanmaz, aynı anda gönderilen isteklerle aşılamaz. Yönetici için sınır yok.
-- Yönetimin koyduğu banı yardımcı admin kaldıramaz, yeni bir banla da değiştiremez (kısaltıp sonra kaldırma yolu kapalı);
-  kendi koyduğu banı ve süresi dolmuş banları kaldırabilir.
-- Şifre: yeni şifrede en yaygın şifreler (123456, qwerty, sifre123, takım adları …), tek karakter tekrarı ve kullanıcı
-  adıyla aynı şifre kabul edilmez. Mevcut şifrelerle giriş etkilenmez.
-- Ses/görüntü anahtarı (LiveKit) 2 saat yerine 20 dakika geçerli: odadan atılan / engellenen kişinin elindeki eski anahtarla
-  odaya doğrudan girebileceği süre 2 saatten 20 dakikaya indi. Odada bağlı olanın bağlantısı kesilmez.
-- Sunucu paneli: sayfa betik çalıştırmaz (CSP), başka siteden form gönderimi daha sıkı reddedilir. Kurulumda üretilen panel
-  şifresi artık kurulum kaydına yazılmaz (yalnızca sunucu konsolu); eski kayıtlardaki şifre satırı silinir. Uygulamadaki
-  Sunucu sayfası kayıtlardaki şifre, anahtar ve token'ları gizler.
-- Ajans merkezi yollarında oturum denetimi büyük/küçük harfe duyarsız; katalog aç/kapat ucunda tür adı sıkı denetlenir.
-- Android: uygulamanın bulut yedeği kapalı (oturum anahtarları Google yedeğine gitmez). Bu ayar APK iş akışındadır.
-- CI: Backend ve Mobile iş akışları depoyu yalnızca okur; Backend iş akışı bilinen açığı olan paketleri özet sayfasında
-  gösterir. Not: .github/workflows dosyaları değişti, GitHub'a elle yüklenmeli (yüklenmezse yalnızca bu iki madde eksik kalır).
-- Belgeler: docs/GUVENLIK.md (sunucu ve CI bölümleri), YETKILER.md, VERITABANI.md güncellendi.
+## v2.94.0 — Oda Etkinlikleri genel anahtarı
+- Yönetim > Uygulama ayarları > Oda: **Oda Etkinlikleri açık** anahtarı (herkes için aynı). Kapalıyken odada Etkinlikler menüsü
+  görünmez ve `/room-activities` 404 verir. `/api/app/config` artık `roomActivitiesEnabled` döndürür.
+- Düzeltme: panel `blockRooted` ve `sslPinning` ayarlarını gönderiyordu ama sunucu tanımıyordu ("Bilinmeyen ayar" ile ayar kaydı
+  reddediliyordu); ikisi de varsayılan kapalı olarak tanımlandı.
+
+## v2.93.0 — Bayi bakiye talebi ve ilk mini oyun WebView'da
+- Bayi paneli "Bakiye Talep Et" artık `/dealer-topup` H5 sayfasını alt pencerede (WebView) açar; sayfa aktif bayi hesabı ve token
+  doğrular, mevcut `/api/dealer/topup-*` uçlarını kullanır. nginx'e yol eklendi. Eski yerel ekran kaldırıldı.
+- Oda etkinliklerine ilk mini oyun eklendi: Hafıza Kartları (ücretsiz, bahissiz, tamamen istemcide).
+- Görünürlük herkes için aynı kurallarla: platforma ya da hesaba göre gizleme yok.
+
+## v2.92.0 — Oda içi etkinlikler: WebView penceresi
+- Oda "İnteraktif Özellikler" menüsüne **Etkinlikler** eklendi: kendi sunucumuzdaki sabit H5 sayfası (`/room-activities?roomId=…`)
+  ekranın alt %55'inde, koyu temalı alt pencerede açılır; sesli yayın ve oda bağlantısı kesilmez.
+- Yeni genel bileşen `AppWebViewModal` (mobile/lib/widgets/app_webview_modal.dart): ince yükleme çubuğu, yalnızca kendi sunucumuza
+  gidebilir, oturum bileti adrese yazılmaz (ilk istekte `Authorization` başlığı; sayfa için `TRLive` kanalı), bakiye yenileme.
+- Sunucu: `GET /room-activities` token ve oda üyeliği doğrular, nonce'lu sıkı CSP ile sayfa sunar; nginx'e yol eklendi.
 
 ## v2.91.1 — Alev çerçeveleri yönetim panelinden eklenecek
 - Alev Halkası ve Mavi Alev Halkası sunucuya kendiliğinden eklenmez (aynı çerçeve iki kez görünmesin); dosyalar yönetim

@@ -7,7 +7,6 @@ import 'package:flutter/services.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api.dart';
-import 'platform_rules.dart';
 
 /// Telefonun kendi hafızasından seçilen müzik dosyası.
 class LocalTrack {
@@ -104,11 +103,7 @@ class LocalMusic {
   /// Telefondan şarkı seçtirir, kalıcı klasöre kopyalar ve "Müziklerim"e ekler. Yeni eklenenleri döndürür.
   Future<List<LocalTrack>> pickToLibrary() async {
     await load();
-    // iPhone'da "ses" türü Apple Music kitaplığını açar (yalnızca satın alınmış şarkılar); Dosyalar uygulamasından
-    // ses dosyası seçilsin diye uzantıyla seçilir.
-    final r = isIOS
-        ? await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: const ['mp3', 'm4a', 'aac', 'wav', 'flac', 'ogg'], allowMultiple: true)
-        : await FilePicker.platform.pickFiles(type: FileType.audio, allowMultiple: true);
+    final r = await FilePicker.platform.pickFiles(type: FileType.audio, allowMultiple: true);
     if (r == null) return const [];
     final list = [...tracks.value];
     final added = <LocalTrack>[];

@@ -5,7 +5,7 @@ import { levelFromExp, expForLevel, levelInfo, levelFor, COIN_LEVEL_STEPS, famil
 import { distributeGift } from '../src/gifts_logic.js';
 import { canManage } from '../src/room_permissions.js';
 import { currentPeriod, periodRange, isPeriod } from '../src/periods.js';
-import { publicUser, selfUser, roomUser } from '../src/views.js';
+import { publicUser, selfUser } from '../src/views.js';
 
 const A = '11111111-1111-4111-8111-111111111111';
 const B = '22222222-2222-4222-8222-222222222222';
@@ -112,7 +112,7 @@ test('dönemler (Türkiye saati)', () => {
   assert.equal(r.end, '2026-12-31T21:00:00.000Z');
 });
 
-test('publicUser: bakiye sızdırmaz; gizli kullanıcı yalnızca odada (roomUser) maskelenir', () => {
+test('publicUser: bakiye sızdırmaz, gizli kullanıcıyı maskeler', () => {
   const row = {
     id: A, username: 'ali', display_name: 'Ali', avatar_url: 'https://x/a.png', is_hidden: false, coin_level: 3, gift_level: 2,
     coins: '999', diamonds: '888', wip_level: 4, wip_features: { nameColor: '#E5E4E2' },
@@ -123,15 +123,11 @@ test('publicUser: bakiye sızdırmaz; gizli kullanıcı yalnızca odada (roomUse
   assert.equal(pub.displayName, 'Ali');
   assert.equal(pub.wipLevel, 4);
   assert.equal(pub.nameColor, '#E5E4E2');
-  const hidden = roomUser({ ...row, is_hidden: true }, B);
+  const hidden = publicUser({ ...row, is_hidden: true }, B);
   assert.equal(hidden.displayName, 'Gizli Kullanıcı');
   assert.equal(hidden.avatarUrl, null);
   assert.equal(hidden.wipLevel, null);
-  assert.equal(roomUser({ ...row, is_hidden: true }, A).displayName, 'Gizli Kullanıcı'); // gizli kişi odada kendini de gizli görür
-  // Oda dışında (mesaj, akış, profil) kendi kimliğiyle; gizli olduğu bildirilmez.
-  const outside = publicUser({ ...row, is_hidden: true }, B);
-  assert.equal(outside.displayName, 'Ali');
-  assert.equal(outside.isHidden, false);
+  assert.equal(publicUser({ ...row, is_hidden: true }, A).displayName, 'Gizli Kullanıcı'); // gizli kişi kendini de gizli görür
   assert.equal(selfUser({ ...row, total_sent_coins: '1', total_received_diamonds: '2' }).coins, '999');
 });
 

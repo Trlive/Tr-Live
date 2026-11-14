@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api.dart';
 import '../services/media_cache.dart';
 import '../services/session.dart';
@@ -53,6 +54,8 @@ class _GiftSheetState extends State<_GiftSheet> with SingleTickerProviderStateMi
   String? _scope; // null | 'mic' | 'room'
   bool _expanded = false;
   final Set<String> _picked = {};
+  // Son gönderim (koltuk numaraları + hediye + kapsam): pencere yeniden açılınca aynı seçim hazır gelir.
+  Map<String, dynamic>? _last;
   bool _sending = false;
   final _pages = PageController();
   // Combo (Yoho): gönderimden sonra 5 sn boyunca "Combo" düğmesi aynı hediyeyi tek dokunuşla tekrar gönderir.
@@ -86,6 +89,55 @@ class _GiftSheetState extends State<_GiftSheet> with SingleTickerProviderStateMi
     _load();
   }
 
+  static const _lastKey = 'gift_last_selection';
+
+  Future<void> _loadLast() async {
+    try {
+      final raw = (await SharedPreferences.getInstance()).getString(_lastKey);
+      if (raw != null) {
+        final d = jsonDecode(raw);
+        if (d is Map) _last = Map<String, dynamic>.from(d);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _saveLast(Map<String, dynamic> gift, List<String> targets) async {
+    // Koltuktaki kişiler değişebileceği için kişi değil koltuk numarası saklanır.
+    final seats = <int>[
+      for (final id in targets)
+        for (final m in widget.members)
+          if (m['userId'] == id && m['microphone'] == true && m['seatIndex'] != null) (m['seatIndex'] as num).toInt(),
+    ];
+    _last = {'giftId': gift['id'], 'seats': seats, 'scope': _scope};
+    try {
+      await (await SharedPreferences.getInstance()).setString(_lastKey, jsonEncode(_last));
+    } catch (_) {}
+  }
+
+  /// Kayıtlı son seçimi uygular: hediye (sekmesiyle) ve koltuklar. Koltuk boşaldıysa o koltuk atlanır.
+  void _applyLast() {
+    final l = _last;
+    if (l == null) return;
+    final g = _gifts.where((x) => '${x['id']}' == '${l['giftId']}').toList();
+    if (g.isNotEmpty) {
+      _tab = (g.first['category'] ?? 'popular').toString();
+      _gift = g.first;
+    }
+    final scope = l['scope'];
+    if (scope == 'mic' || scope == 'room') {
+      _scope = scope as String;
+      return;
+    }
+    final seats = (l['seats'] is List ? l['seats'] as List : const []).whereType<num>().map((e) => e.toInt()).toSet();
+    final ids = [for (final m in _onMic) if (seats.contains((m['seatIndex'] as num).toInt())) m['userId'] as String];
+    if (ids.isNotEmpty) {
+      _picked
+        ..clear()
+        ..addAll(ids);
+      _expanded = false;
+    }
+  }
+
   @override
   void dispose() {
     _luckyTimer?.cancel();
@@ -100,6 +152,7 @@ class _GiftSheetState extends State<_GiftSheet> with SingleTickerProviderStateMi
       _error = null;
     });
     try {
+      await _loadLast();
       final r = await Api.get('/api/gifts');
       if (!mounted) return;
       setState(() {
@@ -129,6 +182,7 @@ class _GiftSheetState extends State<_GiftSheet> with SingleTickerProviderStateMi
           }
         }
         _gift = _tabGifts.isNotEmpty ? _tabGifts.first : null;
+        _applyLast();
         _loading = false;
       });
     } catch (e) {
@@ -201,6 +255,7 @@ class _GiftSheetState extends State<_GiftSheet> with SingleTickerProviderStateMi
       return;
     }
     Session.setCoins((r['balance'] ?? Session.coins).toString());
+    unawaited(_saveLast(gift, targets));
     // Pencere açık kalır (Yoho): combo düğmesi 5 sn görünür, her dokunuşta süre yeniden başlar.
     final combo = (r['combo'] as num?)?.toInt() ?? 1;
     setState(() => _combo = combo);

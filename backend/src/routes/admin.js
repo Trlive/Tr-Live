@@ -24,6 +24,7 @@ import { cleanPublic } from '../safe_text.js';
 import { WIP_MIN_LEVEL, WIP_MAX_LEVEL, MAX_LEVEL, expForLevel, levelFromExp, levelExp } from '../levels.js';
 import { wipLabel } from '../services/wip.js';
 import { dealerSell } from '../services/dealers.js';
+import { approveTopupRequest, rejectTopupRequest, requestView as topupRequestView } from '../services/dealer_topup.js';
 import { hub } from '../realtime.js';
 import { leaveRoom, closeRoom } from '../services/rooms.js';
 import { banIpPersist, unbanIp, listBans, securityStats, userLimit, hitLimit } from '../firewall.js';
@@ -1009,6 +1010,32 @@ router.post('/dealers/:dealerId/sell', requireSuperAdmin, async (req, res) => {
     coins: bigAmount(req.body?.amount, 'Satış Coin miktarı'), actorId: req.user.id, description: text(req.body?.description, 'Açıklama', { max: 200 }),
   }));
   res.json(result);
+});
+
+// ---------------- Bayi bakiye talepleri (yalnızca yönetici) ----------------
+// Bekleyen (varsayılan) veya belirli durumdaki talepler. Onayda bayi bakiyesi artar; red bakiyeyi değiştirmez.
+router.get('/topup-requests', requireSuperAdmin, async (req, res) => {
+  const status = req.query.status ? oneOf(String(req.query.status), ['pending', 'approved', 'rejected'], 'Durum') : 'pending';
+  const r = await query(
+    `SELECT t.*, u.username, d.name AS dealer_name
+       FROM dealer_topup_requests t
+       LEFT JOIN users u ON u.id = t.dealer_user_id
+       LEFT JOIN dealer_accounts d ON d.id = t.dealer_id
+      WHERE t.status = $1 ORDER BY t.created_at ${status === 'pending' ? 'ASC' : 'DESC'} LIMIT 200`,
+    [status],
+  );
+  res.json({ requests: r.rows.map(topupRequestView) });
+});
+
+// Talebi onayla (approve) veya reddet (reject).
+router.post('/topup-requests/:id/review', requireSuperAdmin, idempotent('dealer_topup_review'), async (req, res) => {
+  const id = uuid(req.params.id, 'Talep');
+  const decision = oneOf(req.body?.decision, ['approve', 'reject'], 'Karar');
+  const reviewNote = text(req.body?.reviewNote, 'İnceleme notu', { max: 500 });
+  const result = await tx((c) => decision === 'approve'
+    ? approveTopupRequest(c, { requestId: id, adminId: req.user.id, reviewNote })
+    : rejectTopupRequest(c, { requestId: id, adminId: req.user.id, reviewNote }));
+  res.json({ ok: true, decision, ...result });
 });
 
 // ---------------- Ajans ve yayıncı ----------------

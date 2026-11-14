@@ -40,6 +40,9 @@ import { router as guardianRouter } from './routes/guardian.js';
 import { startGuardianTicker } from './services/guardian.js';
 import { startFamilyJanitor } from './services/family.js';
 import { router as storeRouter } from './routes/store.js';
+import { router as micSkinsRouter, adminRouter as micSkinsAdminRouter } from './routes/mic_skins.js';
+import { router as roomThemesRouter, adminRouter as roomThemesAdminRouter } from './routes/room_themes.js';
+import { router as screenshotsRouter, adminRouter as screenshotsAdminRouter, pruneScreenshots } from './routes/screenshots.js';
 import { router as supportRouter } from './routes/support.js';
 import { router as safetyRouter } from './routes/safety.js';
 import { router as leaderboardsRouter } from './routes/leaderboards.js';
@@ -47,10 +50,14 @@ import { router as pkRouter } from './routes/pk.js';
 import { router as gamesRouter } from './routes/games.js';
 import { router as feedRouter } from './routes/feed.js';
 import { router as systemRouter } from './routes/system.js';
+import { router as roomActivitiesRouter } from './routes/room_activities.js';
+import { router as dealerTopupPageRouter } from './routes/dealer_topup_page.js';
 import { getConfig, compareVersions } from './services/app_config.js';
 import { startMusicTicker } from './services/music.js';
 import { router as luckyRouter, startBagTicker } from './routes/luckybag.js';
 import { startAvatarSweeper } from './services/avatar_sweeper.js';
+import { startSkinSweeper } from './services/mic_skins.js';
+import { startThemeSweeper, seedThemeImages } from './services/room_themes.js';
 import { startPkTicker } from './services/pk.js';
 import { startGameTicker } from './services/games.js';
 import { closeStaleMicSessions } from './services/mic.js';
@@ -126,6 +133,9 @@ app.use('/api', async (req, res, next) => {
   res.status(426).json({ code: 'update_required', message: c.updateMessage, minVersion: c.minAppVersion, updateUrl: c.updateUrl || null });
 });
 app.use('/api', systemRouter);
+// Oda içi etkinlikler H5 sayfası (WebView). /api dışındadır; kendi CSP'sini ve token denetimini uygular.
+app.use('/room-activities', roomActivitiesRouter);
+app.use('/dealer-topup', dealerTopupPageRouter); // bayi bakiye talebi H5 sayfası (WebView)
 
 const authIpLimit = ipLimit('auth', 60, 15 * 60e3);
 // /oauth/poll: uygulama giriş sonucunu birkaç saniyede bir sorar; kendi sınırı vardır (ortak sınırı doldurmasın).
@@ -140,6 +150,12 @@ app.use('/api/friends', friendsRouter);
 app.use('/api/cp', cpRouter);
 app.use('/api/guardians', guardianRouter);
 app.use('/api/store', storeRouter);
+app.use('/api/mic-skins', micSkinsRouter);
+app.use('/api/admin/mic-skins', micSkinsAdminRouter);
+app.use('/api/room-themes', roomThemesRouter);
+app.use('/api/admin/room-themes', roomThemesAdminRouter);
+app.use('/api/screenshots', screenshotsRouter);
+app.use('/api/admin/screenshots', screenshotsAdminRouter);
 app.use('/api/support', supportRouter);
 app.use('/api/leaderboards', leaderboardsRouter);
 app.use('/api/families', familiesRouter);
@@ -235,6 +251,9 @@ const sweeper = startRoomSweeper();
 const musicTicker = startMusicTicker();
 const bagTicker = startBagTicker();
 const avatarSweeper = startAvatarSweeper();
+const skinSweeper = startSkinSweeper();
+const themeSweeper = startThemeSweeper();
+const screenshotPruner = setInterval(() => pruneScreenshots().catch((e) => console.error('Ekran görüntüsü kayıt temizliği:', e.message)), 6 * 3600e3);
 const pkTicker = startPkTicker();
 const gameTicker = startGameTicker();
 const eventsTicker = startWeeklyEventsTicker();
@@ -252,6 +271,7 @@ const idemJanitor = setInterval(nonOverlapping(() => pruneIdempotencyKeys().catc
 idemJanitor.unref();
 loadBans().then((n) => n && console.log(`${n} aktif IP yasağı yüklendi.`)).catch((e) => console.error('IP yasakları yüklenemedi:', e.message));
 promoteBootstrapAdmins().catch((e) => console.error('ADMIN_USERNAMES uygulanamadı:', e.message));
+seedThemeImages().then((n) => n && console.log(`${n} oda teması görseli yüklendi.`)).catch((e) => console.error('Tema görselleri yüklenemedi:', e.message));
 seedAssetPacks().then((n) => n && console.log(`${n} hazır hediye / çerçeve eklendi.`)).catch((e) => console.error('Hazır paket eklenemedi:', e.message));
 
 server.listen(config.port, () => console.log(`TR Live backend ${config.port} portunda çalışıyor.`));
@@ -265,6 +285,9 @@ async function shutdown(signal) {
   clearInterval(musicTicker);
   clearInterval(bagTicker);
   clearInterval(avatarSweeper);
+  clearInterval(skinSweeper);
+  clearInterval(themeSweeper);
+  clearInterval(screenshotPruner);
   clearInterval(pkTicker);
   clearInterval(gameTicker);
   clearInterval(eventsTicker);

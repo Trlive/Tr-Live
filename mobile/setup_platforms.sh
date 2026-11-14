@@ -10,7 +10,7 @@ import pathlib, re
 m = pathlib.Path('android/app/src/main/AndroidManifest.xml')
 if m.exists():
     s = m.read_text()
-    perms = ['INTERNET','RECORD_AUDIO','CAMERA','MODIFY_AUDIO_SETTINGS','ACCESS_NETWORK_STATE','BLUETOOTH_CONNECT']
+    perms = ['INTERNET','RECORD_AUDIO','CAMERA','MODIFY_AUDIO_SETTINGS','ACCESS_NETWORK_STATE','BLUETOOTH_CONNECT','DETECT_SCREEN_CAPTURE']
     add = ''.join(f'    <uses-permission android:name="android.permission.{p}"/>\n' for p in perms
                   if f'android.permission.{p}"' not in s)
     if add:

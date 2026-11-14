@@ -9,7 +9,9 @@ class DragBubble extends StatefulWidget {
   final EdgeInsets safe;
   final VoidCallback? onTap;
   final Widget child;
-  const DragBubble({super.key, required this.pos, required this.child, this.size = 60, this.initial = const Offset(-1, -200), this.safe = const EdgeInsets.fromLTRB(4, 80, 4, 90), this.onTap});
+  /// false: bırakıldığı yerde kalır (kenara yapışmaz).
+  final bool snap;
+  const DragBubble({super.key, this.snap = true, required this.pos, required this.child, this.size = 60, this.initial = const Offset(-1, -200), this.safe = const EdgeInsets.fromLTRB(4, 80, 4, 90), this.onTap});
 
   @override
   State<DragBubble> createState() => _DragBubbleState();
@@ -57,7 +59,7 @@ class _DragBubbleState extends State<DragBubble> {
                     final cur = pos.value ?? o;
                     final snapX = (cur.dx + size / 2) < c.maxWidth / 2 ? safe.left : maxX;
                     setState(() => _dragging = false);
-                    pos.value = clamp(Offset(snapX, cur.dy));
+                    pos.value = clamp(widget.snap ? Offset(snapX, cur.dy) : cur);
                   },
                   onPanCancel: () => setState(() => _dragging = false),
                   child: widget.child,

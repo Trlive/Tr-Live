@@ -1,5 +1,5 @@
 import { query } from '../database.js';
-import { selfUser } from '../views.js';
+import { HIDDEN_NAME, selfUser } from '../views.js';
 import { BASE_FEATURES } from './wip.js';
 import { presenceView } from './presence.js';
 import { loadPublicRow } from './users.js';
@@ -23,8 +23,7 @@ export async function equippedItems(userId, run = query) {
   }));
 }
 
-// Profil sayfası. Gizli moddaki kullanıcı da (gizlilik yalnızca odalarda) kendi profiliyle görünür; ama başkalarına gizli modda
-// olduğu, gizli ID'si ve çevrimiçi / odada durumu gösterilmez (odadaki gizli kimlikle eşleştirilemesin).
+// Profil sayfası. Gizli kullanıcılar başkalarına yalnızca minimal bilgiyle görünür.
 export async function loadProfile(viewerId, targetId) {
   const r = await query(
     `SELECT u.*, uw.level AS wip_level, uw.expires_at AS wip_expires_at, wt.name AS wip_name, wt.features AS wip_features, is_ghost(u.id) AS ghost,
@@ -44,6 +43,14 @@ export async function loadProfile(viewerId, targetId) {
   const u = r.rows[0];
   if (!u || u.account_status === 'deleted') return null;
   const isSelf = viewerId === targetId;
+
+  if (u.is_hidden && !isSelf) {
+    // Gizli kimlik: gerçek profil hiçbir yerden açılmaz; yalnızca gizli ad ve gizli ID.
+    return {
+      id: u.id, isHidden: true, hiddenId: u.hidden_alias ?? null, username: HIDDEN_NAME, displayName: HIDDEN_NAME, avatarUrl: null,
+      coinLevel: null, giftLevel: null,
+    };
+  }
 
   const [counts, following, friendRel, items, family, broadcaster, ownedAgency, blocked] = await Promise.all([
     query(
@@ -122,8 +129,7 @@ export async function loadProfile(viewerId, targetId) {
     coinLevel: u.coin_level,
     giftLevel: u.gift_level,
     createdAt: u.created_at,
-    // Gizli mod yalnızca kişinin kendisine bildirilir.
-    isHidden: isSelf ? Boolean(u.is_hidden) : false,
+    isHidden: Boolean(u.is_hidden),
     // Gizli moddayken odalarda görünen gizli ID: yalnızca kişinin kendisine (Ayarlar'da gösterilir).
     ...(isSelf ? { hiddenId: u.is_hidden ? (u.hidden_alias ?? null) : null } : {}),
     // Hayalet mod şu an gerçekten etkin mi (tercih açık + SWIP üyeliği sürüyor). Yalnızca kişinin kendisine.

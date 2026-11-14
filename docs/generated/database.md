@@ -2,9 +2,9 @@
 
 > Otomatik üretildi: `node backend/scripts/gen_docs.mjs`. Elle düzenlemeyin.
 
-**104 tablo**, 59 migration dosyası (PostgreSQL 16).
+**103 tablo**, 57 migration dosyası (PostgreSQL 16).
 
-[agencies](#agencies) · [agency_applications](#agency_applications) · [agency_assistants](#agency_assistants) · [agency_commission_tiers](#agency_commission_tiers) · [agency_commissions](#agency_commissions) · [agency_requests](#agency_requests) · [agency_settings](#agency_settings) · [agency_statements](#agency_statements) · [agency_transfers](#agency_transfers) · [announcements](#announcements) · [app_config](#app_config) · [asset_items](#asset_items) · [asset_seeds](#asset_seeds) · [assistant_statements](#assistant_statements) · [banners](#banners) · [bootstrap_admins](#bootstrap_admins) · [broadcast_sessions](#broadcast_sessions) · [broadcasters](#broadcasters) · [client_errors](#client_errors) · [coin_packages](#coin_packages) · [cp_pairs](#cp_pairs) · [daily_progress](#daily_progress) · [daily_streak](#daily_streak) · [dealer_accounts](#dealer_accounts) · [dealer_transactions](#dealer_transactions) · [direct_messages](#direct_messages) · [dm_cleared](#dm_cleared) · [entrance_effects](#entrance_effects) · [families](#families) · [family_contrib_weekly](#family_contrib_weekly) · [family_daily_login](#family_daily_login) · [family_join_requests](#family_join_requests) · [family_members](#family_members) · [family_messages](#family_messages) · [family_week_rewards](#family_week_rewards) · [favorite_hosts](#favorite_hosts) · [financial_audit_logs](#financial_audit_logs) · [firewall_blocks](#firewall_blocks) · [follows](#follows) · [frames](#frames) · [friend_requests](#friend_requests) · [gift_transactions](#gift_transactions) · [gifts](#gifts) · [global_gift_events](#global_gift_events) · [guardian_decay_runs](#guardian_decay_runs) · [guardians](#guardians) · [host_badges](#host_badges) · [host_pay_levels](#host_pay_levels) · [host_salary_tiers](#host_salary_tiers) · [host_statements](#host_statements) · [idempotency_keys](#idempotency_keys) · [inventory_items](#inventory_items) · [lucky_bag_claims](#lucky_bag_claims) · [lucky_bags](#lucky_bags) · [media_files](#media_files) · [mic_sessions](#mic_sessions) · [moderation_strikes](#moderation_strikes) · [music_tracks](#music_tracks) · [oauth_states](#oauth_states) · [official_event_attendance](#official_event_attendance) · [official_events](#official_events) · [payout_periods](#payout_periods) · [pk_battles](#pk_battles) · [pk_supporters](#pk_supporters) · [post_comments](#post_comments) · [post_likes](#post_likes) · [posts](#posts) · [profile_visitors](#profile_visitors) · [push_messages](#push_messages) · [recent_rooms](#recent_rooms) · [referral_statements](#referral_statements) · [reports](#reports) · [room_blocks](#room_blocks) · [room_game_players](#room_game_players) · [room_games](#room_games) · [room_gift_totals](#room_gift_totals) · [room_members](#room_members) · [room_messages](#room_messages) · [room_mic_queue](#room_mic_queue) · [room_music](#room_music) · [room_music_queue](#room_music_queue) · [room_mutes](#room_mutes) · [room_pk](#room_pk) · [room_pk_points](#room_pk_points) · [room_profiles](#room_profiles) · [room_staff](#room_staff) · [rooms](#rooms) · [security_events](#security_events) · [special_ids](#special_ids) · [store_items](#store_items) · [support_messages](#support_messages) · [upload_owners](#upload_owners) · [user_blocks](#user_blocks) · [user_identities](#user_identities) · [user_notifications](#user_notifications) · [user_sessions](#user_sessions) · [user_wip](#user_wip) · [users](#users) · [wallet_transactions](#wallet_transactions) · [weekly_event_config](#weekly_event_config) · [weekly_event_results](#weekly_event_results) · [weekly_event_settlements](#weekly_event_settlements) · [wip_plans](#wip_plans) · [wip_tiers](#wip_tiers)
+[agencies](#agencies) · [agency_applications](#agency_applications) · [agency_assistants](#agency_assistants) · [agency_commission_tiers](#agency_commission_tiers) · [agency_commissions](#agency_commissions) · [agency_requests](#agency_requests) · [agency_settings](#agency_settings) · [agency_statements](#agency_statements) · [agency_transfers](#agency_transfers) · [announcements](#announcements) · [app_config](#app_config) · [asset_items](#asset_items) · [asset_seeds](#asset_seeds) · [assistant_statements](#assistant_statements) · [banners](#banners) · [broadcast_sessions](#broadcast_sessions) · [broadcasters](#broadcasters) · [client_errors](#client_errors) · [coin_packages](#coin_packages) · [cp_pairs](#cp_pairs) · [daily_progress](#daily_progress) · [daily_streak](#daily_streak) · [dealer_accounts](#dealer_accounts) · [dealer_transactions](#dealer_transactions) · [direct_messages](#direct_messages) · [dm_cleared](#dm_cleared) · [entrance_effects](#entrance_effects) · [families](#families) · [family_contrib_weekly](#family_contrib_weekly) · [family_daily_login](#family_daily_login) · [family_join_requests](#family_join_requests) · [family_members](#family_members) · [family_messages](#family_messages) · [family_week_rewards](#family_week_rewards) · [favorite_hosts](#favorite_hosts) · [financial_audit_logs](#financial_audit_logs) · [firewall_blocks](#firewall_blocks) · [follows](#follows) · [frames](#frames) · [friend_requests](#friend_requests) · [gift_transactions](#gift_transactions) · [gifts](#gifts) · [global_gift_events](#global_gift_events) · [guardian_decay_runs](#guardian_decay_runs) · [guardians](#guardians) · [host_badges](#host_badges) · [host_pay_levels](#host_pay_levels) · [host_salary_tiers](#host_salary_tiers) · [host_statements](#host_statements) · [idempotency_keys](#idempotency_keys) · [inventory_items](#inventory_items) · [lucky_bag_claims](#lucky_bag_claims) · [lucky_bags](#lucky_bags) · [media_files](#media_files) · [mic_sessions](#mic_sessions) · [moderation_strikes](#moderation_strikes) · [music_tracks](#music_tracks) · [oauth_states](#oauth_states) · [official_event_attendance](#official_event_attendance) · [official_events](#official_events) · [payout_periods](#payout_periods) · [pk_battles](#pk_battles) · [pk_supporters](#pk_supporters) · [post_comments](#post_comments) · [post_likes](#post_likes) · [posts](#posts) · [profile_visitors](#profile_visitors) · [push_messages](#push_messages) · [recent_rooms](#recent_rooms) · [referral_statements](#referral_statements) · [reports](#reports) · [room_blocks](#room_blocks) · [room_game_players](#room_game_players) · [room_games](#room_games) · [room_gift_totals](#room_gift_totals) · [room_members](#room_members) · [room_messages](#room_messages) · [room_mic_queue](#room_mic_queue) · [room_music](#room_music) · [room_music_queue](#room_music_queue) · [room_mutes](#room_mutes) · [room_pk](#room_pk) · [room_pk_points](#room_pk_points) · [room_profiles](#room_profiles) · [room_staff](#room_staff) · [rooms](#rooms) · [security_events](#security_events) · [special_ids](#special_ids) · [store_items](#store_items) · [support_messages](#support_messages) · [upload_owners](#upload_owners) · [user_blocks](#user_blocks) · [user_identities](#user_identities) · [user_notifications](#user_notifications) · [user_sessions](#user_sessions) · [user_wip](#user_wip) · [users](#users) · [wallet_transactions](#wallet_transactions) · [weekly_event_config](#weekly_event_config) · [weekly_event_results](#weekly_event_results) · [weekly_event_settlements](#weekly_event_settlements) · [wip_plans](#wip_plans) · [wip_tiers](#wip_tiers)
 
 ## agencies
 
@@ -289,17 +289,6 @@ Oluşturan: `009_feed_banners_announcements.sql`
 | sort_order | `INT NOT NULL DEFAULT 0` | 009 |
 | is_active | `BOOLEAN NOT NULL DEFAULT TRUE` | 009 |
 | created_at | `TIMESTAMPTZ NOT NULL DEFAULT NOW()` | 009 |
-
-## bootstrap_admins
-
-Oluşturan: `058_bootstrap_admins.sql`
-
-| Sütun | Tür / kural | Ekleyen |
-|---|---|---|
-| username | `TEXT PRIMARY KEY` | 058 |
-| first_listed_at | `TIMESTAMPTZ NOT NULL DEFAULT NOW()` | 058 |
-| user_id | `UUID REFERENCES users(id) ON DELETE SET NULL` | 058 |
-| granted_at | `TIMESTAMPTZ` | 058 |
 
 ## broadcast_sessions
 
@@ -764,7 +753,6 @@ Oluşturan: `002_social_inventory.sql`
 | coin_amount | `BIGINT NOT NULL` | 002 |
 | display_level | `INT NOT NULL DEFAULT 1` | 002 |
 | created_at | `TIMESTAMPTZ DEFAULT NOW()` | 002 |
-| sender_hidden | `BOOLEAN NOT NULL DEFAULT FALSE` | 059 |
 
 İndeksler:
 - `idx_global_gift_created (created_at DESC)`
@@ -946,8 +934,6 @@ Oluşturan: `016_daily_luckybag.sql`
 | expires_at | `TIMESTAMPTZ NOT NULL` | 016 |
 | created_at | `TIMESTAMPTZ NOT NULL DEFAULT NOW()` | 016 |
 | opens_at | `TIMESTAMPTZ` | 017 |
-| sender_hidden | `BOOLEAN NOT NULL DEFAULT FALSE` | 059 |
-| sender_alias | `VARCHAR(8)` | 059 |
 
 İndeksler:
 - `idx_lucky_open (status, expires_at)`

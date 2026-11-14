@@ -5,6 +5,10 @@ import '../version.dart';
 import '../widgets/app_theme.dart';
 import '../widgets/common.dart';
 import '../services/app_visibility.dart';
+import '../services/session.dart';
+import 'admin_topup_screen.dart';
+import 'admin_room_themes_screen.dart';
+import 'admin_screenshots_screen.dart';
 
 String _dt(dynamic iso) {
   final d = DateTime.tryParse((iso ?? '').toString())?.toLocal();
@@ -177,6 +181,11 @@ class _DashboardTabState extends State<DashboardTab> {
           child: Column(children: [
             ListTile(leading: const Icon(Icons.bug_report_outlined), title: const Text('Uygulama hata kayıtları'), trailing: const Icon(Icons.chevron_right), onTap: () => _open(const ClientErrorsScreen())),
             ListTile(leading: const Icon(Icons.history), title: const Text('İşlem kaydı'), subtitle: const Text('Yetkili işlemleri ve para hareketleri'), trailing: const Icon(Icons.chevron_right), onTap: () => _open(const ActionsLogScreen())),
+            if (Session.isAdmin)
+              ListTile(leading: const Icon(Icons.account_balance_wallet_outlined), title: const Text('Bayi bakiye talepleri'), subtitle: const Text('Bekleyen talepleri onayla / reddet'), trailing: const Icon(Icons.chevron_right), onTap: () => _open(const AdminTopupScreen())),
+            if (Session.isAdmin)
+              ListTile(leading: const Icon(Icons.wallpaper), title: const Text('Oda temaları'), subtitle: const Text('Tema ekle / çıkar, özel tema onayları'), trailing: const Icon(Icons.chevron_right), onTap: () => _open(const AdminRoomThemesScreen())),
+            ListTile(leading: const Icon(Icons.screenshot_monitor), title: const Text('Ekran görüntüleri'), subtitle: const Text('Uygulama içinde alınan ekran görüntüsü kayıtları'), trailing: const Icon(Icons.chevron_right), onTap: () => _open(const AdminScreenshotsScreen())),
             ListTile(leading: const Icon(Icons.shield_outlined), title: const Text('Otomatik moderasyon'), subtitle: const Text('Link/telefon/küfür ihlalleri ve kısıtlar'), trailing: const Icon(Icons.chevron_right), onTap: () => _open(const StrikesScreen())),
             ListTile(leading: const Icon(Icons.tune), title: const Text('Uygulama ayarları'), subtitle: const Text('Zorunlu güncelleme, moderasyon kuralları'), trailing: const Icon(Icons.chevron_right), onTap: () => _open(const AppConfigScreen())),
           ]),
@@ -480,6 +489,9 @@ class _AppConfigScreenState extends State<AppConfigScreen> {
   bool _blockLinks = true;
   bool _blockPhones = true;
   bool _luckyEnabled = true;
+  bool _roomActivities = true;
+  bool _blockRooted = false;
+  bool _sslPinning = false;
   bool _loading = true;
   bool _saving = false;
   String? _error;
@@ -523,6 +535,9 @@ class _AppConfigScreenState extends State<AppConfigScreen> {
         _blockLinks = c['blockLinks'] != false;
         _blockPhones = c['blockPhones'] != false;
         _luckyEnabled = c['luckyEnabled'] != false;
+        _roomActivities = c['roomActivitiesEnabled'] != false;
+        _blockRooted = c['blockRooted'] == true;
+        _sslPinning = c['sslPinning'] == true;
         _text['luckyRtpPct']!.text = _pct(c['luckyRtpBps'] ?? 7000);
         _text['luckyReceiverPct']!.text = _pct(c['luckyReceiverBps'] ?? 1000);
         _loading = false;
@@ -546,7 +561,10 @@ class _AppConfigScreenState extends State<AppConfigScreen> {
       'roomNotice': _text['roomNotice']!.text.trim(),
       'blockLinks': _blockLinks,
       'blockPhones': _blockPhones,
+      'blockRooted': _blockRooted,
+      'sslPinning': _sslPinning,
       'luckyEnabled': _luckyEnabled,
+      'roomActivitiesEnabled': _roomActivities,
     };
     for (final k in _ints) {
       final n = int.tryParse(_text[k]!.text.trim());
@@ -617,6 +635,13 @@ class _AppConfigScreenState extends State<AppConfigScreen> {
                   const SizedBox(height: Gap.m),
                   _field('roomNotice', 'Uygulama uyarı duyurusu (odaya girince sohbetin başında; boş = kapalı)', maxLines: 4),
                   _field('flyTextCoins', 'Uçan yazı ücreti (Coin, 0 = ücretsiz)', number: true),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Oda Etkinlikleri açık'),
+                    subtitle: const Text('Herkes için geçerli. Kapalıyken odada Etkinlikler menüsü görünmez ve sayfa açılmaz.'),
+                    value: _roomActivities,
+                    onChanged: (v) => setState(() => _roomActivities = v),
+                  ),
                   const Divider(height: Gap.xl),
                   const Text('Otomatik moderasyon', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
                   SwitchListTile(
@@ -632,6 +657,23 @@ class _AppConfigScreenState extends State<AppConfigScreen> {
                     subtitle: const Text('Herkese açık alanlarda (özel mesaj hariç)'),
                     value: _blockPhones,
                     onChanged: (v) => setState(() => _blockPhones = v),
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Root / jailbreak cihazları engelle'),
+                    subtitle: const Text('Açıksa root (Android) / jailbreak (iPhone) cihazlarda uygulama açılmaz. '
+                        'Dikkat: bazı gerçek kullanıcıların telefonu root\'lu olabilir; tespit kesin değildir.'),
+                    value: _blockRooted,
+                    onChanged: (v) => setState(() => _blockRooted = v),
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('SSL sertifika sabitleme (pinning)'),
+                    subtitle: const Text('Açıksa uygulama yalnızca Let\'s Encrypt köklü sunucu sertifikasına güvenir. '
+                        'Sunucu Let\'s Encrypt kullanmıyorsa AÇMA: bağlantı kopar. Açtıktan sonra telefonda giriş yapıp dene; '
+                        'sorun olursa kapat, uygulama yeniden açılışta düzelir.'),
+                    value: _sslPinning,
+                    onChanged: (v) => setState(() => _sslPinning = v),
                   ),
                   const SizedBox(height: Gap.s),
                   _field('strikeLimit', 'Kaç ihlalde kısıtlansın (1-20)', number: true),

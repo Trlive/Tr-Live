@@ -263,7 +263,7 @@ router.put('/cover', userLimit('cover_upload', 15, 3600e3), ...imageUpload('cove
 router.post('/password', userLimit('password', 5, 15 * 60e3), async (req, res) => {
   const current = String(req.body?.currentPassword ?? '');
   const next = String(req.body?.newPassword ?? '');
-  passwordRules(next, { username: req.user.username });
+  passwordRules(next);
   // Şifresi olmayan (Google/Facebook) hesap ilk kez şifre belirleyebilir.
   if (req.user.password_hash && !(await checkPassword(current, req.user.password_hash))) throw fail('Mevcut şifre hatalı.', 403);
   const hash = await hashPassword(next);
@@ -276,8 +276,6 @@ router.post('/password', userLimit('password', 5, 15 * 60e3), async (req, res) =
 
 // Mağaza kuralları gereği uygulama içinden hesap silme.
 router.delete('/', userLimit('acct_delete', 5, 15 * 60e3), async (req, res) => {
-  // Yönetici hesabı uygulamadan silinemez: ele geçirilen oturumla yönetim kaybedilmesin, boşa çıkan ad başkasına geçmesin.
-  if (req.user.system_role === 'admin') throw fail('Yönetici hesabı uygulamadan silinemez.', 403);
   const password = String(req.body?.password ?? '');
   if (req.user.password_hash) {
     if (!(await checkPassword(password, req.user.password_hash))) throw fail('Şifre hatalı.', 403);

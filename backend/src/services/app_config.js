@@ -29,6 +29,12 @@ export const CONFIG_DEFAULTS = Object.freeze({
     + 'Kurallara uymayan hesaplar uyarı yapılmadan kapatılır.',
   // Uçan yazı (odada ekranın üstünden geçen mesaj) ücreti, Coin. 0 = ücretsiz.
   flyTextCoins: 99,
+  // Oda içi etkinlikler (WebView H5 sayfası + menü). Herkes için geçerli genel anahtar; kapalıyken menü gizlenir, /room-activities 404 verir.
+  roomActivitiesEnabled: true,
+  // Yönetim paneli (Uygulama ayarları) bu iki anahtarı da gönderiyor; kaydın "Bilinmeyen ayar" ile reddedilmemesi için tanımlı.
+  // İstemci henüz okumuyor (varsayılan kapalı, davranış değişmez).
+  blockRooted: false,
+  sslPinning: false,
 });
 
 const VERSION_RE = /^\d{1,3}\.\d{1,3}\.\d{1,3}$/;

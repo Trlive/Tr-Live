@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/api.dart';
 import '../widgets/common.dart';
+import '../widgets/app_webview_modal.dart';
 
 class DealerScreen extends StatefulWidget {
   const DealerScreen({super.key});
@@ -52,6 +53,15 @@ class _DealerScreenState extends State<DealerScreen> {
             onRefresh: reload,
             child: ListView(padding: const EdgeInsets.all(16), children: [
               Card(child: ListTile(leading: const Icon(Icons.storefront), title: Text((dealer['name'] ?? '').toString()), subtitle: Text('Bakiye: ${fmtNumber(dealer['coinBalance'])} Coin'))),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: () async {
+                  await showAppWebViewSheet(context, url: '${Api.baseUrl}/dealer-topup', title: 'Bakiye Talep Et', heightFactor: 0.85);
+                  if (mounted) setState(() => _version++);
+                },
+                icon: const Icon(Icons.account_balance_wallet),
+                label: const Text('Bakiye Talep Et'),
+              ),
               const SizedBox(height: 12),
               TextField(controller: _username, autocorrect: false, decoration: const InputDecoration(labelText: 'Kullanıcı adı', border: OutlineInputBorder())),
               const SizedBox(height: 8),

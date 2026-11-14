@@ -385,7 +385,9 @@ class CpSeatHearts extends StatefulWidget {
   final Offset a;
   final Offset b;
   final double r;
-  const CpSeatHearts({super.key, required this.a, required this.b, required this.r});
+  /// true: yalnızca [a] avatarının çevresinde kalpler uçuşur, ortada kalp çizilmez (yan yana olmayan CP'ler için).
+  final bool solo;
+  const CpSeatHearts({super.key, required this.a, required this.b, required this.r, this.solo = false});
 
   @override
   State<CpSeatHearts> createState() => _CpSeatHeartsState();
@@ -402,7 +404,7 @@ class _CpSeatHeartsState extends State<CpSeatHearts> with SingleTickerProviderSt
 
   @override
   Widget build(BuildContext context) => IgnorePointer(
-        child: RepaintBoundary(child: CustomPaint(painter: _CpHeartsPainter(_c, widget.a, widget.b, widget.r), size: Size.infinite)),
+        child: RepaintBoundary(child: CustomPaint(painter: _CpHeartsPainter(_c, widget.a, widget.b, widget.r, widget.solo), size: Size.infinite)),
       );
 }
 
@@ -411,25 +413,38 @@ class _CpHeartsPainter extends CustomPainter {
   final Offset a;
   final Offset b;
   final double r;
-  _CpHeartsPainter(this.t, this.a, this.b, this.r) : super(repaint: t);
+  final bool solo;
+  _CpHeartsPainter(this.t, this.a, this.b, this.r, this.solo) : super(repaint: t);
 
-  static const _perSeat = 6;
+  static const _perSeat = 9;
+  static const _tints = [kCpRose, Color(0xFFFF9AC8), Color(0xFFFFFFFF), Color(0xFFFF6FA8)];
 
   @override
   void paint(Canvas canvas, Size size) {
     final v = t.value;
-    // Çevreden çıkan küçük kalpler: her avatarda 6 tane, farklı açı ve zamanlarda doğup dışarı süzülür.
-    for (final (center, seed) in [(a, 0), (b, 3)]) {
+    // Çevreden süzülen kalpler: her avatarda 9 tane; yukarı doğru salınarak yükselir, büyüyüp sonra solar,
+    // renkleri gül / açık pembe / beyaz arasında değişir, ikisi arada parıltı bırakır.
+    for (final (center, seed) in solo ? [(a, 0)] : [(a, 0), (b, 3)]) {
       for (var i = 0; i < _perSeat; i++) {
         final life = (v * 2 + i / _perSeat + seed * 0.07) % 1.0;
-        final ang = (i * 137.5 + seed * 40 + (v * 2 + i / _perSeat).floor() * 53) * math.pi / 180;
+        final cycle = (v * 2 + i / _perSeat).floor();
+        final ang = (i * 137.5 + seed * 40 + cycle * 53) * math.pi / 180;
         final dir = Offset(math.cos(ang), math.sin(ang));
-        final p = center + dir * (r * (1.0 + 0.55 * life)) + Offset(0, -r * 0.35 * life);
+        final sway = math.sin(life * math.pi * 2 + i) * r * 0.18;
+        final p = center + dir * (r * (0.95 + 0.5 * life)) + Offset(sway, -r * 0.9 * life);
         final fade = math.sin(math.pi * life);
-        final s = r * (0.2 + 0.12 * fade);
-        canvas.drawPath(heartPath(p, s), Paint()..color = kCpRose.withValues(alpha: 0.9 * fade));
+        final s = r * (0.17 + 0.17 * fade) * (i.isEven ? 1.0 : 0.78);
+        final tint = _tints[(i + cycle) % _tints.length];
+        canvas.drawPath(heartPath(p, s), Paint()
+          ..color = tint.withValues(alpha: 0.28 * fade)
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, s * 0.45));
+        canvas.drawPath(heartPath(p, s), Paint()..color = tint.withValues(alpha: 0.92 * fade));
+        if (i % 3 == 0 && fade > 0.55) {
+          canvas.drawCircle(p + Offset(s * 0.9, -s * 0.9), s * 0.16, Paint()..color = Colors.white.withValues(alpha: 0.9 * fade));
+        }
       }
     }
+    if (solo) return; // yan yana değiller: aradaki kalp çizilmez
     // Ortadaki kalp: kalp atışı (iki hızlı vuruş, sonra dinlenme).
     final beat = (v * 4) % 1.0;
     double k;
@@ -464,5 +479,5 @@ class _CpHeartsPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_CpHeartsPainter old) => old.a != a || old.b != b || old.r != r || old.t != t;
+  bool shouldRepaint(_CpHeartsPainter old) => old.a != a || old.b != b || old.r != r || old.t != t || old.solo != solo;
 }

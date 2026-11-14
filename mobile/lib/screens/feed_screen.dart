@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/screen_guard.dart';
 import '../services/api.dart';
 import '../services/session.dart';
 import '../widgets/app_theme.dart';
@@ -47,7 +48,9 @@ class _FeedScreenState extends State<FeedScreen> {
       );
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ScreenTag(screen: 'feed', child: _guardedBuild(context));
+
+  Widget _guardedBuild(BuildContext context) {
     return Scaffold(
       floatingActionButton: FloatingActionButton(onPressed: _compose, tooltip: 'Paylaş', child: const Icon(Icons.add_a_photo)),
       body: Column(children: [

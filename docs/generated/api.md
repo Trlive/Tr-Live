@@ -62,7 +62,7 @@ Kimlik: **🔒** giriş gerekli · **👑** yalnızca yönetici · **🛠** yön
 
 | Yöntem | Yol | Kimlik | ⏱ | Not |
 |---|---|---|---|---|
-| GET | `/api/users/search` | 🔒 | user_search | Gizli moddaki kullanıcı da kendi kimliğiyle bulunur (gizlilik yalnızca odalarda; hangi odada olduğu gösterilmez). |
+| GET | `/api/users/search` | 🔒 | user_search | Gizli kullanıcılar aramada çıkmaz. |
 | GET | `/api/users/:userId/card` | 🔒 |  | Oda içi profil kartı: "Yakın Arkadaşlarım" (bu kişiye en çok hediye gönderen 5 kişi) ve "Madalyalar" (rozetler). |
 | GET | `/api/users/:userId` | 🔒 |  |  |
 | POST | `/api/users/:userId/follow` | 🔒 | follow |  |

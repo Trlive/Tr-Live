@@ -10,6 +10,7 @@ import { token as livekitToken, setCanPublish, removeParticipant } from '../live
 import { canManage } from '../room_permissions.js';
 import { roomStaffShield } from '../staff_logic.js';
 import { featuresFor, requireFeature } from '../services/wip.js';
+import { skinUntil } from '../services/mic_skins.js';
 import { refreshGhost } from '../services/ghost.js';
 import { loadPublicRow, loadPublicRows, activeEntranceEffect } from '../services/users.js';
 import { leaveRoom, leaveOtherRooms, leaveStaleRooms, closeRoom, noteKick, recentlyKicked, SUPPORTED_SEATS } from '../services/rooms.js';
@@ -24,11 +25,12 @@ import { saveUpload, removeUpload, IMAGE_TYPES } from '../services/images.js';
 import { newRoomNumber } from '../services/ids.js';
 import { isGhost } from '../services/presence.js';
 import { notifyFriendsRoomOpen } from '../services/notify.js';
+import { resolveRoomTheme, CUSTOM_KEY } from '../services/room_themes.js';
 
 export const router = Router();
 
 const SEAT_MANAGERS = ['owner', 'cohost', 'moderator'];
-export const THEMES = ['default', 'neon', 'galaxy', 'sunset', 'forest', 'royal', 'ocean', 'rose'];
+// Temalar artık room_themes kataloğundan doğrulanır (services/room_themes.js: resolveRoomTheme).
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 0/O/1/I yok
 const newCode = () => Array.from(crypto.randomBytes(6), (b) => CODE_ALPHABET[b % CODE_ALPHABET.length]).join('');
 
@@ -37,6 +39,7 @@ const roomJson = (r, { showCode = false } = {}) => ({
   id: r.id, roomNumber: r.room_number ?? null, announcement: r.announcement ?? '', coverUrl: r.cover_url ?? null, name: r.name, roomType: r.room_type, seatCount: r.seat_count, ownerId: r.owner_id, createdAt: r.created_at,
   layout: r.layout === 'live' ? 'live' : 'grid', tags: r.tags ?? [], locked: Boolean(r.password_hash), chatEnabled: r.chat_enabled !== false,
   hidden: Boolean(r.is_hidden), theme: r.theme ?? 'default', themeImageUrl: r.theme_image_url ?? null, scoreboardEnabled: r.scoreboard_enabled !== false, lockedSeats: r.locked_seats ?? [], mutedSeats: r.muted_seats ?? [], micRequest: r.mic_request === true,
+  micSkin: r.mic_skin ?? null, micSkinText: r.mic_skin_text ?? null,
   ...(showCode && r.join_code ? { joinCode: r.join_code } : {}),
 });
 
@@ -235,6 +238,7 @@ router.post('/', requireAuth, userLimit('room_create', 20, 3600e3), async (req, 
   const roomType = b.roomType === 'video' ? 'video' : 'audio';
   const userId = req.user.id;
   let profile = await profileOf(userId, roomType);
+  let setupThemeImage; // özel tema görseli (undefined: dokunma)
   if (!profile || b.setup === true) {
     const name = cleanPublic(text(b.name, 'Oda adı', { min: 2, max: 60, required: true }), 'Oda adı');
     const tags = cleanTags(b.tags);
@@ -242,7 +246,10 @@ router.post('/', requireAuth, userLimit('room_create', 20, 3600e3), async (req, 
     let seatCount = Number(b.seatCount ?? profile?.seat_count ?? (roomType === 'video' ? 9 : 8));
     if (layout === 'live') seatCount = LIVE_SEATS;
     if (!SUPPORTED_SEATS.has(seatCount)) throw fail('Geçersiz koltuk sayısı.');
-    const theme = b.theme === undefined ? (profile?.theme ?? 'default') : oneOf(b.theme, THEMES, 'Tema');
+    // Tema: sahibin kullanabildiği bir tema olmalı (Coin'li → süresi devam eden hak; özel → onaylı özel tema).
+    const rt = b.theme === undefined ? null : await resolveRoomTheme(userId, b.theme);
+    const theme = rt ? rt.theme : (profile?.theme ?? 'default');
+    setupThemeImage = rt ? (rt.imageUrl ?? (profile?.theme === CUSTOM_KEY ? null : undefined)) : undefined;
     const announcement = b.announcement === undefined
       ? (profile?.announcement ?? null)
       : (cleanPublic(text(b.announcement ?? '', 'Duyuru', { min: 0, max: 200 }), 'Duyuru') || null);
@@ -253,6 +260,9 @@ router.post('/', requireAuth, userLimit('room_create', 20, 3600e3), async (req, 
        RETURNING *`,
       [userId, roomType, name, tags, seatCount, theme, profile?.room_number ?? await newRoomNumber(), announcement, layout],
     )).rows[0];
+  }
+  if (setupThemeImage !== undefined && profile) {
+    profile = (await query(`UPDATE room_profiles SET theme_image_url = $3, updated_at = NOW() WHERE owner_id = $1 AND room_type = $2 RETURNING *`, [userId, roomType, setupThemeImage])).rows[0] ?? profile;
   }
   // Tek oda kuralı: kendi odasını açan kişi bulunduğu diğer odalardan çıkar (açık odasına dönüyorsa o oda hariç).
   const already = (await query(`SELECT id FROM rooms WHERE owner_id = $1 AND room_type = $2 AND is_active = TRUE LIMIT 1`, [userId, roomType])).rows[0];
@@ -346,7 +356,7 @@ router.get('/:roomId', requireAuth, async (req, res) => {
   const roomId = uuid(req.params.roomId, 'Oda');
   const r = (await query(
     `SELECT r.id AS room_id, r.room_number, r.cover_url, r.announcement, r.name AS room_name, r.room_type, r.seat_count, r.owner_id, r.created_at AS room_created_at, r.tags, r.chat_enabled,
-       r.is_hidden AS room_hidden, r.join_code, r.theme, r.theme_image_url, r.scoreboard_enabled, r.locked_seats, r.muted_seats, r.mic_request,
+       r.is_hidden AS room_hidden, r.join_code, r.theme, r.theme_image_url, r.scoreboard_enabled, r.locked_seats, r.muted_seats, r.mic_request, r.mic_skin, r.mic_skin_text,
        (r.password_hash IS NOT NULL) AS locked, ${USER_PUBLIC_COLUMNS}
      FROM rooms r JOIN users u ON u.id = r.owner_id ${USER_PUBLIC_JOINS} WHERE r.id = $1 AND r.is_active = TRUE`,
     [roomId],
@@ -360,6 +370,7 @@ router.get('/:roomId', requireAuth, async (req, res) => {
       id: r.room_id, roomNumber: r.room_number ?? null, coverUrl: r.cover_url ?? null, announcement: r.announcement ?? '', name: r.room_name, roomType: r.room_type, seatCount: r.seat_count, ownerId: r.owner_id, createdAt: r.room_created_at,
       tags: r.tags ?? [], locked: r.locked, chatEnabled: r.chat_enabled !== false,
       hidden: r.room_hidden, theme: r.theme, themeImageUrl: r.theme_image_url, scoreboardEnabled: r.scoreboard_enabled, lockedSeats: r.locked_seats ?? [], mutedSeats: r.muted_seats ?? [], micRequest: r.mic_request === true,
+      micSkin: r.mic_skin ?? null, micSkinText: r.mic_skin_text ?? null,
       ...(canSeeCode && r.join_code ? { joinCode: r.join_code } : {}),
       owner: roomUser(r, req.user.id), ownerFamily: await ownerFamily(r.owner_id),
     },
@@ -497,7 +508,16 @@ router.patch('/:roomId', requireAuth, userLimit('room_settings', 20, 60e3), asyn
   if (b.tags !== undefined) set('tags', cleanTags(b.tags));
   if (b.announcement !== undefined) set('announcement', cleanPublic(text(b.announcement ?? '', 'Duyuru', { min: 0, max: 200 }), 'Duyuru') || null);
   if (b.chatEnabled !== undefined) { if (typeof b.chatEnabled !== 'boolean') throw fail('chatEnabled true/false olmalı.'); set('chat_enabled', b.chatEnabled); }
-  if (b.theme !== undefined) set('theme', oneOf(b.theme, THEMES, 'Tema'));
+  // Tema hakları odanın sahibine aittir (yardımcı sahip, sahibin temalarını kullanabilir).
+  let themeImg; // undefined: görsele dokunma
+  if (b.theme !== undefined && b.theme !== before.theme) {
+    const rt = await resolveRoomTheme(before.owner_id, b.theme);
+    set('theme', rt.theme);
+    if (rt.imageUrl) themeImg = rt.imageUrl;
+    else if (before.theme === CUSTOM_KEY) themeImg = null; // özel temadan çıkınca özel görsel kalkar
+  }
+  // Ayar penceresi mevcut görseli geri gönderebilir: değişmemişse yok sayılır; özel temada görseli tema belirler.
+  if (b.themeImageUrl !== undefined && (themeImg !== undefined || (b.themeImageUrl ?? null) === (before.theme_image_url ?? null))) delete b.themeImageUrl;
   if (b.micRequest !== undefined) { if (typeof b.micRequest !== 'boolean') throw fail('micRequest true/false olmalı.'); set('mic_request', b.micRequest); }
   let newSeats = null;
   if (b.seatCount !== undefined) {
@@ -511,6 +531,34 @@ router.patch('/:roomId', requireAuth, userLimit('room_settings', 20, 60e3), asyn
     set('locked_seats', (before.locked_seats ?? []).filter((i) => i < newSeats)); // kalkan koltukların kilidi de kalkar
     set('muted_seats', (before.muted_seats ?? []).filter((i) => i < newSeats));
   }
+  // Özel mikrofon modu tasarımı (ör. Doğum günü): yalnızca oda sahibi, süresi olan hakla. Koltuk sayısı tasarıma göre ayarlanır.
+  if (b.micSkin !== undefined) {
+    if (me.role !== 'owner') throw fail('Mikrofon tasarımını yalnızca oda sahibi seçebilir.', 403);
+    if (b.micSkin === null || b.micSkin === '') {
+      set('mic_skin', null); set('mic_skin_text', null)
+    } else {
+      if (before.layout === 'live') throw fail('Canlı yayında mikrofon tasarımı kullanılamaz.');
+      if (b.seatCount !== undefined) throw fail('Tasarım ve koltuk sayısı birlikte değiştirilemez.');
+      const skin = (await query(`SELECT * FROM mic_skins WHERE key = $1 AND is_active = TRUE`, [String(b.micSkin)])).rows[0];
+      if (!skin) throw fail('Tasarım bulunamadı.', 404);
+      if (!(await skinUntil(req.user.id, skin.key))) throw fail('Bu tasarımın süresi yok. Önce satın alın.', 403);
+      newSeats = skin.seat_count;
+      if (newSeats !== before.seat_count && (await query(`SELECT 1 FROM room_pk WHERE room_id = $1 AND status IN ('preparing','active')`, [roomId])).rowCount) {
+        throw fail('PK modu açıkken mikrofon modu değiştirilemez; önce PK modunu kapatın.', 409);
+      }
+      set('mic_skin', skin.key);
+      set('seat_count', newSeats);
+      set('locked_seats', (before.locked_seats ?? []).filter((i) => i < newSeats));
+      set('muted_seats', (before.muted_seats ?? []).filter((i) => i < newSeats));
+    }
+  } else if (b.seatCount !== undefined && before.mic_skin) {
+    // Normal bir mikrofon moduna geçilince özel tasarım kapanır.
+    set('mic_skin', null); set('mic_skin_text', null)
+  }
+  if (b.micSkinText !== undefined) {
+    if (me.role !== 'owner') throw fail('Yazıyı yalnızca oda sahibi değiştirebilir.', 403);
+    set('mic_skin_text', cleanPublic(text(b.micSkinText ?? '', 'Yazı', { min: 0, max: 40 }), 'Yazı') || null);
+  }
   if (b.themeImageUrl !== undefined) {
     if (b.themeImageUrl !== null && b.themeImageUrl !== '') {
       await requireFeature(req.user.id, 'customRoomTheme', 'Özel tema görseli');
@@ -519,6 +567,7 @@ router.patch('/:roomId', requireAuth, userLimit('room_settings', 20, 60e3), asyn
       set('theme_image_url', u);
     } else set('theme_image_url', null);
   }
+  if (themeImg !== undefined) set('theme_image_url', themeImg);
   if (b.scoreboardEnabled !== undefined) { if (typeof b.scoreboardEnabled !== 'boolean') throw fail('scoreboardEnabled true/false olmalı.'); set('scoreboard_enabled', b.scoreboardEnabled); }
   if (b.hidden !== undefined) {
     if (typeof b.hidden !== 'boolean') throw fail('hidden true/false olmalı.');
@@ -568,6 +617,7 @@ router.patch('/:roomId', requireAuth, userLimit('room_settings', 20, 60e3), asyn
     type: 'room_settings', roomId, name: r.name, tags: r.tags, locked: Boolean(r.password_hash), chatEnabled: r.chat_enabled,
     theme: r.theme, themeImageUrl: r.theme_image_url, scoreboardEnabled: r.scoreboard_enabled, hidden: r.is_hidden,
     seatCount: r.seat_count, lockedSeats: r.locked_seats ?? [], announcement: r.announcement ?? '', coverUrl: r.cover_url ?? null, micRequest: r.mic_request === true,
+    micSkin: r.mic_skin ?? null, micSkinText: r.mic_skin_text ?? null,
   });
   res.json({ room: roomJson(r, { showCode: true }) });
 });

@@ -4,6 +4,8 @@ import android.Manifest
 import android.annotation.TargetApi
 import android.content.Context
 import android.content.pm.PackageManager
+import android.database.ContentObserver
+import android.net.Uri
 import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
@@ -47,6 +49,10 @@ class MainActivity : FlutterActivity() {
     private var polling = false
     private var headsetSink: EventChannel.EventSink? = null
     private var deviceCallback: AudioDeviceCallback? = null
+    private var shotSink: EventChannel.EventSink? = null
+    private var shotCallback: Any? = null
+    private var shotObserver: ContentObserver? = null
+    private var lastShotAt = 0L
 
     /// Kablolu kulaklık / kulaklık girişi / USB kulaklık / Bluetooth kulaklık bağlı mı.
     private fun headsetConnected(): Boolean {
@@ -157,6 +163,16 @@ class MainActivity : FlutterActivity() {
                         }.start()
                     }
                 }
+                "secure" -> {
+                    // Profil fotoğrafı sayfaları: ekran görüntüsü ve ekran kaydı engellenir (görüntü siyah çıkar).
+                    val on = (call.arguments as? Boolean) ?: false
+                    if (on) {
+                        window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                    } else {
+                        window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                    }
+                    result.success(null)
+                }
                 "headsetConnected" -> result.success(headsetConnected())
                 "isMetered" -> {
                     // Mobil veri / kotalı bağlantı mı (Wi-Fi değilse true). Hediye dosyaları yalnızca kotasız ağda önceden iner.
@@ -252,6 +268,18 @@ class MainActivity : FlutterActivity() {
                 deviceCallback = null
             }
         })
+        // Uygulama açıkken alınan ekran görüntüsü: Flutter'a olay gönderilir (görüntünün kendisi okunmaz).
+        EventChannel(messenger, "trlive/screenshot").setStreamHandler(object : EventChannel.StreamHandler {
+            override fun onListen(arguments: Any?, sink: EventChannel.EventSink?) {
+                shotSink = sink
+                startShotWatch()
+            }
+
+            override fun onCancel(arguments: Any?) {
+                shotSink = null
+                stopShotWatch()
+            }
+        })
         EventChannel(messenger, "trlive/phone_call").setStreamHandler(object : EventChannel.StreamHandler {
             override fun onListen(arguments: Any?, sink: EventChannel.EventSink?) {
                 events = sink
@@ -265,6 +293,77 @@ class MainActivity : FlutterActivity() {
                 stopWatch()
             }
         })
+    }
+
+    override fun onStart() {
+        super.onStart()
+        if (shotSink != null) startShotWatch()
+    }
+
+    override fun onStop() {
+        stopShotWatch()
+        super.onStop()
+    }
+
+    private fun emitShot() {
+        val now = System.currentTimeMillis()
+        if (now - lastShotAt < 3000) return // aynı görüntü için birden çok bildirim
+        lastShotAt = now
+        main.post {
+            try {
+                shotSink?.success(now)
+            } catch (e: Exception) {
+            }
+        }
+    }
+
+    private fun startShotWatch() {
+        if (shotCallback != null || shotObserver != null) return
+        try {
+            if (Build.VERSION.SDK_INT >= 34) {
+                // Android 14+: sistemin resmi bildirimi (DETECT_SCREEN_CAPTURE izni, kurulumda verilir).
+                shotCallback = ShotWatch.register(this) { emitShot() }
+            } else if (Build.VERSION.SDK_INT <= 32 && checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) {
+                // Android 12 ve öncesi: galeri izni zaten verilmişse yeni "Screenshot" dosyası fark edilir. İzin istenmez.
+                val obs = object : ContentObserver(main) {
+                    override fun onChange(selfChange: Boolean, uri: Uri?) {
+                        if (isNewScreenshot()) emitShot()
+                    }
+                }
+                contentResolver.registerContentObserver(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, true, obs)
+                shotObserver = obs
+            }
+        } catch (e: Throwable) {
+            shotCallback = null
+            shotObserver = null
+        }
+    }
+
+    private fun stopShotWatch() {
+        try {
+            val cb = shotCallback
+            if (cb != null && Build.VERSION.SDK_INT >= 34) ShotWatch.unregister(this, cb)
+            shotObserver?.let { contentResolver.unregisterContentObserver(it) }
+        } catch (e: Throwable) {
+        }
+        shotCallback = null
+        shotObserver = null
+    }
+
+    /** Son 10 sn içinde eklenen en yeni görselin adı / klasörü "screenshot" içeriyor mu (yalnızca ad okunur). */
+    private fun isNewScreenshot(): Boolean {
+        return try {
+            @Suppress("DEPRECATION")
+            val proj = arrayOf(MediaStore.Images.Media.DISPLAY_NAME, MediaStore.Images.Media.DATA, MediaStore.Images.Media.DATE_ADDED)
+            contentResolver.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, proj, null, null, MediaStore.Images.Media.DATE_ADDED + " DESC")?.use { c ->
+                if (!c.moveToFirst()) return false
+                val name = (c.getString(0) ?: "") + " " + (c.getString(1) ?: "")
+                val added = c.getLong(2)
+                System.currentTimeMillis() / 1000 - added <= 10 && name.lowercase().let { it.contains("screenshot") || it.contains("ekran görüntü") }
+            } ?: false
+        } catch (e: Exception) {
+            false
+        }
     }
 
     override fun onResume() {
@@ -368,6 +467,20 @@ class MainActivity : FlutterActivity() {
         legacyListener = null
         phoneBusy = false
         modeBusy = false
+    }
+}
+
+/// Android 14+ ekran görüntüsü bildirimi (Activity.ScreenCaptureCallback). Eski sürümlerde bu sınıf hiç yüklenmez.
+@TargetApi(34)
+private object ShotWatch {
+    fun register(activity: android.app.Activity, onShot: () -> Unit): Any {
+        val cb = android.app.Activity.ScreenCaptureCallback { onShot() }
+        activity.registerScreenCaptureCallback(activity.mainExecutor, cb)
+        return cb
+    }
+
+    fun unregister(activity: android.app.Activity, cb: Any) {
+        if (cb is android.app.Activity.ScreenCaptureCallback) activity.unregisterScreenCaptureCallback(cb)
     }
 }
 

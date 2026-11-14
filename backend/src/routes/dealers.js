@@ -4,6 +4,7 @@ import { requireAuth } from '../auth.js';
 import { userLimit } from '../firewall.js';
 import { fail, bigAmount, text, uuid } from '../http.js';
 import { dealerSell } from '../services/dealers.js';
+import { createTopupRequest, requestView, packagesView } from '../services/dealer_topup.js';
 import { idempotent } from '../idempotency.js';
 
 export const router = Router();
@@ -45,4 +46,33 @@ router.post('/sell', userLimit('dealer_sell', 60, 3600e3), idempotent('dealer_se
     dealerId: d.id, userId, coins, actorId: req.user.id, description: text(req.body?.description, 'Açıklama', { max: 200 }),
   }));
   res.json(result);
+});
+
+// ---------------- Bayi Bakiye Talepleri ----------------
+// Aktif bayi, toptan paket seçip bakiye talebi oluşturur. Uygulama içinde tahsilat YAPILMAZ; yönetici onayıyla
+// bayinin coin_balance'ı artar (ödeme platform dışında teyit edilir). Görünürlük tamamen rol bazlıdır.
+
+// Toptan paket listesi (bayi ekranı için).
+router.get('/topup-packages', async (req, res) => {
+  await myDealer(req.user.id);
+  res.json({ packages: packagesView() });
+});
+
+// Yeni talep oluştur.
+router.post('/topup-requests', userLimit('dealer_topup', 30, 3600e3), idempotent('dealer_topup'), async (req, res) => {
+  const d = await myDealer(req.user.id);
+  const packageCode = text(req.body?.packageCode, 'Paket', { required: true, max: 40 });
+  const referenceNote = text(req.body?.referenceNote, 'Referans notu', { max: 500 });
+  const request = await createTopupRequest({ query }, { dealerUserId: req.user.id, dealerId: d.id, packageCode, referenceNote });
+  res.json({ request });
+});
+
+// Bayinin kendi talep geçmişi.
+router.get('/topup-requests', async (req, res) => {
+  await myDealer(req.user.id);
+  const rows = (await query(
+    `SELECT * FROM dealer_topup_requests WHERE dealer_user_id = $1 ORDER BY created_at DESC LIMIT 50`,
+    [req.user.id],
+  )).rows;
+  res.json({ requests: rows.map(requestView), packages: packagesView() });
 });
