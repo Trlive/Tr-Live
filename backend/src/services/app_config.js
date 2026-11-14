@@ -31,6 +31,12 @@ export const CONFIG_DEFAULTS = Object.freeze({
   flyTextCoins: 99,
   // Oda içi etkinlikler (WebView H5 sayfası + menü). Herkes için geçerli genel anahtar; kapalıyken menü gizlenir, /room-activities 404 verir.
   roomActivitiesEnabled: true,
+  // Günlük giriş (7 gün): gün gün Coin ödülü; 7. gün ayrıca çerçeve / araç (boşsa verilmez), eşya süresi gün.
+  checkinEnabled: true,
+  checkinCoins: '20,20,20,20,50,50,100',
+  checkinFrameId: '',
+  checkinVehicleId: '',
+  checkinItemDays: 7,
   // Yönetim paneli (Uygulama ayarları) bu iki anahtarı da gönderiyor; kaydın "Bilinmeyen ayar" ile reddedilmemesi için tanımlı.
   // İstemci henüz okumuyor (varsayılan kapalı, davranış değişmez).
   blockRooted: false,
@@ -74,14 +80,19 @@ export function validateConfigPatch(body) {
       if (typeof v !== 'string' || v.length > 300) throw fail('Mesaj en fazla 300 karakter olmalı.');
     } else if (k === 'roomNotice') {
       if (typeof v !== 'string' || v.length > 500) throw fail('Oda uyarı duyurusu en fazla 500 karakter olmalı.');
+    } else if (k === 'checkinCoins') {
+      if (typeof v !== 'string' || !/^\s*\d{1,9}(\s*,\s*\d{1,9}){6}\s*$/.test(v)) throw fail('Günlük giriş ödülleri 7 sayı olmalı (ör. 20,20,20,20,50,50,100).');
+    } else if (k === 'checkinFrameId' || k === 'checkinVehicleId') {
+      if (typeof v !== 'string' || (v && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v))) throw fail('7. gün eşyası geçersiz.');
     } else if (typeof def === 'boolean') {
       if (typeof v !== 'boolean') throw fail(`${k} true/false olmalı.`);
     } else if (typeof def === 'number') {
       const limits = {
         strikeLimit: [1, 20], strikeWindowMin: [1, 1440], muteMinutes: [1, 1440], maxMuteMinutes: [1, 10080],
         luckyRtpBps: [0, 9000], luckyReceiverBps: [0, 5000], luckyMaxWin: [1, 1000000000], luckyAnnounceMultiplier: [10, 500],
-        flyTextCoins: [0, 1000000],
+        flyTextCoins: [0, 1000000], checkinItemDays: [1, 90],
       }[k];
+      if (!limits) throw fail(`${k} için sınır tanımlı değil.`);
       if (!Number.isInteger(v) || v < limits[0] || v > limits[1]) throw fail(`${k} ${limits[0]}-${limits[1]} arasında tam sayı olmalı.`);
     }
     out[k] = v;

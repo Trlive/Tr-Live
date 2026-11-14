@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'daily_checkin.dart';
 import 'package:flutter/material.dart';
 import '../services/api.dart';
 import '../services/socket_service.dart';
@@ -594,56 +595,5 @@ class BagEnvelope extends StatelessWidget {
   }
 }
 
-/// Günlük görev sayfası.
-Future<void> showDailySheet(BuildContext context) {
-  return showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    showDragHandle: true,
-    builder: (c) => FutureBuilder<Map<String, dynamic>>(
-      future: Api.get('/api/me/daily'),
-      builder: (c, snap) {
-        if (snap.hasError) return Padding(padding: const EdgeInsets.all(24), child: Text(errorText(snap.error!)));
-        if (!snap.hasData) return const SizedBox(height: 220, child: Center(child: CircularProgressIndicator()));
-        final d = snap.data!;
-        final streak = (d['streak'] as num?)?.toInt() ?? 0;
-        final target = (d['streakTarget'] as num?)?.toInt() ?? 7;
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [
-                const Expanded(child: Text('Günlük Görevler', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800))),
-                Text('${fmtNumber(d['xp'])} XP', style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.w800)),
-              ]),
-              const SizedBox(height: 10),
-              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                for (var i = 1; i <= target; i++)
-                  Column(children: [
-                    CircleAvatar(
-                      radius: 16,
-                      backgroundColor: i <= streak ? Colors.amber : Colors.white12,
-                      child: i == target ? Icon(Icons.card_giftcard, size: 18, color: i <= streak ? Colors.black : Colors.white54) : Text('$i', style: TextStyle(color: i <= streak ? Colors.black : Colors.white54, fontWeight: FontWeight.w800)),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(i == target ? '${fmtNumber(d['streakCoins'])}🪙' : 'XP', style: const TextStyle(fontSize: 10, color: Colors.white54)),
-                  ]),
-              ]),
-              const SizedBox(height: 4),
-              Text('Her gün tüm görevleri bitir; $target gün üst üste yaparsan ${fmtNumber(d['streakCoins'])} Coin kazanırsın. Bir gün aksatırsan seri sıfırlanır.', style: const TextStyle(color: Colors.white60, fontSize: 12)),
-              const Divider(height: 22),
-              for (final t in listOf(d['tasks']))
-                ListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(t['done'] == true ? Icons.check_circle : Icons.radio_button_unchecked, color: t['done'] == true ? Colors.greenAccent : Colors.white38),
-                  title: Text((t['label'] ?? '').toString()),
-                  trailing: Text('${t['count']}/${t['target']}'),
-                ),
-            ]),
-          ),
-        );
-      },
-    ),
-  );
-}
+/// Eski "Günlük Görevler" sayfası kaldırıldı: yerini 7 günlük giriş ödülü aldı.
+Future<void> showDailySheet(BuildContext context) => showCheckinDialog(context);

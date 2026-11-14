@@ -22,6 +22,8 @@ import 'feed_screen.dart';
 import 'go_live_screen.dart';
 import 'leaderboard_screen.dart';
 import 'legal_screens.dart';
+import 'profile_setup_screen.dart';
+import '../widgets/daily_checkin.dart';
 import 'messages_screen.dart';
 import 'profile_screen.dart';
 import 'room_screen.dart';
@@ -49,11 +51,36 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  bool _setupOpen = false;
+  bool _checkinTried = false;
+
+  /// Sözleşme onayından sonra: yeni hesapsa kayıt ekranı (bir kez), ardından günlük giriş penceresi (bugün alınmadıysa).
+  void _onboard() {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      final me = Session.me.value;
+      if (me == null || TermsGate.needed(me)) return;
+      if (me['setupDone'] == false) {
+        if (_setupOpen) return;
+        _setupOpen = true;
+        await Navigator.of(context).push(MaterialPageRoute(fullscreenDialog: true, builder: (_) => const ProfileSetupScreen()));
+        _setupOpen = false;
+        return; // kayıt bitince profil yenilenir → bu fonksiyon yeniden çalışır ve günlük giriş gelir
+      }
+      if (_checkinTried || _setupOpen) return;
+      _checkinTried = true;
+      await Future<void>.delayed(const Duration(milliseconds: 700));
+      if (mounted) await maybeShowCheckin(context);
+    });
+  }
+
   @override
   void initState() {
     super.initState();
     Session.me.addListener(_checkTerms);
     _checkTerms();
+    Session.me.addListener(_onboard);
+    _onboard();
     Inbox.start();
     // Uygulama açılışı: önceki oturumdan (uygulama kapanmış / çökmüştü) eski odada asılı kalan üyelik temizlenir;
     // sahibi olduğun oda, içeride yönetici yoksa kapanır. Başka bir cihazda gerçekten odadaysan dokunulmaz.
@@ -115,6 +142,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     Session.me.removeListener(_checkTerms);
+    Session.me.removeListener(_onboard);
     _cpSub?.cancel();
     Inbox.stop();
     super.dispose();

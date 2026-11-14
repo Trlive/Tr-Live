@@ -108,6 +108,8 @@ export function selfUser(row) {
     gender: row.gender ?? null,
     birthDate: row.birth_date ? String(row.birth_date).slice(0, 10) : null,
     country: row.country ?? null,
+    countryCode: row.country_code ?? null,
+    setupDone: row.setup_done !== false,
     city: row.city ?? null,
     coins: String(row.coins),
     diamonds: String(row.diamonds),

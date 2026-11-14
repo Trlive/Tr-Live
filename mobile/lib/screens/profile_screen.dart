@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/daily_checkin.dart';
 import '../services/screen_guard.dart';
 import '../services/api.dart';
 import '../services/auth_service.dart';
@@ -6,7 +7,6 @@ import '../services/session.dart';
 import '../services/inbox_service.dart';
 import '../widgets/anim_asset.dart';
 import '../widgets/app_theme.dart';
-import '../widgets/lucky_bag.dart';
 import '../widgets/common.dart';
 import '../widgets/id_badge.dart';
 import '../widgets/cp_widgets.dart';
@@ -331,7 +331,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         else if (agencyAssistant != null)
           row(Icons.support_agent, Pal.cyan, 'Ajans Merkezi', () => _open(const AgencyCenterScreen()), sub: '${agencyAssistant['agencyName']} · Asistan'),
         row(Icons.shield_outlined, const Color(0xFFFF4FA8), 'Koruyuculuğum', () => _open(MyGuardianScreen(profileBuilder: (id) => UserProfileScreen(userId: id))), sub: 'Koruyucuların ve koruduğun kişiler'),
-        row(Icons.task_alt, Colors.greenAccent, 'Günlük Görevler', () => showDailySheet(context)),
+        row(Icons.event_available, Pal.gold, 'Günlük Giriş', () => showCheckinDialog(context)),
         if (isDealer) row(Icons.store_mall_directory, Pal.cyan, 'Bayi paneli', () => _open(const DealerScreen())),
         if (Session.isStaff) row(Icons.admin_panel_settings, Colors.redAccent, Session.isAdmin ? 'Yönetim paneli' : 'Yardımcı admin paneli', () => _open(const AdminScreen())),
       ]),

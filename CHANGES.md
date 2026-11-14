@@ -1,3 +1,13 @@
+## v2.97.0 — Günlük giriş ödülü ve kayıt ekranı
+- Günlük Giriş (7 gün): uygulama açılınca o gün alınmadıysa pencere gelir; her gün "Giriş yap" ile o günün Coin'i,
+  7. gün ayrıca çerçeve / araç (yönetim seçer). Bir gün atlanırsa veya 7. gün alınınca 1. güne döner (İstanbul saati).
+  Uygulama renklerinde; Profil > Günlük Giriş'ten de açılır. Eski "Günlük Görevler" sayfası kaldırıldı ve görev serisi
+  artık Coin vermez: tek günlük ödül günlük giriştir.
+- Yönetim > Günlük giriş ödülleri: 7 günün Coin'i, 7. gün çerçeve ve araç, eşya süresi, aç / kapat.
+- Kayıt ekranı (yalnızca yeni hesaplar, bir kez): profil fotoğrafı, takma ad, cinsiyet, doğum günü (18+), isteğe bağlı
+  şifre (şifresi olmayan hesaplarda), bayraklı ülke seçimi + telefon kodu. Mevcut hesaplar etkilenmez.
+- Migration 066 (country_code, setup_done, daily_checkins). Test + e2e: günlük giriş ve kayıt adımı.
+
 ## v2.96.7 — Tema penceresi: uygulama renkleri ve "Kullan" düğmesi
 - Tema penceresi beyaz/yeşil yerine uygulamanın koyu zemin + altın renklerinde (seçili tema altın çerçeve ve işaret).
 - Müsait: "Satın aldıklarım" (satın alınan ve özel tema; altta "Kullan" / "Kullanılıyor", kalan gün) ve

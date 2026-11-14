@@ -26,13 +26,8 @@ export async function noteTask(userId, key, n = 1) {
       if (doneCount >= Object.keys(DAILY_TASKS).length) {
         const s = (await c.query(`SELECT streak, last_day, ($2::date - last_day) AS gap FROM daily_streak WHERE user_id = $1`, [userId, day])).rows[0];
         const streak = s && s.gap === 1 ? s.streak + 1 : 1;
-        if (streak >= STREAK_DAYS) {
-          await c.query(`UPDATE users SET coins = coins + $2 WHERE id = $1`, [userId, String(STREAK_COINS)]);
-          await c.query(
-            `INSERT INTO wallet_transactions(user_id, transaction_type, coin_amount, description) VALUES($1,'daily_bonus',$2,$3)`,
-            [userId, String(STREAK_COINS), `${STREAK_DAYS} gün üst üste görev ödülü`],
-          );
-        } else xp += XP_PER_DAY;
+        // v2.97: Görev serisi artık Coin vermez; tek günlük Coin ödülü "Günlük Giriş"tir (services/checkin.js).
+        if (streak < STREAK_DAYS) xp += XP_PER_DAY;
         await c.query(
           `INSERT INTO daily_streak(user_id, streak, last_day) VALUES($1,$2,$3)
            ON CONFLICT (user_id) DO UPDATE SET streak = EXCLUDED.streak, last_day = EXCLUDED.last_day`,

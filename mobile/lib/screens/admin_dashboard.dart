@@ -9,6 +9,7 @@ import '../services/session.dart';
 import 'admin_topup_screen.dart';
 import 'admin_room_themes_screen.dart';
 import 'admin_screenshots_screen.dart';
+import 'admin_checkin_screen.dart';
 
 String _dt(dynamic iso) {
   final d = DateTime.tryParse((iso ?? '').toString())?.toLocal();
@@ -183,6 +184,8 @@ class _DashboardTabState extends State<DashboardTab> {
             ListTile(leading: const Icon(Icons.history), title: const Text('İşlem kaydı'), subtitle: const Text('Yetkili işlemleri ve para hareketleri'), trailing: const Icon(Icons.chevron_right), onTap: () => _open(const ActionsLogScreen())),
             if (Session.isAdmin)
               ListTile(leading: const Icon(Icons.account_balance_wallet_outlined), title: const Text('Bayi bakiye talepleri'), subtitle: const Text('Bekleyen talepleri onayla / reddet'), trailing: const Icon(Icons.chevron_right), onTap: () => _open(const AdminTopupScreen())),
+            if (Session.isAdmin)
+              ListTile(leading: const Icon(Icons.event_available), title: const Text('Günlük giriş ödülleri'), subtitle: const Text('7 günün Coin ödülü, 7. gün çerçeve / araç'), trailing: const Icon(Icons.chevron_right), onTap: () => _open(const AdminCheckinScreen())),
             if (Session.isAdmin)
               ListTile(leading: const Icon(Icons.wallpaper), title: const Text('Oda temaları'), subtitle: const Text('Tema ekle / çıkar, özel tema onayları'), trailing: const Icon(Icons.chevron_right), onTap: () => _open(const AdminRoomThemesScreen())),
             ListTile(leading: const Icon(Icons.screenshot_monitor), title: const Text('Ekran görüntüleri'), subtitle: const Text('Uygulama içinde alınan ekran görüntüsü kayıtları'), trailing: const Icon(Icons.chevron_right), onTap: () => _open(const AdminScreenshotsScreen())),

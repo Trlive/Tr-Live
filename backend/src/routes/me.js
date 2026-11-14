@@ -108,6 +108,22 @@ router.patch('/', async (req, res) => {
     }
   }
   if (b.country !== undefined) set('country', text(b.country, 'Ülke', { max: 60 }));
+  // Ülke kodu (ISO, ör. TR): kayıt ekranındaki bayraklı seçim.
+  if (b.countryCode !== undefined) {
+    if (b.countryCode !== null && (typeof b.countryCode !== 'string' || !/^[A-Z]{2}$/.test(b.countryCode))) throw fail('Ülke kodu geçersiz.');
+    set('country_code', b.countryCode);
+  }
+  // Kayıt ekranı bitti (yalnızca true kabul edilir).
+  if (b.setupDone !== undefined) {
+    if (b.setupDone !== true) throw fail('setupDone yalnızca true olabilir.');
+    set('setup_done', true);
+  }
+  // Kayıt ekranında ilk şifre: yalnızca şifresi olmayan hesap (oturumlar kapatılmaz; değiştirmek için /password).
+  if (b.password !== undefined && b.password !== null && b.password !== '') {
+    if (req.user.password_hash) throw fail('Şifreniz zaten var; değiştirmek için Ayarlar > Şifre bölümünü kullanın.', 409);
+    passwordRules(String(b.password));
+    set('password_hash', await hashPassword(String(b.password)));
+  }
   if (b.city !== undefined) set('city', text(b.city, 'Şehir', { max: 60 }));
   if (b.showPresence !== undefined) {
     if (typeof b.showPresence !== 'boolean') throw fail('Çevrimiçi durumu değeri geçersiz.');

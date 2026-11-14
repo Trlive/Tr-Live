@@ -1113,6 +1113,25 @@ test('şanslı çanta ve günlük görev', { skip, timeout: 60000 }, async () =>
   ok(d, 'görev');
   assert.ok(d.body.tasks.find((t) => t.key === 'join_room').done);
   assert.equal(d.body.tasks.length, 4);
+  // günlük giriş: ilk gün 1. günün ödülü, aynı gün ikinci kez alınamaz; görev serisi artık Coin vermez
+  const ci0 = await api('GET', '/api/checkin', { token: c1.token });
+  ok(ci0, 'günlük giriş durumu');
+  assert.equal(ci0.body.days.length, 7);
+  assert.equal(ci0.body.signedToday, false);
+  const before = await coins(c1);
+  const ci = await api('POST', '/api/checkin', { token: c1.token });
+  ok(ci, 'günlük giriş');
+  assert.equal(ci.body.streak, 1);
+  assert.equal((await coins(c1)) - before, BigInt(ci0.body.days[0].coins));
+  assert.equal(ci.body.state.signedToday, true);
+  status(await api('POST', '/api/checkin', { token: c1.token }), 409, 'aynı gün ikinci giriş');
+  // kayıt ekranı: yeni hesap setupDone=false; kayıt bitince true, ülke kodu kaydedilir
+  const meNew = await api('GET', '/api/me', { token: c1.token });
+  assert.equal(meNew.body.user.setupDone, false);
+  ok(await api('PATCH', '/api/me', { token: c1.token, body: { countryCode: 'TR', country: 'Türkiye', setupDone: true } }), 'kurulum');
+  const meDone = await api('GET', '/api/me', { token: c1.token });
+  assert.equal(meDone.body.user.setupDone, true);
+  assert.equal(meDone.body.user.countryCode, 'TR');
   // oda kartı: duyuru, katkı listesi, yönetici silme
   const up = await api('PATCH', `/api/rooms/${room}`, { token: s.token, body: { announcement: 'Hoş geldiniz' } });
   ok(up, 'duyuru');
