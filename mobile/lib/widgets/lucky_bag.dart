@@ -8,7 +8,6 @@ import 'common.dart';
 import 'fig.dart';
 import 'level_badge.dart';
 import 'id_badge.dart';
-import 'marquee.dart';
 
 /// Şanslı çanta kademeleri (sunucudaki ayarla aynı; sunucu doğrular).
 const _tiers = [
@@ -357,50 +356,6 @@ class _ClaimDialogState extends State<_ClaimDialog> {
   }
 
   String _mmss(int s) => '${(s ~/ 60).toString().padLeft(2, '0')}:${(s % 60).toString().padLeft(2, '0')}';
-
-  /// Kim ne kadar aldı: en çok alandan başlayarak art arda kayan şerit (şeffaf siyah, ince altın çerçeve).
-  Widget _claimsStrip() {
-    Widget item(int i, Map<String, dynamic> c) {
-      final u = mapOf(c['user']);
-      final medal = i == 0 ? const Color(0xFFFFD54F) : i == 1 ? const Color(0xFFE0E0E0) : i == 2 ? const Color(0xFFFFAB73) : Colors.white70;
-      return Padding(
-        padding: const EdgeInsets.only(right: 16),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Text('${i + 1}.', style: TextStyle(color: medal, fontWeight: FontWeight.w900, fontSize: 14)),
-          const SizedBox(width: 4),
-          UserAvatar(user: u, radius: 12),
-          const SizedBox(width: 4),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 110),
-            child: Text('${u?['displayName'] ?? ''}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14)),
-          ),
-          const SizedBox(width: 4),
-          const Fig('bag_coin', width: 17, height: 17),
-          const SizedBox(width: 2),
-          Text(fmtNumber(c['amount']), style: const TextStyle(color: Color(0xFFFFE082), fontWeight: FontWeight.w900, fontSize: 14)),
-        ]),
-      );
-    }
-
-    return Container(
-      height: 40,
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFF2B92A), width: 1),
-      ),
-      child: Marquee(
-        height: 40,
-        always: _claims.length > 1,
-        alignX: 0,
-        speed: 38,
-        gap: 8,
-        startDelay: const Duration(milliseconds: 600),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [for (var i = 0; i < _claims.length; i++) item(i, _claims[i])]),
-      ),
-    );
-  }
 
   Widget _okButton() => _yellowButton(tx('Tamam'), () => Navigator.of(context).maybePop(), height: 44);
 

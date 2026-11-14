@@ -1,3 +1,7 @@
+## v2.104.1 — Analiz uyarısı
+- "analiz et" işini düşüren uyarı giderildi: lucky_bag.dart'ta kullanılmayan _claimsStrip (ve yalnızca onun kullandığı
+  marquee içe aktarması) kaldırıldı.
+
 ## v2.104.0 — Etkinlik sonuç bildirimleri etkinliğin görseliyle · küçültülmüş müzik plağı
 Haftalık etkinlik sonuçları (Etkinlik Promosyonu)
 - Tek düz metin yerine her etkinlik için ayrı kart: Haftanın Çifti, Haftalık Kral ve Kraliçe, Haftalık Yıldızlar.
