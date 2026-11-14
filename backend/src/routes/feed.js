@@ -44,12 +44,12 @@ const ANNOUNCEMENT_KINDS = ['team', 'event', 'reward'];
 router.get('/announcements', requireAuth, async (req, res) => {
   const kind = ANNOUNCEMENT_KINDS.includes(req.query.kind) ? req.query.kind : null;
   const r = await query(
-    `SELECT id, kind, title, body, image_url, link_url, created_at FROM announcements WHERE ($1::text IS NULL OR kind = $1) ORDER BY created_at DESC LIMIT 50`,
+    `SELECT id, kind, title, body, image_url, link_url, meta, created_at FROM announcements WHERE ($1::text IS NULL OR kind = $1) ORDER BY created_at DESC LIMIT 50`,
     [kind],
   );
   res.json({
     announcements: r.rows.map((a) => ({
-      id: a.id, kind: a.kind, title: a.title, text: a.body, imageUrl: a.image_url ?? null, linkUrl: a.link_url ?? null, createdAt: a.created_at,
+      id: a.id, kind: a.kind, title: a.title, text: a.body, imageUrl: a.image_url ?? null, linkUrl: a.link_url ?? null, meta: a.meta ?? null, createdAt: a.created_at,
     })),
   });
 });

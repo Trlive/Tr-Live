@@ -135,7 +135,7 @@ export async function loadProfile(viewerId, targetId) {
     // Hayalet mod şu an gerçekten etkin mi (tercih açık + SWIP üyeliği sürüyor). Yalnızca kişinin kendisine.
     ...(isSelf ? { ghostActive: u.ghost === true } : {}),
     // Kurulum adımı (kayıt ekranı) alanları: yalnızca kişinin kendisine.
-    ...(isSelf ? { region: u.region ?? 'uz', countryCode: u.country_code ?? null, setupDone: u.setup_done !== false, birthDate: u.birth_date ? String(u.birth_date).slice(0, 10) : null, hasPassword: Boolean(u.password_hash), language: u.language } : {}),
+    ...(isSelf ? { region: u.region ?? 'uz', countryCode: u.country_code ?? null, setupDone: u.setup_done !== false, birthDate: u.birth_date ? String(u.birth_date).slice(0, 10) : null, hasPassword: Boolean(u.password_hash), language: u.language, phone: u.phone ?? null, phoneVerified: Boolean(u.phone && u.phone_verified_at), email: u.email ?? null, emailVerified: Boolean(u.email && u.email_verified_at) } : {}),
     followers: counts.rows[0].followers,
     following: counts.rows[0].following,
     isFollowing: following.rowCount > 0,

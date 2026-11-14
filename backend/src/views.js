@@ -131,6 +131,9 @@ export function selfUser(row) {
     systemRole: row.system_role,
     kycStatus: row.kyc_status ?? 'none',
     phone: row.phone ?? null,
+    phoneVerified: Boolean(row.phone && row.phone_verified_at),
+    email: row.email ?? null,
+    emailVerified: Boolean(row.email && row.email_verified_at),
     // Google/Facebook ile açılan hesapların şifresi yoktur (silme onayı ve şifre belirleme buna göre).
     hasPassword: Boolean(row.password_hash),
     createdAt: row.created_at,

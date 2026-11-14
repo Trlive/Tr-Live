@@ -5,6 +5,8 @@ import '../services/api.dart';
 import '../services/beauty.dart';
 import '../services/effect_prefs.dart';
 import '../services/session.dart';
+import '../services/phone_verify.dart';
+import 'verify_screens.dart';
 import '../services/room_dock.dart';
 import '../version.dart';
 import '../widgets/app_theme.dart';
@@ -250,6 +252,38 @@ class AccountSecurityScreen extends StatefulWidget {
 
 class _AccountSecurityScreenState extends State<AccountSecurityScreen> {
   Map<String, dynamic> get p => widget.profile;
+  bool _phoneOn = false; // sunucuda SMS doğrulaması (Firebase) açık mı
+  bool _emailOn = false; // sunucuda e-posta gönderimi açık mı
+
+  @override
+  void initState() {
+    super.initState();
+    Verify.phoneOn().then((v) {
+      if (mounted) setState(() => _phoneOn = v);
+    });
+    Verify.emailOn().then((v) {
+      if (mounted) setState(() => _emailOn = v);
+    });
+  }
+
+  /// Doğrulama sonrası güncel telefon / e-posta bilgisini oturumdan alır.
+  void _syncFromSession() {
+    final me = Session.me.value ?? const {};
+    setState(() {
+      for (final k in const ['phone', 'phoneVerified', 'email', 'emailVerified']) {
+        p[k] = me[k];
+      }
+    });
+  }
+
+  Future<void> _linkPhone() async {
+    if (await linkPhone(context) && mounted) _syncFromSession();
+  }
+
+  Future<void> _email() async {
+    final ok = await Navigator.push<bool>(context, MaterialPageRoute(builder: (_) => EmailVerifyScreen(current: p['email']?.toString())));
+    if (ok == true && mounted) _syncFromSession();
+  }
 
   Future<void> _kyc() async {
     final r = await guard(context, () => Api.post('/api/me/kyc/request'));
@@ -278,6 +312,9 @@ class _AccountSecurityScreenState extends State<AccountSecurityScreen> {
     final sec = securityLevel(p);
     final hasPassword = p['hasPassword'] != false;
     final phone = '${p['phone'] ?? ''}';
+    final phoneVerified = p['phoneVerified'] == true;
+    final email = '${p['email'] ?? ''}';
+    final emailVerified = p['emailVerified'] == true;
     final kyc = (p['kycStatus'] ?? 'none').toString();
     const kycText = {'none': 'Doğrulanmadı', 'pending': 'İnceleniyor', 'approved': 'Onaylı', 'rejected': 'Reddedildi'};
     final masked = phone.length > 4 ? '${'•' * (phone.length - 4)}${phone.substring(phone.length - 4)}' : phone;
@@ -308,7 +345,20 @@ class _AccountSecurityScreenState extends State<AccountSecurityScreen> {
               ]),
             ),
             _check(hasPassword, 'Şifre', hasPassword ? tx('Belirlendi') : tx('Belirlenmedi (Google/Facebook hesabı)'), action: hasPassword ? null : tx('Belirle'), onAction: widget.onChangePassword),
-            _check(phone.isNotEmpty, 'Telefon numarası', phone.isNotEmpty ? masked : tx('Bağlı değil')),
+            _check(
+              phone.isNotEmpty && phoneVerified,
+              'Telefon numarası',
+              phone.isEmpty ? tx('Bağlı değil') : (phoneVerified ? masked : '$masked · ${tx('Doğrulanmadı')}'),
+              action: _phoneOn && (phone.isEmpty || !phoneVerified) ? (phone.isEmpty ? tx('Bağla') : tx('Doğrula')) : (_phoneOn && phone.isNotEmpty ? tx('Değiştir') : null),
+              onAction: _linkPhone,
+            ),
+            _check(
+              email.isNotEmpty && emailVerified,
+              'E-posta',
+              email.isEmpty ? tx('Eklenmedi') : (emailVerified ? email : '$email · ${tx('Doğrulanmadı')}'),
+              action: _emailOn ? (email.isEmpty ? tx('Ekle') : (emailVerified ? tx('Değiştir') : tx('Doğrula'))) : null,
+              onAction: _email,
+            ),
             _check(kyc == 'approved', 'Kimlik doğrulama', tx(kycText[kyc] ?? kyc), action: kyc == 'none' || kyc == 'rejected' ? tx('Başvur') : null, onAction: _kyc),
             const SizedBox(height: 6),
           ]),

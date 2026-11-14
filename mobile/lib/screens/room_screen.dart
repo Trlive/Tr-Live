@@ -28,6 +28,8 @@ import '../services/media_cache.dart';
 import '../services/music_service.dart';
 import '../services/room_playlist.dart';
 import '../services/headset_audio.dart';
+import '../services/audio_processing.dart';
+import '../services/denoiser.dart';
 import '../services/room_dock.dart';
 import '../services/session.dart';
 import '../services/socket_service.dart';
@@ -44,6 +46,8 @@ import '../widgets/safety_actions.dart';
 import '../widgets/pk_banner.dart';
 import '../widgets/room_theme.dart';
 import '../widgets/seat_picker.dart';
+import '../widgets/chat_merge.dart';
+import '../widgets/lucky_win_fx.dart';
 import '../widgets/video_grid.dart';
 import 'gift_sheet.dart';
 import 'ludo_screen.dart';
@@ -75,6 +79,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   final GlobalKey _stageKey = GlobalKey();
   final GlobalKey _viewersKey = GlobalKey();
   final List<_GiftFlightData> _flights = [];
+  // Şanslı hediye kazanç efektleri (odadaki herkes görür).
+  final List<LuckyWinFxData> _luckyFx = [];
   int _flightSeq = 0;
   // Mikte oynayan hediyeler (yumurta, domates): alıcının koltuk dairesinin içinde oynar.
   final List<_SeatFx> _seatFx = [];
@@ -104,6 +110,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   StreamSubscription? _sub;
 
   final List<Map<String, dynamic>> _messages = [];
+  // Sohbet temizleme: o andan önce yazılan mesajlar (geç gelen olay ya da temizlemeden önce başlamış bir yükleme ile)
+  // geri gelmesin. Her temizlemede sayaç artar; süren yükleme dönünce sayaç değiştiyse sonucu atılır.
+  DateTime? _chatClearedAt;
+  int _chatEpoch = 0;
   final _chatCtl = TextEditingController();
   final _chatScroll = ScrollController();
   int _unseen = 0; // yukarıdaki eski mesajlar okunurken gelen yeni mesaj sayısı
@@ -266,6 +276,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     CallGuard.instance.inCall.removeListener(_onPhoneCall);
     CallGuard.instance.stop();
     HeadsetAudio.instance.stop();
+    if (_denoiseStarted) unawaited(Denoiser.roomStopped());
     EffectPrefs.roomMuted.value = false;
     _beat?.cancel();
     _lkTick?.cancel();
@@ -339,7 +350,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         });
       }
       _connectLivekit();
-      _loadMessages();
+      _loadMessages(initial: true);
       _loadExtras();
       MusicService.instance.bind(widget.roomId);
       RoomPlaylist.instance.bind(widget.roomId);
@@ -522,21 +533,23 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _loadMessages() async {
+  /// Sohbet geçmişini sunucudan yükler. [initial]: odaya ilk girişte (sohbet en alta indirilir).
+  /// Arka plandan / küçültmeden dönünce de çağrılır: yerel satırlar ("odaya girdi", takip kartı, sistem) yerinde kalır ve
+  /// okunan yer korunur. (Önceden yerel satırların hepsi listenin sonuna ekleniyordu: dönünce eski "odaya girdi"
+  /// satırları sohbetin en altına iniyordu.)
+  Future<void> _loadMessages({bool initial = false}) async {
+    final epoch = _chatEpoch;
     try {
       final r = await Api.get('/api/rooms/${widget.roomId}/messages');
-      if (!mounted) return;
+      // Bu yükleme sürerken sohbet temizlendiyse dönen liste eskidir: temizlenen mesajları geri getirmesin.
+      if (!mounted || epoch != _chatEpoch) return;
       setState(() {
-        // Geçmiş yüklenirken gelen yerel satırlar (odaya girdi, takip kartı, sistem) silinmez.
-        final local = _messages.where((m) => m['join'] == true || m['follow'] == true || m['system'] == true).toList();
         final ids = <String>{};
-        final server = listOf(r['messages']).where((m) => ids.add('${m['id']}')).toList();
+        final server = listOf(r['messages']).where((m) => ids.add('${m['id']}') && !_beforeClear(m['createdAt'])).toList();
         _messages
-          ..clear()
-          ..addAll(server)
-          ..addAll(local);
+          ..replaceRange(0, _messages.length, mergeChatHistory(_messages, server));
       });
-      _scrollChatToEnd(force: true);
+      if (initial) _scrollChatToEnd(force: true);
     } catch (_) {/* sohbet yüklenemese de oda çalışır */}
   }
 
@@ -841,8 +854,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         });
         break;
       case 'room_chat_cleared':
-        setState(() => _messages.clear());
-        _addSystemMessage(tx('Sohbetler temizlendi.'), color: const Color(0xFF34D399));
+        _applyChatClear(e['clearedAt']);
         break;
       case 'lucky_bag_new':
         final nb = mapOf(e['bag']);
@@ -949,6 +961,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         });
         break;
       case 'room_message':
+        // Temizlemeden önce yazılıp olayı geç gelen mesaj gösterilmez.
+        if (_beforeClear(e['createdAt'])) break;
         if (!_messages.any((m) => m['id'] == e['id'])) {
           setState(() {
             _messages.add({'id': e['id'], 'user': e['user'], 'text': e['text'], 'createdAt': e['createdAt'], 'fly': e['fly'] == true, 'welcomeTo': e['welcomeTo']});
@@ -973,6 +987,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       case 'room_gift':
         if (e['roomTotal'] != null) setState(() => _room = {...?_room, 'totalDiamonds': e['roomTotal']});
         _flyGift(e);
+        _luckyWin(e);
         break;
       case 'room_settings':
         if (e['seatCount'] != null && e['seatCount'] != _room?['seatCount']) {
@@ -1113,6 +1128,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       _lk = room;
       _lkRetries = 0;
       await _syncPublish();
+      // Yapay zekâ gürültü azaltma: ses altyapısı artık hazır (bkz. Denoiser). Bu ekran için bir kez.
+      if (!_denoiseStarted) {
+        _denoiseStarted = true;
+        unawaited(Denoiser.roomStarted());
+      }
     } catch (e) {
       if (room != null) {
         room.removeListener(_onLkChanged);
@@ -1595,6 +1615,41 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
   }
 
+  /// Şanslı hediye kazancı odadaki herkese gösterilir (Yoho / Bigo): koltuğun üstünde "x5 +500", büyük çarpanda sahnenin
+  /// ortasında patlama; x10 ve üstü sohbete de yazılır.
+  void _luckyWin(Map<String, dynamic> e) {
+    final l = mapOf(e['lucky']);
+    if (l == null) return;
+    final win = BigInt.tryParse('${l['win'] ?? 0}') ?? BigInt.zero;
+    final best = (l['best'] as num?)?.toInt() ?? 0;
+    if (win <= BigInt.zero || best <= 0) return;
+    final gift = mapOf(e['gift']);
+    final sender = mapOf(e['sender']);
+    final name = (sender?['displayName'] ?? sender?['username'] ?? '').toString();
+    final emoji = luckyEmojiOf(gift?['name']?.toString());
+    if (best >= 10) {
+      _addSystemMessage(
+        tx('{emoji} {name}, {gift} ile x{best} kazandı: +{v1} Coin', {'emoji': emoji, 'name': name, 'gift': (gift?['name'] ?? '').toString(), 'best': best, 'v1': fmtNumber(win.toString())}),
+        color: Pal.gold,
+      );
+    }
+    final ls = WidgetsBinding.instance.lifecycleState;
+    if (RoomDock.minimized.value || (ls != null && ls != AppLifecycleState.resumed) || !EffectPrefs.giftAnim) return;
+    final stage = _stageKey.currentContext?.findRenderObject();
+    if (stage is! RenderBox || !stage.attached) return;
+    final box = _seatKeys[sender?['id']?.toString()]?.currentContext?.findRenderObject();
+    final at = (box is RenderBox && box.attached)
+        ? stage.globalToLocal(box.localToGlobal(box.size.center(Offset.zero)))
+        : Offset(stage.size.width / 2, stage.size.height * 0.62);
+    setState(() {
+      // Aynı anda en fazla 6 efekt; büyük patlamalardan yalnızca biri (üst üste binmesin).
+      final fx = LuckyWinFxData(++_flightSeq, at, best, win.toString(), name, emoji);
+      if (fx.big) _luckyFx.removeWhere((x) => x.big);
+      _luckyFx.add(fx);
+      if (_luckyFx.length > 6) _luckyFx.removeAt(0);
+    });
+  }
+
   /// Mikrofon modu (Yoho): pencere açık kalır; seçim anında uygulanır, istek modu alttaki seçenekle açılıp kapanır.
   Future<void> _micMode() async {
     try {
@@ -1644,12 +1699,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   // ---------- Gürültü engelleme ----------
   /// Açıkken mikrofon sesinde çevre gürültüsü bastırılır (gürültü engelleme + düşük frekans süzgeci + yankı giderme).
   static bool noiseCancel = true;
+  bool _denoiseStarted = false; // bu oda için yapay zekâ gürültü azaltma bağlandı mı
   static bool _noiseLoaded = false;
 
+  // Gürültü engelleme açıkken (varsayılan) kalabalığa karşı en güçlü ücretsiz düzen:
+  //  telefonun çoklu mikrofon işlemesi (AudioProcessing) + WebRTC gürültü bastırma + düşük frekans süzgeci +
+  //  yapay zekâ gürültü azaltma (Denoiser) + otomatik ses düzeyi KAPALI. Otomatik ses düzeyi konuşma aralarında
+  //  mikrofonu ~9 dB'e kadar yükselttiği için arkadaki insan seslerini de büyütüyordu; ağıza yakın konuşan kişinin sesi
+  //  zaten yeterince yüksek gelir. Gürültü engelleme kapatılınca otomatik ses düzeyi geri açılır (uzaktan konuşma için).
   static lk.AudioCaptureOptions get _audioOptions => lk.AudioCaptureOptions(
         noiseSuppression: noiseCancel,
         echoCancellation: true,
-        autoGainControl: true,
+        autoGainControl: !noiseCancel,
         highPassFilter: noiseCancel,
         // Konuşma odaklı işleme (Yoho gibi): klavye/tık sesi bastırma ve iPhone ses izolasyonu gürültü engellemeyle birlikte açılır.
         typingNoiseDetection: noiseCancel,
@@ -1682,6 +1743,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   /// Efekt ve ses ayarları (yalnızca bu cihazda; uygulama kapanıp açılınca da hatırlanır).
   Future<void> _effectsAndSound() async {
     var noise = noiseCancel;
+    var platformAudio = AudioProcessing.platform;
+    await Denoiser.load();
+    if (!mounted) return;
+    var aiDenoise = Denoiser.enabled;
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -1726,7 +1791,21 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                   sw(tx('Mikrofon gürültüsü engelleme'), noise, (v) {
                     noise = v;
                     _setNoiseCancel(v);
-                  }),
+                  }, note: tx('Fan, klima, trafik sesini bastırır; konuşma aralarında arkadaki sesleri yükseltmez. Telefondan uzakta konuşuyorsan kapat.')),
+                  if (Denoiser.supported)
+                    sw(tx('Yapay zekâ gürültü azaltma (deneysel)'), aiDenoise, (v) {
+                      aiDenoise = v;
+                      unawaited(Denoiser.setEnabled(v));
+                    }, note: tx('Klavye, tabak-çatal, TV, trafik gibi konuşma dışı sesleri ek olarak azaltır. Ses bozulursa kapatın.')),
+                  if (AudioProcessing.supported)
+                    sw(tx('Telefonun kendi ses işlemesi'), platformAudio, (v) {
+                      platformAudio = v;
+                      AudioProcessing.setPlatform(v);
+                      toast(context, tx('Uygulamayı kapatıp açınca geçerli olur.'));
+                    },
+                        note: AudioProcessing.restartNeeded
+                            ? tx('Uygulamayı kapatıp açınca geçerli olur.')
+                            : tx('Açıkken (önerilen) telefonun mikrofonları kalabalık ve gürültüyü bastırır. Sesin boğuk geliyor ya da gürültü geçiyorsa kapatıp deneyin.')),
                   ListTile(
                     contentPadding: EdgeInsets.symmetric(horizontal: 20),
                     leading: Icon(Icons.phone_in_talk, color: Colors.white70),
@@ -1772,6 +1851,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         context,
         roomId: widget.roomId,
         current: (_room?['theme'] ?? 'default').toString(),
+        currentImage: _room?['themeImageUrl']?.toString(),
         onApply: (key) => _patchRoom({'theme': key}),
       );
 
@@ -1990,7 +2070,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               const SizedBox(height: 8),
               Text(tx('Oda teması')),
               const SizedBox(height: 6),
-              ThemePicker(value: theme, onChanged: (v) => setS(() => theme = v)),
+              ThemePicker(value: theme, imageUrl: _room?['themeImageUrl']?.toString(), onChanged: (v) => setS(() => theme = v)),
               TextField(controller: imgCtl, decoration: InputDecoration(labelText: tx('Özel arka plan görseli (https, WIP 4+)'))),
               if (scoreboard)
                 TextButton.icon(
@@ -2036,12 +2116,36 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   /// Odadaki müzik: alt çubuk (açık) ya da küçültülünce sürüklenebilir dönen plak.
   static final ValueNotifier<bool> _musicBarOpen = ValueNotifier<bool>(true);
   static final ValueNotifier<Offset?> _discPos = ValueNotifier<Offset?>(null);
-  static void _noop() {}
 
   Future<void> _clearChat() async {
     if (!await confirm(context, tx('Odadaki tüm sohbet mesajları herkes için silinsin mi?'), action: tx('Temizle'))) return;
     if (!mounted) return;
-    await guard(context, () => Api.delete('/api/rooms/${widget.roomId}/messages'));
+    final r = await guard(context, () => Api.delete('/api/rooms/${widget.roomId}/messages'));
+    // Soket olayı gecikse / kaçsa da temizleyenin ekranı hemen temizlenir (olay gelince aynı temizleme tekrar yapılmaz).
+    if (r != null && mounted) _applyChatClear(r['clearedAt']);
+  }
+
+  /// Mesaj temizleme anından önce mi yazılmış (sunucu saatine göre)?
+  bool _beforeClear(dynamic createdAt) {
+    final c = _chatClearedAt;
+    if (c == null || createdAt == null) return false;
+    final t = DateTime.tryParse('$createdAt');
+    return t != null && !t.isAfter(c);
+  }
+
+  /// Sohbeti temizler: tüm mesajlar (yerel satırlar dahil) kalkar, sıradaki uçan yazılar iptal edilir, tek bir
+  /// "Sohbetler temizlendi" satırı kalır. Aynı temizleme (aynı an) ikinci kez gelirse yok sayılır.
+  void _applyChatClear(dynamic clearedAt) {
+    final at = DateTime.tryParse('${clearedAt ?? ''}');
+    if (at != null && _chatClearedAt != null && !at.isAfter(_chatClearedAt!)) return;
+    _chatEpoch++;
+    _chatClearedAt = at ?? DateTime.now().toUtc();
+    _fly.clear();
+    setState(() {
+      _messages.clear();
+      _unseen = 0;
+    });
+    _addSystemMessage(tx('Sohbetler temizlendi.'), color: const Color(0xFF34D399));
   }
 
   /// Oda içi etkinlikler: kendi sunucumuzdaki sabit H5 sayfası, alt %55'lik pencerede. Sesli yayın kesilmez.
@@ -4533,8 +4637,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                             size: 50,
                             initial: Offset(14, MediaQuery.paddingOf(context).top + g.headerH + 44),
                             safe: EdgeInsets.fromLTRB(4, MediaQuery.paddingOf(context).top + 4, 4, g.barH + MediaQuery.paddingOf(context).bottom + 4),
-                            onTap: () => _musicBarOpen.value = !open,
-                            child: const DjDisc(onTap: _noop),
+                            // Dokunuşu balon alır (plağın kendi dokunma algılayıcısı yok): plak eskiden boş bir onTap ile
+                            // dokunuşu yutuyordu, küçültülmüş müzik kutusu açılmıyordu.
+                            onTap: () => _musicBarOpen.value = !_musicBarOpen.value,
+                            child: const DjDisc(),
                           ),
                           if (open && !_inputOpen)
                             Positioned(
@@ -4572,6 +4678,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 for (final f in _flights)
                   _GiftFlight(key: ValueKey(f.id), data: f, onDone: () {
                     if (mounted) setState(() => _flights.removeWhere((x) => x.id == f.id));
+                  }),
+                for (final fx in _luckyFx)
+                  LuckyWinFx(key: ValueKey('lucky-${fx.id}'), data: fx, onDone: () {
+                    if (mounted) setState(() => _luckyFx.removeWhere((x) => x.id == fx.id));
                   }),
                 // Şanslı çanta: en üstte, oda elmasının hemen altında. Açtığım çanta bana görünmez;
                 // birden çok çanta varsa sayısı yazar ve sıradaki açılır.

@@ -3,7 +3,7 @@ import { query } from '../database.js';
 import { optionalAuth } from '../auth.js';
 import { ipLimit } from '../firewall.js';
 import fs from 'node:fs';
-import { getConfig } from '../services/app_config.js';
+import { getConfig, phoneVerifyOn, mailOn } from '../services/app_config.js';
 import { TERMS_VERSION, LEGAL_SITE } from '../legal.js';
 import { PRIVACY_EN, COMPANY, privacyHtml } from '../legal_texts.js';
 import path from 'node:path';
@@ -23,6 +23,11 @@ router.get('/app/config', async (_req, res) => {
     minAppVersion: c.minAppVersion, latestAppVersion: c.latestAppVersion, updateUrl: c.updateUrl || null, updateMessage: c.updateMessage,
     roomNotice: c.roomNotice || '', flyTextCoins: c.flyTextCoins, roomActivitiesEnabled: c.roomActivitiesEnabled !== false, serverVersion: SERVER_VERSION,
     termsVersion: TERMS_VERSION, legalSite: LEGAL_SITE,
+    // Telefon doğrulaması (Firebase): uygulama bu değerlerle Firebase'i başlatır. Kapalıysa null.
+    phoneVerify: phoneVerifyOn(c) && c.firebaseApiKey && c.firebaseAppId
+      ? { projectId: c.firebaseProjectId, apiKey: c.firebaseApiKey, appId: c.firebaseAppId, senderId: c.firebaseSenderId || '' }
+      : null,
+    emailVerify: mailOn(c),
   });
 });
 

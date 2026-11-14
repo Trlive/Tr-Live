@@ -27,6 +27,12 @@ class FlyTextQueue extends ChangeNotifier {
     _pump();
   }
 
+  /// Sıradaki (henüz başlamamış) yazıları iptal eder (ör. sohbet temizlenince). Kayan yazı bitince boşalır.
+  void clear() {
+    if (_dead) return;
+    _wait.clear();
+  }
+
   void _pump() {
     if (_dead) return;
     for (var i = 0; i < lanes.length && _wait.isNotEmpty; i++) {

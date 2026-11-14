@@ -9,6 +9,7 @@ import '../services/presence_service.dart';
 import '../services/socket_service.dart';
 import '../widgets/app_theme.dart';
 import '../widgets/common.dart';
+import '../widgets/event_results_card.dart';
 import '../widgets/presence_widgets.dart';
 import 'messages_screen.dart';
 import 'notification_screens.dart';
@@ -831,7 +832,12 @@ class _OfficialChannelScreenState extends State<OfficialChannelScreen> {
         SizedBox(width: w * 0.08),
       ]);
     }
-    if (widget.kind == 'event') return _eventCard(title, text, img, link);
+    if (widget.kind == 'event') {
+      // Haftalık etkinlik sonuçları: etkinliğin kendi görseli ve kürsüsüyle.
+      final meta = mapOf(a['meta']);
+      if (meta?['type'] == 'event_results') return EventResultsCard(meta: meta!);
+      return _eventCard(title, text, img, link);
+    }
     // Kart: üstte görsel, altta başlık ve metin.
     return Container(
       clipBehavior: Clip.antiAlias,

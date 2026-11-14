@@ -1,7 +1,7 @@
 name: tr_live
 description: TR Live - canlı sesli/görüntülü odalar, aile, WIP, ajans/yayıncı, hediyeler ve yönetim
 publish_to: none
-version: 2.99.1+1
+version: 2.104.0+5
 environment:
   sdk: '>=3.8.0 <4.0.0'
   flutter: '>=3.32.0'
@@ -10,7 +10,8 @@ dependencies:
     sdk: flutter
   http: ^1.5.0
   shared_preferences: ^2.5.3
-  livekit_client: ^2.13.0
+  # 2.13.2: flutter_webrtc 1.6.3 (gürültü azaltma eklentisinin istediği sürüm; ayrıca TURN/TLS güvenlik düzeltmesi).
+  livekit_client: ^2.13.2
   web_socket_channel: ^3.0.3
   lottie: ^3.3.1
   flutter_vap_kit: ^0.1.2
@@ -24,6 +25,13 @@ dependencies:
   device_info_plus: any
   # Telefon araması gelince oda sesini kapatmak için. just_audio zaten bu paketi kullanıyor (yeni yerel kod eklenmez).
   audio_session: any
+  # Mikrofon ses işleme yöntemi (services/audio_processing.dart). livekit_client zaten bu paketi kullanıyor; 'any' aynı sürüm.
+  flutter_webrtc: any
+  # Yapay zekâ gürültü azaltma (RNNoise, BSD-3): flutter_webrtc'nin mikrofon işleme yuvasına takılır (deneysel eklenti).
+  # Bkz. services/denoiser.dart. Sorun çıkarsa bu satır ve denoiser.dart'taki içe aktarma kaldırılır.
+  flutter_webrtc_noise_suppression:
+    git:
+      url: https://github.com/SERDUN/flutter_webrtc_noise_suppression.git
   cupertino_icons: ^1.0.8
   # Yönetimden herkese telefon bildirimi (Firebase gerektirmez). Sürüm sabit: API'si bu sürüme göre yazıldı.
   flutter_local_notifications: 19.5.0
@@ -34,6 +42,10 @@ dependencies:
   # Android 14+ ekran görüntüsü bildirimi izni (yerel/trlive_capture: yalnızca manifest izni).
   trlive_capture:
     path: yerel/trlive_capture
+  # Telefon doğrulaması (SMS kodu): Firebase Authentication. google-services.json gerekmez; Firebase ayarları
+  # sunucudan (/api/app/config) gelir ve uygulama açıkken başlatılır. Flutter BoM 4.x (kararlı) serisi.
+  firebase_core: ^4.0.0
+  firebase_auth: ^6.0.0
 # shared_preferences_android 2.5.0 (16 Ekim 2026) yeni JNI yöntemine geçti; yayın APK'sında küçültme (R8) yüzünden
 # "NoSuchMethodError ... SharedPreferencesApiRegistrar.getAll" ile açılışta çöküyor. Sorunsuz son yayınlanmış sürüme (2.4.28) sabitlendi.
 dependency_overrides:

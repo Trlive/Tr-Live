@@ -43,6 +43,7 @@ import { router as storeRouter } from './routes/store.js';
 import { router as micSkinsRouter, adminRouter as micSkinsAdminRouter } from './routes/mic_skins.js';
 import { router as roomThemesRouter, adminRouter as roomThemesAdminRouter } from './routes/room_themes.js';
 import { router as checkinRouter } from './routes/checkin.js';
+import { router as verifyRouter } from './routes/verify.js';
 import { router as screenshotsRouter, adminRouter as screenshotsAdminRouter, pruneScreenshots } from './routes/screenshots.js';
 import { router as supportRouter } from './routes/support.js';
 import { router as safetyRouter } from './routes/safety.js';
@@ -141,6 +142,7 @@ app.use('/dealer-topup', dealerTopupPageRouter); // bayi bakiye talebi H5 sayfas
 const authIpLimit = ipLimit('auth', 60, 15 * 60e3);
 // /oauth/poll: uygulama giriş sonucunu birkaç saniyede bir sorar; kendi sınırı vardır (ortak sınırı doldurmasın).
 app.use('/api/auth', (req, res, next) => (['/refresh', '/logout', '/oauth/poll'].includes(req.path) ? next() : authIpLimit(req, res, next)), authRouter, authSocialRouter);
+app.use('/api/verify', verifyRouter);
 app.use('/api/me', meRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/inventory', inventoryRouter);

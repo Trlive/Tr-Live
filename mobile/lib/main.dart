@@ -20,6 +20,7 @@ import 'widgets/common.dart';
 import 'services/effect_prefs.dart';
 import 'services/screen_guard.dart';
 import 'l10n/delegates.dart';
+import 'services/audio_processing.dart';
 import 'l10n/l10n.dart';
 import 'widgets/nav_guard.dart';
 import 'widgets/tr_localizations.dart';
@@ -62,6 +63,8 @@ Future<void> _boot() async {
   // Efekt ayarları (hediye animasyonu, araç, şerit, global bildirim) telefondan okunur.
   await EffectPrefs.load().timeout(const Duration(seconds: 2), onTimeout: () {});
   await L10n.init().timeout(const Duration(seconds: 2), onTimeout: () {}); // dil: kayıtlı seçim ya da telefonun dili
+  // Mikrofon ses işleme (yankı / gürültü): LiveKit kullanılmadan önce bir kez (bkz. AudioProcessing).
+  await AudioProcessing.init().timeout(const Duration(seconds: 4), onTimeout: () {});
   // Uygulama ekranda mı: arka plandayken periyodik sorgular durur (pil/internet).
   AppVisibility.instance.init();
   try {

@@ -19,7 +19,9 @@ export const CONFIG_DEFAULTS = Object.freeze({
   // Şanslı hediye: gönderene ortalama geri dönüş (RTP, baz puan: 7000 = %70), alıcıya geçen Elmas payı (1000 = %10),
   // tek gönderimde en fazla kazanç ve tüm kullanıcılara duyurulan en düşük çarpan.
   luckyEnabled: true,
-  luckyRtpBps: 7000,
+  // Havuza giden pay (uzun vadede gönderene dönen en fazla oran) ve bunun büyük ödül havuzuna ayrılan kısmı.
+  luckyRtpBps: 6000,
+  luckyJackpotShareBps: 2500,
   luckyReceiverBps: 1000,
   luckyMaxWin: 5000000,
   luckyAnnounceMultiplier: 100,
@@ -41,7 +43,32 @@ export const CONFIG_DEFAULTS = Object.freeze({
   // İstemci henüz okumuyor (varsayılan kapalı, davranış değişmez).
   blockRooted: false,
   sslPinning: false,
+  // Telefon doğrulaması (Firebase SMS). Proje kimliği boşken telefonla kayıt eskisi gibi kodsuz çalışır; doluysa ve
+  // phoneVerifyRequired açıksa SMS kodu zorunludur. Bu değerler gizli değildir (uygulamaya da gönderilir).
+  phoneVerifyRequired: true,
+  firebaseProjectId: '',
+  firebaseApiKey: '',
+  firebaseAppId: '',
+  firebaseSenderId: '',
+  // E-posta doğrulama kodu ve şifre sıfırlama için gönderici (SMTP). Şifre yönetim panelinde maskeli görünür.
+  smtpHost: '',
+  smtpPort: 465,
+  smtpSecure: true,
+  smtpUser: '',
+  smtpPass: '',
+  smtpFrom: '',
 });
+
+/** Yönetim paneline giden ayarlarda SMTP şifresi gösterilmez; bu değer geri gelirse şifre değiştirilmez. */
+export const SECRET_MASK = '••••••••';
+export function maskSecrets(c) {
+  return { ...c, smtpPass: c.smtpPass ? SECRET_MASK : '' };
+}
+
+/** Telefon doğrulaması açık mı (Firebase yapılandırılmış ve zorunlu). */
+export const phoneVerifyOn = (c) => Boolean(c.firebaseProjectId) && c.phoneVerifyRequired !== false;
+/** E-posta gönderimi yapılandırılmış mı. */
+export const mailOn = (c) => Boolean(c.smtpHost && (c.smtpFrom || c.smtpUser));
 
 const VERSION_RE = /^\d{1,3}\.\d{1,3}\.\d{1,3}$/;
 const TTL_MS = 30e3;
@@ -82,6 +109,21 @@ export function validateConfigPatch(body) {
       if (typeof v !== 'string' || v.length > 500) throw fail('Oda uyarı duyurusu en fazla 500 karakter olmalı.');
     } else if (k === 'checkinCoins') {
       if (typeof v !== 'string' || !/^\s*\d{1,9}(\s*,\s*\d{1,9}){6}\s*$/.test(v)) throw fail('Günlük giriş ödülleri 7 sayı olmalı (ör. 20,20,20,20,50,50,100).');
+    } else if (k === 'firebaseProjectId') {
+      if (typeof v !== 'string' || (v && !/^[a-z0-9][a-z0-9-]{3,38}[a-z0-9]$/.test(v))) throw fail('Firebase proje kimliği geçersiz (ör. trlive-12345).');
+    } else if (k === 'firebaseApiKey') {
+      if (typeof v !== 'string' || (v && !/^[A-Za-z0-9_-]{20,80}$/.test(v))) throw fail('Firebase API anahtarı geçersiz.');
+    } else if (k === 'firebaseAppId') {
+      if (typeof v !== 'string' || (v && !/^1:\d{5,20}:android:[0-9a-f]{6,40}$/.test(v))) throw fail('Firebase uygulama kimliği 1:...:android:... biçiminde olmalı.');
+    } else if (k === 'firebaseSenderId') {
+      if (typeof v !== 'string' || (v && !/^\d{5,20}$/.test(v))) throw fail('Firebase gönderici numarası yalnızca rakam olmalı.');
+    } else if (k === 'smtpHost') {
+      if (typeof v !== 'string' || (v && !/^[A-Za-z0-9.-]{3,200}$/.test(v))) throw fail('SMTP sunucusu geçersiz (ör. smtp-relay.brevo.com).');
+    } else if (k === 'smtpUser' || k === 'smtpPass' || k === 'smtpFrom') {
+      if (typeof v !== 'string' || v.length > 200) throw fail(`${k} en fazla 200 karakter olmalı.`);
+      if (k === 'smtpFrom' && v && !/^([^<>@]*<[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+>|[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+)$/.test(v.trim())) {
+        throw fail('Gönderen adresi "TR Live <no-reply@alanadi.com>" ya da e-posta biçiminde olmalı.');
+      }
     } else if (k === 'checkinFrameId' || k === 'checkinVehicleId') {
       if (typeof v !== 'string' || (v && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v))) throw fail('7. gün eşyası geçersiz.');
     } else if (typeof def === 'boolean') {
@@ -89,8 +131,8 @@ export function validateConfigPatch(body) {
     } else if (typeof def === 'number') {
       const limits = {
         strikeLimit: [1, 20], strikeWindowMin: [1, 1440], muteMinutes: [1, 1440], maxMuteMinutes: [1, 10080],
-        luckyRtpBps: [0, 9000], luckyReceiverBps: [0, 5000], luckyMaxWin: [1, 1000000000], luckyAnnounceMultiplier: [10, 500],
-        flyTextCoins: [0, 1000000], checkinItemDays: [1, 90],
+        luckyRtpBps: [0, 9000], luckyJackpotShareBps: [0, 8000], luckyReceiverBps: [0, 5000], luckyMaxWin: [1, 1000000000], luckyAnnounceMultiplier: [10, 1000],
+        flyTextCoins: [0, 1000000], checkinItemDays: [1, 90], smtpPort: [1, 65535],
       }[k];
       if (!limits) throw fail(`${k} için sınır tanımlı değil.`);
       if (!Number.isInteger(v) || v < limits[0] || v > limits[1]) throw fail(`${k} ${limits[0]}-${limits[1]} arasında tam sayı olmalı.`);

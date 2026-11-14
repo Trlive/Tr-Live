@@ -1306,6 +1306,32 @@ test('yönetim paneli: canlı durum, hata kayıtları, işlem kaydı, zorunlu g�
   assert.equal(cfg.body.minAppVersion, '2.36.0');
   ok(await api('PUT', '/api/admin/app-config', { token: U.d.token, headers: hdr, body: { minAppVersion: '0.0.0' } }), 'kapat');
   ok(await api('GET', '/api/me', { token: U.a.token }), 'kapatınca eski sürümler de girer');
+
+  // v2.100.0: doğrulama ayarları — varsayılan kapalı; SMTP şifresi panelde maskeli; telefonla kayıtta SMS zorunluluğu.
+  assert.equal(cfg.body.phoneVerify, null, 'Firebase ayarlanmadan telefon doğrulaması kapalı');
+  assert.equal(cfg.body.emailVerify, false);
+  status(await api('POST', '/api/verify/email/send', { token: U.a.token, body: { email: 'a@ornek.com' } }), 503, 'SMTP yokken e-posta kodu gönderilmez');
+  status(await api('PUT', '/api/admin/app-config', { token: U.d.token, body: { firebaseAppId: 'yanlis' } }), 400);
+  ok(await api('PUT', '/api/admin/app-config', { token: U.d.token, body: {
+    firebaseProjectId: 'trlive-e2e', firebaseApiKey: 'AIzaSyA1234567890abcdefghijklmnopqrstu', firebaseAppId: '1:123456789:android:abcdef123456',
+    smtpHost: 'smtp.ornek.com', smtpPort: 465, smtpUser: 'u@ornek.com', smtpPass: 'gizli-sifre', smtpFrom: 'TR Live <no-reply@ornek.com>',
+  } }));
+  const panel = await api('GET', '/api/admin/app-config', { token: U.d.token });
+  ok(panel);
+  assert.notEqual(panel.body.config.smtpPass, 'gizli-sifre', 'SMTP şifresi panele açık gönderilmez');
+  ok(await api('PUT', '/api/admin/app-config', { token: U.d.token, body: { smtpPass: panel.body.config.smtpPass, smtpPort: 587 } }), 'maskeli şifre geri gelince değişmez');
+  const cfg2 = await api('GET', '/api/app/config');
+  assert.equal(cfg2.body.phoneVerify?.projectId, 'trlive-e2e');
+  assert.equal(cfg2.body.emailVerify, true);
+  assert.equal(cfg2.body.smtpPass, undefined, 'SMTP bilgisi herkese açık ayarlarda yok');
+  const noSms = await api('POST', '/api/auth/register-phone', { body: { phone: '05559998877', password: 'secret123', displayName: 'Kodsuz' } });
+  status(noSms, 428, 'Firebase açıkken SMS doğrulaması zorunlu');
+  status(await api('POST', '/api/auth/register-phone', { body: { phone: '05559998877', password: 'secret123', displayName: 'Sahte', idToken: 'x'.repeat(200) } }), 401, 'sahte doğrulama');
+  status(await api('POST', '/api/verify/reset/phone', { body: { password: 'yenisifre1', idToken: 'x'.repeat(200) } }), 401);
+  const rs = await api('POST', '/api/verify/reset/email/send', { body: { email: 'kimse@ornek.com' } });
+  ok(rs, 'kayıtlı olmayan adres de aynı yanıtı alır');
+  ok(await api('PUT', '/api/admin/app-config', { token: U.d.token, body: { firebaseProjectId: '', smtpHost: '' } }), 'doğrulamayı kapat');
+  ok(await api('POST', '/api/auth/register-phone', { body: { phone: '05559998877', password: 'secret123', displayName: 'Kodsuz' } }), 'kapalıyken eskisi gibi');
 });
 
 // ---------------------------------------------------------------- v2.37
@@ -1434,6 +1460,11 @@ test('şanslı hediye: alıcı payı, kazanç, ayar sınırları', { skip, timeo
   const gt = (await sql('SELECT coin_amount, diamond_amount FROM gift_transactions WHERE id = $1', [a.body.transactions[0].id])).rows[0];
   assert.equal(BigInt(gt.coin_amount), price * 10n);
   assert.equal(BigInt(gt.diamond_amount), (price * 10n) / 10n);
+  // Yoho / Bigo kuralı: şanslı hediye puan ve seviyede de değeri (alıcı payı) kadar sayılır.
+  const st = (await sql('SELECT total_sent_coins FROM users WHERE id=$1', [s.id])).rows[0].total_sent_coins;
+  assert.equal(BigInt(st), (price * 10n * 1000n) / 10000n, 'servet seviyesi alıcı payıyla');
+  const seat = (await sql('SELECT total_coins FROM room_gift_totals WHERE room_id=$1 AND user_id=$2', [room, r.id])).rows[0];
+  assert.equal(BigInt(seat.total_coins), (price * 10n * 1000n) / 10000n, 'koltuk puanı alıcı payıyla');
 
   // Yüksek RTP'de çok adet → kazanç bakiyeye eklenir ve geçmişte görünür
   ok(await api('PUT', '/api/admin/app-config', { token: U.d.token, body: { luckyRtpBps: 9000, luckyReceiverBps: 500 } }));
@@ -1442,6 +1473,23 @@ test('şanslı hediye: alıcı payı, kazanç, ayar sınırları', { skip, timeo
   ok(b);
   const win = BigInt(b.body.lucky.win);
   assert.ok(win > 0n, '2000 çekilişte kazanç çıkmalı');
+  assert.equal(b.body.lucky.units, 2000);
+  assert.ok(b.body.lucky.wins > 300, 'küçük kazançlar sık çıkar');
+  // Havuz: giren = ödenen + kalan; kullanıcıya büyük ödül havuzu durumu döner.
+  const pool = (await sql('SELECT base_balance, jackpot_balance, total_in, total_out, seeded FROM lucky_pools WHERE gift_id = $1', [bell.id])).rows[0];
+  assert.ok(pool, 'havuz satırı');
+  assert.equal(BigInt(pool.total_in) + BigInt(pool.seeded), BigInt(pool.total_out) + BigInt(pool.base_balance) + BigInt(pool.jackpot_balance));
+  assert.ok(BigInt(pool.total_out) <= BigInt(pool.total_in), 'havuzdan girenden fazla ödenmez');
+  assert.equal(b.body.lucky.pool.giftId, bell.id);
+  const listed = (await api('GET', '/api/gifts', { token: s.token })).body.lucky;
+  assert.ok(listed.pools.some((x) => x.giftId === bell.id && x.jackpot === b.body.lucky.pool.jackpot));
+  // Yönetim havuza ekleyebilir; yalnızca süper yönetici.
+  status(await api('POST', `/api/admin/lucky-pools/${bell.id}/seed`, { token: s.token, body: { pool: 'jackpot', coins: 1000 } }), 403);
+  ok(await api('POST', `/api/admin/lucky-pools/${bell.id}/seed`, { token: U.d.token, body: { pool: 'jackpot', coins: 1000 } }));
+  const pools = await api('GET', '/api/admin/lucky-pools', { token: U.d.token });
+  ok(pools);
+  const mine = pools.body.pools.find((x) => x.giftId === bell.id);
+  assert.equal(mine.seeded, '1000');
   assert.equal(await coins(s), before - price * 2000n + win);
   assert.equal(BigInt(b.body.balance), before - price * 2000n + win);
   const hist = await api('GET', '/api/me/wallet?group=gift&limit=5', { token: s.token });
@@ -1450,7 +1498,25 @@ test('şanslı hediye: alıcı payı, kazanç, ayar sınırları', { skip, timeo
   // Kapatılınca gönderilemez
   ok(await api('PUT', '/api/admin/app-config', { token: U.d.token, body: { luckyEnabled: false } }));
   status(await send(1), 403, 'kapalı');
-  ok(await api('PUT', '/api/admin/app-config', { token: U.d.token, body: { luckyEnabled: true, luckyRtpBps: 7000, luckyReceiverBps: 1000 } }));
+  ok(await api('PUT', '/api/admin/app-config', { token: U.d.token, body: { luckyEnabled: true, luckyRtpBps: 6000, luckyReceiverBps: 1000 } }));
+});
+
+test('sohbet temizleme: eski mesajlar geri gelmez, yeniler görünür', { skip, timeout: 30000 }, async () => {
+  const o = await register('clrO');
+  const v = await register('clrV');
+  const created = await api('POST', '/api/rooms', { token: o.token, body: { name: 'Temizlik' } });
+  status(created, 201);
+  const room = created.body.room.id;
+  ok(await api('POST', `/api/rooms/${room}/join`, { token: v.token, body: {} }));
+  for (const t of ['bir', 'iki', 'üç']) status(await api('POST', `/api/rooms/${room}/messages`, { token: v.token, body: { text: t } }), 201);
+  status(await api('DELETE', `/api/rooms/${room}/messages`, { token: v.token }), 403, 'yetkisiz temizleyemez');
+  const c = await api('DELETE', `/api/rooms/${room}/messages`, { token: o.token });
+  ok(c);
+  assert.ok(c.body.clearedAt);
+  for (const who of [o, v]) assert.equal((await api('GET', `/api/rooms/${room}/messages`, { token: who.token })).body.messages.length, 0);
+  status(await api('POST', `/api/rooms/${room}/messages`, { token: v.token, body: { text: 'yeni' } }), 201);
+  const after = (await api('GET', `/api/rooms/${room}/messages`, { token: o.token })).body.messages;
+  assert.equal(after.length, 1);
 });
 
 test('ADMIN_USERNAMES: listedeki kullanıcı kayıtta yönetici olur, diğerleri olmaz', { skip, timeout: 30000 }, async () => {

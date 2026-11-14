@@ -10,6 +10,8 @@ import { selfUser } from '../views.js';
 import { newPublicId } from '../services/ids.js';
 import { ipLimit, loginGuard, clientIp } from '../firewall.js';
 import { promoteBootstrapAdmins } from '../services/bootstrap.js';
+import { getConfig, phoneVerifyOn } from '../services/app_config.js';
+import { verifyPhoneToken } from '../services/firebase_verify.js';
 
 export const router = Router();
 export const USERNAME_RE = /^[a-z0-9_.]{3,30}$/;
@@ -65,16 +67,29 @@ export function normalizePhone(input) {
 }
 const looksLikePhone = (v) => /^[+\d][\d\s\-()]{8,}$/.test(v);
 
-// Telefon numarasıyla kayıt (SMS kodu yok): numara + şifre + görünen ad. Numara benzersizdir.
+// Telefon numarasıyla kayıt: numara + şifre + görünen ad. Numara benzersizdir.
+// Firebase yapılandırılmışsa (yönetim > uygulama ayarları) SMS kodu zorunludur: uygulama kodu Firebase ile doğrular ve
+// kimlik token'ını (idToken) gönderir; numara token'dan alınır. Yapılandırılmamışsa eskisi gibi kodsuz kayıt.
 router.post('/register-phone', ipLimit('register', 5, 3600e3), async (req, res) => {
-  const phone = normalizePhone(req.body?.phone);
+  const cfg = await getConfig();
+  let phone = normalizePhone(req.body?.phone);
+  let verified = false;
+  if (phoneVerifyOn(cfg)) {
+    if (!req.body?.idToken) throw fail('Telefon numaranı SMS koduyla doğrulaman gerekiyor. Uygulamayı güncelleyin.', 428);
+    const p = normalizePhone(await verifyPhoneToken(req.body.idToken, cfg.firebaseProjectId));
+    if (!p) throw fail('Bu telefon numarasıyla kayıt yapılamaz.');
+    if (phone && phone !== p) throw fail('Doğrulanan numara ile girilen numara aynı değil.');
+    phone = p;
+    verified = true;
+  }
   if (!phone) throw fail('Geçerli bir cep telefonu numarası girin (ör. 0555 123 45 67).');
   const password = String(req.body?.password ?? '');
   passwordRules(password);
   const displayName = cleanPublic(text(req.body?.displayName, 'Ad', { min: 1, max: 60 }), 'Ad');
   if ((await query(`SELECT 1 FROM users WHERE phone = $1`, [phone])).rowCount) throw fail('Bu telefon numarasıyla zaten bir hesap var. Giriş yapın.', 409);
   const passwordHash = await hashPassword(password);
-  const row = await createAccount({ displayName, passwordHash, phone, prefix: 't' });
+  let row = await createAccount({ displayName, passwordHash, phone, prefix: 't' });
+  if (verified) row = (await query(`UPDATE users SET phone_verified_at = NOW() WHERE id = $1 RETURNING *`, [row.id])).rows[0];
   res.status(201).json({ ...(await tokensFor(row, req)), user: selfUser(row) });
 });
 

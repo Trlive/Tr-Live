@@ -26,6 +26,7 @@ import { wipLabel } from '../services/wip.js';
 import { dealerSell } from '../services/dealers.js';
 import { approveTopupRequest, rejectTopupRequest, requestView as topupRequestView } from '../services/dealer_topup.js';
 import { hub } from '../realtime.js';
+import { JACKPOT_OPEN } from '../lucky.js';
 import { leaveRoom, closeRoom } from '../services/rooms.js';
 import { banIpPersist, unbanIp, listBans, securityStats, userLimit, hitLimit } from '../firewall.js';
 import net from 'node:net';
@@ -34,7 +35,9 @@ import { revokeAllSessions } from '../services/sessions.js';
 import { deleteAccount } from '../services/account_delete.js';
 import { detectMedia, ensureVapc, mimeFor, MEDIA_MAX_BYTES } from '../services/media.js';
 import { mediaCacheStats } from '../services/images.js';
-import { getConfig, saveConfig, validateConfigPatch, compareVersions, CONFIG_DEFAULTS } from '../services/app_config.js';
+import { getConfig, saveConfig, validateConfigPatch, compareVersions, CONFIG_DEFAULTS, maskSecrets, SECRET_MASK, mailOn } from '../services/app_config.js';
+import { sendMail } from '../services/mailer.js';
+import { normalizeEmail } from '../services/email_codes.js';
 import { livekitHealth } from '../livekit.js';
 import { poolStats } from '../database.js';
 import fs from 'node:fs';
@@ -1993,11 +1996,14 @@ router.get('/actions', requireSuperAdmin, async (req, res) => {
 });
 
 router.get('/app-config', requireSuperAdmin, async (req, res) => {
-  res.json({ config: await getConfig(), defaults: CONFIG_DEFAULTS });
+  res.json({ config: maskSecrets(await getConfig()), defaults: CONFIG_DEFAULTS });
 });
 
 router.put('/app-config', requireSuperAdmin, async (req, res) => {
-  const patch = validateConfigPatch(req.body);
+  // Maskeli SMTP şifresi geri geldiyse şifre değiştirilmez.
+  const body = { ...(req.body ?? {}) };
+  if (body.smtpPass === SECRET_MASK) delete body.smtpPass;
+  const patch = validateConfigPatch(body);
   // Kendi sürümünden yüksek bir "en düşük sürüm" yönetici dahil herkesi uygulamadan kilitlerdi.
   if (patch.minAppVersion && compareVersions(patch.minAppVersion, '0.0.0') > 0) {
     const mine = req.get('X-App-Version');
@@ -2012,8 +2018,64 @@ router.put('/app-config', requireSuperAdmin, async (req, res) => {
     throw fail('Şanslı hediyede geri dönüş (RTP) + alıcı payı en fazla %95 olabilir.');
   }
   const cfg = await saveConfig(patch, req.user.id);
-  await auditStaff({ query }, req.user.id, null, 'app_config_update', patch);
-  res.json({ config: cfg });
+  await auditStaff({ query }, req.user.id, null, 'app_config_update', patch.smtpPass !== undefined ? { ...patch, smtpPass: SECRET_MASK } : patch);
+  res.json({ config: maskSecrets(cfg) });
+});
+
+// Şanslı hediye havuzları: her şanslı hediyenin ana / büyük ödül havuzu, giren / çıkan ve gerçekleşen geri dönüş.
+router.get('/lucky-pools', requireSuperAdmin, async (req, res) => {
+  const r = await query(
+    `SELECT g.id, g.name, g.coin_price, g.is_active, COALESCE(p.base_balance, 0) AS base_balance,
+            COALESCE(p.jackpot_balance, 0) AS jackpot_balance, COALESCE(p.total_in, 0) AS total_in,
+            COALESCE(p.total_out, 0) AS total_out, COALESCE(p.seeded, 0) AS seeded, COALESCE(p.jackpot_hits, 0) AS jackpot_hits
+     FROM gifts g LEFT JOIN lucky_pools p ON p.gift_id = g.id
+     WHERE g.category = 'lucky' ORDER BY g.coin_price, g.name`,
+  );
+  const coin = (v) => (BigInt(v) / 10000n).toString();
+  res.json({
+    jackpotOpen: JACKPOT_OPEN,
+    pools: r.rows.map((x) => ({
+      giftId: x.id, name: x.name, coinPrice: String(x.coin_price), active: x.is_active,
+      base: coin(x.base_balance), jackpot: coin(x.jackpot_balance),
+      openAt: (BigInt(x.coin_price) * BigInt(JACKPOT_OPEN)).toString(),
+      totalIn: coin(x.total_in), totalOut: coin(x.total_out), seeded: coin(x.seeded), jackpotHits: Number(x.jackpot_hits),
+    })),
+  });
+});
+
+// Havuza yönetimden Coin eklemek (ör. açılışta büyük ödül havuzunu doldurmak). Eklenen tutar platformdan çıkar,
+// ayrı tutulur ve denetim kaydına yazılır.
+router.post('/lucky-pools/:giftId/seed', requireSuperAdmin, async (req, res) => {
+  const giftId = uuid(req.params.giftId, 'Hediye');
+  const target = oneOf(req.body?.pool ?? 'jackpot', ['base', 'jackpot'], 'Havuz');
+  const coins = bigAmount(req.body?.coins, 'Miktar', { max: 100000000n });
+  if (coins <= 0n) throw fail('Miktar 0\'dan büyük olmalı.');
+  const gift = (await query(`SELECT id, name FROM gifts WHERE id = $1 AND category = 'lucky'`, [giftId])).rows[0];
+  if (!gift) throw fail('Şanslı hediye bulunamadı.', 404);
+  const units = (coins * 10000n).toString();
+  const col = target === 'base' ? 'base_balance' : 'jackpot_balance';
+  await query(
+    `INSERT INTO lucky_pools(gift_id, ${col}, seeded) VALUES($1, $2, $2)
+     ON CONFLICT (gift_id) DO UPDATE SET ${col} = lucky_pools.${col} + EXCLUDED.${col}, seeded = lucky_pools.seeded + EXCLUDED.seeded, updated_at = NOW()`,
+    [giftId, units],
+  );
+  await auditStaff({ query }, req.user.id, null, 'lucky_pool_seed', { giftId, gift: gift.name, pool: target, coins: coins.toString() });
+  res.json({ ok: true });
+});
+
+// SMTP ayarlarını denemek için yöneticinin yazdığı adrese deneme e-postası (kaydedilmiş ayarlarla).
+router.post('/app-config/test-mail', requireSuperAdmin, async (req, res) => {
+  const to = normalizeEmail(req.body?.to);
+  if (!to) throw fail('Geçerli bir e-posta adresi girin.');
+  const c = await getConfig();
+  if (!mailOn(c)) throw fail('Önce SMTP ayarlarını kaydedin.', 400);
+  try {
+    await sendMail({ host: c.smtpHost, port: c.smtpPort, secure: c.smtpSecure !== false, user: c.smtpUser, pass: c.smtpPass, from: c.smtpFrom || c.smtpUser },
+      { to, subject: 'TR Live deneme e-postası', text: 'SMTP ayarların çalışıyor. Bu bir deneme e-postasıdır.' });
+  } catch (e) {
+    throw fail(`Gönderilemedi: ${e.message}`, 502);
+  }
+  res.json({ ok: true });
 });
 
 router.get('/moderation/strikes', requireSuperAdmin, async (req, res) => {

@@ -43,6 +43,8 @@ class _GoLiveScreenState extends State<GoLiveScreen> {
   int _gridSeats = 9;
   String _themeA = 'default';
   String _themeV = 'default';
+  String? _themeImgA; // kayıtlı odanın tema görseli (birden çok özel temadan hangisi)
+  String? _themeImgV;
   PickedImage? _coverA;
   PickedImage? _coverV;
   String? _coverUrlA;
@@ -68,6 +70,7 @@ class _GoLiveScreenState extends State<GoLiveScreen> {
       final n = (a['seatCount'] as num?)?.toInt();
       if (n != null && _voiceModes.contains(n)) _voiceSeats = n;
       _themeA = (a['theme'] ?? 'default').toString();
+      _themeImgA = a['themeImageUrl']?.toString();
       _coverUrlA = a['coverUrl'] as String?;
     }
     if (v != null) {
@@ -76,6 +79,7 @@ class _GoLiveScreenState extends State<GoLiveScreen> {
       final n = (v['seatCount'] as num?)?.toInt();
       if (n != null && kVideoGridModes.contains(n)) _gridSeats = n;
       _themeV = (v['theme'] ?? 'default').toString();
+      _themeImgV = v['themeImageUrl']?.toString();
       _coverUrlV = v['coverUrl'] as String?;
     }
     _mode = widget.initialType == 'audio' ? LiveMode.voice : (v?['layout'] == 'live' ? LiveMode.live : LiveMode.multi);
@@ -204,7 +208,7 @@ class _GoLiveScreenState extends State<GoLiveScreen> {
             child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(tx('Oda teması'), style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
               const SizedBox(height: 12),
-              ThemePicker(value: theme, onChanged: (v) => setS(() => theme = v)),
+              ThemePicker(value: theme, imageUrl: _voice ? _themeImgA : _themeImgV, onChanged: (v) => setS(() => theme = v)),
               const SizedBox(height: 16),
               SizedBox(width: double.infinity, child: FilledButton(onPressed: () => Navigator.pop(c, true), child: Text(tx('Uygula')))),
             ]),

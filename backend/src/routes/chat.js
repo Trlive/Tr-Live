@@ -90,7 +90,9 @@ router.get('/:roomId/messages', async (req, res) => {
   const r = await query(
     `SELECT m.id AS message_id, m.body, m.created_at AS message_at, m.sender_hidden, m.sender_alias, ${USER_PUBLIC_COLUMNS}
      FROM room_messages m JOIN users u ON u.id = m.user_id ${USER_PUBLIC_JOINS}
-     WHERE m.room_id = $1 AND m.deleted = FALSE AND m.created_at >= $3 ORDER BY m.created_at DESC LIMIT $2`,
+     WHERE m.room_id = $1 AND m.deleted = FALSE AND m.created_at >= $3
+       AND m.created_at > COALESCE((SELECT chat_cleared_at FROM rooms WHERE id = $1), '-infinity'::timestamptz)
+     ORDER BY m.created_at DESC LIMIT $2`,
     [roomId, limit, member.joined_at],
   );
   res.json({
@@ -107,9 +109,12 @@ router.delete('/:roomId/messages', userLimit('chat_clear', 10, 60e3), async (req
   const roomId = uuid(req.params.roomId, 'Oda');
   const { member } = await roomAndMember(roomId, req.user.id);
   if (!MANAGERS.includes(member.role)) throw fail('Sohbeti yalnızca oda yetkilileri temizleyebilir.', 403);
-  const r = await query(`UPDATE room_messages SET deleted = TRUE WHERE room_id = $1 AND deleted = FALSE`, [roomId]);
-  hub.broadcastRoom(roomId, { type: 'room_chat_cleared', roomId, by: req.user.id });
-  res.json({ ok: true, cleared: r.rowCount });
+  // Temizleme anı kaydedilir: istemciler bu andan önceki mesajları (geç gelen olay / yükleme dahil) göstermez.
+  const at = (await query(`UPDATE rooms SET chat_cleared_at = clock_timestamp() WHERE id = $1 RETURNING chat_cleared_at`, [roomId])).rows[0]?.chat_cleared_at;
+  const r = await query(`UPDATE room_messages SET deleted = TRUE WHERE room_id = $1 AND deleted = FALSE AND created_at <= $2`, [roomId, at ?? new Date()]);
+  const clearedAt = new Date(at ?? Date.now()).toISOString();
+  hub.broadcastRoom(roomId, { type: 'room_chat_cleared', roomId, by: req.user.id, clearedAt });
+  res.json({ ok: true, cleared: r.rowCount, clearedAt });
 });
 
 router.delete('/:roomId/messages/:messageId', async (req, res) => {

@@ -1,3 +1,106 @@
+## v2.104.0 — Etkinlik sonuç bildirimleri etkinliğin görseliyle · küçültülmüş müzik plağı
+Haftalık etkinlik sonuçları (Etkinlik Promosyonu)
+- Tek düz metin yerine her etkinlik için ayrı kart: Haftanın Çifti, Haftalık Kral ve Kraliçe, Haftalık Yıldızlar.
+  Her kartta o etkinliğin kendi görseli ve renkleri, "SONUÇLAR" etiketi ve hafta tarihi var.
+- Her bölümde kürsü: 2. · 1. (taçlı, büyük, altın ışıltılı) · 3. Madalya renkli halkalarda kazananın fotoğrafı ve adı;
+  çiftte iki fotoğraf, yıldızda hediyenin simgesi. Fotoğrafa dokununca profil, karta dokununca etkinlik sayfası açılır.
+- Son 12 haftanın eski düz metin duyuruları sunucu açılışında bir kez yeni kartlara çevrilir.
+- Veritabanı: 071 (duyurulara yapılandırılmış içerik).
+Müzik
+- Müzik küçültülünce çıkan plağa dokununca müzik kutusu açılmıyordu: plağın boş dokunma algılayıcısı dokunuşu
+  yutuyordu. Artık dokununca açılıp kapanıyor, sürükleme de çalışıyor.
+
+## v2.103.1 — "Sohbetler temizlendi" deniyor ama mesajlar kalıyordu
+- Temizleme anı sunucuda kaydediliyor (rooms.chat_cleared_at, 070). O andan önce yazılan mesajlar artık hiçbir yoldan
+  geri gelmiyor: sohbet yeniden yüklenince, temizlemeden önce başlamış bir yükleme geç dönünce (eski listeyi geri
+  getiriyordu), mesaj olayı temizlemeden sonra ulaşınca ya da uçan yazı işlemi temizleme sırasında bitince.
+- Temizleyenin ekranı, soket olayını beklemeden istek başarılı olur olmaz temizleniyor; aynı temizleme iki kez
+  yazılmıyor. Sıradaki eski uçan yazılar da iptal ediliyor.
+
+## v2.103.0 — Şanslı hediye: havuzlu sistem (dolunca verir)
+- Her şanslı hediyenin kendi ödül havuzu var. Gönderimin "geri dönüş oranı" kadarı (varsayılan %60, eskiden %70)
+  havuza girer; kazançlar YALNIZCA havuzdan ödenir. Platform ve alıcı payı her zaman korunur: uzun vadede
+  gönderene dönen Coin hiçbir zaman ayarlanan orandan fazla olamaz (havuz eksiye düşmez).
+- İki kademe:
+  • Ana havuz (x1, x2, x3, x5, x10, x50): her zaman çekilir; havuz yetmezse karşılayabildiği en büyük küçük çarpan verilir.
+  • Büyük ödül havuzu (x100, x500, x1000): payın %25'i (panelden 0–80) buraya birikir. Havuz "fiyat × 100" dolmadan
+    büyük çarpan hiç çıkmaz; dolunca açılır, çıkınca boşalır ve yeniden dolar.
+- Hediye penceresinde seçili şanslı hediyenin büyük ödül havuzu doluluk çubuğuyla görünür ("DOLU: x100 – x1000 açık!").
+  Olasılıklar penceresi "Her zaman" ve "Büyük ödül (havuz dolunca açılır)" diye ayrıldı. Büyük ödülde "BÜYÜK ÖDÜL!" yazar.
+- Yönetim: "Büyük ödül payı %" ayarı; Uygulama ayarları > Şanslı hediye > "Havuzları gör / havuza ekle": her hediyenin
+  havuzları, giren / ödenen, gerçekleşen geri dönüş, büyük ödül sayısı; açılışta havuza Coin eklenebilir (denetim kaydına yazılır).
+- Veritabanı: 069_lucky_pools.
+
+## v2.102.0 — Şanslı Çan / Şanslı Yonca: Yoho / Bigo / Mico mantığı
+Kazanç
+- Yeni çarpan tablosu: x1, x2, x3, x5, x10, x50, x100, x500, x1000. Küçük kazançlar sık (yaklaşık her 3 adette bir;
+  x1 = hediye bedeli geri), büyükler seyrek. Varsayılan geri ödeme yine %70; panelden %90'a kadar artırılabilir
+  (tüm olasılıklar orantılı ölçeklenir). Her adet ayrı çekiliş; 99 adetlik gönderimde neredeyse her zaman bir şey çıkar.
+- Sonuçta kaç adedin kazandırdığı ("12/99 adet kazandırdı") ve combo boyunca toplam kazanç ("Combo toplamı") görünür.
+Odadakiler kazancı görür
+- Her kazanç odadaki herkese gönderenin koltuğunun üstünde "🍀 x5 +500" rozetiyle; x100 ve üstü sahnenin ortasında
+  altın patlamayla gösterilir. x10 ve üstü sohbete yazılır. Büyük kazancın tüm uygulamaya duyurusu (şerit) aynen sürer.
+Puan / Elmas / sıralama (diğer uygulamalardaki kural)
+- Şanslı hediyenin değeri fiyatının alıcı payı kadardır (varsayılan %10): alıcıya o kadar Elmas; koltuk puanı, oda
+  elması, PK, oda içi PK, gönderen/alan/oda/haftalık sıralamalar, profil destekçileri, CP yakınlığı, koruyucu puanı,
+  aile katkısı, başkan indirimi ve gönderenin servet seviyesi de bu değerle sayılır. (Önceden gönderen tarafında tam
+  fiyatla sayılıyordu: geri kazanılan Coin'le tekrar göndererek sıralama ve seviye kasılabiliyordu.)
+- Şanslı hediye artık normal "hediye şeridine" düşmez (yalnızca büyük kazanç duyurusu).
+Gönderme / combo
+- Şanslı hediyede adetler 1 · 9 · 19 · 49 · 99 · 199 · 520 · 999; combo düğmesi son gönderimden sonra 12 sn açık
+  kalır (sunucu combo sayacı da 12 sn), her dokunuş yeni çekiliş.
+- Panel: duyuru çarpanı sınırı 10–1000.
+
+## v2.101.0 — Kalabalık ve gürültüye karşı ses düzeni (ücretsiz en güçlü kurulum)
+Mikrofon sesi sırasıyla şu katmanlardan geçer (gürültü engelleme açıkken, varsayılan):
+1. Telefonun çoklu mikrofon işlemesi (Android voice communication): ağızdan gelmeyen sesleri kısar.
+2. WebRTC: yankı giderme, gürültü bastırma, düşük frekans süzgeci.
+3. Yapay zekâ gürültü azaltma (RNNoise, BSD-3; deneysel eklenti flutter_webrtc_noise_suppression): klavye, tabak,
+   TV, trafik gibi konuşma dışı sesleri ek olarak azaltır. Oda ses bağlantısı kurulunca bağlanır, çıkınca çıkar.
+   Efekt ve ses'ten anında kapatılabilir; bağlanamazsa ses olduğu gibi kalır.
+4. Otomatik ses düzeyi KAPALI: konuşma aralarında mikrofonu yükseltip arkadaki insan seslerini büyütüyordu.
+   Gürültü engelleme kapatılınca geri açılır (telefondan uzakta konuşanlar için).
+- livekit_client ^2.13.2 (flutter_webrtc 1.6.3: eklentinin istediği sürüm + TURN/TLS güvenlik düzeltmesi).
+- Sınır: yanınızda konuşan birinin sesi, siz konuşurken tamamen ayrılamaz (bunun için ücretli Krisp BVC gerekir);
+  en etkili ücretsiz önlem kulaklık mikrofonu.
+
+## v2.100.3 — Kalabalık sesi: telefonun ses işlemesi yeniden varsayılan
+- Asıl sorun ortam kalabalığı (arkadaki insan sesleri). Buna karşı en etkili ücretsiz araç telefonun çoklu mikrofon
+  işlemesi (ağızdan gelmeyen sesi kısar). v2.100.2'de varsayılan yapılan "uygulamanın ses işlemesi" bunu da kapattığı
+  için kalabalığı artırabiliyordu: varsayılan yeniden telefonun işlemesi (telefonda engelleyici yoksa WebRTC'nin gürültü
+  bastırması zaten çalışır). "Uygulamanın ses işlemesi" Efekt ve ses'te seçenek olarak kaldı (anahtarı kapatınca).
+
+## v2.100.2 — Gürültü engelleme: uygulamanın ses işlemesi
+- Android'de mikrofon artık uygulamanın (WebRTC) yazılım ses işlemesiyle çalışır: yankı giderme (AEC3), gürültü
+  bastırma (yüksek), otomatik ses düzeyi ve düşük frekans süzgeci her telefonda aynı. Önceden Android 10+ telefonlarda
+  üreticinin kendi engelleyicisi kullanılıyor, WebRTC'nin gürültü bastırması yalnızca telefonda engelleyici yoksa
+  açılıyordu: kalite markaya göre değişiyor, "Mikrofon gürültüsü engelleme" anahtarı bu telefonlarda etkisizdi.
+  Artık anahtar her telefonda çalışır; kulaklıkla (medya modu) konuşurken de gürültü bastırılır.
+- Efekt ve ses > "Telefonun kendi ses işlemesi": bir telefonda yankı olursa eski yönteme dönülür (yeniden açılışta).
+- LiveKit'in bypassVoiceProcessing ayarı kullanılmadı (yazılım işlemesini de kapatır); yalnız ses aygıtı katmanında
+  telefonun efektleri kapatıldı (services/audio_processing.dart).
+
+## v2.100.1 — Özel tema seçimi ve sohbet sırası düzeltmesi
+- Birden çok özel tema varken hepsi "Kullanılıyor" görünüyordu ve hangisinin odada olacağı seçilemiyordu: her özel
+  temanın kendi anahtarı var ("custom:<id>"); dokunulan özel temanın görseli uygulanır, yalnızca o "Kullanılıyor" olur.
+  Oda açma ekranı ve oda ayarlarındaki tema seçici de her özel temayı ayrı gösterir; oda yeniden açılınca seçilen özel
+  tema korunur. Süre bitince yalnızca biten tema kalkar (başka özel temanın süresi sürüyor diye bitmiş görsel kalmaz).
+- Oda küçültülüp / uygulama arka plandan dönünce eski "odaya girdi" satırları sohbetin en altına iniyordu ve sohbet
+  zorla en alta kaydırılıyordu: yeniden yüklemede yerel satırlar yerinde kalır, okunan yer korunur (test eklendi).
+
+## v2.100.0 — SMS (Firebase) ve e-posta doğrulaması, şifremi unuttum, kalıcı imza
+- Telefonla kayıtta SMS kodu (Firebase Authentication). Firebase ayarları yönetim panelinden girilir (APK'ya gömülü
+  değil); girilene kadar kayıt eskisi gibi kodsuz. Sunucu Firebase kimlik token'ını Google'ın anahtarlarıyla doğrular
+  (imza, proje, 10 dakika, tek kullanım).
+- E-posta: 6 haneli kod (10 dk, 5 deneme, dakikada 1 / saatte 5 gönderim). Gönderim yönetimden girilen SMTP ile
+  (ek paket yok; 465 SSL ya da 587 STARTTLS). Yönetimde "Deneme e-postası gönder"; SMTP şifresi panelde maskeli.
+- Hesap & Güvenlik: telefonu bağla / doğrula, e-posta ekle / doğrula. Giriş ekranında "Şifremi unuttum"
+  (SMS ya da e-posta kodu; şifre değişince tüm cihazlardan çıkış).
+- Kalıcı imzalama anahtarı (mobile/imza): APK derlemenin sonunda bu anahtarla yeniden imzalanır. Firebase SMS ve
+  Play Store için gerekli; sonraki sürümler telefondaki uygulamanın üstüne kurulur (bu sürüme geçerken bir kez kaldır-kur).
+- Migration 068 (users.email, email_verified_at, phone_verified_at, email_codes). Test: Firebase token, SMTP, ayarlar; e2e.
+- Kurulum adımları: docs/DOGRULAMA_KURULUM.md
+
 ## v2.99.1 — Doğum Günü modu: koltuk dizilimi ve Mikrofon Modu'na taşındı
 - Koltuklar üst üste biniyordu: satır araları koltuk + numara/ad satırı sığacak şekilde yeniden hesaplandı
   (satırlar arası en az "yarım koltuk + ad + yarım koltuk"; küçük ekranlarda ölçek düşse de binmez). Pasta ve şerit

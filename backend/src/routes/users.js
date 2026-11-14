@@ -39,8 +39,8 @@ router.get('/:userId/card', async (req, res) => {
   if (!t) throw fail('Kullanıcı bulunamadı.', 404);
   if (t.is_hidden && targetId !== req.user.id) return res.json({ supporters: [], medals: [], gifts: [] });
   const sup = await query(
-    `SELECT sender_id, SUM(coin_amount)::text AS coins FROM gift_transactions
-     WHERE receiver_id = $1 AND sender_id <> $1 GROUP BY sender_id ORDER BY SUM(coin_amount) DESC LIMIT 5`,
+    `SELECT sender_id, SUM(COALESCE(diamond_amount, coin_amount))::text AS coins FROM gift_transactions
+     WHERE receiver_id = $1 AND sender_id <> $1 GROUP BY sender_id ORDER BY SUM(COALESCE(diamond_amount, coin_amount)) DESC LIMIT 5`,
     [targetId],
   );
   const users = new Map((await loadPublicRows(sup.rows.map((x) => x.sender_id))).map((u) => [u.id, u]));

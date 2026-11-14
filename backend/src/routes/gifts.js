@@ -14,8 +14,8 @@ import { scoreRoomPk, broadcastRoomPk } from '../services/room_pk.js';
 import { scoreboardOf } from '../services/scoreboard.js';
 import { loadPublicRows } from '../services/users.js';
 import { idempotent } from '../idempotency.js';
-import { nextCombo } from '../combo.js';
-import { drawLucky, LUCKY_BASE, luckyTable } from '../lucky.js';
+import { COMBO_WINDOW_MS, LUCKY_COMBO_WINDOW_MS, nextCombo } from '../combo.js';
+import { drawLuckyPool, LUCKY_BASE, luckyTables, poolView, JACKPOT_OPEN } from '../lucky.js';
 import { getConfig } from '../services/app_config.js';
 import { featuresFor, minLevelFor, wipLabel } from '../services/wip.js';
 import { addGiftExp } from '../services/cp.js';
@@ -43,12 +43,25 @@ router.get('/gifts', async (req, res) => {
   // Gönderim anındaki sınırlamanın aynısı uygulanır.
   const recvBps = Math.min(Math.max(Math.trunc(Number(cfg.luckyReceiverBps)) || 0, 0), 5000);
   const rtpBps = Math.min(Math.max(Math.trunc(Number(cfg.luckyRtpBps)) || 0, 0), 9500 - recvBps);
-  const odds = luckyTable(rtpBps).map(([m, p]) => ({ multiplier: m, probability: Number(p.toFixed(8)) }));
+  const jackpotShare = Math.min(Math.max(Math.trunc(Number(cfg.luckyJackpotShareBps)) || 0, 0), 8000);
+  const t = luckyTables(rtpBps, jackpotShare);
+  // jackpot: true → yalnızca büyük ödül havuzu doluyken çıkabilir.
+  const odds = [
+    ...t.jackpot.map(([m, p]) => ({ multiplier: m, probability: Number(p.toFixed(8)), jackpot: true })),
+    ...t.base.map(([m, p]) => ({ multiplier: m, probability: Number(p.toFixed(8)), jackpot: false })),
+  ];
+  const luckyGifts = rows.filter((g) => g.category === 'lucky');
+  const pools = luckyGifts.length
+    ? (await query(`SELECT gift_id, base_balance, jackpot_balance FROM lucky_pools WHERE gift_id = ANY($1::uuid[])`, [luckyGifts.map((g) => g.id)])).rows
+    : [];
+  const poolOf = new Map(pools.map((x) => [x.gift_id, { base: x.base_balance, jackpot: x.jackpot_balance }]));
   res.json({
     gifts: rows.map(giftJson), globalMinCoins: String(config.globalGiftMinCoins),
     lucky: {
       enabled: cfg.luckyEnabled, receiverBps: cfg.luckyReceiverBps, multipliers: LUCKY_BASE.map(([m]) => m),
       odds, rtpBps, maxWin: String(Math.max(Math.trunc(Number(cfg.luckyMaxWin)) || 1, 1)),
+      comboSeconds: LUCKY_COMBO_WINDOW_MS / 1000, jackpotOpen: JACKPOT_OPEN,
+      pools: luckyGifts.map((g) => poolView(g.id, g.coin_price, poolOf.get(g.id))),
     },
   });
 });
@@ -93,6 +106,7 @@ router.post('/rooms/:roomId/gifts/send', userLimit('gift', 60, 60e3), idempotent
   const luckyRecvBps = Math.min(Math.max(Math.trunc(Number(cfg.luckyReceiverBps)) || 0, 0), 5000);
   const luckyRtpBps = Math.min(Math.max(Math.trunc(Number(cfg.luckyRtpBps)) || 0, 0), 9500 - luckyRecvBps);
   const luckyMaxWin = BigInt(Math.max(Math.trunc(Number(cfg.luckyMaxWin)) || 1, 1));
+  const luckyJackpotShare = Math.min(Math.max(Math.trunc(Number(cfg.luckyJackpotShareBps)) || 0, 0), 8000);
 
   const result = await tx(async (c) => {
     const room = (await c.query(`SELECT id, is_hidden, owner_id, room_type FROM rooms WHERE id = $1 AND is_active = TRUE`, [roomId])).rows[0];
@@ -106,7 +120,9 @@ router.post('/rooms/:roomId/gifts/send', userLimit('gift', 60, 60e3), idempotent
     }
     const lucky = gift.category === 'lucky';
     if (lucky && cfg.luckyEnabled === false) throw fail('Şanslı hediyeler şu an kapalı.', 403);
-    // Şanslı hediyede alıcıya hediye değerinin bir payı Elmas olarak geçer (geri kalanı gönderenin şans havuzudur).
+    // Şanslı hediye (Yoho / Bigo kuralı): hediyenin "değeri" fiyatının alıcı payı kadardır (varsayılan %10). Alıcıya bu kadar
+    // Elmas geçer; koltuk puanı, PK, sıralamalar, CP, koruyucu, aile katkısı ve gönderenin servet seviyesi de bu değerle
+    // sayılır (geri kalanı gönderenin şans havuzudur; tam değerle saymak geri kazanılan Coin'le puan/seviye kasılmasına yol açar).
     const creditOf = (coinAmount) => (lucky ? (coinAmount * BigInt(luckyRecvBps)) / 10000n : coinAmount);
 
     // Hayalet (SWIP) dinleyiciler toplu hediyelerde alıcı olmaz (mikrofondaysa olur).
@@ -138,6 +154,8 @@ router.post('/rooms/:roomId/gifts/send', userLimit('gift', 60, 60e3), idempotent
     // Toplam tutar, dağıtılan toplam adede göre hesaplanır (bölünen modlarda = adet, "herkese" modlarında = adet × kişi).
     const totalUnits = allocation.reduce((s, a) => s + BigInt(a.quantity), 0n);
     const totalCoins = BigInt(gift.coin_price) * totalUnits;
+    // Puan / seviye değeri (normal hediyede = harcanan Coin, şanslıda alıcı payı).
+    const totalValue = allocation.reduce((s, a) => s + creditOf(BigInt(gift.coin_price) * BigInt(a.quantity)), 0n);
     // Kilitlenmeyi (deadlock) önlemek için ilgili tüm kullanıcı satırları TEK sorguda, sıralı kilitlenir.
     const lockIds = [...new Set([senderId, ...allocation.map((a) => a.userId)])];
     const locked = (await c.query(`SELECT id, coins FROM users WHERE id = ANY($1::uuid[]) ORDER BY id FOR UPDATE`, [lockIds])).rows;
@@ -145,9 +163,9 @@ router.post('/rooms/:roomId/gifts/send', userLimit('gift', 60, 60e3), idempotent
     if (!senderRow || BigInt(senderRow.coins) < totalCoins) throw fail('Yetersiz Coin.');
 
     const sent = (await c.query(
-      `UPDATE users SET coins = coins - $1, total_sent_coins = total_sent_coins + $1, updated_at = NOW()
+      `UPDATE users SET coins = coins - $1, total_sent_coins = total_sent_coins + $3, updated_at = NOW()
        WHERE id = $2 RETURNING coins, total_sent_coins, level_exp_bonus`,
-      [totalCoins.toString(), senderId],
+      [totalCoins.toString(), senderId, totalValue.toString()],
     )).rows[0];
     // Seviye = gönderilen Coin + yönetimin verdiği seviye farkı (level_exp_bonus).
     await c.query(`UPDATE users SET coin_level = $1 WHERE id = $2`, [levelFromExp(levelExp(sent.total_sent_coins, sent.level_exp_bonus)), senderId]);
@@ -157,7 +175,7 @@ router.post('/rooms/:roomId/gifts/send', userLimit('gift', 60, 60e3), idempotent
     const transactions = [];
     const qualifying = [];
     const familyContrib = [];
-    let selfCoins = 0n;
+    let selfValue = 0n;
     for (const item of allocation) {
       const coinAmount = BigInt(gift.coin_price) * BigInt(item.quantity);
       const credit = creditOf(coinAmount); // alıcıya geçen Elmas (normal hediyede = coinAmount)
@@ -182,13 +200,13 @@ router.post('/rooms/:roomId/gifts/send', userLimit('gift', 60, 60e3), idempotent
         [roomId, item.userId, credit.toString(), item.quantity],
       );
       // CP yakınlığı: iki kişi arasındaki hediye Coin değeri kadar exp (CP hediyesi 1,5 kat).
-      await addGiftExp((t, p) => c.query(t, p), senderId, item.userId, coinAmount, gift.category === 'cp');
+      await addGiftExp((t, p) => c.query(t, p), senderId, item.userId, credit, gift.category === 'cp');
       // Koruyucu puanı: gönderen alıcının koruyucusuysa 1 Coin = 1 puan.
-      await addGuardianPoints((t, p) => c.query(t, p), senderId, item.userId, coinAmount);
-      const pkId = await scorePk(c, roomId, item.userId, senderId, credit, coinAmount);
+      await addGuardianPoints((t, p) => c.query(t, p), senderId, item.userId, credit);
+      const pkId = await scorePk(c, roomId, item.userId, senderId, credit, credit);
       if (pkId) pkIds.add(pkId);
       // Oda içi PK: alıcı Kırmızı / Mavi takım koltuğundaysa takım puanı.
-      roomPkId = (await scoreRoomPk(c, roomId, item.userId, senderId, credit, coinAmount)) ?? roomPkId;
+      roomPkId = (await scoreRoomPk(c, roomId, item.userId, senderId, credit, credit)) ?? roomPkId;
       await c.query(
         `INSERT INTO wallet_transactions(user_id, transaction_type, coin_amount, reference_id, description) VALUES($1,'gift_sent',$2,$3,$4)`,
         [senderId, (-coinAmount).toString(), gt.id, `Hediye: ${gift.name} x${item.quantity}`],
@@ -202,11 +220,12 @@ router.post('/rooms/:roomId/gifts/send', userLimit('gift', 60, 60e3), idempotent
 
       // Aile katkısı: alıcının ailesine alınan Elmas, gönderenin ailesine harcanan Coin (işlem sonunda toplu).
       // Kendine hediye aileye ve başkan indirimine sayılmaz.
-      if (item.userId !== senderId) familyContrib.push({ userId: item.userId, points: credit }, { userId: senderId, points: coinAmount });
-      else selfCoins += coinAmount;
+      if (item.userId !== senderId) familyContrib.push({ userId: item.userId, points: credit }, { userId: senderId, points: credit });
+      else selfValue += credit;
 
       // Gizli odanın kimliği tüm kullanıcılara yayılmasın: global şerit/kayıt yalnızca açık odalarda.
-      if (coinAmount >= config.globalGiftMinCoins && !room.is_hidden) {
+      // Şanslı hediye hediye şeridine girmez; büyük kazancı ayrı "şanslı kazanç" şeridiyle duyurulur.
+      if (!lucky && coinAmount >= config.globalGiftMinCoins && !room.is_hidden) {
         await c.query(
           `INSERT INTO global_gift_events(gift_transaction_id, room_id, sender_id, receiver_id, coin_amount, display_level)
            VALUES($1,$2,$3,$4,$5,$6)`,
@@ -219,7 +238,7 @@ router.post('/rooms/:roomId/gifts/send', userLimit('gift', 60, 60e3), idempotent
       });
     }
     // Aile katkısı ve başkan indirimi (aile satırları sıralı güncellenir).
-    await addFamilyContribBatch((t, p) => c.query(t, p), familyContrib, { userId: senderId, coins: totalCoins - selfCoins });
+    await addFamilyContribBatch((t, p) => c.query(t, p), familyContrib, { userId: senderId, coins: totalValue - selfValue });
 
     // Oda elması: odaya gelen toplam (kalıcı oda kaydında; oda kapanıp açılınca sıfırlanmaz). Kendine hediye de sayılır
     // (koltuk sayaçlarıyla aynı).
@@ -229,13 +248,26 @@ router.post('/rooms/:roomId/gifts/send', userLimit('gift', 60, 60e3), idempotent
       [room.owner_id, room.room_type, roomCredit.toString()],
     )).rows[0]?.total_diamonds ?? null;
 
-    // Şanslı hediye çekilişi: her adet ayrı çekiliş; kazanç = toplam çarpan × hediye fiyatı (tek gönderimde üst sınırlı).
+    // Şanslı hediye çekilişi (havuzlu): bu gönderimin payı hediyenin havuzuna girer, her adet ayrı çekilir, kazanç
+    // havuzdan ödenir (havuz yetmezse daha küçük çarpan). Havuz satırı EN SON kilitlenir (kullanıcı satırlarından sonra):
+    // kilit sırası her gönderimde aynı, kilitlenme olmaz.
     let luckyResult = null;
     let balance = sent.coins;
     if (lucky) {
-      const draw = drawLucky(Number(totalUnits), luckyRtpBps);
-      let win = BigInt(draw.multiplier) * BigInt(gift.coin_price);
-      if (win > luckyMaxWin) win = luckyMaxWin;
+      await c.query(`INSERT INTO lucky_pools(gift_id) VALUES($1) ON CONFLICT (gift_id) DO NOTHING`, [gift.id]);
+      const row = (await c.query(`SELECT base_balance, jackpot_balance FROM lucky_pools WHERE gift_id = $1 FOR UPDATE`, [gift.id])).rows[0];
+      const draw = drawLuckyPool({
+        units: Number(totalUnits), price: BigInt(gift.coin_price),
+        pool: { base: BigInt(row.base_balance), jackpot: BigInt(row.jackpot_balance) },
+        rtpBps: luckyRtpBps, jackpotShareBps: luckyJackpotShare, maxWin: luckyMaxWin,
+      });
+      const win = draw.win;
+      await c.query(
+        `UPDATE lucky_pools SET base_balance = $2, jackpot_balance = $3, total_in = total_in + $4, total_out = total_out + $5,
+           jackpot_hits = jackpot_hits + $6, updated_at = NOW() WHERE gift_id = $1`,
+        [gift.id, draw.pool.base.toString(), draw.pool.jackpot.toString(), (draw.added.base + draw.added.jackpot).toString(),
+          (win * 10000n).toString(), draw.jackpotHits],
+      );
       if (win > 0n) {
         balance = (await c.query(
           `UPDATE users SET coins = coins + $1, updated_at = NOW() WHERE id = $2 RETURNING coins`,
@@ -246,7 +278,10 @@ router.post('/rooms/:roomId/gifts/send', userLimit('gift', 60, 60e3), idempotent
           [senderId, win.toString(), transactions[0].id, `Şanslı hediye kazancı: ${gift.name} (en yüksek x${draw.best})`],
         );
       }
-      luckyResult = { win: win.toString(), best: draw.best, hits: draw.hits };
+      luckyResult = {
+        win: win.toString(), best: draw.best, hits: draw.hits, wins: draw.wins, units: Number(totalUnits),
+        jackpot: draw.jackpotHits > 0, pool: poolView(gift.id, gift.coin_price, draw.pool),
+      };
     }
     return {
       gift, quantity, totalCoins, balance, transactions, qualifying, allocation, pkIds: [...pkIds], roomPkId, lucky: luckyResult,
@@ -279,7 +314,11 @@ router.post('/rooms/:roomId/gifts/send', userLimit('gift', 60, 60e3), idempotent
   }));
 
   // Combo (Yoho): aynı kişiye aynı hediye birkaç saniye içinde tekrar gönderilirse sayaç artar (x2, x3 ...).
-  const combo = nextCombo(`${roomId}|${senderId}|${giftId}|${distribution}|${result.allocation.map((a) => a.userId).sort().join(',')}`);
+  // Şanslı hediyede combo penceresi daha uzundur (art arda dokunarak şans denenir).
+  const combo = nextCombo(
+    `${roomId}|${senderId}|${giftId}|${distribution}|${result.allocation.map((a) => a.userId).sort().join(',')}`,
+    Date.now(), result.gift.category === 'lucky' ? LUCKY_COMBO_WINDOW_MS : COMBO_WINDOW_MS,
+  );
   hub.broadcastRoom(roomId, {
     type: 'room_gift', roomId, gift: giftInfo, quantity: result.quantity, totalCoins: result.totalCoins.toString(), sender, receivers, combo,
     lucky: result.lucky, roomTotal: result.roomTotal,

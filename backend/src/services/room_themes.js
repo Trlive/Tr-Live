@@ -203,10 +203,29 @@ export const notifyCustom = (row, approved) => notifyUser(
  * Odaya uygulanacak temayı doğrular. Sahip ([ownerId]) bu temayı kullanabiliyorsa { theme, imageUrl } döner:
  * imageUrl yalnızca özel temada doludur; katalog temasında undefined (dokunulmaz).
  */
-export async function resolveRoomTheme(ownerId, key, q = query) {
-  if (key === CUSTOM_KEY) {
-    const c = await activeCustom(ownerId, q);
-    if (!c) throw fail('Onaylanmış, süresi devam eden bir özel temanız yok.', 403);
+export async function resolveRoomTheme(ownerId, key, q = query, { preferImage = null } = {}) {
+  // Özel tema: "custom" (en son onaylanan) ya da "custom:<id>" (birden çok özel temadan seçilen). Odada theme her zaman
+  // "custom" kalır; hangi özel temanın kullanıldığını görsel (theme_image_url) belirler.
+  const customId = typeof key === 'string' && key.startsWith(`${CUSTOM_KEY}:`) ? key.slice(CUSTOM_KEY.length + 1) : null;
+  if (key === CUSTOM_KEY || customId !== null) {
+    let c;
+    if (customId !== null) {
+      if (!/^\d{1,18}$|^[0-9a-f-]{36}$/i.test(customId)) throw fail('Tema geçersiz.');
+      c = (await q(
+        `SELECT * FROM custom_room_themes WHERE id::text = $2 AND user_id = $1 AND status = 'approved' AND expires_at > NOW()`,
+        [ownerId, customId],
+      )).rows[0] ?? null;
+    } else {
+      // "custom" (eski istek / oda açma ekranı): kayıtlı görsel hâlâ geçerli bir özel temaysa o korunur.
+      if (preferImage) {
+        c = (await q(
+          `SELECT * FROM custom_room_themes WHERE user_id = $1 AND image_url = $2 AND status = 'approved' AND expires_at > NOW() LIMIT 1`,
+          [ownerId, preferImage],
+        )).rows[0] ?? null;
+      }
+      c ??= await activeCustom(ownerId, q);
+    }
+    if (!c || !c.image_url) throw fail('Onaylanmış, süresi devam eden bir özel temanız yok.', 403);
     return { theme: CUSTOM_KEY, imageUrl: c.image_url };
   }
   if (!isThemeKey(key)) throw fail('Tema geçersiz.');
@@ -227,7 +246,7 @@ const settingsEvent = (r) => ({
 // Bir odanın teması hâlâ geçerli mi (SQL koşulu; t = rooms ya da room_profiles satırı, sahip sütunu verilir).
 const INVALID_THEME = (alias, owner) => `(
   (${alias}.theme = '${CUSTOM_KEY}' AND NOT EXISTS (SELECT 1 FROM custom_room_themes c WHERE c.user_id = ${owner}
-     AND c.status = 'approved' AND c.expires_at > NOW()))
+     AND c.status = 'approved' AND c.expires_at > NOW() AND c.image_url IS NOT DISTINCT FROM ${alias}.theme_image_url))
   OR (${alias}.theme <> '${CUSTOM_KEY}' AND NOT EXISTS (SELECT 1 FROM room_themes t WHERE t.key = ${alias}.theme
      AND t.is_active = TRUE AND t.is_deleted = FALSE AND (t.price_coins = 0 OR EXISTS (
        SELECT 1 FROM inventory_items i WHERE i.user_id = ${owner} AND i.item_type = 'room_theme' AND i.item_key = t.key

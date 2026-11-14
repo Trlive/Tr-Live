@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import '../l10n/l10n.dart';
 import 'package:flutter/scheduler.dart';
 import '../services/api.dart';
 import '../services/effect_prefs.dart';
@@ -65,6 +66,9 @@ class CustomTheme {
 
 const kCustomThemeKey = 'custom';
 
+/// Belirli bir özel temanın anahtarı (sunucu "custom:<id>" ile o temanın görselini uygular).
+String customKeyOf(CustomTheme c) => '$kCustomThemeKey:${c.id}';
+
 /// Katalog önbelleği. Sunucuya ulaşılamazsa eski gradyan temalarla çalışır.
 class RoomThemes {
   RoomThemes._();
@@ -92,6 +96,19 @@ class RoomThemes {
       if (c.active) return c;
     }
     return null;
+  }
+
+  /// Onaylı, süresi devam eden tüm özel temalar (birden çok olabilir).
+  static List<CustomTheme> get activeCustoms => [for (final c in custom) if (c.active) c];
+
+  /// Odadaki temanın seçim anahtarı. Odada özel tema "custom" + görsel olarak tutulur; birden çok özel tema olduğunda
+  /// hangisinin kullanıldığı görselden bulunur ("custom:<id>"). Bulunamazsa "custom".
+  static String selectedKey(String? theme, String? imageUrl) {
+    if (theme != kCustomThemeKey) return theme ?? 'default';
+    for (final c in custom) {
+      if (c.active && c.imageUrl != null && c.imageUrl == imageUrl) return customKeyOf(c);
+    }
+    return kCustomThemeKey;
   }
 
   /// [roomId] verilirse haklar oda sahibine göre gelir. 5 dakika önbellek; [force] ile yenilenir.
@@ -418,7 +435,9 @@ class _EffectPainter extends CustomPainter {
 class ThemePicker extends StatefulWidget {
   final String value;
   final ValueChanged<String> onChanged;
-  const ThemePicker({super.key, required this.value, required this.onChanged});
+  /// Odanın şu anki tema görseli: değer "custom" ise hangi özel temanın seçili olduğu bununla bulunur.
+  final String? imageUrl;
+  const ThemePicker({super.key, required this.value, required this.onChanged, this.imageUrl});
 
   @override
   State<ThemePicker> createState() => _ThemePickerState();
@@ -436,9 +455,10 @@ class _ThemePickerState extends State<ThemePicker> {
     return ValueListenableBuilder<int>(
       valueListenable: RoomThemes.version,
       builder: (context, _, __) {
-        final custom = RoomThemes.activeCustom;
+        final customs = RoomThemes.activeCustoms;
+        final selected = widget.value == kCustomThemeKey ? RoomThemes.selectedKey(widget.value, widget.imageUrl) : widget.value;
         final items = <(String, String, String?, List<Color>)>[
-          if (custom != null) (kCustomThemeKey, 'Özel tema', custom.imageUrl, const [Color(0xFF17130C), Color(0xFF221B10)]),
+          for (final c in customs) (customKeyOf(c), tx('Özel tema'), c.imageUrl, const [Color(0xFF17130C), Color(0xFF221B10)]),
           for (final t in RoomThemes.all.where((t) => t.usable)) (t.key, t.label, t.thumbUrl, t.colors),
         ];
         final dpr = MediaQuery.devicePixelRatioOf(context);
@@ -456,7 +476,7 @@ class _ThemePickerState extends State<ThemePicker> {
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(10),
                       gradient: LinearGradient(colors: colors.length < 2 ? const [Colors.white24, Colors.white24] : colors, begin: Alignment.topCenter, end: Alignment.bottomCenter),
-                      border: Border.all(color: widget.value == key ? Pal.cyan : Colors.white24, width: widget.value == key ? 3 : 1),
+                      border: Border.all(color: selected == key ? Pal.cyan : Colors.white24, width: selected == key ? 3 : 1),
                     ),
                     child: thumb == null ? null : Image(image: NetImage(Api.absoluteUrl(thumb)!, targetW: NetImage.px(54, dpr), targetH: NetImage.px(76, dpr)), fit: BoxFit.cover),
                   ),

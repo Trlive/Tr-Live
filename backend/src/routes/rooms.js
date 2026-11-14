@@ -125,8 +125,8 @@ router.get('/', optionalAuth, async (req, res) => {
        (SELECT COUNT(*)::int FROM room_members rm WHERE rm.room_id = r.id AND (rm.microphone OR rm.user_id NOT IN (SELECT id FROM active_ghosts))) AS member_count,
        (SELECT COUNT(*)::int FROM room_members rm WHERE rm.room_id = r.id AND rm.microphone = TRUE) AS mic_count,
        -- Sıralama (Yoho / Mico): son 30 ve 5 dakikada odada atılan hediyeler, PK sürüyor mu.
-       (SELECT COALESCE(SUM(gt.coin_amount), 0)::bigint FROM gift_transactions gt WHERE gt.room_id = r.id AND gt.created_at > NOW() - INTERVAL '30 minutes') AS gifts_30m,
-       (SELECT COALESCE(SUM(gt.coin_amount), 0)::bigint FROM gift_transactions gt WHERE gt.room_id = r.id AND gt.created_at > NOW() - INTERVAL '5 minutes') AS gifts_5m,
+       (SELECT COALESCE(SUM(COALESCE(gt.diamond_amount, gt.coin_amount)), 0)::bigint FROM gift_transactions gt WHERE gt.room_id = r.id AND gt.created_at > NOW() - INTERVAL '30 minutes') AS gifts_30m,
+       (SELECT COALESCE(SUM(COALESCE(gt.diamond_amount, gt.coin_amount)), 0)::bigint FROM gift_transactions gt WHERE gt.room_id = r.id AND gt.created_at > NOW() - INTERVAL '5 minutes') AS gifts_5m,
        (EXISTS (SELECT 1 FROM room_pk rp WHERE rp.room_id = r.id AND rp.status IN ('preparing','active'))
         OR EXISTS (SELECT 1 FROM pk_battles pb WHERE (pb.room_a = r.id OR pb.room_b = r.id) AND pb.status = 'active')) AS in_pk,
        -- Kartta üst üste binen üye avatarları (Yoho): önce mikrofondakiler; gizli kullanıcı ve hayalet dinleyici hariç.
@@ -182,7 +182,7 @@ router.get('/', optionalAuth, async (req, res) => {
 // tek adımda açar; ad ve etiketler yalnızca oda içinden (oda adına dokunarak) değiştirilir.
 const profileJson = (p) => ({
   roomNumber: p.room_number ?? null, announcement: p.announcement ?? '', coverUrl: p.cover_url ?? null, roomType: p.room_type, name: p.name, tags: p.tags ?? [],
-  seatCount: p.seat_count, theme: p.theme, layout: p.layout === 'live' ? 'live' : 'grid',
+  seatCount: p.seat_count, theme: p.theme, themeImageUrl: p.theme_image_url ?? null, layout: p.layout === 'live' ? 'live' : 'grid',
 });
 
 /** Canlı yayında koltuk sayısı sabittir: yayıncı + 3 konuk penceresi. */
@@ -249,7 +249,7 @@ router.post('/', requireAuth, userLimit('room_create', 20, 3600e3), async (req, 
     if (layout === 'live') seatCount = LIVE_SEATS;
     if (!SUPPORTED_SEATS.has(seatCount)) throw fail('Geçersiz koltuk sayısı.');
     // Tema: sahibin kullanabildiği bir tema olmalı (Coin'li → süresi devam eden hak; özel → onaylı özel tema).
-    const rt = b.theme === undefined ? null : await resolveRoomTheme(userId, b.theme);
+    const rt = b.theme === undefined ? null : await resolveRoomTheme(userId, b.theme, query, { preferImage: profile?.theme === CUSTOM_KEY ? profile.theme_image_url : null });
     const theme = rt ? rt.theme : (profile?.theme ?? 'default');
     setupThemeImage = rt ? (rt.imageUrl ?? (profile?.theme === CUSTOM_KEY ? null : undefined)) : undefined;
     const announcement = b.announcement === undefined
@@ -512,7 +512,8 @@ router.patch('/:roomId', requireAuth, userLimit('room_settings', 20, 60e3), asyn
   if (b.chatEnabled !== undefined) { if (typeof b.chatEnabled !== 'boolean') throw fail('chatEnabled true/false olmalı.'); set('chat_enabled', b.chatEnabled); }
   // Tema hakları odanın sahibine aittir (yardımcı sahip, sahibin temalarını kullanabilir).
   let themeImg; // undefined: görsele dokunma
-  if (b.theme !== undefined && b.theme !== before.theme) {
+  // "custom:<id>": başka bir özel temaya geçiş (theme yine "custom", görsel değişir).
+  if (b.theme !== undefined && (b.theme !== before.theme || String(b.theme).startsWith(`${CUSTOM_KEY}:`))) {
     const rt = await resolveRoomTheme(before.owner_id, b.theme);
     set('theme', rt.theme);
     if (rt.imageUrl) themeImg = rt.imageUrl;
@@ -667,7 +668,7 @@ router.get('/:roomId/contributions', requireAuth, async (req, res) => {
   const day = req.query.range === 'day';
   const r = await query(
     `SELECT ${USER_PUBLIC_COLUMNS}, g.total
-     FROM (SELECT gt.sender_id, SUM(gt.coin_amount)::bigint AS total FROM gift_transactions gt
+     FROM (SELECT gt.sender_id, SUM(COALESCE(gt.diamond_amount, gt.coin_amount))::bigint AS total FROM gift_transactions gt
            WHERE gt.room_id IN (SELECT id FROM rooms WHERE owner_id = $1 AND room_type = $2)
              AND ($3::boolean = FALSE OR gt.created_at > NOW() - INTERVAL '24 hours')
            GROUP BY gt.sender_id ORDER BY total DESC LIMIT 50) g

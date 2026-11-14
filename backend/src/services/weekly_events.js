@@ -61,7 +61,7 @@ export async function weekBounds(offset = 0, run = query) {
 function rankingSql(kind, side = 'sender') {
   if (kind === 'couple') {
     return `SELECT LEAST(g.sender_id, g.receiver_id) AS user_id, GREATEST(g.sender_id, g.receiver_id) AS partner_id,
-              SUM(g.coin_amount)::bigint AS score
+              SUM(COALESCE(g.diamond_amount, g.coin_amount))::bigint AS score
             FROM gift_transactions g
             JOIN gifts gf ON gf.id = g.gift_id AND gf.category = 'cp'
             JOIN cp_pairs p ON p.user_a = LEAST(g.sender_id, g.receiver_id) AND p.user_b = GREATEST(g.sender_id, g.receiver_id) AND p.relation = 'cp'
@@ -71,7 +71,7 @@ function rankingSql(kind, side = 'sender') {
             GROUP BY 1, 2`;
   }
   if (kind === 'king' || kind === 'queen') {
-    return `SELECT g.receiver_id AS user_id, NULL::uuid AS partner_id, SUM(g.coin_amount)::bigint AS score
+    return `SELECT g.receiver_id AS user_id, NULL::uuid AS partner_id, SUM(COALESCE(g.diamond_amount, g.coin_amount))::bigint AS score
             FROM gift_transactions g JOIN users u ON u.id = g.receiver_id
             WHERE g.created_at >= $1 AND g.created_at < $2
               AND u.gender = $3::text AND u.account_status = 'active'
@@ -282,12 +282,95 @@ export async function settleWeek(start, end) {
     announceUserChange(w.userId);
   }
   if (winners.length) {
-    const users = new Map((await loadPublicRows([...new Set(winners.map((w) => w.userId))])).map((u) => [u.id, u]));
-    const lines = winners.map((w) => `${w.title} ${publicUser(users.get(w.userId), null)?.displayName ?? ''}`);
-    const body = `Geçen haftanın kazananları:\n${lines.join('\n')}`.slice(0, 2000);
-    await query(`INSERT INTO announcements(kind, title, body) VALUES('event', 'Haftalık etkinlik sonuçları', $1)`, [body]).catch((e) => console.error('[etkinlik] duyuru:', e.message));
+    await publishResults(start).catch((e) => console.error('[etkinlik] duyuru:', e.message));
   }
   return winners;
+}
+
+// ---------------------------------------------------------------- sonuç duyuruları
+/** Etkinlik grupları (uygulamadaki etkinlik sayfaları ve görselleriyle aynı). */
+export const EVENT_GROUPS = { couple: ['couple'], royal: ['king', 'queen'], star: ['star1', 'star2', 'star3', 'star4'] };
+const GROUP_TITLES = { couple: 'Haftanın Çifti', royal: 'Haftalık Kral ve Kraliçe', star: 'Haftalık Yıldızlar' };
+
+/** Duyuruda saklanan kısa kullanıcı (o haftaki ad ve fotoğraf; gizli kullanıcı gizli görünür). */
+function miniUser(row) {
+  const u = publicUser(row, null);
+  return u ? { id: u.id, displayName: u.displayName, avatarUrl: u.avatarUrl ?? null, frameUrl: u.frameUrl ?? null, isHidden: Boolean(u.isHidden) } : null;
+}
+
+/**
+ * Bir haftanın sonuçlarından etkinlik grubu başına bir duyuru hazırlar: başlık, düz metin (eski uygulamalar için) ve
+ * kürsü verisi (meta: grup, hafta, bölümler → 1./2./3. kazananlar; çiftte eşiyle, yıldızda hediyesiyle).
+ */
+export async function resultAnnouncements(weekStart, run = query, loadUsers = loadPublicRows) {
+  const rows = (await run(
+    `SELECT r.kind, r.rank, r.user_id, r.partner_id, r.score, g.name AS gift_name, g.icon_url AS gift_icon
+     FROM weekly_event_results r LEFT JOIN gifts g ON g.id = r.gift_id
+     WHERE r.week_start = $1 ORDER BY r.kind, r.rank`,
+    [weekStart],
+  )).rows;
+  if (!rows.length) return [];
+  const users = new Map((await loadUsers([...new Set(rows.flatMap((r) => [r.user_id, r.partner_id]).filter(Boolean))])).map((u) => [u.id, u]));
+  const week = new Date(weekStart).toISOString();
+  const out = [];
+  for (const [group, kinds] of Object.entries(EVENT_GROUPS)) {
+    const sections = [];
+    const lines = [];
+    for (const kind of kinds) {
+      const mine = rows.filter((r) => r.kind === kind);
+      if (!mine.length) continue;
+      const giftName = isStar(kind) ? mine[0].gift_name ?? null : null;
+      const title = `${EVENT_TITLES[kind]}${giftName ? ` · ${giftName}` : ''}`;
+      const entries = mine.map((r) => ({ rank: r.rank, user: miniUser(users.get(r.user_id)), partner: r.partner_id ? miniUser(users.get(r.partner_id)) : null }));
+      sections.push({ kind, title, giftName, giftIcon: isStar(kind) ? mine[0].gift_icon ?? null : null, entries });
+      for (const e of entries) {
+        lines.push(`${title} ${e.rank}. ${e.user?.displayName ?? ''}${e.partner ? ` & ${e.partner.displayName}` : ''}`);
+      }
+    }
+    if (!sections.length) continue;
+    out.push({
+      group,
+      title: `${GROUP_TITLES[group]} kazananları`,
+      body: `Geçen haftanın kazananları:\n${lines.join('\n')}`.slice(0, 2000),
+      meta: { type: 'event_results', group, weekStart: week, sections },
+    });
+  }
+  return out;
+}
+
+/** Haftanın sonuç duyurularını yazar (aynı hafta için bir kez). at: duyuru zamanı (geçmiş haftalar için). */
+export async function publishResults(weekStart, at = null) {
+  const week = new Date(weekStart).toISOString();
+  const exists = await query(`SELECT 1 FROM announcements WHERE kind = 'event' AND meta->>'type' = 'event_results' AND meta->>'weekStart' = $1 LIMIT 1`, [week]);
+  if (exists.rowCount) return 0;
+  const list = await resultAnnouncements(weekStart);
+  let i = 0;
+  for (const a of list) {
+    await query(
+      `INSERT INTO announcements(kind, title, body, meta, created_at)
+       VALUES('event', $1, $2, $3, COALESCE($4::timestamptz, NOW()) + ($5::int * INTERVAL '1 second'))`,
+      [a.title, a.body, JSON.stringify(a.meta), at, i],
+    );
+    i += 1;
+  }
+  return list.length;
+}
+
+/**
+ * Eski düz metin "Haftalık etkinlik sonuçları" duyurularını etkinlik görselli kürsü duyurularıyla değiştirir
+ * (son 12 hafta; bir kez, sunucu açılışında).
+ */
+export async function upgradeLegacyResultAnnouncements() {
+  const legacy = await query(`SELECT id FROM announcements WHERE kind = 'event' AND title = 'Haftalık etkinlik sonuçları' AND meta IS NULL`);
+  if (!legacy.rowCount) return 0;
+  const weeks = (await query(
+    `SELECT s.week_start, s.settled_at FROM weekly_event_settlements s
+     WHERE EXISTS (SELECT 1 FROM weekly_event_results r WHERE r.week_start = s.week_start)
+     ORDER BY s.week_start DESC LIMIT 12`,
+  )).rows;
+  for (const w of weeks.reverse()) await publishResults(w.week_start, w.settled_at);
+  await query(`DELETE FROM announcements WHERE id = ANY($1::uuid[])`, [legacy.rows.map((x) => x.id)]);
+  return weeks.length;
 }
 
 /** Geçen hafta kapatılmadıysa kapatır. Sunucu açılışında ve 5 dakikada bir çalışır. */
@@ -301,6 +384,7 @@ export function startWeeklyEventsTicker() {
     if (w) console.log(`[etkinlik] hafta kapatıldı, ${w.length} ödül sahibi.`);
   }).catch((e) => console.error('[etkinlik] haftalık dağıtım hatası:', e.message)));
   setTimeout(run, 30e3).unref();
+  setTimeout(() => upgradeLegacyResultAnnouncements().catch((e) => console.error('[etkinlik] eski duyurular:', e.message)), 20e3).unref();
   const t = setInterval(run, 5 * 60e3);
   t.unref();
   return t;

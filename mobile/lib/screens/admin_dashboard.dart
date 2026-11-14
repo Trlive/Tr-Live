@@ -10,6 +10,7 @@ import 'admin_topup_screen.dart';
 import 'admin_room_themes_screen.dart';
 import 'admin_screenshots_screen.dart';
 import 'admin_checkin_screen.dart';
+import 'admin_lucky_pools_screen.dart';
 
 String _dt(dynamic iso) {
   final d = DateTime.tryParse((iso ?? '').toString())?.toLocal();
@@ -486,9 +487,21 @@ class _AppConfigScreenState extends State<AppConfigScreen> {
     'maxMuteMinutes': TextEditingController(),
     'luckyRtpPct': TextEditingController(),
     'luckyReceiverPct': TextEditingController(),
+    'luckyJackpotPct': TextEditingController(),
     'luckyMaxWin': TextEditingController(),
     'luckyAnnounceMultiplier': TextEditingController(),
+    'firebaseProjectId': TextEditingController(),
+    'firebaseApiKey': TextEditingController(),
+    'firebaseAppId': TextEditingController(),
+    'firebaseSenderId': TextEditingController(),
+    'smtpHost': TextEditingController(),
+    'smtpPort': TextEditingController(),
+    'smtpUser': TextEditingController(),
+    'smtpPass': TextEditingController(),
+    'smtpFrom': TextEditingController(),
   };
+  bool _phoneVerifyRequired = true;
+  bool _smtpSecure = true;
   bool _blockLinks = true;
   bool _blockPhones = true;
   bool _luckyEnabled = true;
@@ -499,7 +512,8 @@ class _AppConfigScreenState extends State<AppConfigScreen> {
   bool _saving = false;
   String? _error;
 
-  static const _ints = ['flyTextCoins', 'strikeLimit', 'strikeWindowMin', 'muteMinutes', 'maxMuteMinutes', 'luckyMaxWin', 'luckyAnnounceMultiplier'];
+  static const _ints = ['flyTextCoins', 'strikeLimit', 'strikeWindowMin', 'muteMinutes', 'maxMuteMinutes', 'luckyMaxWin', 'luckyAnnounceMultiplier', 'smtpPort'];
+  static const _strs = ['firebaseProjectId', 'firebaseApiKey', 'firebaseAppId', 'firebaseSenderId', 'smtpHost', 'smtpUser', 'smtpPass', 'smtpFrom'];
 
   /// Sunucu baz puan tutar (7000 = %70); panelde yüzde gösterilir.
   static String _pct(dynamic bps) {
@@ -541,7 +555,10 @@ class _AppConfigScreenState extends State<AppConfigScreen> {
         _roomActivities = c['roomActivitiesEnabled'] != false;
         _blockRooted = c['blockRooted'] == true;
         _sslPinning = c['sslPinning'] == true;
-        _text['luckyRtpPct']!.text = _pct(c['luckyRtpBps'] ?? 7000);
+        _phoneVerifyRequired = c['phoneVerifyRequired'] != false;
+        _smtpSecure = c['smtpSecure'] != false;
+        _text['luckyRtpPct']!.text = _pct(c['luckyRtpBps'] ?? 6000);
+        _text['luckyJackpotPct']!.text = _pct(c['luckyJackpotShareBps'] ?? 2500);
         _text['luckyReceiverPct']!.text = _pct(c['luckyReceiverBps'] ?? 1000);
         _loading = false;
       });
@@ -568,6 +585,9 @@ class _AppConfigScreenState extends State<AppConfigScreen> {
       'sslPinning': _sslPinning,
       'luckyEnabled': _luckyEnabled,
       'roomActivitiesEnabled': _roomActivities,
+      'phoneVerifyRequired': _phoneVerifyRequired,
+      'smtpSecure': _smtpSecure,
+      for (final k in _strs) k: _text[k]!.text.trim(),
     };
     for (final k in _ints) {
       final n = int.tryParse(_text[k]!.text.trim());
@@ -579,7 +599,8 @@ class _AppConfigScreenState extends State<AppConfigScreen> {
     }
     final rtp = double.tryParse(_text['luckyRtpPct']!.text.trim().replaceAll(',', '.'));
     final share = double.tryParse(_text['luckyReceiverPct']!.text.trim().replaceAll(',', '.'));
-    if (rtp == null || share == null) {
+    final jackpot = double.tryParse(_text['luckyJackpotPct']!.text.trim().replaceAll(',', '.'));
+    if (rtp == null || share == null || jackpot == null) {
       toast(context, 'Şanslı hediye yüzdeleri sayı olmalı.', error: true);
       return;
     }
@@ -589,6 +610,11 @@ class _AppConfigScreenState extends State<AppConfigScreen> {
     }
     body['luckyRtpBps'] = (rtp * 100).round();
     body['luckyReceiverBps'] = (share * 100).round();
+    if (jackpot < 0 || jackpot > 80) {
+      toast(context, 'Büyük ödül payı %0-80 arasında olmalı.', error: true);
+      return;
+    }
+    body['luckyJackpotShareBps'] = (jackpot * 100).round();
     final min = body['minAppVersion'] as String;
     if (min != '0.0.0' &&
         !await confirm(context, 'En düşük sürüm $min olacak. Bu sürümün altındaki uygulamalar "Güncelleme gerekli" ekranı görür ve kullanılamaz. Devam edilsin mi?',
@@ -601,6 +627,15 @@ class _AppConfigScreenState extends State<AppConfigScreen> {
     if (!mounted) return;
     setState(() => _saving = false);
     if (r != null) toast(context, 'Ayarlar kaydedildi.');
+  }
+
+  /// Kaydedilmiş SMTP ayarlarıyla deneme e-postası.
+  Future<void> _testMail() async {
+    final f = await formDialog(context, 'Deneme e-postası', ['Alıcı e-posta']);
+    final to = f?['Alıcı e-posta']?.trim() ?? '';
+    if (to.isEmpty || !mounted) return;
+    final r = await guard(context, () => Api.post('/api/admin/app-config/test-mail', {'to': to}));
+    if (r != null && mounted) toast(context, 'Deneme e-postası gönderildi. Gelen kutusunu (ve spam klasörünü) kontrol edin.');
   }
 
   Widget _field(String key, String label, {String? hint, bool number = false, int maxLines = 1}) => Padding(
@@ -646,6 +681,50 @@ class _AppConfigScreenState extends State<AppConfigScreen> {
                     onChanged: (v) => setState(() => _roomActivities = v),
                   ),
                   const Divider(height: Gap.xl),
+                  const Text('Telefon doğrulaması (Firebase SMS)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Firebase konsolu > Proje ayarları > Android uygulaması (com.trlive.tr_live) bilgilerinden. Proje kimliği boşken telefonla kayıt kodsuz çalışır. '
+                    'Değişiklik APK yayınlamadan geçerli olur.',
+                    style: TextStyle(color: Pal.textDim, fontSize: 12.5, height: 1.35),
+                  ),
+                  const SizedBox(height: Gap.m),
+                  _field('firebaseProjectId', 'Proje kimliği (Project ID)', hint: 'trlive-12345'),
+                  _field('firebaseApiKey', 'Web API anahtarı (API key)', hint: 'AIza...'),
+                  _field('firebaseAppId', 'Android uygulama kimliği (App ID)', hint: '1:1234567890:android:abc123...'),
+                  _field('firebaseSenderId', 'Gönderici numarası (Project number)', hint: '1234567890', number: true),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Telefonla kayıtta SMS kodu zorunlu'),
+                    subtitle: const Text('Kapalıyken yalnızca şifremi unuttum ve telefon bağlama SMS kullanır.'),
+                    value: _phoneVerifyRequired,
+                    onChanged: (v) => setState(() => _phoneVerifyRequired = v),
+                  ),
+                  const Divider(height: Gap.xl),
+                  const Text('E-posta gönderimi (SMTP)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'E-posta doğrulama kodu ve şifre sıfırlama için. Örn. Brevo: smtp-relay.brevo.com, 587, SSL kapalı; Gmail: smtp.gmail.com, 465, SSL açık (uygulama şifresiyle).',
+                    style: TextStyle(color: Pal.textDim, fontSize: 12.5, height: 1.35),
+                  ),
+                  const SizedBox(height: Gap.m),
+                  _field('smtpHost', 'SMTP sunucusu', hint: 'smtp-relay.brevo.com'),
+                  _field('smtpPort', 'Port', hint: '465 / 587', number: true),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Doğrudan SSL (465)'),
+                    subtitle: const Text('Kapalıyken 587 + STARTTLS kullanılır (şifresiz gönderilmez).'),
+                    value: _smtpSecure,
+                    onChanged: (v) => setState(() => _smtpSecure = v),
+                  ),
+                  _field('smtpUser', 'Kullanıcı adı'),
+                  _field('smtpPass', 'Şifre / SMTP anahtarı (kayıtlıysa ••• görünür)'),
+                  _field('smtpFrom', 'Gönderen', hint: 'TR Live <no-reply@alanadiniz.com>'),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: OutlinedButton.icon(onPressed: _testMail, icon: const Icon(Icons.outgoing_mail), label: const Text('Deneme e-postası gönder')),
+                  ),
+                  const Divider(height: Gap.xl),
                   const Text('Otomatik moderasyon', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
@@ -687,8 +766,10 @@ class _AppConfigScreenState extends State<AppConfigScreen> {
                   const Text('Şanslı hediye', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
                   const SizedBox(height: 4),
                   const Text(
-                    'Gönderen her adet için x2–x500 kazanma şansı yakalar. Geri dönüş oranı uzun vadede gönderilen Coin\'in ne kadarının '
-                    'çekilişle geri döndüğüdür; alıcı payı hediye değerinin alıcıya Elmas olarak geçen kısmıdır. İkisinin toplamı en fazla %95.',
+                    'Havuzlu sistem (Yoho / Bigo): her adet x1–x1000 çekilişe girer, kazançlar yalnızca hediyenin havuzundan ödenir. '
+                    'Geri dönüş oranı, gönderilen Coin\'in havuza giren payıdır (uzun vadede en fazla bu kadar geri döner). '
+                    'Bunun "büyük ödül payı" kadarı büyük ödül havuzuna gider; o havuz fiyat × 100 dolunca x100–x1000 açılır. '
+                    'Alıcı payı hediye değeridir (Elmas, puan, sıralama). Geri dönüş + alıcı payı en fazla %95.',
                     style: TextStyle(color: Pal.textDim, fontSize: 12.5, height: 1.35),
                   ),
                   SwitchListTile(
@@ -697,10 +778,16 @@ class _AppConfigScreenState extends State<AppConfigScreen> {
                     value: _luckyEnabled,
                     onChanged: (v) => setState(() => _luckyEnabled = v),
                   ),
-                  _field('luckyRtpPct', 'Geri dönüş oranı % (0-90)', number: true),
+                  _field('luckyRtpPct', 'Geri dönüş oranı (havuza giden) % (0-90)', number: true),
+                  _field('luckyJackpotPct', 'Bunun büyük ödül havuzuna giden kısmı % (0-80)', number: true),
                   _field('luckyReceiverPct', 'Alıcı payı % (0-50)', number: true),
                   _field('luckyMaxWin', 'Tek gönderimde en fazla kazanç (Coin)', number: true),
-                  _field('luckyAnnounceMultiplier', 'Tüm uygulamaya duyurulacak en düşük çarpan (10-500)', number: true),
+                  _field('luckyAnnounceMultiplier', 'Tüm uygulamaya duyurulacak en düşük çarpan (10-1000)', number: true),
+                  OutlinedButton.icon(
+                    onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminLuckyPoolsScreen())),
+                    icon: const Icon(Icons.savings_outlined),
+                    label: const Text('Havuzları gör / havuza ekle'),
+                  ),
                   const SizedBox(height: Gap.s),
                   FilledButton.icon(
                     onPressed: _saving ? null : _save,

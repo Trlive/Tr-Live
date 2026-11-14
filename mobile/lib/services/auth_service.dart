@@ -58,11 +58,12 @@ class AuthService {
         'device': await DeviceInfo.collect(),
       }));
 
-  /// Telefon numarasıyla kayıt (SMS kodu yok): numara + şifre + görünen ad.
-  static Future<void> registerPhone(String phone, String password, String displayName) async => _save(await Api.post('/api/auth/register-phone', {
+  /// Telefon numarasıyla kayıt: numara + şifre + görünen ad. [idToken]: SMS doğrulaması açıksa Firebase kimlik token'ı.
+  static Future<void> registerPhone(String phone, String password, String displayName, {String? idToken}) async => _save(await Api.post('/api/auth/register-phone', {
         'phone': phone,
         'password': password,
         'displayName': displayName,
+        if (idToken != null) 'idToken': idToken,
         'device': await DeviceInfo.collect(),
       }));
 

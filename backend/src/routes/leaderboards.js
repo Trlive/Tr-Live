@@ -36,7 +36,7 @@ router.get('/', async (req, res) => {
     } else if (type === 'rooms') {
       // Oda kapanınca silindiği için yalnızca şu an açık (gizli olmayan) odalar sıralanır.
       rows = (await query(
-        `SELECT r.id, r.name, r.room_type, SUM(gt.coin_amount) AS total,
+        `SELECT r.id, r.name, r.room_type, SUM(COALESCE(gt.diamond_amount, gt.coin_amount)) AS total,
                 (SELECT COUNT(*)::int FROM room_members rm WHERE rm.room_id = r.id AND (rm.microphone OR rm.user_id NOT IN (SELECT id FROM active_ghosts))) AS member_count
          FROM gift_transactions gt JOIN rooms r ON r.id = gt.room_id AND r.is_active = TRUE AND r.is_hidden = FALSE
          WHERE gt.sender_id <> gt.receiver_id AND ($1::timestamptz IS NULL OR gt.created_at >= $1::timestamptz)
@@ -66,8 +66,9 @@ router.get('/', async (req, res) => {
       )).rows;
     } else {
       const col = type === 'senders' ? 'sender_id' : 'receiver_id';
-      // Gönderen sıralaması harcanan Coin'e, alan sıralaması alınan Elmasa göre (şanslı hediyede alıcıya pay geçer).
-      const amount = type === 'senders' ? 'gt.coin_amount' : 'COALESCE(gt.diamond_amount, gt.coin_amount)';
+      // Sıralama hediye değerine göre: normal hediyede tam fiyat, şanslı hediyede alıcı payı (diamond_amount) — gönderen
+      // ve alan sıralamasında aynı (Yoho / Bigo): geri kazanılan Coin'le tekrar gönderilen şanslı hediye sıralamayı kasmaz.
+      const amount = 'COALESCE(gt.diamond_amount, gt.coin_amount)';
       rows = (await query(
         `SELECT gt.${col} AS user_id, SUM(${amount}) AS total FROM gift_transactions gt
          WHERE gt.sender_id <> gt.receiver_id AND ($1::timestamptz IS NULL OR gt.created_at >= $1::timestamptz)
@@ -113,7 +114,7 @@ router.get('/', async (req, res) => {
       )).rows[0].total;
     } else {
       const col = type === 'senders' ? 'sender_id' : 'receiver_id';
-      const amount = type === 'senders' ? 'coin_amount' : 'COALESCE(diamond_amount, coin_amount)';
+      const amount = 'COALESCE(diamond_amount, coin_amount)';
       t = (await query(
         `SELECT COALESCE(SUM(${amount}), 0) AS total FROM gift_transactions WHERE ${col} = $1 AND sender_id <> receiver_id
            AND ($2::timestamptz IS NULL OR created_at >= $2::timestamptz)`,

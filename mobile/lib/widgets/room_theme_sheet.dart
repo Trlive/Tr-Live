@@ -12,7 +12,7 @@ import 'room_theme.dart';
 ///  * "Müsait": önce satın alınanlar ve özel tema (altlarında "Kullan" düğmesi), sonra Coin'siz temalar (dokununca uygulanır).
 ///  * "Mağaza": Coin'li, süreli temalar. Satın alınmışsa "Kullan" + "Uzat", değilse "Satın al".
 /// [onApply] temayı odaya uygular; başarılıysa true döner. Oda sesi ve bağlantısı etkilenmez.
-Future<void> showRoomThemeSheet(BuildContext context, {required String roomId, required String current, required Future<bool> Function(String key) onApply}) {
+Future<void> showRoomThemeSheet(BuildContext context, {required String roomId, required String current, String? currentImage, required Future<bool> Function(String key) onApply}) {
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -20,15 +20,17 @@ Future<void> showRoomThemeSheet(BuildContext context, {required String roomId, r
     barrierColor: Colors.black45,
     shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
     clipBehavior: Clip.antiAlias,
-    builder: (c) => SizedBox(height: MediaQuery.sizeOf(c).height * 0.62, child: _ThemeSheet(roomId: roomId, current: current, onApply: onApply)),
+    builder: (c) => SizedBox(height: MediaQuery.sizeOf(c).height * 0.62, child: _ThemeSheet(roomId: roomId, current: current, currentImage: currentImage, onApply: onApply)),
   );
 }
 
 class _ThemeSheet extends StatefulWidget {
   final String roomId;
   final String current;
+  /// Odanın tema görseli (özel temalardan hangisinin kullanıldığını belirler).
+  final String? currentImage;
   final Future<bool> Function(String key) onApply;
-  const _ThemeSheet({required this.roomId, required this.current, required this.onApply});
+  const _ThemeSheet({required this.roomId, required this.current, this.currentImage, required this.onApply});
 
   @override
   State<_ThemeSheet> createState() => _ThemeSheetState();
@@ -37,18 +39,29 @@ class _ThemeSheet extends StatefulWidget {
 class _ThemeSheetState extends State<_ThemeSheet> with SingleTickerProviderStateMixin {
   late final TabController _tabs = TabController(length: 2, vsync: this);
   late String _current = widget.current;
+
+  /// Özel temada seçim anahtarı görselden bulunur ("custom:<id>"); temalar yüklenince yeniden hesaplanır.
+  void _resolveCurrent() {
+    if (_current == kCustomThemeKey) _current = RoomThemes.selectedKey(_current, widget.currentImage);
+  }
   bool _loading = true;
   String? _busy;
 
   @override
   void initState() {
     super.initState();
+    _resolveCurrent();
     _reload();
   }
 
   Future<void> _reload() async {
     await RoomThemes.load(roomId: widget.roomId, force: true);
-    if (mounted) setState(() => _loading = false);
+    if (mounted) {
+      setState(() {
+        _loading = false;
+        _resolveCurrent();
+      });
+    }
   }
 
   @override
@@ -211,13 +224,13 @@ class _ThemeSheetState extends State<_ThemeSheet> with SingleTickerProviderState
   Widget _available() {
     final self = RoomThemes.self;
     final customs = self ? RoomThemes.custom.where((c) => c.status != 'expired').toList() : <CustomTheme>[];
-    final active = RoomThemes.activeCustom;
     final owned = RoomThemes.all.where((t) => !t.free && t.owned).toList();
     final free = RoomThemes.all.where((t) => t.free).toList();
     final mine = <Widget>[
       for (final c in customs)
-        if (c.active) _ownedTile(key: kCustomThemeKey, image: c.imageUrl, label: tx('Özel tema'), days: c.daysLeft) else _customState(c),
-      if (!self && active != null) _ownedTile(key: kCustomThemeKey, image: active.imageUrl, label: tx('Özel tema'), days: active.daysLeft),
+        if (c.active) _ownedTile(key: customKeyOf(c), image: c.imageUrl, label: tx('Özel tema'), days: c.daysLeft) else _customState(c),
+      if (!self)
+        for (final c in RoomThemes.activeCustoms) _ownedTile(key: customKeyOf(c), image: c.imageUrl, label: tx('Özel tema'), days: c.daysLeft),
       for (final t in owned) _ownedTile(key: t.key, image: t.thumbUrl, colors: t.colors, label: t.label, days: t.daysLeft, animated: t.animated),
     ];
     const grid = SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, mainAxisSpacing: 12, crossAxisSpacing: 12, childAspectRatio: 0.62);

@@ -42,3 +42,59 @@ rootProject.allprojects { p ->
         t.enabled = false
     }
 }
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Kalıcı imza (v2.100.0). İş akışı her derlemede yeni bir geçici (debug) anahtarla imzalıyordu: her APK'nın imzası farklı
+// olduğu için telefondaki uygulama üstüne kurulamıyor, Firebase SMS doğrulaması (SHA parmak izi) ve Play Store çalışmıyordu.
+// Yayın APK'sı oluşturulduktan sonra mobile/imza/upload.jks ile yeniden imzalanır (apksigner; v1+v2+v3 imza, hizalama korunur).
+// Anahtar yoksa hiçbir şey değişmez. Gradle'ın uygulama ayarlarına dokunulmaz; yalnızca derleme adımının sonuna eklenir.
+// ---------------------------------------------------------------------------------------------------------------------
+def trliveSignDir = new File(rootProject.projectDir.parentFile, "imza")
+def trliveSignProps = new File(trliveSignDir, "imza.properties")
+if (trliveSignProps.exists()) {
+    def sp = new Properties()
+    trliveSignProps.withInputStream { sp.load(it) }
+    def storeFile = new File(trliveSignDir, sp.getProperty("storeFile", "upload.jks"))
+    def alias = sp.getProperty("keyAlias", "trlive")
+    def storePw = sp.getProperty("storePassword", "")
+    def keyPw = sp.getProperty("keyPassword", storePw)
+    def sdkDir = android.sdkDirectory
+    def outRoot = new File(rootProject.projectDir.parentFile, "build/app/outputs")
+
+    def trliveSign = {
+        def tools = new File(sdkDir, "build-tools").listFiles()?.findAll { new File(it, "apksigner").exists() } ?: []
+        if (tools.isEmpty()) throw new GradleException("TR Live imza: Android build-tools içinde apksigner bulunamadı (${sdkDir})")
+        // En yeni build-tools sürümü (35.0.0 > 34.0.0 > 30.0.3 …).
+        def ver = { File f -> f.name.tokenize('.-').collect { it.isInteger() ? it.toInteger() : 0 } }
+        def best = tools.sort { a, b ->
+            def x = ver(a), y = ver(b)
+            for (int i = 0; i < Math.max(x.size(), y.size()); i++) {
+                def c = (i < x.size() ? x[i] : 0) <=> (i < y.size() ? y[i] : 0)
+                if (c != 0) return c
+            }
+            return 0
+        }.last()
+        def apksigner = new File(best, "apksigner").absolutePath
+        def apks = []
+        if (outRoot.exists()) outRoot.eachFileRecurse { f -> if (f.name.endsWith(".apk") && f.name.contains("release")) apks << f }
+        if (apks.isEmpty()) println("TR Live imza: imzalanacak yayın APK'sı bulunamadı (${outRoot})")
+        apks.each { File apk ->
+            def cmd = [apksigner, "sign", "--ks", storeFile.absolutePath, "--ks-key-alias", alias,
+                       "--ks-pass", "pass:" + storePw, "--key-pass", "pass:" + keyPw, apk.absolutePath]
+            def proc = new ProcessBuilder(cmd).redirectErrorStream(true).start()
+            def out = proc.inputStream.text
+            if (proc.waitFor() != 0) throw new GradleException("TR Live imza başarısız (${apk.name}): " + out)
+            def check = new ProcessBuilder([apksigner, "verify", "--print-certs", apk.absolutePath]).redirectErrorStream(true).start()
+            def certs = check.inputStream.text
+            check.waitFor()
+            println("TR Live imza: ${apk.name} kalıcı anahtarla imzalandı.")
+            certs.readLines().findAll { it.contains("SHA-256") || it.contains("SHA-1") }.each { println("  " + it.trim()) }
+        }
+    }
+
+    def appProject = rootProject.findProject(":app")
+    if (appProject != null) {
+        // Flutter kopyalama adımı (flutter-apk klasörü) assembleRelease'in sonunda çalışır; imza ondan sonra eklenir.
+        appProject.tasks.matching { it.name == "assembleRelease" }.configureEach { t -> t.doLast { trliveSign() } }
+    }
+}

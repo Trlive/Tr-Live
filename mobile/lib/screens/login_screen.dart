@@ -2,6 +2,8 @@ import 'dart:math' as math;
 import '../l10n/l10n.dart';
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
+import '../services/phone_verify.dart';
+import 'verify_screens.dart';
 import '../widgets/common.dart';
 import 'home_screen.dart';
 import 'legal_screens.dart';
@@ -114,7 +116,18 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     try {
       final id = _id.text.trim();
       if (_mode == _Mode.phone && _register) {
-        await AuthService.registerPhone(id, _password.text, _displayName.text.trim());
+        // SMS doğrulaması açıksa (yönetim > Firebase) önce numara kodla doğrulanır.
+        String? idToken;
+        if (await Verify.phoneOn()) {
+          final e164 = toE164(id);
+          if (e164 == null) throw Exception(tx('Telefon numarası geçersiz.'));
+          if (!mounted) return;
+          setState(() => _busy = false);
+          idToken = await verifyPhone(context, e164);
+          if (idToken == null || !mounted) return; // vazgeçti
+          setState(() => _busy = true);
+        }
+        await AuthService.registerPhone(id, _password.text, _displayName.text.trim(), idToken: idToken);
       } else if (_mode == _Mode.username && _register) {
         final name = _displayName.text.trim();
         await AuthService.register(id.toLowerCase(), _password.text, name.isEmpty ? id : name);
@@ -359,6 +372,15 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
       if (_register) _consent(),
       const SizedBox(height: 22),
       _goldButton(icon: _register ? Icons.how_to_reg_rounded : Icons.login_rounded, text: _register ? tx('Kayıt ol') : tx('Giriş yap'), onTap: _busy ? null : _submit, busy: _busy),
+      if (!_register)
+        Align(
+          alignment: AlignmentDirectional.centerEnd,
+          child: TextButton(
+            style: TextButton.styleFrom(foregroundColor: const Color(0xFFE8C66A)),
+            onPressed: _busy ? null : () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ForgotPasswordScreen())),
+            child: Text(tx('Şifremi unuttum')),
+          ),
+        ),
       const SizedBox(height: 8),
       TextButton.icon(
         style: TextButton.styleFrom(foregroundColor: const Color(0xFFB9A57A)),

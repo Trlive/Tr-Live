@@ -566,10 +566,11 @@ class _DeviceAudioPageState extends State<DeviceAudioPage> with WidgetsBindingOb
 
 // ======================================================================= Odadaki plak ve DJ paneli
 /// Odada müziği çalan kişiye görünen plak (çalarken döner). Dokununca DJ paneli açılır / kapanır.
+/// [onTap] boşsa plak dokunuşu yakalamaz (sürüklenebilir balonun içindeyken dokunuşu balon alır).
 class DjDisc extends StatefulWidget {
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   final double size;
-  const DjDisc({super.key, required this.onTap, this.size = 50});
+  const DjDisc({super.key, this.onTap, this.size = 50});
 
   @override
   State<DjDisc> createState() => _DjDiscState();
@@ -596,9 +597,7 @@ class _DjDiscState extends State<DjDisc> with SingleTickerProviderStateMixin {
           _spin.stop();
         }
         final d = widget.size;
-        return GestureDetector(
-          onTap: widget.onTap,
-          child: SizedBox(
+        final disc = SizedBox(
             width: d * 1.15,
             height: d * 1.15,
             child: Stack(children: [
@@ -640,8 +639,9 @@ class _DjDiscState extends State<DjDisc> with SingleTickerProviderStateMixin {
               ),
               Positioned(right: 0, top: 0, child: Container(width: 8, height: 8, decoration: const BoxDecoration(color: _goldHi, shape: BoxShape.circle))),
             ]),
-          ),
-        );
+          );
+        final tap = widget.onTap;
+        return tap == null ? disc : GestureDetector(onTap: tap, behavior: HitTestBehavior.opaque, child: disc);
       },
     );
   }
