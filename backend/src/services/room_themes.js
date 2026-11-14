@@ -211,7 +211,7 @@ export async function resolveRoomTheme(ownerId, key, q = query) {
   }
   if (!isThemeKey(key)) throw fail('Tema geçersiz.');
   const t = (await q(`SELECT key, price_coins FROM room_themes WHERE key = $1 AND is_active = TRUE AND is_deleted = FALSE`, [key])).rows[0];
-  if (!t) throw fail('Tema bulunamadı.', 404);
+  if (!t) throw fail('Tema geçersiz.');
   if (BigInt(t.price_coins) > 0n && !(await themeUntil(ownerId, key, q))) throw fail('Bu temanın süresi yok. Önce Mağaza\'dan satın alın.', 403);
   return { theme: t.key };
 }

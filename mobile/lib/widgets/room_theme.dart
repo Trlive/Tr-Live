@@ -277,10 +277,11 @@ class _ThemeEffectLayerState extends State<ThemeEffectLayer> with SingleTickerPr
       p.ph += dt;
       switch (widget.effect) {
         case 'meteors':
-          if (p.ph < 0) continue; // bekleme
-          p.x += p.vx * dt;
-          p.y += p.vy * dt;
-          if (p.ph > 1.4) _ps[i] = _spawn();
+          if (p.ph >= 0) { // ph < 0: sırasını bekliyor
+            p.x += p.vx * dt;
+            p.y += p.vy * dt;
+            if (p.ph > 1.4) _ps[i] = _spawn();
+          }
         case 'fireflies':
           p.vx += (_rnd.nextDouble() - 0.5) * 0.02 * dt * 10;
           p.vy += (_rnd.nextDouble() - 0.5) * 0.02 * dt * 10;
@@ -349,8 +350,7 @@ class _EffectPainter extends CustomPainter {
           canvas.drawCircle(c, p.r, _fill);
         }
       case 'meteors':
-        for (final p in ps) {
-          if (p.ph < 0) continue;
+        for (final p in ps.where((p) => p.ph >= 0)) {
           final life = (1 - p.ph / 1.4).clamp(0.0, 1.0).toDouble();
           final head = Offset(p.x * s.width, p.y * s.height);
           final tail = head - Offset(p.vx * s.width, p.vy * s.height) * 0.35;

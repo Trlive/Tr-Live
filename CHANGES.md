@@ -1,3 +1,16 @@
+## v2.96.2 — APK derleme düzeltmesi
+- v2.96.0 APK derlemesi Android lint denetiminde düşüyordu (MainActivity.kt ekran görüntüsü kodu). Kod lint'e takılmayacak
+  biçimde yeniden yazıldı: Android 14 bildirimi yansıtma ile kaydedilir (@TargetApi), galeri taraması lambdasız.
+- Android 14+ ekran görüntüsü bildirimi izni artık iş akışı dosyasına dokunmadan gelir: mobile/packages/trlive_capture
+  (yalnızca AndroidManifest izni taşıyan yerel eklenti; derleme izni uygulamaya kendisi ekler).
+
+## v2.96.1 — CI düzeltmeleri
+- Sunucu açılmıyordu (e2e "Sunucu 30 sn içinde açılmadı"): güncelleme paketindeki admin.js, pakette olmayan
+  src/redact.js dosyasını içe aktarıyordu. Dosya eklendi (sunucu kayıtlarındaki şifre / token / anahtarları maskeler) + test.
+- Bilinmeyen oda teması yine 400 döner (e2e beklentisi).
+- Mobile CI: flutter analyze çıktısındaki hata ve uyarılar kaydın sonunda ayrıca listelenir ve özet sayfasında görünür.
+- Tema efekt katmanında switch içindeki continue kaldırıldı.
+
 ## v2.96.0 — Oda sohbet geçmişi ve ekran görüntüsü koruması
 - Odaya yeni giren kişi yalnızca **girdiği andan sonraki** mesajları görür (önceki sohbet gösterilmez; çıkıp girince
   yeniden o andan başlar). Bağlantı kopup aynı oturuma dönen kişi kendi giriş anından beri olanları görmeye devam eder.

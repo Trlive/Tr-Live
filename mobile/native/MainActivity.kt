@@ -321,8 +321,10 @@ class MainActivity : FlutterActivity() {
         if (shotCallback != null || shotObserver != null) return
         try {
             if (Build.VERSION.SDK_INT >= 34) {
-                // Android 14+: sistemin resmi bildirimi (DETECT_SCREEN_CAPTURE izni, kurulumda verilir).
-                shotCallback = ShotWatch.register(this) { emitShot() }
+                // Android 14+: sistemin resmi bildirimi. İzin (DETECT_SCREEN_CAPTURE) uygulamada tanımlı değilse denenmez.
+                if (checkSelfPermission("android.permission.DETECT_SCREEN_CAPTURE") == PackageManager.PERMISSION_GRANTED) {
+                    shotCallback = registerShotCallback()
+                }
             } else if (Build.VERSION.SDK_INT <= 32 && checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) {
                 // Android 12 ve öncesi: galeri izni zaten verilmişse yeni "Screenshot" dosyası fark edilir. İzin istenmez.
                 val obs = object : ContentObserver(main) {
@@ -342,7 +344,7 @@ class MainActivity : FlutterActivity() {
     private fun stopShotWatch() {
         try {
             val cb = shotCallback
-            if (cb != null && Build.VERSION.SDK_INT >= 34) ShotWatch.unregister(this, cb)
+            if (cb != null && Build.VERSION.SDK_INT >= 34) unregisterShotCallback(cb)
             shotObserver?.let { contentResolver.unregisterContentObserver(it) }
         } catch (e: Throwable) {
         }
@@ -350,20 +352,64 @@ class MainActivity : FlutterActivity() {
         shotObserver = null
     }
 
-    /** Son 10 sn içinde eklenen en yeni görselin adı / klasörü "screenshot" içeriyor mu (yalnızca ad okunur). */
-    private fun isNewScreenshot(): Boolean {
+    /** Android 14+ ekran görüntüsü bildirimi, yansıtma ile (Activity.ScreenCaptureCallback). Kayıt nesnesi ya da null. */
+    @TargetApi(34)
+    private fun registerShotCallback(): Any? {
         return try {
-            @Suppress("DEPRECATION")
-            val proj = arrayOf(MediaStore.Images.Media.DISPLAY_NAME, MediaStore.Images.Media.DATA, MediaStore.Images.Media.DATE_ADDED)
-            contentResolver.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, proj, null, null, MediaStore.Images.Media.DATE_ADDED + " DESC")?.use { c ->
-                if (!c.moveToFirst()) return false
-                val name = (c.getString(0) ?: "") + " " + (c.getString(1) ?: "")
-                val added = c.getLong(2)
-                System.currentTimeMillis() / 1000 - added <= 10 && name.lowercase().let { it.contains("screenshot") || it.contains("ekran görüntü") }
-            } ?: false
-        } catch (e: Exception) {
-            false
+            val iface = Class.forName("android.app.Activity\$ScreenCaptureCallback")
+            val handler = InvocationHandler { proxy, method, args ->
+                when (method.name) {
+                    "onScreenCaptured" -> {
+                        emitShot()
+                        null
+                    }
+                    "hashCode" -> System.identityHashCode(proxy)
+                    "equals" -> args != null && args.size == 1 && args[0] === proxy
+                    "toString" -> "TrLiveShot"
+                    else -> null
+                }
+            }
+            val cb = Proxy.newProxyInstance(iface.classLoader, arrayOf(iface), handler)
+            val reg = android.app.Activity::class.java.getMethod("registerScreenCaptureCallback", java.util.concurrent.Executor::class.java, iface)
+            reg.invoke(this, mainExecutor, cb)
+            cb
+        } catch (e: Throwable) {
+            null
         }
+    }
+
+    @TargetApi(34)
+    private fun unregisterShotCallback(cb: Any) {
+        try {
+            val iface = Class.forName("android.app.Activity\$ScreenCaptureCallback")
+            android.app.Activity::class.java.getMethod("unregisterScreenCaptureCallback", iface).invoke(this, cb)
+        } catch (e: Throwable) {
+        }
+    }
+
+    /** Son 10 sn içinde eklenen en yeni görselin adı / klasörü "screenshot" içeriyor mu (yalnızca ad okunur). */
+    @Suppress("DEPRECATION")
+    private fun isNewScreenshot(): Boolean {
+        var found = false
+        var cursor: android.database.Cursor? = null
+        try {
+            val proj = arrayOf(MediaStore.Images.Media.DISPLAY_NAME, MediaStore.Images.Media.DATA, MediaStore.Images.Media.DATE_ADDED)
+            cursor = contentResolver.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, proj, null, null, MediaStore.Images.Media.DATE_ADDED + " DESC")
+            if (cursor != null && cursor.moveToFirst()) {
+                val name = ((cursor.getString(0) ?: "") + " " + (cursor.getString(1) ?: "")).lowercase()
+                val added = cursor.getLong(2)
+                val recent = System.currentTimeMillis() / 1000 - added <= 10
+                found = recent && (name.contains("screenshot") || name.contains("ekran"))
+            }
+        } catch (e: Exception) {
+            found = false
+        } finally {
+            try {
+                cursor?.close()
+            } catch (e: Exception) {
+            }
+        }
+        return found
     }
 
     override fun onResume() {
@@ -467,20 +513,6 @@ class MainActivity : FlutterActivity() {
         legacyListener = null
         phoneBusy = false
         modeBusy = false
-    }
-}
-
-/// Android 14+ ekran görüntüsü bildirimi (Activity.ScreenCaptureCallback). Eski sürümlerde bu sınıf hiç yüklenmez.
-@TargetApi(34)
-private object ShotWatch {
-    fun register(activity: android.app.Activity, onShot: () -> Unit): Any {
-        val cb = android.app.Activity.ScreenCaptureCallback { onShot() }
-        activity.registerScreenCaptureCallback(activity.mainExecutor, cb)
-        return cb
-    }
-
-    fun unregister(activity: android.app.Activity, cb: Any) {
-        if (cb is android.app.Activity.ScreenCaptureCallback) activity.unregisterScreenCaptureCallback(cb)
     }
 }
 
