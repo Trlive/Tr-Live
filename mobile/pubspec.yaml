@@ -1,7 +1,7 @@
 name: tr_live
 description: TR Live - canlı sesli/görüntülü odalar, aile, WIP, ajans/yayıncı, hediyeler ve yönetim
 publish_to: none
-version: 2.96.2+1
+version: 2.96.3+1
 environment:
   sdk: '>=3.8.0 <4.0.0'
   flutter: '>=3.32.0'
@@ -31,9 +31,9 @@ dependencies:
   url_launcher: ^6.3.1
   # Oda içi etkinlikler / oyunlar için kendi sunucumuzdaki sabit H5 sayfasını gösterir (widgets/app_webview_modal.dart).
   webview_flutter: ^4.13.0
-  # Android 14+ ekran görüntüsü bildirimi izni (packages/trlive_capture: yalnızca manifest izni).
+  # Android 14+ ekran görüntüsü bildirimi izni (yerel/trlive_capture: yalnızca manifest izni).
   trlive_capture:
-    path: packages/trlive_capture
+    path: yerel/trlive_capture
 # shared_preferences_android 2.5.0 (16 Ekim 2026) yeni JNI yöntemine geçti; yayın APK'sında küçültme (R8) yüzünden
 # "NoSuchMethodError ... SharedPreferencesApiRegistrar.getAll" ile açılışta çöküyor. Sorunsuz son yayınlanmış sürüme (2.4.28) sabitlendi.
 dependency_overrides:

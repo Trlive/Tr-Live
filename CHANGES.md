@@ -1,7 +1,11 @@
+## v2.96.3 — APK derlemesi doğru klasörü bulsun
+- APK iş akışı Flutter projesini alfabetik ilk pubspec.yaml'dan seçtiği için mobile/packages/trlive_capture'ı uygulama
+  sandı. Eklenti mobile/yerel/trlive_capture'a taşındı (artık mobile/pubspec.yaml önce bulunur).
+
 ## v2.96.2 — APK derleme düzeltmesi
 - v2.96.0 APK derlemesi Android lint denetiminde düşüyordu (MainActivity.kt ekran görüntüsü kodu). Kod lint'e takılmayacak
   biçimde yeniden yazıldı: Android 14 bildirimi yansıtma ile kaydedilir (@TargetApi), galeri taraması lambdasız.
-- Android 14+ ekran görüntüsü bildirimi izni artık iş akışı dosyasına dokunmadan gelir: mobile/packages/trlive_capture
+- Android 14+ ekran görüntüsü bildirimi izni artık iş akışı dosyasına dokunmadan gelir: mobile/yerel/trlive_capture
   (yalnızca AndroidManifest izni taşıyan yerel eklenti; derleme izni uygulamaya kendisi ekler).
 
 ## v2.96.1 — CI düzeltmeleri
