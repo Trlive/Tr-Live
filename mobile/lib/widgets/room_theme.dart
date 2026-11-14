@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import '../services/api.dart';
 import '../services/effect_prefs.dart';
+import 'app_theme.dart';
 import 'net_image.dart';
 
 /// Oda teması (sunucudaki room_themes kataloğundan). Görsel 1080x1920 (9:16); her ekranda "cover" yerleşir.
@@ -455,7 +456,7 @@ class _ThemePickerState extends State<ThemePicker> {
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(10),
                       gradient: LinearGradient(colors: colors.length < 2 ? const [Colors.white24, Colors.white24] : colors, begin: Alignment.topCenter, end: Alignment.bottomCenter),
-                      border: Border.all(color: widget.value == key ? const Color(0xFF00C853) : Colors.white24, width: widget.value == key ? 3 : 1),
+                      border: Border.all(color: widget.value == key ? Pal.cyan : Colors.white24, width: widget.value == key ? 3 : 1),
                     ),
                     child: thumb == null ? null : Image(image: NetImage(Api.absoluteUrl(thumb)!, targetW: NetImage.px(54, dpr), targetH: NetImage.px(76, dpr)), fit: BoxFit.cover),
                   ),

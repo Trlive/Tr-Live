@@ -1,3 +1,22 @@
+## v2.96.7 — Tema penceresi: uygulama renkleri ve "Kullan" düğmesi
+- Tema penceresi beyaz/yeşil yerine uygulamanın koyu zemin + altın renklerinde (seçili tema altın çerçeve ve işaret).
+- Müsait: "Satın aldıklarım" (satın alınan ve özel tema; altta "Kullan" / "Kullanılıyor", kalan gün) ve
+  "Ücretsiz temalar" (dokununca uygulanır) olarak ayrıldı.
+- Mağaza: satın alınmış temada "Kullan" + "Uzat", alınmamışta "Satın al"; fiyat altın renkte.
+- Oda açma ekranındaki tema seçicide seçili çerçeve de altın.
+
+## v2.96.6 — Tema görseli kırpma ekranı
+- Tema görselinde fotoğraf artık çerçevenin içine sığana kadar küçültülebilir ("Sığdır" / "Doldur" düğmesi); geniş
+  fotoğrafın kenarları kesilmek zorunda değil. Boş kalan yer fotoğrafın bulanık, koyu hâliyle dolar; önizlemede görünen
+  kaydedilenle aynıdır. Çıktı her zaman 1080x1920.
+- Dikey çerçeve ekranın daha büyük kısmını kullanır; çerçeve dışı belirgin şekilde karartılır (neyin kesileceği görünür).
+- Profil / kapak / banner kırpmaları eskisi gibi çalışır.
+
+## v2.96.5 — Doğum Günü mikrofon modu düzeltmesi
+- "Uygula" deyince "Değer kurallara uymuyor." hatası: mod odayı 25 koltuğa çıkarıyor ama veritabanı kısıtı 25'e izin
+  vermiyordu (062'de eksik kalmış). Migration 065 ile 25 koltuk rooms ve room_profiles'a eklendi.
+- Yeni test: uygulamanın izin verdiği her koltuk sayısının ve her mikrofon tasarımının veritabanı kısıtında olduğu denetlenir.
+
 ## v2.96.4 — APK derlemesi: lint denetimi
 - Yayın derlemesinde Android "lint vital" denetimi kapatıldı (mobile/yerel/trlive_capture/android/build.gradle): lint
   aracının kendisi çökerek (LintDriver.handleDetectorError) assembleRelease'i durduruyordu. APK'nın içeriği değişmez;
