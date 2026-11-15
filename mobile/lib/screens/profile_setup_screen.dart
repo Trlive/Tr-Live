@@ -64,7 +64,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       helpText: tx('Doğum günü'),
       initialEntryMode: DatePickerEntryMode.calendarOnly,
     );
-    if (d != null) setState(() => _birth = d);
+    if (d != null && mounted) setState(() => _birth = d);
   }
 
   Future<void> _pickCountry() async {
@@ -75,7 +75,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (_) => const _CountrySheet(),
     );
-    if (c != null) setState(() => _country = c);
+    if (c != null && mounted) setState(() => _country = c);
   }
 
   String _fmtDate(DateTime d) => '${d.day.toString().padLeft(2, '0')}.${d.month.toString().padLeft(2, '0')}.${d.year}';

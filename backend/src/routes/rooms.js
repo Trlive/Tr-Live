@@ -446,6 +446,11 @@ router.post('/:roomId/join', requireAuth, userLimit('room_join', 40, 60e3), asyn
     `INSERT INTO room_members(room_id, user_id, role) VALUES($1,$2,$3) ON CONFLICT (room_id, user_id) DO NOTHING RETURNING user_id`,
     [roomId, userId, room.owner_id === userId ? 'owner' : (staffRole ?? 'user')],
   );
+  // Zaten üyeydi (uygulama kapanıp açıldı / yeniden katıldı): "canlı" işareti tazelenir. Tazelenmezse eski işaretle
+  // giren kişi, soket aboneliği kurulmadan çalışan temizleyiciye denk gelip odaya girer girmez çıkarılabiliyordu.
+  if (!ins.rowCount) {
+    await query(`UPDATE room_members SET last_seen_at = NOW() WHERE room_id = $1 AND user_id = $2`, [roomId, userId]);
+  }
   // Sahip, yönetici sayesinde açık kalan odasına döndü: yayın süresi sayımı yeniden başlar (onaylı yayıncıysa).
   if (ins.rowCount && room.owner_id === userId) {
     await query(
@@ -1075,7 +1080,7 @@ router.post('/:roomId/scoreboard/reset', requireAuth, userLimit('scoreboard_rese
 });
 
 // ---------- LiveKit ----------
-router.post('/:roomId/livekit-token', requireAuth, async (req, res) => {
+router.post('/:roomId/livekit-token', requireAuth, userLimit('livekit_token', 40, 60e3), async (req, res) => {
   const roomId = uuid(req.params.roomId, 'Oda');
   await activeRoom(roomId);
   const m = (await query(

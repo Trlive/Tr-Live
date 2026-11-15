@@ -1,3 +1,54 @@
+## v2.105.0 — Bağlantı sağlamlığı, odadan düşme, ses/görüntü kalitesi, güvenlik denetimi
+Canlı bağlantı (WebSocket)
+- Sessizce ölen bağlantı odadayken 25–35 sn içinde fark edilir (eskiden 75–95 sn; o sürede oda "donmuş" görünüyordu):
+  odadayken 10 sn'de bir yoklama, 25 sn sessizlikte yeniden bağlanma. Oda dışında eskisi gibi seyrek (pil).
+- Bağlanma 12 sn içinde tamamlanmazsa beklenmez, yeniden denenir (eskiden zaman aşımı yoktu).
+- Arka plandan dönünce bağlantı hemen yoklanır (4 sn); telefon uykudan uyanınca bağlantı hemen kesilmez, önce yoklanır.
+- Oda aboneliği sunucudan onay gelene kadar yeniden istenir (onaysız kalan abonelikte oda olayları gelmiyordu).
+- Yeniden bağlanma odadayken en fazla 6 sn bekler; sunucu güncellenirken (1012) hemen bağlanılır; sunucu "çok fazla
+  bağlantı" (1013) derse üst üste denenmez, yarım dakika beklenir.
+- 4 sn'den uzun kopmalarda odada küçük "Bağlantı yenileniyor…" bilgisi.
+Güvenlik duvarı meşru kullanıcıları yasaklıyordu (odadan toplu düşme)
+- Hız sınırını aşan her istek bir ihlal puanıydı ve 30 puanda IP 15 dk → 1 saat → 24 saat yasaklanıyordu. Ölçüm (eski
+  kod): tek kişinin bir dakikada 90 hediye dokunuşu (60 geçer, 30'u reddedilir) IP'yi yasaklatıyor; aynı Wi-Fi /
+  operatör IP'sindeki herkes "Erişiminiz geçici olarak engellendi" alıp odasından düşüyordu. Görsel dosyaları da
+  IP başına 300 istek/dk sınırına sayılıyordu: 330 görsel isteği aynı sonucu veriyordu.
+- Artık sınır aşımı yine 429 döner ama tek başına IP yasağına dönüşmez ("çok istek" türü ihlaller IP başına dakikada
+  en fazla bir puan alır; eşik 30). Saldırı imzaları (WAF), oda şifresi denemeleri ve hatalı girişler eskisi gibi
+  her seferinde puanlanır.
+- Görsel / animasyon / emoji dosyaları ayrı bütçeden sayılır (IP başına 6000/dk); API bütçesi 300 → 3000/dk
+  (IP başına sınır kullanıcı başına sınır değildir; operatör NAT'ında onlarca kişi tek IP'den görünür).
+- Canlı bağlantı: IP başına 30 → 300 (kullanıcı başına 5 aynı). 31. kişi bağlanamıyor, denemeleri IP'yi yasaklatıyordu.
+- Veritabanı: 072 (hız sınırı kaynaklı eski otomatik IP yasakları kaldırılır; saldırı ve elle konan yasaklar kalır).
+- Ayarlar: FIREWALL_IP_PER_MINUTE, FIREWALL_MEDIA_PER_MINUTE, FIREWALL_WS_PER_IP.
+- deploy/fail2ban (nginx kurulumu; Oracle kurulumunda kullanılmıyor): 403 yanıtları artık yasak sebebi sayılmıyor
+  (uygulamanın olağan yanıtıdır; beş 403 alan kullanıcı 24 saat engelleniyordu), hız sınırı hapsi varsayılan kapalı.
+Odadan düşme
+- Sunucu: odaya yeniden girişte "canlı" işareti tazelenir. Tazelenmediği için eski işaretle giren kişi temizleyiciye
+  denk gelip girer girmez çıkarılabiliyor, uygulama bunu bir dakikaya kadar fark etmiyordu.
+- Oda kapandıysa / üyelik düştüyse 60 sn'lik sinyal beklenmez: soket yeniden bağlanınca, ses anahtarı reddedilince ve
+  ses sunucusu "çıkarıldın / oda silindi" deyince hemen sonuçlandırılır (çık ya da yeniden katıl).
+- "Oda açık" sinyali ağ hatasında 10 sn sonra bir kez daha denenir.
+Ses / görüntü bağlantısı
+- Ses bağlantısı üç denemeden sonra vazgeçmez: uyarı görünürken de 15 sn'de bir dener; her sinyalde ve soket
+  yeniden bağlanınca da denetlenir. Kullanıcı "Tekrar"a dokunmasa da ses geri gelir.
+- "Mikrofondayım ama sesim gitmiyor": ağ değişiminden sonra ve yayın izni geç geldiğinde mikrofon yeniden açılır;
+  izin uyuşmazlığında bağlantı güncel izinli yeni anahtarla bir kez yenilenir.
+- Aynı hesap iki cihazdan aynı odaya girerse cihazlar birbirini sürekli düşürmez: eski cihazdaki oda ekranı kapanır.
+- Kalite: ses 32 → 48 kbps (Şarj tüketimi modunda 32); canlı yayında (tek yayıncı) 540p görüntü 1,3 Mbps'e çıkar
+  (hareketli görüntüde daha net). Çözünürlük 540p kaldı: güzellik filtresi 720p'de orta sınıf telefonda kare düşürür.
+Sunucu
+- Güncellemede düzgün kapanış: Docker'ın durdurma sinyali artık sunucuya ulaşıyor (CMD "exec"), canlı bağlantılar
+  "yeniden başlıyor" koduyla kapatılıyor. Eskiden sunucu 10 sn bekleyip zorla öldürülüyordu.
+Güvenlik
+- Canlı bağlantı token'ı artık adres satırında değil Authorization başlığında (kayıtlara düşmez); eski sürümler çalışır.
+- Ses sunucusu anahtarlarında kullanılmayan veri kanalı izni kapatıldı; ses anahtarı isteğine hız sınırı eklendi.
+Tanı
+- Bağlantı kopmaları (soket / ses sunucusu / üyelik) sebebiyle birlikte Yönetim > Hata kayıtları'na yazılır.
+Diğer
+- Diyalog sonrası kapanmış ekranda çizim yapılabilen 6 yer düzeltildi.
+- docs/generated (API uçları, veritabanı, canlı olaylar) koddan yeniden üretildi (374 → 398 uç, 103 → 111 tablo).
+
 ## v2.104.1 — Analiz uyarısı
 - "analiz et" işini düşüren uyarı giderildi: lucky_bag.dart'ta kullanılmayan _claimsStrip (ve yalnızca onun kullandığı
   marquee içe aktarması) kaldırıldı.

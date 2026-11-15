@@ -269,7 +269,7 @@ class _CatalogListPageState extends State<CatalogListPage> {
 
   Future<void> _toggle(String kind, Map<String, dynamic> it, bool v) async {
     final r = await guard(context, () => Api.post('/api/admin/catalog/$kind/${it['id']}/active', {'isActive': v}));
-    if (r != null) setState(() => it['isActive'] = v);
+    if (r != null && mounted) setState(() => it['isActive'] = v);
   }
 
   Future<void> _delete(String kind, Map<String, dynamic> it) async {

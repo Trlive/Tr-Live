@@ -6,7 +6,7 @@ import cors from 'cors';
 import { config, validateConfig } from './config.js';
 import { query, closeDb } from './database.js';
 import { authenticateToken } from './auth.js';
-import { attachRealtime } from './realtime.js';
+import { attachRealtime, hub } from './realtime.js';
 import { isRoomMember, startRoomSweeper } from './services/rooms.js';
 import { cachedMedia, rememberMedia } from './services/images.js';
 import { presenceSnapshot, recordPresence, canSignalTyping, isGhost } from './services/presence.js';
@@ -245,6 +245,7 @@ attachRealtime(server, {
   ipOf: wsClientIp,
   isBanned,
   onViolation: (ip, type, opts) => noteViolation(ip, type, opts),
+  maxSocketsPerIp: config.firewall.wsPerIp,
   onPresence: (userId) => recordPresence(userId),
   presenceSnapshot,
   canTyping: canSignalTyping,
@@ -305,8 +306,16 @@ async function shutdown(signal) {
   clearInterval(idemJanitor);
   const force = setTimeout(() => process.exit(1), 10000);
   force.unref();
+  // Yeni istek alınmaz; süren istekler biter. Canlı bağlantılar (WebSocket) "yeniden başlıyor" koduyla kapatılır:
+  // uygulamalar hemen yeniden bağlanır. (Eskiden soketler kapatılmadığı için server.close() hiç bitmiyor, süreç
+  // 10 sn sonra zorla sonlandırılıyordu: her güncellemede 10 sn fazladan kesinti.)
   server.close(async () => { await closeDb(); process.exit(0); });
-  server.closeAllConnections?.();
+  const closed = hub.closeAll(1012, 'restart');
+  if (closed) console.log(`${closed} canlı bağlantı kapatıldı (yeniden bağlanacaklar).`);
+  // Boşta bekleyen (keep-alive) bağlantılar hemen, süren istekler bitince kapanır.
+  server.closeIdleConnections?.();
+  const hard = setTimeout(() => server.closeAllConnections?.(), 4000);
+  hard.unref();
 }
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));

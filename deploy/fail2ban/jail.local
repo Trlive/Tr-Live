@@ -5,8 +5,11 @@ enabled = true
 maxretry = 4
 bantime = 1h
 
+# Hız sınırı aşımı tek başına ağ düzeyinde yasak sebebi DEĞİLDİR: operatör NAT'ı / aynı Wi-Fi arkasındaki onlarca
+# meşru kullanıcı tek IP'den görünür; biri sınırı aşınca hepsi 1 saat engelleniyordu. Sınırı aşan istek zaten 429 alır.
+# Gerçek bir sel saldırısında elle açın (enabled = true).
 [nginx-limit-req]
-enabled  = true
+enabled  = false
 port     = http,https
 logpath  = /var/log/nginx/error.log
 maxretry = 20

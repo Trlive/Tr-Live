@@ -41,7 +41,13 @@ export const config = {
     enabled: env.FIREWALL_ENABLED !== 'false',
     // Asla yasaklanmayacak IP'ler (yerel geliştirme + kendi ofis/izleme IP'leriniz)
     allowIps: ['127.0.0.1', '::1', ...(env.FIREWALL_ALLOW_IPS || '').split(',').map((s) => s.trim()).filter(Boolean)],
-    ipPerMinute: Number(env.FIREWALL_IP_PER_MINUTE || 300),
+    // IP başına dakikalık istek sınırı (kaba sel koruması). Kullanıcı başına sınır DEĞİLDİR: operatör NAT'ı, yurt, kafe
+    // ve aynı Wi-Fi'daki herkes tek IP'den görünür. Eski değer (300) birkaç kişinin aynı ağdan kullanmasıyla doluyordu.
+    ipPerMinute: Number(env.FIREWALL_IP_PER_MINUTE || 3000),
+    // Görsel / animasyon dosyaları (/uploads, /media, emoji) ayrı sayılır: API bütçesini tüketmez.
+    mediaPerMinute: Number(env.FIREWALL_MEDIA_PER_MINUTE || 6000),
+    // Aynı IP'den en fazla eşzamanlı canlı bağlantı (WebSocket). Kullanıcı başına sınır ayrıca 5'tir.
+    wsPerIp: Number(env.FIREWALL_WS_PER_IP || 300),
     banThreshold: Number(env.FIREWALL_BAN_THRESHOLD || 30),
   },
 };

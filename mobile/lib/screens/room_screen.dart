@@ -23,6 +23,7 @@ import '../services/background_service.dart';
 import '../services/beauty.dart';
 import '../services/call_guard.dart';
 import '../services/effect_prefs.dart';
+import '../services/error_log.dart';
 import '../services/inbox_service.dart';
 import '../services/media_cache.dart';
 import '../services/music_service.dart';
@@ -52,6 +53,7 @@ import '../widgets/video_grid.dart';
 import 'gift_sheet.dart';
 import 'ludo_screen.dart';
 import 'pk_sheet.dart';
+import '../widgets/reconnect_pill.dart';
 import '../widgets/room_pk.dart';
 import '../widgets/video_pk.dart';
 import 'music_screens.dart';
@@ -100,6 +102,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   lk.Room? _lk;
   bool _lkConnecting = false;
   int _lkRetries = 0; // ses bağlantısı koparsa artan bekleme ile yeniden bağlanılır
+  Timer? _lkRetryTimer; // ses bağlantısını yeniden deneme zamanlayıcısı (tek; üst üste binmez)
+  Timer? _beatRetry; // ağ hatasında "oda açık" sinyalinin erken tekrarı
+  int _lkGen = 0; // ses bağlantısı kuşağı: eski bağlantının geç gelen olayı yenisini etkilemesin
+  lk.ConnectionState? _lkPrevState; // SDK'nın kendi yeniden bağlanmasını fark etmek için
+  bool? _lkCanPublish; // son görülen yayın izni (izin sonradan gelirse mikrofon o an açılır)
+  DateTime? _lkPermFixAt; // yayın izni uyuşmazlığında bağlantı en son ne zaman yenilendi
+  bool _syncing = false; // yayın eşitlemesi sürüyor
+  bool _syncAgain = false; // eşitleme sürerken yeni istek geldi
   Timer? _lkTick; // LiveKit değişikliklerinde tüm odayı saniyede onlarca kez yeniden çizmemek için
   String? _lkSig; // son çizilen LiveKit durumu (bkz. _lkSignature)
   String? _password; // kilitli odada yeniden katılırken gerekir
@@ -177,26 +187,42 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 
   /// Her 60 sn'de sunucuya "oda açık" sinyali gider: üyeyi canlı tutar, WebSocket aboneliğini tazeler,
-  /// oda sunucuda kapanmışsa kullanıcı sonsuza dek ölü odada kalmaz. (Sunucu üyeyi 5 dk sinyalsiz kalınca çıkarır;
+  /// oda sunucuda kapanmışsa kullanıcı sonsuza dek ölü odada kalmaz. (Sunucu üyeyi 3 dk sinyalsiz kalınca çıkarır;
   /// soket bağlıyken hiç çıkarmaz. 25 sn yerine 60 sn: telefon daha seyrek uyanır, daha az internet.)
   void _startHeartbeat() {
     _beat?.cancel();
-    _beat = Timer.periodic(const Duration(seconds: 60), (_) async {
-      if (!mounted || !_joined || _closing) return;
-      SocketService.instance.subscribeRoom(widget.roomId);
-      try {
-        await Api.post('/api/rooms/${widget.roomId}/heartbeat');
-      } on ApiException catch (e) {
-        if (!mounted || _closing) return;
-        if (e.statusCode == 404) {
-          _exit(tx('Oda kapandı.'));
-        } else if (e.statusCode == 409) {
-          _exit(e.message); // başka odaya geçilmiş: geri katılınmaz
-        } else if (e.statusCode == 403) {
-          _rejoin();
-        }
-      } catch (_) {/* ağ kesintisi: bir sonraki sinyalde tekrar denenir */}
-    });
+    _beat = Timer.periodic(const Duration(seconds: 60), (_) => _beatOnce());
+  }
+
+  /// Tek sinyal. Ağ hatasında 10 sn sonra bir kez daha denenir (eskiden bir sonraki sinyal 60 sn beklerdi; art arda
+  /// iki kayıp, üyeliğin düşmesine yaklaştırıyordu). Her sinyalde ses bağlantısı da denetlenir: kopuk kaldıysa yeniden kurulur.
+  Future<void> _beatOnce({bool retry = true}) async {
+    if (!mounted || !_joined || _closing) return;
+    SocketService.instance.subscribeRoom(widget.roomId);
+    _ensureAudio();
+    try {
+      await Api.post('/api/rooms/${widget.roomId}/heartbeat');
+    } on ApiException catch (e) {
+      if (!mounted || _closing) return;
+      if (e.statusCode == 404) {
+        _exit(tx('Oda kapandı.'));
+      } else if (e.statusCode == 409) {
+        _exit(e.message); // başka odaya geçilmiş: geri katılınmaz
+      } else if (e.statusCode == 403) {
+        _rejoin();
+      } else if (e.statusCode == null && retry) {
+        // Ağ kesintisi / zaman aşımı: kısa süre sonra bir kez daha.
+        _beatRetry?.cancel();
+        _beatRetry = Timer(const Duration(seconds: 10), () => _beatOnce(retry: false));
+      }
+    } catch (_) {/* beklenmeyen hata: bir sonraki sinyalde tekrar denenir */}
+  }
+
+  /// Ses bağlantısı yoksa ve kurulmuyorsa yeniden kurmayı başlatır (her sinyalde ve soket yeniden bağlanınca çağrılır).
+  /// Böylece ses, kullanıcı "Tekrar"a dokunmasa da kendiliğinden geri gelir.
+  void _ensureAudio() {
+    if (!mounted || _closing || !_joined) return;
+    if (_lk == null && !_lkConnecting && !(_lkRetryTimer?.isActive ?? false)) _connectLivekit();
   }
 
   /// Arka plandan dönünce oda bilgisi yenilenir (bağlantı arada kopmuş olabilir).
@@ -261,12 +287,24 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     SocketService.instance.subscribeRoom(widget.roomId);
     try {
       await _loadMembers();
+    } on ApiException catch (e) {
+      // Oda bu arada kapanmış / üyelik düşmüş: 60 sn'lik sinyali beklemeden hemen sonuçlandır. (Eskiden bu hata
+      // sessizce yutuluyor, kullanıcı bir dakikaya kadar kapanmış odada bekliyordu.)
+      if (!mounted || _closing) return;
+      if (e.statusCode == 404) {
+        _exit(tx('Oda kapandı.'));
+        return;
+      }
+      if (e.statusCode == 403) {
+        _rejoin();
+        return;
+      }
     } catch (_) {/* ağ yoksa bir sonraki sinyalde */}
     if (!mounted || _closing) return;
     _loadMessages();
     _loadExtras();
     MusicService.instance.refresh();
-    if (_lk == null && !_lkConnecting) _connectLivekit();
+    _ensureAudio();
   }
 
   @override
@@ -279,6 +317,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     if (_denoiseStarted) unawaited(Denoiser.roomStopped());
     EffectPrefs.roomMuted.value = false;
     _beat?.cancel();
+    _beatRetry?.cancel();
+    _lkRetryTimer?.cancel();
+    _lkGen++; // süren bağlanma denemesi / geç gelen kopma olayı bu ekranı artık etkilemesin
     _lkTick?.cancel();
     for (final t in _micEmojiTimers.values) {
       t.cancel();
@@ -622,9 +663,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       final fresh = mapOf(r['room']);
       if (fresh != null) _room = {...?_room, 'ownerFamily': fresh['ownerFamily'], if (fresh['owner'] != null) 'owner': fresh['owner']};
       SocketService.instance.subscribeRoom(widget.roomId);
+      // Tanı kaydı (yönetim paneli > Hata kayıtları): üyeliğin neden / ne sıklıkta düştüğü görülebilsin.
+      if (r['joined'] == true) ErrorLog.add('Bağlantı · oda', 'üyelik düşmüştü; yeniden katılındı');
       await _loadMembers();
       if (!mounted) return;
-      if (_lk == null && !_lkConnecting) _connectLivekit();
+      _ensureAudio();
     } catch (e) {
       // Yalnızca sunucu açıkça reddederse (oda kapandı, engellendi...) odadan çıkarılır.
       // Ağ kesintisi gibi geçici hatalarda oda açık kalır ve biraz sonra yeniden denenir.
@@ -713,6 +756,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final type = e['type'];
     if (type == 'connected') {
       _resync(); // soket yeniden bağlandı: arada kaçan olayları telafi et
+      return;
+    }
+    if (type == 'socket_closed') {
+      // Sessizce ölen bağlantılar tanı kaydına yazılır (ne sıklıkta yaşandığı panelden görülebilsin).
+      final why = e['reason']?.toString() ?? '';
+      if (why == 'silent' || why == 'connect_timeout' || why == 'probe') ErrorLog.add('Bağlantı · soket', why);
       return;
     }
     if (type == 'error' && e['code'] == 'not_member' && e['roomId'] == widget.roomId) {
@@ -1043,13 +1092,24 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     // Ses sunucusu bağlantısı koptuysa (ağ değişimi, sunucudan çıkarılma sonrası yeniden katılma) yeniden kur.
     if (r != null && r.connectionState == lk.ConnectionState.disconnected && !_lkConnecting && !_closing && mounted) {
       _lk = null;
+      _lkPrevState = null;
+      _lkCanPublish = null;
       r.removeListener(_onLkChanged);
       r.disconnect().whenComplete(() => r.dispose()).catchError((_) {});
-      final wait = Duration(seconds: 2 << _lkRetries.clamp(0, 4)); // 2, 4, 8, 16, 32 sn
+      final wait = Duration(seconds: 2 << _lkRetries.clamp(0, 3)); // 2, 4, 8, 16 sn
       _lkRetries++;
-      Future.delayed(wait, () {
-        if (mounted && !_closing && _joined && _lk == null) _connectLivekit();
-      });
+      _scheduleLkRetry(wait);
+    } else if (r != null && !_closing && mounted) {
+      final st = r.connectionState;
+      // SDK kendi içinde yeniden bağlandı (ağ değişimi): yayın durumu yeniden eşitlenir. Koltuktaki kişinin mikrofonu
+      // yeniden bağlanmadan sonra kapalı kalabiliyordu ("mikrofondayım ama sesim gitmiyor").
+      final resumed = st == lk.ConnectionState.connected && _lkPrevState == lk.ConnectionState.reconnecting;
+      _lkPrevState = st;
+      // Yayın izni sonradan geldi (sunucunun izni birkaç saniye gecikti): mikrofon o an açılır.
+      final can = r.localParticipant?.permissions.canPublish;
+      final granted = can == true && _lkCanPublish == false;
+      if (can != null) _lkCanPublish = can;
+      if ((resumed || granted) && _onSeat) _syncPublish();
     }
     // Konuşma göstergeleri ve görüntüler için yeniden çizim: en fazla 200 ms'de bir ve yalnızca ekranda görünen bir şey
     // (kim konuşuyor, kimin görüntüsü var, bağlantı) değiştiyse. Ses sunucusu bağlantı kalitesi gibi olayları saniyede
@@ -1091,10 +1151,58 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     return b.toString();
   }
 
-  Future<void> _connectLivekit() async {
-    if (_lk != null || _lkConnecting) return;
-    _lkConnecting = true;
+  /// Ses bağlantısını yeniden denemeyi planlar (tek zamanlayıcı: üst üste binen denemeler olmaz).
+  void _scheduleLkRetry(Duration wait) {
+    _lkRetryTimer?.cancel();
+    _lkRetryTimer = Timer(wait, () {
+      if (mounted && !_closing && _joined && _lk == null) _connectLivekit();
+    });
+  }
+
+  /// "Tekrar" düğmesi: beklemeden yeniden dener.
+  void _retryAudioNow() {
+    _lkRetries = 0;
+    _lkRetryTimer?.cancel();
     if (mounted) setState(() => _lkError = null);
+    _connectLivekit();
+  }
+
+  /// Ses bağlantısını sunucudan alınan yeni anahtarla baştan kurar (ör. yayın izni uyuşmazlığında).
+  void _refreshLivekit() {
+    final r = _lk;
+    _lkGen++;
+    _lk = null;
+    _lkPrevState = null;
+    _lkCanPublish = null;
+    if (r != null) {
+      r.removeListener(_onLkChanged);
+      r.disconnect().whenComplete(() => r.dispose()).catchError((_) {});
+    }
+    _scheduleLkRetry(const Duration(milliseconds: 700));
+  }
+
+  /// Ses sunucusu bağlantısı koptu: sebebe göre davranılır. (Yeniden bağlanmayı [_onLkChanged] planlar.)
+  void _onLkDisconnected(int gen, String? reason) {
+    if (gen != _lkGen || !mounted || _closing) return;
+    final why = reason ?? 'unknown';
+    if (why != 'clientInitiated') ErrorLog.add('Bağlantı · ses sunucusu', 'koptu ($why)');
+    if (why == 'duplicateIdentity') {
+      // Aynı hesap başka bir cihazda bu odaya bağlandı. İki cihaz birbirini sürekli düşürmesin diye bu ekran kapanır
+      // (üyelik diğer cihazda sürdüğü için sunucuya "çıktım" denmez).
+      _lkRetryTimer?.cancel();
+      _exit(tx('Hesabın başka bir cihazda bu odaya bağlandı.'));
+      return;
+    }
+    // Sunucu bizi çıkardı / oda silindi: 60 sn'lik sinyal beklenmeden üyelik doğrulanır (oda kapandıysa ekran kapanır,
+    // üyelik düştüyse yeniden katılınır).
+    if (why == 'participantRemoved' || why == 'roomDeleted') _beatOnce(retry: false);
+  }
+
+  Future<void> _connectLivekit() async {
+    if (_lk != null || _lkConnecting || _closing) return;
+    _lkConnecting = true;
+    _lkRetryTimer?.cancel();
+    final gen = ++_lkGen;
     lk.Room? room;
     try {
       final t = await Api.post('/api/rooms/${widget.roomId}/livekit-token');
@@ -1103,30 +1211,46 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       if (url == null || url.isEmpty || token == null) throw ApiException(tx('Ses sunucusu yapılandırılmamış.'));
       await _loadNoisePref();
       await HeadsetAudio.instance.start(); // kulaklık takılıysa yüksek kaliteli ses modu (bağlanmadan önce)
+      final saver = EffectPrefs.powerSave.value;
       room = lk.Room(roomOptions: lk.RoomOptions(
         adaptiveStream: true,
         dynacast: true,
         defaultAudioCaptureOptions: _audioOptions,
-        // Konuşma sesi: 32 kbps (konuşma için fazlasıyla yeterli; varsayılan 48), sessizken neredeyse hiç veri gitmez (DTX).
-        // DİKKAT: "red" bilerek verilmedi. Bu SDK'da red: true (varsayılan) yedek ses kopyasını KAPATIR, red: false AÇAR
-        // (ses verisi ~2 katına çıkar). Varsayılanda kalsın.
-        defaultAudioPublishOptions: const lk.AudioPublishOptions(encoding: lk.AudioEncoding(maxBitrate: 32000), dtx: true),
-        // Kamera 540p (varsayılan 720p): telefon ekranında fark az, yükleme ~yarı, işlemci/pil daha az yorulur.
-        // Şarj tüketimi modunda 360p (daha az ısınma ve şarj).
+        // Ses: 48 kbps (LiveKit'in önerdiği düzey; konuşma ve şarkı daha net). Şarj tüketimi modunda 32 kbps.
+        // Sessizken neredeyse hiç veri gitmez (DTX).
+        // "red" (yedekli ses) bilerek BELİRTİLMEDİ: bu SDK'nın eski sürümlerinde ayar ters çalışıyor (red: true yedekli
+        // sesi kapatıyor; LiveKit Flutter hata kaydı #1271). Düzeltmeyi içeren sürümde varsayılan değer yedekli sesi
+        // kendiliğinden açar; burada elle verilirse o sürümde tersine döner.
+        defaultAudioPublishOptions: lk.AudioPublishOptions(encoding: lk.AudioEncoding(maxBitrate: saver ? 32000 : 48000), dtx: true),
+        // Kamera 540p (varsayılan 720p): güzellik filtresi her kareyi telefonda işlediği için 720p orta sınıf telefonda
+        // kare düşürür; 540p'de görüntü akıcı kalır. Şarj tüketimi modunda 360p (daha az ısınma ve şarj).
         defaultCameraCaptureOptions: lk.CameraCaptureOptions(
-          params: EffectPrefs.powerSave.value ? lk.VideoParametersPresets.h360_169 : lk.VideoParametersPresets.h540_169,
+          params: saver ? lk.VideoParametersPresets.h360_169 : lk.VideoParametersPresets.h540_169,
         ),
+        // Canlı (tek yayıncı, tam ekran) yayında aynı çözünürlükte daha yüksek bit hızı: hareketli görüntüde bulanıklık
+        // ve kareleşme azalır. İzleyicinin interneti zayıfsa sunucu düşük katmanı gönderir (simulcast + dynacast).
+        defaultVideoPublishOptions: _isLive && !saver
+            ? lk.VideoPublishOptions(videoEncoding: lk.VideoEncoding(maxBitrate: 1300 * 1000, maxFramerate: 25))
+            : lk.VideoPublishOptions(),
       ));
-      room.addListener(_onLkChanged);
-      await room.connect(url, token);
-      if (!mounted || _closing) {
-        room.removeListener(_onLkChanged);
-        await room.disconnect();
-        await room.dispose();
+      final created = room;
+      created.addListener(_onLkChanged);
+      // Kopma sebebi (tanı kaydı; aynı hesap başka cihazda / sunucudan çıkarılma durumlarına özel davranış).
+      created.createListener().on<lk.RoomDisconnectedEvent>((e) => _onLkDisconnected(gen, e.reason?.name));
+      await created.connect(url, token);
+      if (!mounted || _closing || gen != _lkGen) {
+        created.removeListener(_onLkChanged);
+        await created.disconnect();
+        await created.dispose();
+        // Bağlanırken bağlantı yenileme istendi: yeni deneme hemen planlanır (yoksa ses bir sonraki sinyale kadar gelmezdi).
+        if (mounted && !_closing && gen != _lkGen) _scheduleLkRetry(const Duration(milliseconds: 300));
         return;
       }
-      _lk = room;
+      _lk = created;
       _lkRetries = 0;
+      _lkPrevState = created.connectionState;
+      _lkCanPublish = created.localParticipant?.permissions.canPublish;
+      if (_lkError != null) setState(() => _lkError = null);
       await _syncPublish();
       // Yapay zekâ gürültü azaltma: ses altyapısı artık hazır (bkz. Denoiser). Bu ekran için bir kez.
       if (!_denoiseStarted) {
@@ -1134,24 +1258,30 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         unawaited(Denoiser.roomStarted());
       }
     } catch (e) {
-      if (room != null) {
-        room.removeListener(_onLkChanged);
-        room.disconnect().whenComplete(() => room!.dispose()).catchError((_) {});
+      final failed = room;
+      if (failed != null) {
+        failed.removeListener(_onLkChanged);
+        failed.disconnect().whenComplete(() => failed.dispose()).catchError((_) {});
       }
-      // İlk denemelerde hata gösterilmez: 2, 4, 8 sn sonra kendiliğinden yeniden denenir. Üçü de olmazsa uyarı çıkar
-      // ("Tekrar" ile elle denenir).
-      if (_lkRetries < 3) {
-        final wait = Duration(seconds: 2 << _lkRetries);
-        _lkRetries++;
-        Future.delayed(wait, () {
-          if (mounted && !_closing && _joined && _lk == null) _connectLivekit();
-        });
-      } else {
-        _lkRetries = 0;
+      if (!mounted || _closing || gen != _lkGen) return;
+      final code = e is ApiException ? e.statusCode : null;
+      if (code == 404) {
+        _exit(tx('Oda kapandı.')); // ses anahtarı istenirken oda kapanmış
+        return;
+      }
+      // Sunucu bizi odanın üyesi saymıyor (üyelik düşmüş): yeniden katılınır; ses ardından yeniden denenir.
+      if (code == 403) _rejoin();
+      // İlk denemeler sessizdir: 2, 4, 8 sn sonra yeniden denenir. Üçü de olmazsa uyarı çıkar ("Tekrar" ile elle denenir)
+      // ama arka planda 15 sn'de bir denemeye devam edilir: bağlantı gelince ses kendiliğinden döner. (Eskiden üç
+      // denemeden sonra vazgeçiliyor, kullanıcı "Tekrar"a dokunana kadar ses gelmiyordu.)
+      final n = _lkRetries++;
+      if (n >= 2) {
         final raw = errorText(e);
         final msg = raw.contains('Timeout') ? tx('Ses sunucusuna ulaşılamadı. İnternetinizi kontrol edip Tekrar\'a dokunun.') : raw;
-        if (mounted) setState(() => _lkError = msg);
+        if (_lkError != msg) setState(() => _lkError = msg);
+        if (n == 2) ErrorLog.add('Bağlantı · ses sunucusu', 'bağlanılamadı: $raw');
       }
+      _scheduleLkRetry(Duration(seconds: n < 3 ? (2 << n) : 15));
     } finally {
       _lkConnecting = false;
       if (mounted) setState(() {});
@@ -1181,10 +1311,29 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 
   /// Koltuktaysak mikrofonu (görüntülü odada kamerayı) yayına aç, değilsek kapat.
+  /// Aynı anda tek eşitleme çalışır: üst üste gelen istekler (koltuk değişimi + izin + yeniden bağlanma) birbirini
+  /// ezmez; süren eşitleme bitince son durum bir kez daha uygulanır.
   Future<void> _syncPublish() async {
+    if (_syncing) {
+      _syncAgain = true;
+      return;
+    }
+    _syncing = true;
+    try {
+      do {
+        _syncAgain = false;
+        await _syncPublishOnce();
+      } while (_syncAgain && mounted && !_closing);
+    } finally {
+      _syncing = false;
+    }
+  }
+
+  Future<void> _syncPublishOnce() async {
     final room = _lk;
     if (room == null) return;
     for (var attempt = 0; attempt < 3; attempt++) {
+      if (!identical(room, _lk)) return; // bağlantı bu arada yenilendi: yeni bağlantı kendi eşitlemesini yapar
       try {
         await room.localParticipant?.setMicrophoneEnabled(_onSeat && _micOn && !_seatMuted && !CallGuard.instance.inCall.value);
         if (_isVideo) {
@@ -1199,7 +1348,20 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         await Future.delayed(const Duration(milliseconds: 800));
       }
     }
-    if (mounted && _onSeat) toast(context, tx('Mikrofon açılamadı. Mikrofon/kamera iznini kontrol edin.'), error: true);
+    if (!mounted || _closing || !_onSeat || !identical(room, _lk)) return;
+    // Koltuktayız ama ses sunucusu yayın izni vermiyor (izin güncellemesi bağlantı kopukken gitmiş olabilir): güncel
+    // izni taşıyan yeni anahtarla bağlantı bir kez yenilenir (30 sn'de en fazla bir). Eskiden yalnızca hata gösteriliyor,
+    // kullanıcı odadan çıkıp girene kadar mikrofonu açılmıyordu.
+    final lp = room.localParticipant;
+    final last = _lkPermFixAt;
+    final now = DateTime.now();
+    if (lp != null && !lp.permissions.canPublish && (last == null || now.difference(last) > const Duration(seconds: 30))) {
+      _lkPermFixAt = now;
+      ErrorLog.add('Bağlantı · ses sunucusu', 'yayın izni yok; bağlantı yeni anahtarla yenileniyor');
+      _refreshLivekit();
+      return;
+    }
+    toast(context, tx('Mikrofon açılamadı. Mikrofon/kamera iznini kontrol edin.'), error: true);
   }
 
   bool _isSpeaking(String userId) {
@@ -4616,10 +4778,17 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         dense: true,
                         leading: const Icon(Icons.error_outline),
                         title: Text(tx('Ses/görüntü bağlanamadı: {lkError}', {'lkError': _lkError}), style: const TextStyle(fontSize: 12)),
-                        trailing: TextButton(onPressed: _connectLivekit, child: Text(tx('Tekrar'))),
+                        trailing: TextButton(onPressed: _retryAudioNow, child: Text(tx('Tekrar'))),
                       ),
                     ),
                   ),
+                // Canlı bağlantı birkaç saniyedir kopuksa küçük bilgi (kısa kopmalarda görünmez).
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  top: MediaQuery.paddingOf(context).top + g.headerH + (_lkError != null ? 64 : 6),
+                  child: const ReconnectPill(),
+                ),
                 Positioned(left: 0, right: 0, top: MediaQuery.sizeOf(context).height * 0.36, child: EntranceStrip(queue: _entrance)),
                 // Müzik (Yoho): yalnızca müziği çalan kişi plağı ve DJ panelini görür; odadakiler yalnızca müziği duyar.
                 Positioned.fill(

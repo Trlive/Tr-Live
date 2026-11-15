@@ -74,9 +74,21 @@ export async function unbanIp(ip) {
 
 export const isBanned = (ip) => !allow.has(ip) && bans.isBanned(ip);
 
-/** İhlal puanı ekler; eşik aşılırsa IP'yi otomatik yasaklar. */
-export function noteViolation(ip, type, { userId = null, weight = 1, detail = {} } = {}) {
+// "Çok istek" türü ihlaller (hız sınırı aşımı, çok bağlantı) IP başına ORTAK bir kovadan, dakikada en fazla bir puan
+// alır: 10 dakikalık pencerede en çok 10 puan eder, yani tek başına yasak eşiğine (varsayılan 30) ulaşamaz.
+const VOLUME_POINT_EVERY_MS = 60e3;
+
+/**
+ * İhlal puanı ekler; eşik aşılırsa IP'yi otomatik yasaklar.
+ * volume: "çok istek" türü ihlal (hız sınırı aşımı, çok bağlantı). Bunlar eskiden istek başına bir puandı: hızlı dokunan
+ * (hediye combo'su) ya da aynı IP'yi paylaşan (operatör NAT'ı, aynı Wi-Fi) meşru kullanıcılar saniyeler içinde eşiği
+ * doldurup o IP'deki HERKESİ 15 dk – 24 saat yasaklatıyor, yasaklanan herkes odasından düşüyordu. Artık hız sınırı
+ * aşımı 429 ile yanıtlanır ama tek başına yasağa dönüşmez; saldırı imzaları (WAF), şifre denemeleri ve hatalı girişler
+ * eskisi gibi her seferinde puanlanır.
+ */
+export function noteViolation(ip, type, { userId = null, weight = 1, detail = {}, volume = false } = {}) {
   if (!config.firewall.enabled || allow.has(ip)) return;
+  if (volume && !limiter.hit(`viol:volume:${ip}`, 1, VOLUME_POINT_EVERY_MS).allowed) return;
   logSecurityEvent(`violation:${type}`.slice(0, 40), ip, userId, detail);
   const r = violations.record(ip, weight);
   if (r.ban) banIp(ip, r.durationMs, `Otomatik: ${type} (puan ${r.score})`);
@@ -95,6 +107,9 @@ export function startFirewallJanitor() {
 }
 
 // ---------------- Express ara katmanları ----------------
+/** Herkese açık dosya yolları (görsel, animasyon, emoji): API hız bütçesinden ayrı sayılır. */
+export const isMediaPath = (url) => typeof url === 'string' && (url.startsWith('/uploads/') || url.startsWith('/media/') || url.startsWith('/api/emoji/'));
+
 export function firewall() {
   return (req, res, next) => {
     if (!config.firewall.enabled) return next();
@@ -107,9 +122,14 @@ export function firewall() {
       noteViolation(ip, rule, { weight: 5, detail: { path: String(req.originalUrl).slice(0, 120) } });
       return res.status(403).json({ message: 'İstek reddedildi.' });
     }
-    const r = limiter.hit(`ip:${ip}`, config.firewall.ipPerMinute, 60e3);
+    // Görsel / animasyon dosyaları (herkese açık, önbelleklenen GET'ler) API bütçesinden düşmez: bir liste ekranı
+    // saniyeler içinde onlarca görsel ister; bunlar API sınırını doldurup uygulamayı "çok fazla istek" hatasına düşürüyordu.
+    const r = isMediaPath(req.originalUrl)
+      ? limiter.hit(`ipm:${ip}`, config.firewall.mediaPerMinute, 60e3)
+      : limiter.hit(`ip:${ip}`, config.firewall.ipPerMinute, 60e3);
     if (!r.allowed) {
-      noteViolation(ip, 'rate_limit');
+      // Aşım 429 ile yanıtlanır; ihlal puanı dakikada en fazla bir kez yazılır (bkz. noteViolation: volume).
+      noteViolation(ip, 'rate_limit', { volume: true });
       res.set('Retry-After', String(Math.ceil(r.retryAfterMs / 1000)));
       return res.status(429).json({ message: 'Çok fazla istek gönderildi. Lütfen biraz bekleyin.' });
     }
@@ -138,7 +158,8 @@ function limiterMiddleware(name, limit, windowMs, byUser) {
     const who = byUser && req.user ? `u:${req.user.id}` : `ip:${ip}`;
     const r = limiter.hit(`${name}:${who}`, limit, windowMs);
     if (r.allowed) return next();
-    noteViolation(ip, `limit_${name}`, { userId: req.user?.id ?? null });
+    // Hızlı dokunan kullanıcı (hediye combo'su) 429 alır ama IP'si yasaklanmaz (bkz. noteViolation: volume).
+    noteViolation(ip, `limit_${name}`, { userId: req.user?.id ?? null, volume: true });
     res.set('Retry-After', String(Math.ceil(r.retryAfterMs / 1000)));
     next(fail('Çok hızlı işlem yapıyorsunuz. Lütfen biraz bekleyin.', 429));
   };

@@ -10,7 +10,9 @@ const client = () => new RoomServiceClient(httpUrl(), process.env.LIVEKIT_API_KE
 export async function token({ identity, name, room, canPublish = true, metadata = '', hidden = false, ttl = '2h' }) {
   if (!configured()) throw Object.assign(new Error('LiveKit yapılandırılmamış.'), { status: 503 });
   const t = new AccessToken(process.env.LIVEKIT_API_KEY, process.env.LIVEKIT_API_SECRET, { identity, name, metadata, ttl });
-  t.addGrant({ roomJoin: true, room, canPublish, canSubscribe: true, canPublishData: !hidden, ...(hidden ? { hidden: true } : {}) });
+  // canPublishData kapalı: uygulama LiveKit veri kanalını kullanmaz (olaylar kendi WebSocket'imizden gider). Açık kalsaydı
+  // değiştirilmiş bir istemci odadaki herkese sınırsız veri paketi yollayabilirdi.
+  t.addGrant({ roomJoin: true, room, canPublish, canSubscribe: true, canPublishData: false, ...(hidden ? { hidden: true } : {}) });
   return t.toJwt();
 }
 
@@ -18,7 +20,7 @@ export async function token({ identity, name, room, canPublish = true, metadata 
 export async function setCanPublish(room, identity, canPublish) {
   if (!configured()) return;
   try {
-    await client().updateParticipant(room, identity, undefined, { canPublish, canSubscribe: true, canPublishData: true });
+    await client().updateParticipant(room, identity, undefined, { canPublish, canSubscribe: true, canPublishData: false });
   } catch (_) { /* katılımcı henüz bağlı olmayabilir */ }
 }
 

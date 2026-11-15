@@ -519,6 +519,7 @@ class _PayLevelsEditorScreenState extends State<PayLevelsEditorScreen> {
   Future<void> _removeLast() async {
     if (_levels.length <= 1) return;
     if (!await confirm(context, 'Son seviye (${_levels.last['level']}) silinsin mi?', action: 'Sil', destructive: true)) return;
+    if (!mounted) return;
     setState(() {
       _levels.removeLast();
       _dirty = true;

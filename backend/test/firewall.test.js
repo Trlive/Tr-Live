@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 // Yapılandırma modül yüklenmeden önce ayarlanmalı.
 process.env.FIREWALL_IP_PER_MINUTE = '6';
+process.env.FIREWALL_MEDIA_PER_MINUTE = '4';
 process.env.FIREWALL_BAN_THRESHOLD = '20';
 process.env.FIREWALL_ALLOW_IPS = '8.8.8.8';
 delete process.env.DATABASE_URL;
@@ -93,4 +94,57 @@ test('gövde koruması: prototype pollution reddedilir', async () => {
 test('oda şifresi deneme sınırı (hitLimit)', () => {
   for (let i = 0; i < 5; i++) assert.equal(fw.hitLimit('roompw:r1:u1', 5, 60000).allowed, true);
   assert.equal(fw.hitLimit('roompw:r1:u1', 5, 60000).allowed, false);
+});
+
+test('görsel dosyaları API bütçesinden ayrı sayılır', async () => {
+  const mw = fw.firewall();
+  const ip = '9.9.9.20';
+  for (let i = 0; i < 6; i++) assert.equal((await run(mw, makeReq(ip))).status, 'next');
+  assert.equal((await run(mw, makeReq(ip))).status, 429, 'API bütçesi doldu');
+  // API bütçesi doluyken görseller yüklenmeye devam eder (kendi bütçesi: 4).
+  for (const url of ['/uploads/a.png', '/media/3f0c0b1e-0000-4000-8000-000000000000.png', '/api/emoji/noto/1f600', '/uploads/b.png']) {
+    assert.equal((await run(mw, makeReq(ip, url))).status, 'next', url);
+  }
+  assert.equal((await run(mw, makeReq(ip, '/uploads/c.png'))).status, 429, 'görsel bütçesi de sınırlıdır');
+  // Tersi: görsel seli API isteklerini engellemez.
+  const ip2 = '9.9.9.21';
+  for (let i = 0; i < 10; i++) await run(mw, makeReq(ip2, '/uploads/x.png'));
+  assert.equal((await run(mw, makeReq(ip2))).status, 'next');
+  assert.equal(fw.isMediaPath('/api/rooms'), false);
+  assert.equal(fw.isMediaPath(undefined), false);
+});
+
+test('hız sınırı aşımı tek başına IP yasağına dönüşmez (ortak IP / hızlı dokunan kullanıcı)', async () => {
+  const mw = fw.firewall();
+  const ip = '9.9.9.22';
+  // Eşik 20 puan: eskiden sınırı aşan her istek 1 puandı, 20 fazladan istek IP'deki herkesi yasaklıyordu.
+  for (let i = 0; i < 200; i++) await run(mw, makeReq(ip));
+  assert.equal(fw.isBanned(ip), false, 'IP sınırı aşımı dakikada en fazla bir puan');
+  const lim = fw.userLimit('deneme_combo', 3, 60000);
+  const req = makeReq('9.9.9.23', '/api/x', { user: { id: 'u-9' } });
+  let limited = 0;
+  for (let i = 0; i < 200; i++) if ((await run(lim, req)).status === 429) limited += 1;
+  assert.equal(limited, 197, 'sınır yine uygulanır (429)');
+  assert.equal(fw.isBanned('9.9.9.23'), false, 'kullanıcı sınırı aşımı yasağa dönüşmez');
+  // Aynı IP'de farklı sınırlar aynı anda aşılsa da puanlar toplanıp yasağa gitmez (ortak kova).
+  const ip3 = '9.9.9.25';
+  for (const name of ['a', 'b', 'c', 'd', 'e']) {
+    const m = fw.userLimit(`deneme_${name}`, 1, 60000);
+    for (let i = 0; i < 50; i++) await run(m, makeReq(ip3, '/api/x', { user: { id: `u-${name}` } }));
+  }
+  for (let i = 0; i < 200; i++) await run(mw, makeReq(ip3));
+  assert.equal(fw.isBanned(ip3), false);
+  assert.equal((await run(mw, makeReq(ip3, '/uploads/a.png'))).status, 'next', 'yasak yok: görseller de açılır');
+});
+
+test('"çok istek" ihlalleri ortak kovadan dakikada bir puan alır; saldırı imzaları her seferinde puanlanır', () => {
+  const ip = '9.9.9.24';
+  for (let i = 0; i < 100; i++) fw.noteViolation(ip, 'ws_ip_flood', { volume: true });
+  for (let i = 0; i < 100; i++) fw.noteViolation(ip, 'rate_limit', { volume: true });
+  assert.equal(fw.isBanned(ip), false);
+  // Kısılmayan ihlaller (WAF imzası, şifre denemesi) eşiği (20) doldurur: 1 + 7 x 3 = 22.
+  for (let i = 0; i < 6; i++) fw.noteViolation(ip, 'deneme_saldiri', { weight: 3 });
+  assert.equal(fw.isBanned(ip), false, '1 + 18 = 19 < 20');
+  fw.noteViolation(ip, 'deneme_saldiri', { weight: 3 });
+  assert.equal(fw.isBanned(ip), true);
 });

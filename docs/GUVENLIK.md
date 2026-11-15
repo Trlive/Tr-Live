@@ -19,11 +19,15 @@ Bu belge uygulamada **şu an çalışan** korumaları ve bilinçli olarak açık
 
 ## Ağ ve istek katmanı
 
-* **Güvenlik duvarı:** IP yasağı (kalıcı, veritabanında), IP başına dakikalık sınır, kötü davranış puanı eşiği aşılınca otomatik yasak, yönetici panelinden elle IP engeli.
+* **Güvenlik duvarı:** IP yasağı (kalıcı, veritabanında), IP başına dakikalık sınır (API 3000, görsel/animasyon dosyaları ayrı 6000), kötü davranış puanı eşiği aşılınca otomatik yasak, yönetici panelinden elle IP engeli.
+  Hız sınırı aşımları 429 döner ama tek başına yasağa dönüşmez ("çok istek" türü ihlaller IP başına dakikada en fazla bir puan alır): ortak IP'deki (operatör NAT'ı, aynı Wi-Fi) ya da hızlı dokunan meşru kullanıcılar yasaklanmaz. Saldırı imzaları, şifre denemeleri ve hatalı girişler her seferinde puanlanır.
 * **WAF kuralları (URL ve User-Agent):** yol gezintisi, null bayt, SQL enjeksiyonu kalıpları, XSS kalıpları, komut enjeksiyonu, tarayıcı/araç imzaları (sqlmap, nikto ...).
 * **Gövde denetimi:** JSON en fazla 100 KB, en fazla 8 seviye derinlik / 2000 düğüm, `__proto__`/`constructor`/`prototype` anahtarları reddedilir.
 * **Uç bazlı hız sınırları** (giriş, kayıt, sohbet, DM, hediye, yükleme, rapor ...) — tam liste: [generated/api.md](generated/api.md) "⏱" sütunu. Token yenileme IP sınırına sayılmaz (operatör NAT'ı arkasındaki binlerce kullanıcı aynı IP'yi paylaşır).
-* **WebSocket:** kullanıcı başına 5, IP başına 30 bağlantı; 10 sn'de 40 mesaj; mesaj en fazla 8 KB; oda aboneliği üyelik doğrulamasıyla.
+* **WebSocket:** kullanıcı başına 5, IP başına 300 bağlantı (`FIREWALL_WS_PER_IP`); 10 sn'de 40 mesaj; mesaj en fazla 8 KB; oda aboneliği üyelik doğrulamasıyla.
+  Token `Authorization: Bearer` başlığıyla gelir (adres satırında / erişim kayıtlarında görünmez); v2.104 ve öncesi
+  uygulamalar için `?token=` hâlâ kabul edilir. Sunucu kapanırken bağlantılar 1012 koduyla kapatılır.
+* **Ses sunucusu anahtarı:** yalnızca oda üyesine, kullanıcı başına dakikada 40; veri kanalı izni kapalı (uygulama kullanmaz).
 * **Başlıklar:** helmet (HSTS 1 yıl, nosniff, frame koruması), `X-Powered-By` kapalı, API yanıtları önbelleğe alınmaz.
 * **Hatalar:** 5xx ayrıntısı istemciye gitmez; PostgreSQL hata kodları genel Türkçe mesaja çevrilir.
 

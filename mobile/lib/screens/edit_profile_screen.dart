@@ -91,7 +91,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     if (initial.isAfter(last)) initial = last;
     if (initial.isBefore(first)) initial = first;
     final d = await showDatePicker(context: context, initialDate: initial, firstDate: first, lastDate: last);
-    if (d != null) {
+    if (d != null && mounted) {
       setState(() => _birthDate = '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}');
     }
   }

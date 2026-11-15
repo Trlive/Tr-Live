@@ -4,7 +4,7 @@
 
 Kimlik: **🔒** giriş gerekli · **👑** yalnızca yönetici · **🛠** yönetici + yardımcı admin (destek) · **⏱** hız sınırı adı
 
-**Toplam 374 uç.**
+**Toplam 398 uç.**
 
 ## system.js  (`/api`)
 
@@ -19,6 +19,18 @@ Kimlik: **🔒** giriş gerekli · **👑** yalnızca yönetici · **🛠** yön
 | GET | `/api/legal/data-deletion` | açık |  |  |
 | GET | `/api/legal/terms` | açık |  |  |
 
+## room_activities.js  (`/room-activities`)
+
+| Yöntem | Yol | Kimlik | ⏱ | Not |
+|---|---|---|---|---|
+| GET | `/room-activities` | açık | room_activities |  |
+
+## dealer_topup_page.js  (`/dealer-topup`)
+
+| Yöntem | Yol | Kimlik | ⏱ | Not |
+|---|---|---|---|---|
+| GET | `/dealer-topup` | açık | dealer_topup_page |  |
+
 ## auth_social.js  (`/api/auth`)
 
 | Yöntem | Yol | Kimlik | ⏱ | Not |
@@ -27,6 +39,17 @@ Kimlik: **🔒** giriş gerekli · **👑** yalnızca yönetici · **🛠** yön
 | POST | `/api/auth/oauth/start` | açık | oauth_start |  |
 | GET | `/api/auth/oauth/:provider/callback` | açık | oauth_cb |  |
 | POST | `/api/auth/oauth/poll` | açık | oauth_poll | Uygulama sonucu birkaç saniyede bir sorar. Tamamlandıysa oturum bir kez verilir ve istek silinir. |
+
+## verify.js  (`/api/verify`)
+
+| Yöntem | Yol | Kimlik | ⏱ | Not |
+|---|---|---|---|---|
+| POST | `/api/verify/phone/link` | 🔒 | phone_link | Giriş yapmış kullanıcı telefonunu SMS ile doğrular / bağlar (hesapta başka numara varsa yenisiyle değiştirilir). |
+| POST | `/api/verify/email/send` | 🔒 | email_send | E-posta ekleme / doğrulama: koda gönder. |
+| POST | `/api/verify/email/confirm` | 🔒 | email_confirm |  |
+| POST | `/api/verify/reset/email/send` | açık | reset_email | Şifremi unuttum (e-posta): hesap var mı yok mu belli edilmez; her durumda aynı yanıt. |
+| POST | `/api/verify/reset/email` | açık | reset_email_confirm |  |
+| POST | `/api/verify/reset/phone` | açık | reset_phone | Şifremi unuttum (telefon): SMS kodu uygulamada Firebase ile doğrulanır. |
 
 ## me.js  (`/api/me`)
 
@@ -122,7 +145,7 @@ Kimlik: **🔒** giriş gerekli · **👑** yalnızca yönetici · **🛠** yön
 | POST | `/api/rooms/:roomId/members/:userId/role` | 🔒 | moderate |  |
 | GET | `/api/rooms/:roomId/scoreboard` | 🔒 |  | ---------- Hediye sayı tahtası (mikrofon koltuğu başına) ---------- |
 | POST | `/api/rooms/:roomId/scoreboard/reset` | 🔒 | scoreboard_reset |  |
-| POST | `/api/rooms/:roomId/livekit-token` | 🔒 |  | ---------- LiveKit ---------- |
+| POST | `/api/rooms/:roomId/livekit-token` | 🔒 | livekit_token | ---------- LiveKit ---------- |
 
 ## chat.js  (`/api/rooms`)
 
@@ -190,6 +213,34 @@ Kimlik: **🔒** giriş gerekli · **👑** yalnızca yönetici · **🛠** yön
 | GET | `/api/store/items` | 🔒 |  |  |
 | POST | `/api/store/buy` | 🔒 | store_buy | Satın al (kendin için) veya "Gönder" (başka bir kullanıcıya hediye). Süre: ürünün gün sayısı; aynı ürün tekrar alınırsa süre uzar. |
 
+## mic_skins.js  (`/api/mic-skins`)
+
+| Yöntem | Yol | Kimlik | ⏱ | Not |
+|---|---|---|---|---|
+| GET | `/api/mic-skins` | 🔒 |  | Tasarım listesi + kullanıcının hakkının bitiş zamanı. |
+| POST | `/api/mic-skins/:key/buy` | 🔒 | mic_skin_buy | Coin ile satın al (varsa süre uzar). |
+
+## room_themes.js  (`/api/room-themes`)
+
+| Yöntem | Yol | Kimlik | ⏱ | Not |
+|---|---|---|---|---|
+| GET | `/api/room-themes` | 🔒 |  | yardımcı sahibiyse haklar ODA SAHİBİNE göre hesaplanır (tema hakları odanın sahibine aittir). |
+| POST | `/api/room-themes/:key/buy` | 🔒 | room_theme_buy |  |
+| PUT | `/api/room-themes/custom/:id/image` | 🔒 | custom_theme_upload | Özel tema görseli (uygulama 9:16 kırpar; sunucu yine de 1080x1920'ye getirir). Sonra yönetim incelemesine girer. |
+
+## screenshots.js  (`/api/screenshots`)
+
+| Yöntem | Yol | Kimlik | ⏱ | Not |
+|---|---|---|---|---|
+| POST | `/api/screenshots` | 🔒 | screenshot |  |
+
+## checkin.js  (`/api/checkin`)
+
+| Yöntem | Yol | Kimlik | ⏱ | Not |
+|---|---|---|---|---|
+| GET | `/api/checkin` | 🔒 |  |  |
+| POST | `/api/checkin` | 🔒 | daily_checkin |  |
+
 ## support.js  (`/api/support`)
 
 | Yöntem | Yol | Kimlik | ⏱ | Not |
@@ -249,6 +300,9 @@ Kimlik: **🔒** giriş gerekli · **👑** yalnızca yönetici · **🛠** yön
 |---|---|---|---|---|
 | GET | `/api/dealer/me` | 🔒 |  |  |
 | POST | `/api/dealer/sell` | 🔒 | dealer_sell | Bayi kendi bakiyesinden kullanıcıya Coin satar. Alıcı kullanıcı adı veya kimlik ile bulunur. |
+| GET | `/api/dealer/topup-packages` | 🔒 |  | Toptan paket listesi (bayi ekranı için). |
+| POST | `/api/dealer/topup-requests` | 🔒 | dealer_topup | Yeni talep oluştur. |
+| GET | `/api/dealer/topup-requests` | 🔒 |  | Bayinin kendi talep geçmişi. |
 
 ## admin.js  (`/api/admin`)
 
@@ -304,6 +358,8 @@ Kimlik: **🔒** giriş gerekli · **👑** yalnızca yönetici · **🛠** yön
 | POST | `/api/admin/dealers` | 👑 |  |  |
 | POST | `/api/admin/dealers/:dealerId/coins` | 👑 |  |  |
 | POST | `/api/admin/dealers/:dealerId/sell` | 👑 |  |  |
+| GET | `/api/admin/topup-requests` | 👑 |  | Bekleyen (varsayılan) veya belirli durumdaki talepler. Onayda bayi bakiyesi artar; red bakiyeyi değiştirmez. |
+| POST | `/api/admin/topup-requests/:id/review` | 👑 |  | Talebi onayla (approve) veya reddet (reject). |
 | GET | `/api/admin/agencies` | 🛠 |  | ---------------- Ajans ve yayıncı ---------------- |
 | POST | `/api/admin/agencies` | 👑 |  | Yönetici bir kullanıcıyı (ID / kullanıcı adı ile seçilir) ajans sahibi yapar; ajans doğrudan aktif açılır. |
 | POST | `/api/admin/agencies/:agencyId/referrer` | 👑 |  | Davet eden ajans (Davet Merkezi primi) sonradan ayarlanır / kaldırılır. |
@@ -363,6 +419,9 @@ Kimlik: **🔒** giriş gerekli · **👑** yalnızca yönetici · **🛠** yön
 | GET | `/api/admin/actions` | 👑 |  | Yönetici/yardımcı admin işlemleri ve para hareketleri tek listede: kim, ne zaman, kime, ne yaptı. |
 | GET | `/api/admin/app-config` | 👑 |  |  |
 | PUT | `/api/admin/app-config` | 👑 |  |  |
+| GET | `/api/admin/lucky-pools` | 👑 |  | Şanslı hediye havuzları: her şanslı hediyenin ana / büyük ödül havuzu, giren / çıkan ve gerçekleşen geri dönüş. |
+| POST | `/api/admin/lucky-pools/:giftId/seed` | 👑 |  | ayrı tutulur ve denetim kaydına yazılır. |
+| POST | `/api/admin/app-config/test-mail` | 👑 |  | SMTP ayarlarını denemek için yöneticinin yazdığı adrese deneme e-postası (kaydedilmiş ayarlarla). |
 | GET | `/api/admin/moderation/strikes` | 👑 |  |  |
 | POST | `/api/admin/users/:userId/chat-restriction` | 🛠 |  | Sohbet kısıtı: dakika (0 = kaldır). Yardımcı admin de kullanabilir (yalnızca normal kullanıcılara). |
 | GET | `/api/admin/users/:userId/devices` | 👑 |  | Cihazlar: kullanıcının oturumları ve aynı cihazı kullanan diğer hesaplar (çoklu hesap / hile tespiti). |

@@ -86,7 +86,7 @@ class _PhoneSheetState extends State<_PhoneSheet> {
           ),
       ]),
     );
-    if (c != null) setState(() => _country = c);
+    if (c != null && mounted) setState(() => _country = c);
   }
 
   @override

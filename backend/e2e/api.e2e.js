@@ -1243,18 +1243,29 @@ test('çevrimiçi durumu: soket bağlıyken çevrimiçi, gizleyince görünmez',
   const { WebSocket } = await import('ws');
   const p1 = await register('pr1');
   const p2 = await register('pr2');
-  const open = (token) => new Promise((resolve, reject) => {
-    const ws = new WebSocket(`ws://127.0.0.1:${PORT}/ws?token=${encodeURIComponent(token)}`);
+  // header: true → yeni uygulamalar gibi token'ı Authorization başlığında yollar (adres satırında görünmez);
+  // header: false → eski uygulamalar gibi ?token= ile. İkisi de kabul edilir.
+  const open = (token, header = false) => new Promise((resolve, reject) => {
+    const ws = header
+      ? new WebSocket(`ws://127.0.0.1:${PORT}/ws`, { headers: { Authorization: `Bearer ${token}` } })
+      : new WebSocket(`ws://127.0.0.1:${PORT}/ws?token=${encodeURIComponent(token)}`);
     const t = setTimeout(() => reject(new Error('soket bağlanmadı')), 10000);
     ws.on('message', (raw) => { if (JSON.parse(String(raw)).type === 'connected') { clearTimeout(t); resolve(ws); } });
     ws.on('error', reject);
+  });
+  // Token'sız bağlantı kabul edilmez (1008).
+  await new Promise((resolve, reject) => {
+    const bad = new WebSocket(`ws://127.0.0.1:${PORT}/ws`);
+    const t = setTimeout(() => reject(new Error('token\'sız soket kapatılmadı')), 10000);
+    bad.on('close', (code) => { clearTimeout(t); try { assert.equal(code, 1008); resolve(); } catch (e) { reject(e); } });
+    bad.on('error', () => {});
   });
   const next = (ws, type) => new Promise((resolve, reject) => {
     const t = setTimeout(() => reject(new Error(`${type} gelmedi`)), 10000);
     const on = (raw) => { const m = JSON.parse(String(raw)); if (m.type === type) { clearTimeout(t); ws.off('message', on); resolve(m); } };
     ws.on('message', on);
   });
-  const w1 = await open(p1.token);
+  const w1 = await open(p1.token, true);
   const w2 = await open(p2.token);
   const prof = await api('GET', `/api/users/${p1.id}`, { token: p2.token });
   ok(prof);

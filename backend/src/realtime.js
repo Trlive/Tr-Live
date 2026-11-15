@@ -125,6 +125,24 @@ export const hub = {
     for (const ws of clients()) if (ws.watch?.has(userId)) safeSend(ws, payload);
     presenceVisible.set(userId, false);
   },
+  /**
+   * Sunucu kapanırken (yeniden başlatma / güncelleme) tüm bağlantıları 1012 "yeniden başlıyor" koduyla kapatır:
+   * uygulama bunu görünce beklemeden yeniden bağlanır. Kapanış el sıkışmasına yanıt vermeyen (ölü) bağlantılar
+   * kısa süre sonra kesilir; böylece sunucu 10 sn beklemeden kapanır.
+   */
+  closeAll(code = 1012, reason = 'restart', graceMs = 1500) {
+    if (!wss) return 0;
+    let n = 0;
+    for (const ws of wss.clients) {
+      n += 1;
+      try { ws.close(code, reason); } catch (_) { /* yoksay */ }
+    }
+    const t = setTimeout(() => {
+      for (const ws of clients()) { try { ws.terminate(); } catch (_) { /* yoksay */ } }
+    }, graceMs);
+    t.unref?.();
+    return n;
+  },
   stats() {
     let sockets = 0; let inRooms = 0;
     for (const ws of clients()) { if (!ws.userId) continue; sockets += 1; if (ws.roomId) inRooms += 1; }
@@ -132,12 +150,25 @@ export const hub = {
   },
 };
 
-const MAX_SOCKETS_PER_IP = 30;
+/**
+ * Bağlantı token'ı. Yeni uygulama sürümleri `Authorization: Bearer …` başlığıyla gönderir: adres satırındaki token
+ * vekil sunucu / erişim kayıtlarına yazılabildiği için adresten çıkarıldı. Eski sürümler için `?token=` hâlâ kabul edilir.
+ */
+export function socketToken(req, url) {
+  const h = String(req?.headers?.authorization ?? '');
+  if (h.startsWith('Bearer ') && h.length > 7) return h.slice(7).trim();
+  return url?.searchParams?.get('token') ?? null;
+}
+
+// IP başına varsayılan bağlantı sınırı. Eski değer (30) operatör NAT'ı / yurt / kafe gibi ortak IP'lerde 31. kullanıcıyı
+// dışarıda bırakıyor, onun yeniden bağlanma denemeleri de IP'deki herkesi yasaklatıyordu. Asıl koruma kullanıcı başına
+// sınırdır (5); kimliği doğrulanamayan bağlantı zaten hemen kapatılır.
+const MAX_SOCKETS_PER_IP = 300;
 const MAX_SOCKETS_PER_USER = 5;
 const MSG_LIMIT = { count: 40, windowMs: 10000 };
 
 export function attachRealtime(server, {
-  authenticate, isRoomMember, ipOf = () => 'unknown', isBanned = () => false, onViolation = () => {},
+  authenticate, isRoomMember, ipOf = () => 'unknown', isBanned = () => false, onViolation = () => {}, maxSocketsPerIp = MAX_SOCKETS_PER_IP,
   onPresence = () => {}, presenceSnapshot = async () => [], canTyping = async () => false,
   isPresenceVisible = async (u) => u.show_presence !== false && !u.is_hidden,
 }) {
@@ -220,8 +251,8 @@ export function attachRealtime(server, {
     if (isBanned(ip)) { ws.close(1008, 'banned'); return; }
     let sameIp = 0;
     for (const c of wss.clients) if (c.ip === ip) sameIp += 1;
-    if (sameIp > MAX_SOCKETS_PER_IP) {
-      onViolation(ip, 'ws_ip_flood', { weight: 2 });
+    if (sameIp > maxSocketsPerIp) {
+      onViolation(ip, 'ws_ip_flood', { volume: true });
       ws.close(1013, 'too_many_connections');
       return;
     }
@@ -247,7 +278,7 @@ export function attachRealtime(server, {
       let initialRoom = null;
       try {
         const url = new URL(req.url, 'http://localhost');
-        const user = await authenticate(url.searchParams.get('token'));
+        const user = await authenticate(socketToken(req, url));
         if (ws.readyState !== OPEN) return; // doğrulama sürerken istemci gitti
         ws.userId = user.id;
         ws.sessionId = user.session_id ?? null;
