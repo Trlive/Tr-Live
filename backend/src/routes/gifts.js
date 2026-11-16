@@ -90,7 +90,8 @@ router.get('/gifts/global/recent', async (req, res) => {
 // Hediye gönderimi: tek PostgreSQL işlemi. Kendine hediye serbesttir (gönderen alıcı olabilir):
 //  - Coin düşer, Diamond artar (muhasebe kaydı tutulur).
 //  - Kendine hediye; ajans/maaş hesabına ve liderlik tablolarına SAYILMAZ (suistimali önlemek için). PK puanına SAYILIR (Micolive gibi).
-router.post('/rooms/:roomId/gifts/send', userLimit('gift', 60, 60e3), idempotent('gift_send'), async (req, res) => {
+// Dakikada 180 gönderim (saniyede 3): şanslı hediye combo'sunda hızlı dokunan kullanıcı "çok hızlı" uyarısına takılmasın.
+router.post('/rooms/:roomId/gifts/send', userLimit('gift', 180, 60e3), idempotent('gift_send'), async (req, res) => {
   const roomId = uuid(req.params.roomId, 'Oda');
   const giftId = uuid(req.body?.giftId, 'Hediye');
   const quantity = positiveInt(req.body?.quantity ?? 1, 'Hediye adedi', 10000);

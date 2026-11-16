@@ -116,13 +116,29 @@ class BackgroundService with WidgetsBindingObserver {
   }
 
   Future<bool> _tryStart({required bool withMic}) async {
+    Future<ServiceRequestResult> start() => FlutterForegroundTask.startService(
+          serviceId: 4721,
+          serviceTypes: [ForegroundServiceTypes.mediaPlayback, if (withMic) ForegroundServiceTypes.microphone],
+          notificationTitle: 'TR Live',
+          notificationText: '$_roomName odasındasınız · dönmek için dokun',
+        );
     try {
-      final result = await FlutterForegroundTask.startService(
-        serviceId: 4721,
-        serviceTypes: [ForegroundServiceTypes.mediaPlayback, if (withMic) ForegroundServiceTypes.microphone],
-        notificationTitle: 'TR Live',
-        notificationText: '$_roomName odasındasınız · dönmek için dokun',
-      );
+      var result = await start();
+      // Servis zaten çalışıyor (uygulama yeniden açıldı ama servis önceki açılıştan kalmış): bu bir hata değildir.
+      // Eskiden "Ön plan servisi başlatılamadı: ServiceAlreadyStartedException" diye kayda geçiyor, servis çalıştığı
+      // hâlde uygulama onu kapalı sanıyordu. Doğru türle (mikrofon / yalnız medya) yeniden başlatılır; olmazsa
+      // çalışan servis olduğu gibi kullanılır.
+      if (result is ServiceRequestFailure && '${result.error}'.contains('already started')) {
+        try {
+          await FlutterForegroundTask.stopService();
+          result = await start();
+        } catch (_) {/* aşağıda çalışan servis kabul edilir */}
+        if (result is! ServiceRequestSuccess) {
+          _running = true;
+          _withMic = false; // türü bilinmiyor: mikrofona çıkılınca (uygulama ekrandayken) mikrofon türüyle yeniden başlar
+          return true;
+        }
+      }
       _running = result is ServiceRequestSuccess;
       if (_running) _withMic = withMic;
       if (result is ServiceRequestFailure && !withMic) ErrorLog.add('Ön plan servisi başlatılamadı', result.error, StackTrace.current);

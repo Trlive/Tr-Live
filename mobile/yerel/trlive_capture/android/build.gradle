@@ -44,6 +44,41 @@ rootProject.allprojects { p ->
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+// Derleme belleği (v2.106.0). v2.100 sonrası derlemeler hiçbir hata yazmadan duruyordu ("exit code 143": derleme makinesi
+// dışarıdan durduruluyor). En olası sebep bellek: Flutter'ın ürettiği android/gradle.properties Gradle'a 8 GB izin
+// verir, GitHub'ın derleme makinesi ise küçüktür; Gradle çöp toplamak yerine belleği büyütmeyi seçer. Asıl çözüm iş
+// akışı dosyasındadır (apk_build.yml: Gradle belleği sınırlanır); o dosya güncel değilse burası devreye girer: Gradle'ın
+// kullanmadığı belleği sisteme geri vermesi sağlanır (ayrılan bellek 2,5 GB'ı geçince çöp toplanır) ve Kotlin
+// derleyicisinin belleği sınırlanır. Bellek izni zaten küçükse (iş akışı güncelse) hiçbir şey yapılmaz. Hiçbir adım
+// derlemeyi durduramaz (hepsi yakalanır).
+// ---------------------------------------------------------------------------------------------------------------------
+try {
+    def trliveRt = Runtime.getRuntime()
+    long trliveMaxMb = (long) (trliveRt.maxMemory() / (1024L * 1024L))
+    if (trliveMaxMb > 4096 && System.getProperty("trlive.heapwatch") == null) {
+        System.setProperty("trlive.heapwatch", "1")
+        if (System.getProperty("kotlin.daemon.jvm.options") == null) System.setProperty("kotlin.daemon.jvm.options", "-Xmx1536m")
+        try {
+            def bean = java.lang.management.ManagementFactory.getPlatformMXBean(com.sun.management.HotSpotDiagnosticMXBean.class)
+            bean.setVMOption("MinHeapFreeRatio", "10")
+            bean.setVMOption("MaxHeapFreeRatio", "25")
+        } catch (Throwable ignored) { }
+        def trliveWatch = new Thread({
+            long limit = 2500L * 1024L * 1024L
+            while (true) {
+                try { Thread.sleep(15000) } catch (InterruptedException e) { return }
+                try {
+                    if (trliveRt.totalMemory() > limit) System.gc()
+                } catch (Throwable ignored) { }
+            }
+        } as Runnable, "trlive-heap-watch")
+        trliveWatch.setDaemon(true)
+        trliveWatch.start()
+        println("TR Live: Gradle bellek izni ${trliveMaxMb} MB (büyük); kullanılmayan bellek sisteme geri verilecek.")
+    }
+} catch (Throwable ignored) { }
+
+// ---------------------------------------------------------------------------------------------------------------------
 // Kalıcı imza (v2.100.0). İş akışı her derlemede yeni bir geçici (debug) anahtarla imzalıyordu: her APK'nın imzası farklı
 // olduğu için telefondaki uygulama üstüne kurulamıyor, Firebase SMS doğrulaması (SHA parmak izi) ve Play Store çalışmıyordu.
 // Yayın APK'sı oluşturulduktan sonra mobile/imza/upload.jks ile yeniden imzalanır (apksigner; v1+v2+v3 imza, hizalama korunur).

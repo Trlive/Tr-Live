@@ -27,6 +27,7 @@ Bu belge uygulamada **şu an çalışan** korumaları ve bilinçli olarak açık
 * **WebSocket:** kullanıcı başına 5, IP başına 300 bağlantı (`FIREWALL_WS_PER_IP`); 10 sn'de 40 mesaj; mesaj en fazla 8 KB; oda aboneliği üyelik doğrulamasıyla.
   Token `Authorization: Bearer` başlığıyla gelir (adres satırında / erişim kayıtlarında görünmez); v2.104 ve öncesi
   uygulamalar için `?token=` hâlâ kabul edilir. Sunucu kapanırken bağlantılar 1012 koduyla kapatılır.
+* **Oda yasakları:** odadan atılan kişi 24 saat, banlanan kişi süresiz o odaya giremez; yasak kalıcı odaya (sahip + oda türü) bağlıdır, oda yeniden açılınca da sürer. Oda sahibi / yardımcı sahip "Yönetici kayıtları"ndan kimin kimi attığını görür ve yasağı kaldırır (`room_bans`, `room_mod_logs`).
 * **Ses sunucusu anahtarı:** yalnızca oda üyesine, kullanıcı başına dakikada 40; veri kanalı izni kapalı (uygulama kullanmaz).
 * **Başlıklar:** helmet (HSTS 1 yıl, nosniff, frame koruması), `X-Powered-By` kapalı, API yanıtları önbelleğe alınmaz.
 * **Hatalar:** 5xx ayrıntısı istemciye gitmez; PostgreSQL hata kodları genel Türkçe mesaja çevrilir.

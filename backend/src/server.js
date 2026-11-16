@@ -11,6 +11,7 @@ import { isRoomMember, startRoomSweeper } from './services/rooms.js';
 import { cachedMedia, rememberMedia } from './services/images.js';
 import { presenceSnapshot, recordPresence, canSignalTyping, isGhost } from './services/presence.js';
 import { pruneIdempotencyKeys } from './idempotency.js';
+import { pruneRoomBans } from './services/room_bans.js';
 import { promoteBootstrapAdmins } from './services/bootstrap.js';
 import { nonOverlapping } from './ticker.js';
 import { router as authRouter } from './routes/auth.js';
@@ -273,6 +274,9 @@ refreshCappedLevels().catch((e) => console.error('Seviye yenileme hatası:', e.m
 const janitor = startFirewallJanitor();
 // Bir günden eski işlem (idempotency) anahtarları saatte bir silinir.
 const idemJanitor = setInterval(nonOverlapping(() => pruneIdempotencyKeys().catch((e) => console.error('İşlem anahtarı temizliği:', e.message))), 3600e3);
+// Süresi dolmuş oda yasakları ve eski yönetici kayıtları (kalıcı oda başına son 500) saatte bir temizlenir.
+const banJanitor = setInterval(nonOverlapping(() => pruneRoomBans().catch((e) => console.error('Oda yasağı temizliği:', e.message))), 3600e3);
+banJanitor.unref();
 idemJanitor.unref();
 loadBans().then((n) => n && console.log(`${n} aktif IP yasağı yüklendi.`)).catch((e) => console.error('IP yasakları yüklenemedi:', e.message));
 promoteBootstrapAdmins().catch((e) => console.error('ADMIN_USERNAMES uygulanamadı:', e.message));
@@ -304,6 +308,7 @@ async function shutdown(signal) {
   clearInterval(privacySweeper);
   clearInterval(janitor);
   clearInterval(idemJanitor);
+  clearInterval(banJanitor);
   const force = setTimeout(() => process.exit(1), 10000);
   force.unref();
   // Yeni istek alınmaz; süren istekler biter. Canlı bağlantılar (WebSocket) "yeniden başlıyor" koduyla kapatılır:

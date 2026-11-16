@@ -26,6 +26,7 @@ import { newRoomNumber } from '../services/ids.js';
 import { isGhost } from '../services/presence.js';
 import { notifyFriendsRoomOpen } from '../services/notify.js';
 import { resolveRoomTheme, CUSTOM_KEY } from '../services/room_themes.js';
+import { KICK_BAN_HOURS, banFromRoom, activeBan, unbanFromRoom, banMessage, logModeration, moderationRows } from '../services/room_bans.js';
 
 export const router = Router();
 
@@ -403,6 +404,11 @@ router.post('/:roomId/join', requireAuth, userLimit('room_join', 40, 60e3), asyn
   }
   const blocked = await query(`SELECT 1 FROM room_blocks WHERE room_id = $1 AND blocked_user_id = $2`, [roomId, userId]);
   if (blocked.rowCount) throw fail('Bu odaya girişiniz engellenmiş.', 403);
+  // Atılma (24 saat) ve engelleme yasağı kalıcı odaya bağlıdır: oda kapatılıp yeniden açılsa da sürer.
+  if (room.owner_id !== userId) {
+    const ban = await activeBan(room, userId);
+    if (ban) throw fail(banMessage(ban), 403);
+  }
 
   // Şifreli oda: zaten üye olanlar (yeniden bağlanma) ve oda sahibi şifre girmeden geçer.
   if (room.password_hash && room.owner_id !== userId && !(await memberOf(roomId, userId))) {
@@ -901,32 +907,37 @@ async function assertNotImmune(actor, targetId, actorUser) {
 router.post('/:roomId/members/:userId/mic-off', requireAuth, userLimit('moderate', 60, 60e3), async (req, res) => {
   const roomId = uuid(req.params.roomId, 'Oda');
   const targetId = uuid(req.params.userId, 'Kullanıcı');
-  await activeRoom(roomId);
+  const micRoom = await activeRoom(roomId);
   const { actor, target } = await moderationContext(roomId, req.user.id, targetId);
   if (!target) throw fail('Kullanıcı odada değil.', 404);
   if (!canManage(actor.role, target.role, 'moderate')) throw fail('Bu işlem için yetkiniz yok.', 403);
   await assertNotImmune(actor, targetId, req.user);
   await releaseSeat(roomId, targetId);
+  await logModeration(micRoom, req.user.id, targetId, 'mic_off');
   res.json({ ok: true });
 });
 
-async function removeFromRoom(roomId, targetId, type) {
+async function removeFromRoom(roomId, targetId, type, extra = {}) {
   noteKick(roomId, targetId);
   await leaveRoom(targetId, roomId);
-  hub.sendToUser(targetId, { type, roomId });
+  hub.sendToUser(targetId, { type, roomId, ...extra });
   await removeParticipant(roomId, targetId);
 }
 
+// Odadan atma: kişi odadan çıkarılır ve KICK_BAN_HOURS (24) saat bu odaya giremez. Yasak kalıcı odaya bağlıdır (oda
+// kapatılıp açılsa da sürer); oda sahibi / yardımcı sahip "Yönetici kayıtları"ndan kaldırabilir.
 router.post('/:roomId/members/:userId/kick', requireAuth, userLimit('moderate', 60, 60e3), async (req, res) => {
   const roomId = uuid(req.params.roomId, 'Oda');
   const targetId = uuid(req.params.userId, 'Kullanıcı');
-  await activeRoom(roomId);
+  const room = await activeRoom(roomId);
   const { actor, target } = await moderationContext(roomId, req.user.id, targetId);
   if (!target) throw fail('Kullanıcı odada değil.', 404);
   if (!canManage(actor.role, target.role, 'moderate')) throw fail('Bu işlem için yetkiniz yok.', 403);
   await assertNotImmune(actor, targetId, req.user);
-  await removeFromRoom(roomId, targetId, 'room_kicked');
-  res.json({ ok: true });
+  await banFromRoom(room, targetId, 'kick', req.user.id);
+  await removeFromRoom(roomId, targetId, 'room_kicked', { hours: KICK_BAN_HOURS });
+  await logModeration(room, req.user.id, targetId, 'kick', { hours: KICK_BAN_HOURS });
+  res.json({ ok: true, hours: KICK_BAN_HOURS });
 });
 
 router.post('/:roomId/members/:userId/block', requireAuth, userLimit('moderate', 60, 60e3), async (req, res) => {
@@ -946,22 +957,62 @@ router.post('/:roomId/members/:userId/block', requireAuth, userLimit('moderate',
     `INSERT INTO room_blocks(room_id, blocked_user_id, blocked_by_user_id) VALUES($1,$2,$3) ON CONFLICT (room_id, blocked_user_id) DO NOTHING`,
     [roomId, targetId, req.user.id],
   );
+  // Kalıcı kayıt: engel eskiden oda kimliğine bağlıydı, oda kapatılıp açılınca kayboluyordu.
+  await banFromRoom(room, targetId, 'block', req.user.id);
   if (target) await removeFromRoom(roomId, targetId, 'room_blocked');
+  await logModeration(room, req.user.id, targetId, 'block');
   res.json({ ok: true });
 });
 
-router.delete('/:roomId/blocks/:userId', requireAuth, async (req, res) => {
+// Yasağı kaldır: engelleme (süresiz) ve atılma (24 saat) yasağının ikisi de kalkar.
+router.delete('/:roomId/blocks/:userId', requireAuth, userLimit('moderate', 60, 60e3), async (req, res) => {
   const roomId = uuid(req.params.roomId, 'Oda');
   const targetId = uuid(req.params.userId, 'Kullanıcı');
+  const room = await activeRoom(roomId);
   const me = await memberOf(roomId, req.user.id);
   if (!me || !['owner', 'cohost', 'moderator'].includes(me.role)) throw fail('Bu işlem için yetkiniz yok.', 403);
-  // Moderatör yalnızca kendi koyduğu engeli kaldırır; sahibin/yardımcı sahibin engelini kaldıramaz.
+  // Moderatör yalnızca kendi koyduğu yasağı kaldırır; sahibin/yardımcı sahibin yasağını kaldıramaz.
   if (me.role === 'moderator') {
     const b = (await query(`SELECT blocked_by_user_id FROM room_blocks WHERE room_id = $1 AND blocked_user_id = $2`, [roomId, targetId])).rows[0];
-    if (b && b.blocked_by_user_id !== req.user.id) throw fail('Bu engeli yalnızca oda sahibi veya yardımcı sahip kaldırabilir.', 403);
+    const ban = await activeBan(room, targetId);
+    if ((b && b.blocked_by_user_id !== req.user.id) || (ban && ban.banned_by !== req.user.id)) {
+      throw fail('Bu yasağı yalnızca oda sahibi veya yardımcı sahip kaldırabilir.', 403);
+    }
   }
-  await query(`DELETE FROM room_blocks WHERE room_id = $1 AND blocked_user_id = $2`, [roomId, targetId]);
-  res.json({ ok: true });
+  const old = await query(`DELETE FROM room_blocks WHERE room_id = $1 AND blocked_user_id = $2`, [roomId, targetId]);
+  const ban = await unbanFromRoom(room, targetId);
+  if (old.rowCount || ban) await logModeration(room, req.user.id, targetId, 'unban', { kind: ban?.kind ?? 'block' });
+  res.json({ ok: true, removed: Boolean(old.rowCount || ban) });
+});
+
+// Yönetici kayıtları (oda sahibi ve yardımcı sahip): süren yasaklar + son işlemler (atma, engelleme, yasak kaldırma,
+// susturma, mikrofondan indirme, rol). Kayıtlar kalıcı odaya aittir; oda kapatılıp açılsa da görünür.
+router.get('/:roomId/moderation', requireAuth, async (req, res) => {
+  const roomId = uuid(req.params.roomId, 'Oda');
+  const room = await activeRoom(roomId);
+  const me = await memberOf(roomId, req.user.id);
+  if (!me || !['owner', 'cohost'].includes(me.role)) throw fail('Yönetici kayıtlarını yalnızca oda sahibi ve yardımcı sahip görebilir.', 403);
+  const { bans, logs } = await moderationRows(room);
+  const ids = new Set();
+  for (const b of bans) { ids.add(b.user_id); if (b.banned_by) ids.add(b.banned_by); }
+  for (const l of logs) { if (l.actor_id) ids.add(l.actor_id); if (l.target_id) ids.add(l.target_id); }
+  const users = new Map((await loadPublicRows([...ids])).map((u) => [u.id, publicUser(u, req.user.id, { alias: true })]));
+  const banned = new Set(bans.map((b) => b.user_id));
+  res.json({
+    kickHours: KICK_BAN_HOURS,
+    bans: bans.map((b) => ({
+      user: users.get(b.user_id) ?? null, userId: b.user_id, kind: b.kind, until: b.until, createdAt: b.created_at,
+      by: b.banned_by ? (users.get(b.banned_by) ?? null) : null,
+    })),
+    logs: logs.map((l) => ({
+      id: String(l.id), action: l.action, detail: l.detail ?? {}, createdAt: l.created_at,
+      actor: l.actor_id ? (users.get(l.actor_id) ?? null) : null,
+      target: l.target_id ? (users.get(l.target_id) ?? null) : null,
+      targetId: l.target_id ?? null,
+      // Bu kişinin yasağı hâlâ sürüyor mu (kayıt satırında "Yasağı kaldır" düğmesi için).
+      banned: l.target_id ? banned.has(l.target_id) : false,
+    })),
+  });
 });
 
 // Koltuk kilitle / aç (oda sahibi ve moderatörler). Dolu koltuk kilitlenirse oturan kişi koltuktan indirilir (yetki yeterliyse).
@@ -1058,6 +1109,7 @@ router.post('/:roomId/members/:userId/role', requireAuth, userLimit('moderate', 
     [roomRow.owner_id, roomRow.room_type, targetId, role],
   );
   hub.broadcastRoom(roomId, { type: 'room_role_changed', roomId, userId: targetId, role });
+  await logModeration(roomRow, req.user.id, targetId, 'role', { role, from: target.role });
   res.json({ ok: true, role });
 });
 

@@ -4,7 +4,7 @@
 
 Kimlik: **🔒** giriş gerekli · **👑** yalnızca yönetici · **🛠** yönetici + yardımcı admin (destek) · **⏱** hız sınırı adı
 
-**Toplam 398 uç.**
+**Toplam 399 uç.**
 
 ## system.js  (`/api`)
 
@@ -136,9 +136,10 @@ Kimlik: **🔒** giriş gerekli · **👑** yalnızca yönetici · **🛠** yön
 | DELETE | `/api/rooms/:roomId/mic/queue/:userId` | 🔒 |  | Yetkili: mikrofon isteğini reddeder (kullanıcıyı sıradan çıkarır). |
 | POST | `/api/rooms/:roomId/mic/leave` | 🔒 |  |  |
 | POST | `/api/rooms/:roomId/members/:userId/mic-off` | 🔒 | moderate |  |
-| POST | `/api/rooms/:roomId/members/:userId/kick` | 🔒 | moderate |  |
+| POST | `/api/rooms/:roomId/members/:userId/kick` | 🔒 | moderate | kapatılıp açılsa da sürer); oda sahibi / yardımcı sahip "Yönetici kayıtları"ndan kaldırabilir. |
 | POST | `/api/rooms/:roomId/members/:userId/block` | 🔒 | moderate |  |
-| DELETE | `/api/rooms/:roomId/blocks/:userId` | 🔒 |  |  |
+| DELETE | `/api/rooms/:roomId/blocks/:userId` | 🔒 | moderate | Yasağı kaldır: engelleme (süresiz) ve atılma (24 saat) yasağının ikisi de kalkar. |
+| GET | `/api/rooms/:roomId/moderation` | 🔒 |  | susturma, mikrofondan indirme, rol). Kayıtlar kalıcı odaya aittir; oda kapatılıp açılsa da görünür. |
 | POST | `/api/rooms/:roomId/seats/:index/lock` | 🔒 | moderate | Koltuk kilitle / aç (oda sahibi ve moderatörler). Dolu koltuk kilitlenirse oturan kişi koltuktan indirilir (yetki yeterliyse). |
 | POST | `/api/rooms/:roomId/seats/:index/mute` | 🔒 | moderate | mikrofon açılmaz (uygulama kapatır) ve koltukta "susturuldu" işareti görünür. Boş koltuk da susturulabilir. |
 | POST | `/api/rooms/:roomId/members/:userId/mic-invite` | 🔒 | mic_invite | Mikrofona davet: davet edilen kişi kabul ederse mic/take ile oturur. |
@@ -459,7 +460,7 @@ Kimlik: **🔒** giriş gerekli · **👑** yalnızca yönetici · **🛠** yön
 |---|---|---|---|---|
 | GET | `/api/gifts` | 🔒 |  |  |
 | GET | `/api/gifts/global/recent` | 🔒 |  | Uygulama açılışında şeridi doldurmak için son global hediyeler. |
-| POST | `/api/rooms/:roomId/gifts/send` | 🔒 | gift | - Kendine hediye; ajans/maaş hesabına ve liderlik tablolarına SAYILMAZ (suistimali önlemek için). PK puanına SAYILIR (Micolive gibi). |
+| POST | `/api/rooms/:roomId/gifts/send` | 🔒 | gift | Dakikada 180 gönderim (saniyede 3): şanslı hediye combo'sunda hızlı dokunan kullanıcı "çok hızlı" uyarısına takılmasın. |
 
 ## agencies.js  (`/api`)
 

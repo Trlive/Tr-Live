@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show PlatformException;
 import 'package:image_picker/image_picker.dart';
 import 'common.dart';
 import 'image_crop.dart';
@@ -12,6 +13,8 @@ class PickedImage {
   const PickedImage(this.bytes, this.mime);
 }
 
+bool _picking = false;
+
 String? sniffImageMime(Uint8List b) {
   if (b.length > 12 && b[0] == 0x89 && b[1] == 0x50 && b[2] == 0x4E && b[3] == 0x47) return 'image/png';
   if (b.length > 3 && b[0] == 0xFF && b[1] == 0xD8) return 'image/jpeg';
@@ -23,9 +26,20 @@ String? sniffImageMime(Uint8List b) {
 /// [crop] verilirse seçimden sonra kırpma ekranı açılır (kullanıcı kaydırıp büyüterek kadrajı ayarlar);
 /// sonuç o oranda, en fazla [CropSpec.outWidth] genişliğinde JPEG olur.
 Future<PickedImage?> pickImage(BuildContext context, {double maxWidth = 1280, CropSpec? crop}) async {
-  // Gönderi / mesaj görselleri 1280 px ve %80 kalite: telefonda net görünür, dosya ~yarı (gönderen de görenler de daha az
-  // internet harcar).
-  final picked = await ImagePicker().pickImage(source: ImageSource.gallery, maxWidth: crop == null ? maxWidth : 2048, imageQuality: crop == null ? 80 : 95);
+  // Galeri açıkken düğmeye ikinci kez dokunulursa Android "Image picker is already active" hatası verir (hata
+  // kayıtlarında görülüyordu): seçim bitene kadar ikinci istek yok sayılır.
+  if (_picking) return null;
+  _picking = true;
+  XFile? picked;
+  try {
+    // Gönderi / mesaj görselleri 1280 px ve %80 kalite: telefonda net görünür, dosya ~yarı (gönderen de görenler de
+    // daha az internet harcar).
+    picked = await ImagePicker().pickImage(source: ImageSource.gallery, maxWidth: crop == null ? maxWidth : 2048, imageQuality: crop == null ? 80 : 95);
+  } on PlatformException {
+    // Seçici zaten açık / izin verilmedi: sessizce vazgeçilir (picked null kalır).
+  } finally {
+    _picking = false;
+  }
   if (picked == null) return null;
   var bytes = await picked.readAsBytes();
   var mime = sniffImageMime(bytes);

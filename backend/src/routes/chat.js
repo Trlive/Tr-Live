@@ -12,6 +12,7 @@ import { featuresFor } from '../services/wip.js';
 import { noteTask } from '../services/daily.js';
 import { loadPublicRow } from '../services/users.js';
 import { roomStaffShield } from '../staff_logic.js';
+import { logModeration } from '../services/room_bans.js';
 import { publicUser, USER_PUBLIC_COLUMNS, USER_PUBLIC_JOINS, roomUser } from '../views.js';
 
 export const router = Router();
@@ -20,7 +21,7 @@ router.use(requireAuth);
 const MANAGERS = ['owner', 'cohost', 'moderator'];
 
 async function roomAndMember(roomId, userId) {
-  const room = (await query(`SELECT id, chat_enabled FROM rooms WHERE id = $1 AND is_active = TRUE`, [roomId])).rows[0];
+  const room = (await query(`SELECT id, chat_enabled, owner_id, room_type FROM rooms WHERE id = $1 AND is_active = TRUE`, [roomId])).rows[0];
   if (!room) throw fail('Oda bulunamadı.', 404);
   // Susturma odadan çıkıp girince kaybolmasın: kalıcı kayıt (room_mutes) ile üyelikteki süre birleştirilir.
   const member = (await query(
@@ -136,7 +137,7 @@ router.post('/:roomId/members/:userId/chat-mute', userLimit('moderate', 60, 60e3
   const minutes = Number(req.body?.minutes);
   if (!Number.isInteger(minutes) || minutes < 0 || minutes > 1440) throw fail('Süre 0-1440 dakika arasında olmalı.');
   if (targetId === req.user.id) throw fail('Kendinizi susturamazsınız.');
-  const { member } = await roomAndMember(roomId, req.user.id);
+  const { room: muteRoom, member } = await roomAndMember(roomId, req.user.id);
   const target = (await query(`SELECT role FROM room_members WHERE room_id = $1 AND user_id = $2`, [roomId, targetId])).rows[0];
   if (!target) throw fail('Kullanıcı odada değil.', 404);
   if (!canManage(member.role, target.role, 'moderate')) throw fail('Bu işlem için yetkiniz yok.', 403);
@@ -155,5 +156,6 @@ router.post('/:roomId/members/:userId/chat-mute', userLimit('moderate', 60, 60e3
     `INSERT INTO room_mutes(room_id, user_id, until) VALUES($1,$2, NOW() + ($3::int * INTERVAL '1 minute'))
      ON CONFLICT (room_id, user_id) DO UPDATE SET until = EXCLUDED.until`, [roomId, targetId, minutes]);
   hub.sendToUser(targetId, { type: 'room_chat_muted', roomId, minutes });
+  await logModeration(muteRoom, req.user.id, targetId, minutes === 0 ? 'unmute' : 'mute', minutes === 0 ? {} : { minutes });
   res.json({ ok: true, minutes });
 });

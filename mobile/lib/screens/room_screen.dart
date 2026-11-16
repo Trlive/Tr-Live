@@ -54,6 +54,7 @@ import 'gift_sheet.dart';
 import 'ludo_screen.dart';
 import 'pk_sheet.dart';
 import '../widgets/reconnect_pill.dart';
+import '../widgets/room_moderation_sheet.dart';
 import '../widgets/room_pk.dart';
 import '../widgets/video_pk.dart';
 import 'music_screens.dart';
@@ -1063,7 +1064,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         _exit(tx('Oda kapatıldı.'));
         break;
       case 'room_kicked':
-        _exit(tx('Odadan çıkarıldınız.'));
+        // Atılan kişi bu odaya 24 saat giremez (süre sunucudan gelir; eski sunucuda süre yoktur).
+        final hours = _asInt(e['hours']);
+        _exit(hours != null && hours > 0 ? tx('Odadan çıkarıldınız. {h} saat bu odaya giremezsiniz.', {'h': hours}) : tx('Odadan çıkarıldınız.'));
         break;
       case 'room_blocked':
         _exit(tx('Bu odadan engellendiniz.'));
@@ -2131,6 +2134,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             });
           }, tint: cPurple),
           if (_isOwnerOrCohost) feature(Icons.palette, tx('Tema'), () => need(_isOwnerOrCohost, _roomThemes), tint: cPink),
+          // Yönetici kayıtları: süren yasaklar (atılan 24 saat giremez) ve yöneticilerin son işlemleri; yasak buradan kaldırılır.
+          if (_isOwnerOrCohost) feature(Icons.fact_check, tx('Yönetici\nKayıtları'), () => need(_isOwnerOrCohost, () => showRoomModeration(context, widget.roomId)), tint: cOrange),
           feature(Icons.share, tx('Odayı\nPaylaş'), () => run(_shareRoom), tint: cBlue),
           if (_myRole == 'owner') feature(Icons.power_settings_new, tx('Odayı\nKapat'), () => run(_closeRoom), tint: cRed),
           // Koltuk / kamera araçları (duruma göre).
@@ -3289,10 +3294,15 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 if (await confirm(context, tx('{name} bu odadan banlansın mı?', {'name': name}), action: tx('Banla'), destructive: true)) _moderate(userId, 'block');
               },
             ),
-            ListTile(leading: const Icon(Icons.exit_to_app), title: Text(tx('Odadan at')), onTap: () async {
-              Navigator.pop(c);
-              if (await confirm(context, tx('{name} odadan atılsın mı?', {'name': name}), action: tx('At'))) _moderate(userId, 'kick');
-            }),
+            ListTile(
+              leading: const Icon(Icons.exit_to_app),
+              title: Text(tx('Odadan at')),
+              subtitle: Text(tx('24 saat bu odaya giremez')),
+              onTap: () async {
+                Navigator.pop(c);
+                if (await confirm(context, tx('{name} odadan atılsın mı? 24 saat bu odaya giremez.', {'name': name}), action: tx('At'))) _moderate(userId, 'kick');
+              },
+            ),
             ListTile(leading: const Icon(Icons.comments_disabled), title: Text(tx('Sohbette sustur')), onTap: () { Navigator.pop(c); _muteChoice(userId); }),
           ],
           // Uygulama yöneticisi / yardımcı admin kısayolları (yetkiyi sunucu ayrıca denetler).
@@ -4395,23 +4405,29 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 Text(label, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Colors.white, decoration: TextDecoration.none)),
               ]),
             );
-        return SafeArea(
-          child: Stack(children: [
-            Center(
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                big(Icons.close_fullscreen, tx('Küçült'), () {
-                  Navigator.pop(c);
-                  RoomDock.minimize();
-                }),
-                const SizedBox(height: 56),
-                big(Icons.power_settings_new, tx('Çıkış'), () {
-                  Navigator.pop(c);
-                  _onBack();
-                }),
-              ]),
-            ),
-            Positioned(top: 10, right: 14, child: IconButton(onPressed: () => Navigator.pop(c), icon: const CircleAvatar(backgroundColor: Colors.white24, child: Icon(Icons.close, color: Colors.white)))),
-          ]),
+        // Material şart: InkWell / IconButton dokunma efektini en yakın Material'a çizer. showGeneralDialog kendisi
+        // Material koymaz; eksikken her dokunuşta "Null check operator used on a null value" hatası atılıyordu
+        // (hata kayıtlarındaki en sık hata: haftada 195 kez).
+        return Material(
+          type: MaterialType.transparency,
+          child: SafeArea(
+            child: Stack(children: [
+              Center(
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  big(Icons.close_fullscreen, tx('Küçült'), () {
+                    Navigator.pop(c);
+                    RoomDock.minimize();
+                  }),
+                  const SizedBox(height: 56),
+                  big(Icons.power_settings_new, tx('Çıkış'), () {
+                    Navigator.pop(c);
+                    _onBack();
+                  }),
+                ]),
+              ),
+              Positioned(top: 10, right: 14, child: IconButton(onPressed: () => Navigator.pop(c), icon: const CircleAvatar(backgroundColor: Colors.white24, child: Icon(Icons.close, color: Colors.white)))),
+            ]),
+          ),
         );
       },
     );
@@ -4434,6 +4450,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final on = !_roomMuted && !CallGuard.instance.inCall.value;
     for (final p in room.remoteParticipants.values) {
       for (final pub in p.audioTrackPublications) {
+        // Aboneliği bitmiş yayının izi bırakılmıştır; ona dokunmak "MediaStreamTrack has been disposed" hatası verir.
+        if (!pub.subscribed) continue;
         try {
           pub.track?.mediaStreamTrack.enabled = on;
         } catch (_) {/* iz henüz hazır değil */}

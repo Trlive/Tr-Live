@@ -1,3 +1,41 @@
+## v2.106.0 — Atılan 24 saat giremez · yönetici kayıtları · hediye sınırı 180 · APK derlemesi · hata kayıtlarındaki hatalar
+APK derlemesi ("exit code 143")
+- v2.100 sonrası APK derlemeleri hiçbir hata yazmadan duruyordu (kullanıcıların telefonundaki son sürüm 2.99.1). Derleme
+  makinesi dışarıdan durduruluyor; en olası sebep bellek / disk tükenmesi (Flutter'ın şablonu Gradle'a 8 GB izin verir,
+  makine küçüktür; Firebase, WebRTC ve yerel kodlu gürültü azaltma eklentisi derlemeyi büyüttü).
+- `.github/workflows/apk_build.yml` güncellendi (ELLE YÜKLENMELİ; zip iş akışı dosyalarını değiştiremez): kullanılmayan
+  hazır araçlar silinip disk açılır, ek takas alanı eklenir, Gradle ve Kotlin belleği makineye göre sınırlanır; derleme
+  boyunca 45 sn'de bir bellek / disk durumu günlüğe yazılır (yine durursa sebep son satırlarda görünür).
+- İş akışı dosyası yüklenmemişse zip'le gelen yedek devreye girer (mobile/yerel/trlive_capture/android/build.gradle):
+  Gradle'ın bellek izni büyükse kullanmadığı belleği sisteme geri vermesi sağlanır, Kotlin derleyicisinin belleği
+  sınırlanır. Yerel denemede (Gradle 8.14, 6 GB izin) boşta tutulan bellek 1960 MB'tan 64 MB'a indi. Tek başına
+  yeteceği doğrulanmadı; asıl çözüm iş akışı dosyasıdır.
+Odadan atma: 24 saat yasak
+- Odadan atılan kişi 24 saat o odaya giremez ("Bu odadan çıkarıldınız. … sonra tekrar girebilirsiniz."). Atan kişiye
+  onay penceresinde, atılana çıkarken süre gösterilir.
+- Yasak kalıcı odaya (sahip + oda türü) bağlıdır: oda kapatılıp yeniden açılsa da sürer. "Odadan banla" (süresiz) da
+  artık kalıcıdır; eskiden oda yeniden açılınca kayboluyordu. Açık odalardaki mevcut banlar taşınır.
+Yönetici kayıtları (oda sahibi ve yardımcı sahip)
+- Oda araçları > "Yönetici Kayıtları": yasaklılar (kim attı / banladı, kalan süre) ve son işlemler: atma, banlama,
+  yasak kaldırma, sohbette susturma, mikrofondan indirme, rol verme / alma (kim, kime, ne zaman).
+- "Yasağı kaldır": atılan ya da banlanan kişi yeniden girebilir. Moderatör yalnızca kendi koyduğu yasağı kaldırır.
+- Kayıtlar kalıcı odaya aittir (oda başına son 500 işlem saklanır).
+- Veritabanı: 073 (room_bans, room_mod_logs). Sunucu: GET /api/rooms/:id/moderation; DELETE …/blocks/:userId iki
+  yasağı da kaldırır.
+Hediye
+- Hediye gönderme sınırı dakikada 60 → 180 (hızlı combo "Çok hızlı işlem yapıyorsunuz" uyarısına takılmasın).
+Hata kayıtlarından (Yönetim > Hata kayıtları) düzeltilenler
+- "Null check operator used on a null value" (haftada 195 kez, en sık hata): odadaki X düğmesinin "Küçült / Çıkış"
+  penceresinde dokunma efektinin çizileceği Material yoktu; her dokunuş hata kaydı üretiyordu.
+- "ServiceAlreadyStartedException: The service has already started" (28 kez): ön plan servisi zaten çalışırken
+  "başlatılamadı" sayılıyor, uygulama çalışan servisi kapalı sanıyordu. Artık hata değil; doğru türle yeniden başlatılır.
+- "Image picker is already active" (5 kez): galeri açıkken ikinci dokunuş yok sayılır.
+- "MediaStreamTrack has been disposed" (3 kez): oda sesi açılıp kapatılırken aboneliği bitmiş yayına dokunulmaz.
+- '"Deneme21" için animasyon dosyası tanımlı değil': kod hatası değil; bu hediyeye yönetimden animasyon yüklenmemiş.
+Diğer
+- Uçtan uca testler başarısız testi günlüğün SONUNDA da listeler (spec raporlayıcı): ekran görüntüsünde görünür.
+- Testler: oda yasağı (birim), atma / yasak / yönetici kayıtları / yasağın yeni açılışta sürmesi (uçtan uca).
+
 ## v2.105.0 — Bağlantı sağlamlığı, odadan düşme, ses/görüntü kalitesi, güvenlik denetimi
 Canlı bağlantı (WebSocket)
 - Sessizce ölen bağlantı odadayken 25–35 sn içinde fark edilir (eskiden 75–95 sn; o sürede oda "donmuş" görünüyordu):

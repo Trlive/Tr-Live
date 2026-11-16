@@ -237,11 +237,35 @@ test('moderasyon: yetki, mikrofon kapatma, atma, engelleme, rol, WIP dokunulmazl
   ok(await api('POST', `/api/rooms/${roomId}/members/${U.c.id}/kick`, { token: U.a.token }), 'kick');
   m = (await api('GET', `/api/rooms/${roomId}/members`, { token: U.a.token })).body.members;
   assert.ok(!m.some((x) => x.userId === U.c.id));
-  ok(await api('POST', `/api/rooms/${roomId}/join`, { token: U.c.token }), 'atılan yeniden girebilir');
+  // atılan kişi 24 saat giremez; oda sahibi yönetici kayıtlarından yasağı kaldırır
+  const banned = await api('POST', `/api/rooms/${roomId}/join`, { token: U.c.token });
+  status(banned, 403, 'atılan 24 saat giremez');
+  assert.match(banned.body.message, /çıkarıldınız.*(saat|dakika) sonra/);
+  status(await api('GET', `/api/rooms/${roomId}/moderation`, { token: U.b.token }), 403, 'üye yönetici kayıtlarını göremez');
+  const mod1 = await api('GET', `/api/rooms/${roomId}/moderation`, { token: U.a.token });
+  ok(mod1, 'yönetici kayıtları');
+  assert.equal(mod1.body.kickHours, 24);
+  const ban1 = mod1.body.bans.find((x) => x.userId === U.c.id);
+  assert.ok(ban1 && ban1.kind === 'kick' && ban1.until && ban1.by.id === U.a.id, 'süren yasak listede');
+  const hoursLeft = (new Date(ban1.until).getTime() - Date.now()) / 3600e3;
+  assert.ok(hoursLeft > 23.9 && hoursLeft <= 24.01, `24 saat (${hoursLeft})`);
+  const kickLog = mod1.body.logs.find((x) => x.action === 'kick' && x.targetId === U.c.id);
+  assert.ok(kickLog && kickLog.actor.id === U.a.id && kickLog.banned === true && kickLog.detail.hours === 24);
+  assert.ok(mod1.body.logs.some((x) => x.action === 'mic_off' && x.targetId === U.b.id), 'mikrofondan indirme kaydı');
+  status(await api('DELETE', `/api/rooms/${roomId}/blocks/${U.c.id}`, { token: U.b.token }), 403, 'üye yasak kaldıramaz');
+  const unb = await api('DELETE', `/api/rooms/${roomId}/blocks/${U.c.id}`, { token: U.a.token });
+  ok(unb); assert.equal(unb.body.removed, true);
+  ok(await api('POST', `/api/rooms/${roomId}/join`, { token: U.c.token }), 'yasak kalkınca girer');
   ok(await api('POST', `/api/rooms/${roomId}/members/${U.c.id}/block`, { token: U.a.token }), 'block');
-  status(await api('POST', `/api/rooms/${roomId}/join`, { token: U.c.token }), 403, 'engelli giremez');
+  const blk = await api('POST', `/api/rooms/${roomId}/join`, { token: U.c.token });
+  status(blk, 403, 'engelli giremez');
+  assert.match(blk.body.message, /engellenmiş/);
   ok(await api('DELETE', `/api/rooms/${roomId}/blocks/${U.c.id}`, { token: U.a.token }));
   ok(await api('POST', `/api/rooms/${roomId}/join`, { token: U.c.token }));
+  const mod2 = (await api('GET', `/api/rooms/${roomId}/moderation`, { token: U.a.token })).body;
+  assert.equal(mod2.bans.length, 0, 'yasak kalmadı');
+  assert.deepEqual(mod2.logs.filter((x) => x.targetId === U.c.id).map((x) => x.action), ['unban', 'block', 'unban', 'kick'], 'kayıtlar yeniden eskiye');
+  assert.ok(mod2.logs.every((x) => x.banned === false));
   ok(await api('POST', `/api/rooms/${roomId}/members/${U.b.id}/role`, { token: U.a.token, body: { role: 'moderator' } }));
   status(await api('POST', `/api/rooms/${roomId}/members/${U.a.id}/kick`, { token: U.b.token }), 403, 'moderatör sahibi atamaz');
   status(await api('POST', `/api/rooms/${roomId}/members/${U.c.id}/role`, { token: U.b.token, body: { role: 'cohost' } }), 403, 'moderatör rol veremez');
@@ -1003,6 +1027,19 @@ test('kalıcı oda: bir kez kur, tek adımda aç, ad/etiket sabit, yöneticiler 
   assert.equal(again.body.room.name, 'Duyurulu');
   assert.equal(again.body.room.announcement, 'Hoş geldiniz!');
   assert.deepEqual(again.body.room.tags, ['müzik']);
+  // atılma yasağı kalıcı odaya bağlıdır: oda kapatılıp yeniden açılınca da sürer; kayıtlar da görünür
+  const guest = await register('pg');
+  ok(await api('POST', `/api/rooms/${again.body.room.id}/join`, { token: guest.token }));
+  ok(await api('POST', `/api/rooms/${again.body.room.id}/members/${guest.id}/kick`, { token: an.token }));
+  ok(await api('POST', `/api/rooms/${again.body.room.id}/close`, { token: an.token }));
+  const third = await api('POST', '/api/rooms', { token: an.token, body: { roomType: 'audio' } });
+  status(third, 201);
+  assert.notEqual(third.body.room.id, again.body.room.id, 'yeni açılış yeni oda kimliği');
+  status(await api('POST', `/api/rooms/${third.body.room.id}/join`, { token: guest.token }), 403, 'yasak yeni açılışta da sürer');
+  const modv = (await api('GET', `/api/rooms/${third.body.room.id}/moderation`, { token: an.token })).body;
+  assert.ok(modv.bans.some((x) => x.userId === guest.id) && modv.logs.some((x) => x.action === 'kick' && x.targetId === guest.id));
+  ok(await api('DELETE', `/api/rooms/${third.body.room.id}/blocks/${guest.id}`, { token: an.token }));
+  ok(await api('POST', `/api/rooms/${third.body.room.id}/join`, { token: guest.token }), 'yasak kalkınca yeni açılışa girer');
 });
 
 test('liderlik tablosu, cüzdan geçmişi ve hesap silme', { skip, timeout: 60000 }, async () => {

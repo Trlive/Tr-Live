@@ -1,6 +1,6 @@
 {
   "name": "tr-live-backend",
-  "version": "2.105.0",
+  "version": "2.106.0",
   "private": true,
   "type": "module",
   "main": "src/server.js",
@@ -10,7 +10,7 @@
     "migrate": "node src/migration_runner.js",
     "test": "node --test",
     "check": "node scripts/check.mjs",
-    "test:e2e": "node --test --test-concurrency=1 e2e/api.e2e.js"
+    "test:e2e": "node --test --test-reporter=spec --test-concurrency=1 e2e/api.e2e.js"
   },
   "engines": {
     "node": ">=20"
