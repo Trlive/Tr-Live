@@ -168,7 +168,7 @@ jobs:
           perms = ["INTERNET", "RECORD_AUDIO", "CAMERA", "MODIFY_AUDIO_SETTINGS", "ACCESS_NETWORK_STATE", "BLUETOOTH_CONNECT",
                    "WAKE_LOCK", "POST_NOTIFICATIONS", "FOREGROUND_SERVICE", "FOREGROUND_SERVICE_MICROPHONE", "FOREGROUND_SERVICE_MEDIA_PLAYBACK",
                    "FOREGROUND_SERVICE_SPECIAL_USE", "SYSTEM_ALERT_WINDOW", "REQUEST_IGNORE_BATTERY_OPTIMIZATIONS", "READ_PHONE_STATE",
-                   "READ_MEDIA_AUDIO", "READ_EXTERNAL_STORAGE"]
+                   "READ_MEDIA_AUDIO", "READ_EXTERNAL_STORAGE", "DETECT_SCREEN_CAPTURE"]
           add = "".join(f'    <uses-permission android:name="android.permission.{p}"/>\n' for p in perms if f'android.permission.{p}"' not in s)
           if add:
               s = s.replace("<application", add + "    <application", 1)
@@ -201,19 +201,6 @@ jobs:
           # Android 10: taranan müzik dosyalarına yol ile erişebilmek için (11+ için gerekmez).
           if "requestLegacyExternalStorage" not in s:
               s = s.replace("<application", '<application android:requestLegacyExternalStorage="true"', 1)
-          # Yedekleme kapalı: oturum anahtarları (token) telefonun bulut yedeğine kopyalanıp başka telefona geri yüklenmesin.
-          # Bazı eklentiler kendi manifestinde allowBackup=true yazar; birleştirme hatası olmasın diye tools:replace eklenir.
-          if "android:allowBackup" not in s:
-              m = re.search(r"<application\b[^>]*>", s)
-              tag = m.group(0)
-              new_tag = tag.replace("<application", '<application android:allowBackup="false"', 1)
-              rep = re.search(r'tools:replace="([^"]*)"', new_tag)
-              if rep:
-                  new_tag = new_tag.replace(rep.group(0), 'tools:replace="' + rep.group(1) + ',android:allowBackup"', 1)
-              else:
-                  new_tag = new_tag.replace("<application", '<application tools:replace="android:allowBackup"', 1)
-              s = s.replace(tag, new_tag, 1)
-              print("Uygulama yedeği kapatıldı (allowBackup=false)")
           # Uygulama yalnızca dikey (ekran dönmesin).
           if 'android:screenOrientation' not in s:
               s = re.sub(r'(<activity\s[^>]*android:name="\.MainActivity")', r'\1 android:screenOrientation="portrait"', s, count=1)
@@ -314,11 +301,58 @@ jobs:
             exit 1
           fi
 
+      # v2.100 sonrası derlemeler hiçbir hata yazmadan "exit code 143" ile bitiyordu (derleme makinesi dışarıdan
+      # durduruluyor). En olası sebep kaynak tükenmesi: Flutter'ın ürettiği android/gradle.properties Gradle'a 8 GB bellek
+      # izni verir, özel depolardaki makine ise küçüktür; Firebase, WebRTC ve yerel kodlu gürültü azaltma eklentisi
+      # (NDK + CMake indirir) derlemeyi büyüttü. Burada: kullanılmayan hazır araçlar silinip disk açılır, ek takas alanı
+      # eklenir, Gradle ve Kotlin belleği makineye göre sınırlanır. Derleme adımı da bellek / disk durumunu günlüğe yazar.
+      - name: Derleme makinesini hazırla (disk, takas alanı, Gradle belleği)
+        shell: bash
+        working-directory: ${{ env.APP_DIR }}
+        run: |
+          set -uo pipefail
+          echo "Çekirdek: $(nproc)"; free -m; df -h / | tail -1
+          # Bu derlemede kullanılmayan hazır araçlar (yaklaşık 10 GB): NDK ve derleme çıktıları için yer açılır.
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost /opt/hostedtoolcache/CodeQL /usr/local/.ghcup /usr/share/swift 2>/dev/null || true
+          AVAIL_GB="$(df -BG --output=avail / | tail -1 | tr -dc '0-9')"
+          TOTAL_MB="$(free -m | awk '/^Mem:/{print $2}')"
+          echo "Boş disk: ${AVAIL_GB} GB · bellek: ${TOTAL_MB} MB"
+          # Ek takas alanı: bellek kısa süreliğine taşarsa makine kapanmak yerine yavaşlar.
+          SWAP_GB=0
+          if [ "${AVAIL_GB:-0}" -ge 26 ]; then SWAP_GB=6; elif [ "${AVAIL_GB:-0}" -ge 18 ]; then SWAP_GB=3; fi
+          if [ "$SWAP_GB" -gt 0 ]; then
+            if sudo fallocate -l "${SWAP_GB}G" /trlive_swap && sudo chmod 600 /trlive_swap && sudo mkswap /trlive_swap >/dev/null && sudo swapon /trlive_swap; then
+              echo "${SWAP_GB} GB ek takas alanı açıldı."
+            else
+              sudo rm -f /trlive_swap || true
+              echo "::warning::Ek takas alanı açılamadı; derleme yine denenir."
+            fi
+          fi
+          # Gradle / Kotlin belleği: küçük makinede 3 GB + 1,5 GB, büyük makinede (16 GB) 6 GB + 2 GB.
+          if [ "${TOTAL_MB:-0}" -ge 14000 ]; then GX=6g; KX=2g; WORKERS=""; else GX=3g; KX=1536m; WORKERS="org.gradle.workers.max=2"; fi
+          {
+            echo ""
+            echo "# TRLIVE_BELLEK (apk_build.yml): sondaki satırlar baştakileri geçersiz kılar."
+            echo "org.gradle.jvmargs=-Xmx${GX} -XX:MaxMetaspaceSize=2g -XX:ReservedCodeCacheSize=512m -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8"
+            echo "kotlin.daemon.jvmargs=-Xmx${KX}"
+            echo "org.gradle.parallel=false"
+            [ -n "$WORKERS" ] && echo "$WORKERS"
+          } >> android/gradle.properties
+          echo "--- android/gradle.properties"; cat android/gradle.properties
+          echo "---"; free -m; df -h / | tail -1
+
       - name: APK derle
         shell: bash
         working-directory: ${{ env.APP_DIR }}
         run: |
           set -euo pipefail
+          # Bellek / disk izleme: 45 sn'de bir günlüğe yazılır. Makine yine kapanırsa sebebi (bellek mi, disk mi) son
+          # satırlardan görülür.
+          ( while sleep 45; do
+              echo "[izleme $(date +%H:%M:%S)] bellek: $(free -m | awk '/^Mem:/{printf "kullanılan %s MB, kullanılabilir %s MB", $3, $7} /^Swap:/{printf ", takas %s MB", $3}') · disk boş: $(df -BG --output=avail / | tail -1 | tr -d ' ') · en büyük: $(ps -eo rss=,comm= --sort=-rss | head -1 | awk '{printf "%s %d MB", $2, $1/1024}')"
+            done ) &
+          MON=$!
+          trap 'kill "$MON" 2>/dev/null || true' EXIT
           # arm64: bugünkü telefonların neredeyse tamamı; tek dosya, küçük boyut. Debug anahtarıyla imzalanır (test/yan yükleme için).
           flutter build apk --release --no-shrink --target-platform android-arm64 \
             --dart-define=API_URL="$API_URL" 2>&1 | tee build.log
