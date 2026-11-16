@@ -1,3 +1,83 @@
+## v2.110.0 — Sesli / görüntülü ayrı maaş hesabı ve Fasulye sistemi
+Ajans / yayıncı sisteminin 2. aşaması ve cüzdanın Yoho benzeri "Fasulye" düzenine geçişi.
+
+**Sesli ve görüntülü ayrı hesap**
+- Yayıncının elması, süresi ve geçerli günü odanın türüne göre (sesli oda / görüntülü yayın) ayrı sayılır; iki taraf
+  kendi maaş tablosundan ayrı hesaplanır ve maaşlar toplanır. Odasız gelen hediyeler sesli tarafa yazılır.
+- Görüntülü için ayrı maaş tablosu (`host_pay_levels_video`): başlangıçta sesli tablonun kopyasıdır, Yönetim →
+  Ödemeler'den "Görüntülü tabloyu düzenle" ile ayrıca değiştirilir.
+- Görüntülüye özgü üç kural (varsayılan kapalı = 0): günde sayılan en fazla süre, en kısa geçerli oturum, gün/saat
+  şartı tutmazsa kesintili ödeme (0 = ödenmez).
+- Değişmeyenler: ajans primi yayıncının TOPLAM elması üzerinden sesli tabloyla hesaplanır; Yöntem 2 (bakiye) ve seviye
+  ödülleri (VIP / rozet) sesli tabloya bağlıdır.
+- "Sesli ve görüntülü ayrı hesaplansın" anahtarı kapatılırsa eski davranışa (tek havuz, sesli tablo) dönülür.
+- Yayıncı Merkezi'nde tahmini maaşın sesli / görüntülü kırılımı; maaş tablosu ekranında sesli / görüntülü geçişi.
+- Hesap özetine sesli / görüntülü süre, elmas, seviye ve tutar sütunları eklendi.
+
+**Kimlik doğrulaması (KYC) ve cüzdan**
+- Kimlik doğrulaması onaylı olmayan yayıncının maaşı dönem kapanışında cüzdana YATMAZ; özeti bekler. Admin KYC'yi
+  onaylayıp özeti (tek tek ya da toplu) ödeyince tutar cüzdana yatar. Ajans primi, asistan payı ve davet primi
+  kapanışta yatmaya devam eder. Cüzdan ekranı bekleyen maaşı ve nedenini gösterir.
+- Cüzdan dönemlerinde yönetimdeki "öde" düğmesi artık tutarı cüzdana yatırır (platform dışı ödeme işaretlemez).
+
+**Fasulye sistemi**
+- Cüzdan bakiyesi uygulamada Fasulye olarak gösterilir: **1 Fasulye = 1 dolar**. (Sunucuda tutar yine sent olarak
+  tam sayı tutulur; defter ve bakiye kuralları aynıdır.)
+- **Coin'e çevir:** Fasulye anında düşer, karşılığı Coin kullanıcının kendi hesabına yüklenir.
+- **Coin gönder:** kullanıcı ID ya da kullanıcı adıyla alıcıyı seçer; Fasulye düşer, Coin alıcının hesabına yüklenir,
+  alıcıya bildirim gider. Engellediği / onu engelleyen ya da pasif hesaba gönderilemez.
+- İkisi de anında yapılır ve geri alınamaz; uygulama tutarı, Coin karşılığını ve alıcıyı onaylatır. Alt sınır 1 Fasulye.
+- **Dolar olarak gönder** (altta): bayiye gönderim ve admine gönderim önceki sürümdeki gibi çalışır (alt sınır 10 dolar).
+- **Kur GEÇİCİ:** 1 Fasulye = 4.000 Coin (bayi liste fiyatına göre; bayiye gönderim kuruyla aynı). Yönetim → Fasulye
+  cüzdanı ekranından ayrı ayrı değiştirilir (`usdCoinsPerUsd`, `usdExchangeMinCents`, `usdDealerCoinsPerUsd`).
+- Kayıt: her çevirme `usd_coin_exchanges` tablosuna, Fasulye çıkışı deftere (`coin_exchange` / `coin_send`), Coin girişi
+  alıcının Coin geçmişine ("Fasulye çevirme" / "Fasulyeden gelen Coin") ve mali denetim kaydına yazılır.
+- Yeni uç: `POST /api/usd/coin-exchanges` `{ amountCents, targetUserId? }` (saatte 30 istek, tek seferlik anahtar).
+- Yönetim ekranı toplamlarına "Coin'e çevrilen" eklendi.
+
+Doğrulama
+- Gerçek PostgreSQL ile çalıştırıldı: ölçümlerin oda türüne göre ayrılması; dönem kapatmada sesli 10 $ + görüntülü
+  15 $ = 25 $ ve cüzdana yatış; görüntülü kuralları (kısa oturum, günlük sınır, %50 kesinti); ayrı hesap kapalıyken
+  eski sonuç; KYC'siz yayıncıda bekleme ve onaydan sonra tek tek / toplu ödemeyle yatış (iki kez yatmama).
+- Fasulye: kendine çevirme, başka kullanıcıya gönderme, alt sınır, yetersiz bakiye, olmayan / pasif / engelli alıcı,
+  kur ve alt sınırın ayardan gelmesi, kapatma anahtarı. Her adımda "bakiye = defter toplamı" denetlendi; başarısız
+  denemelerin kayıt bırakmadığı doğrulandı.
+- Bütün sabit SQL sorguları gerçek şemaya karşı hazırlanarak (PREPARE) denetlendi; birim testleri geçti.
+- Flutter kodu yerelde derlenemedi; ilk gerçek denetim GitHub'daki `flutter analyze` ve APK derlemesidir.
+
+## v2.109.0 — Dolar cüzdanı: maaşlar cüzdana yatar; admin'e ve Coin bayisine gönderim
+Ajans / yayıncı sisteminin 1. aşaması (para akışı). 2. aşama (sesli ve görüntülü için ayrı maaş hesabı) sıradadır.
+- **Dolar cüzdanı:** her kullanıcının dolar bakiyesi (`users.usd_cents`, sent olarak tam sayı) ve her hareketin yazıldığı
+  defter (`usd_transactions`: tutar, hareket sonrası bakiye, kaynak). Bakiye eksiye düşemez (koşullu güncelleme +
+  veritabanı kısıtı).
+- **Maaşlar otomatik yatar:** admin dönemi kapattığında yayıncı maaşı yayıncıya, ajans primi ve davet primi ajans
+  sahibine, asistan payı asistana yatar ve hesap özetleri "ödendi" olur. Aynı özet ikinci kez yatırılamaz (tekil indeks).
+  Eski dönemlerin bekleyen özetleri eskisi gibi elle işaretlenir (çifte ödeme olmasın diye otomatik yatırılmaz).
+- **Admin'e gönderim:** kullanıcı tutarı, ödeme yöntemini ve ödeme bilgisini girer; tutar bakiyeden hemen düşer, talep
+  bekler. Admin öder ve "Ödendi" der; reddederse (neden zorunlu) ya da kullanıcı vazgeçerse tutar cüzdana geri döner.
+  Alt sınır 10 dolar, kesinti yok.
+- **Bayiye gönderim:** kullanıcı bayiyi seçer, tutarı girer; dolar anında düşer ve karşılığı Coin bayinin satış stokuna
+  eklenir (bayi hareketlerinde "Dolar gönderimi" olarak görünür). Geri alınamaz; uygulama gönderimden önce bayi adını ve
+  tutarı onaylatır. Kullanıcı kendi bayi hesabına gönderemez. Alt sınır 10 dolar, kesinti yok.
+- **Kur GEÇİCİ:** bayiye gönderimde 1 dolar = 4.000 Coin (mevcut toptan bayi paketine yakın, platform aleyhine olmayan
+  bir değer). Coin fiyatı netleşince Yönetim → Dolar cüzdanı ekranından değiştirilir.
+- **Uygulama:** Yayıncı Merkezi ve Ajans Merkezi'nde "Dolar cüzdanı" (bakiye, iki gönderim, taleplerim, hareketler);
+  Yönetim → Uygulama ayarları'nda "Dolar cüzdanı: çekim talepleri ve ayarlar" (bekleyen talepler, öde / reddet,
+  toplamlar, alt sınırlar, kur, aç/kapat). Yönetim uçları yalnızca tam yetkili admin'e açıktır.
+- Güvenlik: tutarlar yalnızca pozitif tam sent kabul edilir; para işlemleri tek seferlik anahtarla (Idempotency-Key)
+  yinelenmeye karşı korunur; her yönetim işlemi mali denetim kaydına yazılır; ödeme bilgisi yalnızca sahibine ve
+  admin'e görünür.
+- Yeni uçlar: `GET /api/usd/me`, `GET /api/usd/dealers`, `POST /api/usd/withdrawals`,
+  `POST /api/usd/withdrawals/:id/cancel`, `POST /api/usd/dealer-transfers`; yönetim: `GET /api/admin/usd`,
+  `POST /api/admin/usd/withdrawals/:id/pay|reject`, `POST /api/admin/usd/adjust`, `GET /api/admin/usd/users/:id`.
+- Web paneli (ayrı depo) bu sürümde değişmedi; çekim talepleri şimdilik uygulamadaki yönetim ekranından yönetilir.
+Doğrulama
+- Gerçek PostgreSQL ile tüm akış çalıştırıldı: dönem kapanışında yatırma (ve ikinci kez yatmama), alt sınırlar,
+  yetersiz bakiye, öde / reddet / vazgeç, bayiye gönderim ve Coin stoku, kendi bayisine gönderememe, kapatma anahtarı.
+  Her adımda "bakiye = defter toplamı" denetlendi. Başarısız denemelerin kayıt bırakmadığı doğrulandı.
+- 075 geçişi ve koddaki bütün SQL metinleri gerçek şemaya karşı denetlendi; 3 yeni birim testi + uçtan uca test.
+- Uygulama tarafı (Flutter) yerelde derlenemedi; APK derlemesi ve `flutter analyze` GitHub'da çalışır.
+
 ## v2.108.0 — Ludo yenilendi: oda içi pencere (WebView), Klasik / Seri / Eşyalı modlar
 - Ludo artık TEK ile aynı düzende çalışır: odanın üst kısmında açılan oyun penceresi (kendi sunucumuzdaki sabit sayfa,
   WebView). Sohbet ve alt çubuk açık kalır; pencere küçültülünce sağda oyun balonu durur, oyun başlayınca oyuncuların

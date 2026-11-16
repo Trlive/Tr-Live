@@ -59,6 +59,17 @@ export const CONFIG_DEFAULTS = Object.freeze({
   smtpUser: '',
   smtpPass: '',
   smtpFrom: '',
+  // Dolar cüzdanı (yayıncı / ajans maaşları). Tutarlar sent: 1000 = 10 dolar.
+  usdEnabled: true, // kapalıyken admin'e ve bayiye gönderim yapılamaz (bakiye ve geçmiş görünür)
+  usdAutoCredit: true, // dönem kapatılınca maaş ve primler cüzdanlara otomatik yatar
+  usdWithdrawMinCents: 1000, // admin'e gönderimde alt sınır
+  usdDealerMinCents: 1000, // bayiye gönderimde alt sınır
+  // Bayiye gönderimde 1 doların bayi stokuna geçen Coin karşılığı. GEÇİCİ değer: Coin fiyatı netleşince panelden ayarlanır.
+  usdDealerCoinsPerUsd: 4000,
+  // Fasulye → Coin (kendine çevirme ve başka kullanıcıya Coin gönderme): 1 Fasulye (1 dolar) kaç Coin eder ve alt sınır.
+  // GEÇİCİ değer: bayi liste fiyatına (100 Coin ≈ 1 TL, 1 dolar ≈ 40 TL) göre, bayi kuruyla aynı seçildi; panelden ayarlanır.
+  usdCoinsPerUsd: 4000,
+  usdExchangeMinCents: 100,
 });
 
 /** Yönetim paneline giden ayarlarda SMTP şifresi gösterilmez; bu değer geri gelirse şifre değiştirilmez. */
@@ -135,6 +146,8 @@ export function validateConfigPatch(body) {
         strikeLimit: [1, 20], strikeWindowMin: [1, 1440], muteMinutes: [1, 1440], maxMuteMinutes: [1, 10080],
         luckyRtpBps: [0, 9000], luckyJackpotShareBps: [0, 8000], luckyReceiverBps: [0, 5000], luckyMaxWin: [1, 1000000000], luckyAnnounceMultiplier: [10, 1000],
         flyTextCoins: [0, 1000000], checkinItemDays: [1, 90], smtpPort: [1, 65535],
+        usdWithdrawMinCents: [100, 100000000], usdDealerMinCents: [100, 100000000], usdDealerCoinsPerUsd: [1, 100000000],
+        usdCoinsPerUsd: [1, 100000000], usdExchangeMinCents: [1, 100000000],
       }[k];
       if (!limits) throw fail(`${k} için sınır tanımlı değil.`);
       if (!Number.isInteger(v) || v < limits[0] || v > limits[1]) throw fail(`${k} ${limits[0]}-${limits[1]} arasında tam sayı olmalı.`);

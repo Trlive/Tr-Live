@@ -1,3 +1,4 @@
+import 'usd_wallet_screen.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/api.dart';
@@ -287,6 +288,8 @@ const _actionLabels = {
   'admin_wip_revoke': 'WIP alındı',
   'admin_inventory_grant': 'Öğe verildi',
   'dealer_credit': 'Bayiye Coin yüklendi',
+  'usd_coin_exchange': 'Fasulye → Coin',
+  'usd_dealer_transfer': 'Bayiye dolar gönderimi',
   'dealer_sale': 'Bayi satışı',
   'agency_status': 'Ajans durumu',
   'broadcaster_status': 'Yayıncı durumu',
@@ -797,6 +800,12 @@ class _AppConfigScreenState extends State<AppConfigScreen> {
                     onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminLuckyPoolsScreen())),
                     icon: const Icon(Icons.savings_outlined),
                     label: const Text('Havuzları gör / havuza ekle'),
+                  ),
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminUsdScreen())),
+                    icon: const Icon(Icons.account_balance_wallet_outlined),
+                    label: const Text('Fasulye cüzdanı: çekim talepleri ve ayarlar'),
                   ),
                   const SizedBox(height: Gap.s),
                   FilledButton.icon(

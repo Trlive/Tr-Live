@@ -54,6 +54,7 @@ import { router as gamesRouter } from './routes/games.js';
 import { router as feedRouter } from './routes/feed.js';
 import { router as systemRouter } from './routes/system.js';
 import { router as roomActivitiesRouter } from './routes/room_activities.js';
+import { router as usdRouter, adminRouter as usdAdminRouter } from './routes/usd.js';
 import { router as roomGamePageRouter } from './routes/room_game_page.js';
 import { router as dealerTopupPageRouter } from './routes/dealer_topup_page.js';
 import { getConfig, compareVersions } from './services/app_config.js';
@@ -168,7 +169,9 @@ app.use('/api/leaderboards', leaderboardsRouter);
 app.use('/api/families', familiesRouter);
 app.use('/api/wip', wipRouter);
 app.use('/api/dealer', dealersRouter);
+app.use('/api/admin/usd', usdAdminRouter); // dolar cüzdanı yönetimi (çekim talepleri); genel admin yönlendiricisinden önce
 app.use('/api/admin', adminRouter);
+app.use('/api/usd', usdRouter); // dolar cüzdanı: bakiye, admin'e ve bayiye gönderim
 app.use('/api/events', eventsRouter);
 // Aşağıdakiler '/api' altında birden çok yol tanımladığı için en sona konur.
 app.use('/api', feedRouter);

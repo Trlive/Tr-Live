@@ -1,3 +1,4 @@
+import 'usd_wallet_screen.dart';
 import 'package:flutter/material.dart';
 import '../services/api.dart';
 import '../widgets/app_theme.dart';
@@ -22,6 +23,31 @@ String periodTitle(String key) {
 }
 
 String _usd(dynamic cents, String cur) => fmtMoney(cents, cur);
+
+/// Yayıncı Merkezi: sesli / görüntülü maaş kırılımı satırı.
+Widget _splitRow(IconData icon, String title, Map<String, dynamic> k, String cur) {
+  final hours = (((k['seconds'] as num?) ?? 0) / 3600).toStringAsFixed(1);
+  final level = k['level'];
+  final cut = k['shortfall'] == true;
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+    decoration: BoxDecoration(color: Pal.surface, borderRadius: BorderRadius.circular(12), border: Border.all(color: Pal.outline)),
+    child: Row(children: [
+      Icon(icon, size: 20, color: Pal.gold),
+      const SizedBox(width: 10),
+      Expanded(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+          Text(
+            '${fmtNumber(k['diamonds'])} 💎 · $hours sa · ${k['validDays'] ?? 0} gün · ${level == null ? 'seviye yok' : 'Sv $level'}${cut ? ' (şart eksik: kesintili)' : ''}',
+            style: const TextStyle(fontSize: 11.5, color: Pal.textDim),
+          ),
+        ]),
+      ),
+      Text(_usd(k['cents'], cur), style: const TextStyle(fontWeight: FontWeight.w900, color: Pal.gold)),
+    ]),
+  );
+}
 
 /// 'broadcaster' → Yayıncı Merkezi (ajans daveti, maaş); 'agency' → Ajans Merkezi (ajans sahibi / asistan).
 class AgencyScreen extends StatefulWidget {
@@ -93,6 +119,7 @@ class _AgencyScreenState extends State<AgencyScreen> {
     if (widget.mode == 'agency') return const AgencyCenterScreen();
     return Scaffold(
       appBar: AppBar(title: const Text('Yayıncı Merkezi'), actions: [
+        IconButton(tooltip: 'Fasulye cüzdanı', icon: const Icon(Icons.account_balance_wallet_outlined), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const UsdWalletScreen()))),
         IconButton(tooltip: 'Maaş tablosu', icon: const Icon(Icons.table_chart_outlined), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PayTableScreen()))),
       ]),
       body: AsyncBody<Map<String, dynamic>>(
@@ -363,6 +390,13 @@ class _AgencyScreenState extends State<AgencyScreen> {
             if (method != null) Text('Yöntem $method', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
           ]),
         ),
+        // Sesli ve görüntülü ayrı hesaplanıyorsa kırılım: her tarafın elması, süresi, seviyesi ve maaşı.
+        if (p['split'] == true && mapOf(p['video']) != null) ...[
+          const SizedBox(height: 8),
+          _splitRow(Icons.mic, 'Sesli oda', mapOf(p['audio']) ?? const {}, cur),
+          const SizedBox(height: 6),
+          _splitRow(Icons.videocam, 'Görüntülü yayın', mapOf(p['video']) ?? const {}, cur),
+        ],
         if (method == 2)
           Padding(
             padding: const EdgeInsets.only(top: 6),

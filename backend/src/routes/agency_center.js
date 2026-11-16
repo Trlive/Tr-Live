@@ -130,6 +130,9 @@ router.get('/agency-center/pay-table', async (req, res) => {
   const cfg = await loadConfig();
   res.json({
     currency: cfg.settings.currency, levels: cfg.levels.map(payLevelJson), badges: BADGE_NAMES, grades: gradesJson(cfg.grades),
+    // Görüntülü yayın tablosu ve kuralları (ayrı hesap kapalıysa split = false; uygulama tek tablo gösterir).
+    split: cfg.settings.splitByRoomType !== false, videoLevels: (cfg.videoLevels ?? cfg.levels).map(payLevelJson),
+    video: { dailyCapMinutes: cfg.settings.videoDailyCapMinutes, minSessionMinutes: cfg.settings.videoMinSessionMinutes, shortfallCutBps: cfg.settings.videoShortfallCutBps },
     settings: {
       cycle: cfg.settings.cycle, validDayMinutes: cfg.settings.validDayMinutes, requireGameHours: cfg.settings.requireGameHours,
       allowBalanceMethod: cfg.settings.allowBalanceMethod, referralBps: cfg.settings.referralBps,

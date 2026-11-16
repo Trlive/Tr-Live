@@ -1,6 +1,6 @@
 // Ajans sistemi v2: dönem ölçümleri (toplu sorgular). Gün sınırları Türkiye saatine göredir (UTC+3).
 import { query } from '../database.js';
-import { payLevelFromRow, DEFAULT_AGENCY_GRADES, evaluatePay, agencyPrim } from '../paytable.js';
+import { payLevelFromRow, DEFAULT_AGENCY_GRADES, evaluatePay, evaluateVideoPay, agencyPrim } from '../paytable.js';
 
 const DAY = 86400;
 const OFF = 10800; // +3 saat
@@ -13,6 +13,8 @@ export const dayKey = (idx) => new Date(idx * DAY * 1000).toISOString().slice(0,
 export async function loadPayConfig(run = query) {
   const s = (await run(`SELECT * FROM agency_settings WHERE id = 1`)).rows[0] ?? {};
   const levels = (await run(`SELECT * FROM host_pay_levels ORDER BY level`)).rows.map(payLevelFromRow);
+  // Görüntülü yayın tablosu (boşsa sesli tablo kullanılır).
+  const videoRows = (await run(`SELECT * FROM host_pay_levels_video ORDER BY level`)).rows.map(payLevelFromRow);
   let grades = DEFAULT_AGENCY_GRADES;
   if (Array.isArray(s.agency_grades) && s.agency_grades.length) {
     try { grades = s.agency_grades.map((g) => ({ name: String(g.name), min: BigInt(g.min) })); } catch { grades = DEFAULT_AGENCY_GRADES; }
@@ -24,8 +26,13 @@ export async function loadPayConfig(run = query) {
       validDayMinutes: s.valid_day_minutes ?? 60, requireGameHours: s.require_game_hours === true,
       allowBalanceMethod: s.allow_balance_method !== false, maxAssistants: s.max_assistants ?? 7,
       maxAssistantBps: s.max_assistant_bps ?? 5000, referralBps: s.referral_bps ?? 500, transferWaitHours: s.transfer_wait_hours ?? 72,
+      // Sesli / görüntülü ayrı hesap ve görüntülüye özgü kurallar (0 = kural kapalı).
+      splitByRoomType: s.split_by_room_type !== false,
+      videoDailyCapMinutes: s.video_daily_cap_minutes ?? 0, videoMinSessionMinutes: s.video_min_session_minutes ?? 0,
+      videoShortfallCutBps: s.video_shortfall_cut_bps ?? 0,
     },
     levels,
+    videoLevels: videoRows.length ? videoRows : levels,
     grades,
   };
 }
@@ -35,9 +42,13 @@ export const gradesJson = (grades) => grades.map((g) => ({ name: g.name, min: St
 /**
  * Yayıncıların dönem ölçümleri.
  * hosts: [{ user_id, approved_at }] — süre ve hediyeler yayıncı onayından SONRA sayılır.
- * Dönüş: Map userId → { seconds, validDays, gameSeconds, diamonds, todaySeconds, days: Map(dayIdx → seconds), giftDays: Map(dayIdx → BigInt) }
+ * Dönüş: Map userId → { seconds, validDays, gameSeconds, diamonds, todaySeconds, days: Map(dayIdx → seconds), giftDays: Map(dayIdx → BigInt),
+ *   audio: { seconds, validDays, diamonds }, video: { seconds, rawSeconds, validDays, diamonds } }
+ * Üst düzey alanlar iki tarafın TOPLAMIDIR (panel grafikleri için). audio / video: odanın türüne göre ayrılmış ölçümler.
+ * Görüntülü tarafta [video] kuralları uygulanır: minSessionMinutes'ten kısa oturumlar sayılmaz, bir günde en fazla
+ * dailyCapMinutes sayılır (0 = sınırsız). rawSeconds: kurallar uygulanmadan önceki süre.
  */
-export async function hostPeriodMetrics(hosts, start, end, validDayMinutes = 60, run = query) {
+export async function hostPeriodMetrics(hosts, start, end, validDayMinutes = 60, run = query, video = {}) {
   const out = new Map();
   if (!hosts.length) return out;
   const startMs = new Date(start).getTime();
@@ -46,25 +57,31 @@ export async function hostPeriodMetrics(hosts, start, end, validDayMinutes = 60,
     const appr = h.approved_at ? new Date(h.approved_at).getTime() : 0;
     ids.push(h.user_id);
     froms.push(new Date(Math.max(appr, startMs)).toISOString());
-    out.set(h.user_id, { seconds: 0, validDays: 0, gameSeconds: 0, diamonds: 0n, todaySeconds: 0, days: new Map(), giftDays: new Map() });
+    out.set(h.user_id, {
+      seconds: 0, validDays: 0, gameSeconds: 0, diamonds: 0n, todaySeconds: 0, days: new Map(), giftDays: new Map(),
+      audio: { seconds: 0, validDays: 0, diamonds: 0n, days: new Map() },
+      video: { seconds: 0, rawSeconds: 0, validDays: 0, diamonds: 0n, days: new Map() },
+    });
   }
   const endIso = new Date(end).toISOString();
   const mic = await run(
     `WITH x AS (SELECT * FROM unnest($1::uuid[], $2::timestamptz[]) AS t(user_id, from_ts)),
      s AS (
-       SELECT m.user_id,
+       SELECT m.user_id, (CASE WHEN r.room_type = 'video' THEN 'video' ELSE 'audio' END) AS kind,
          FLOOR(EXTRACT(EPOCH FROM GREATEST(m.started_at, x.from_ts)))::bigint AS st,
          FLOOR(EXTRACT(EPOCH FROM LEAST(COALESCE(m.ended_at, NOW()), $3::timestamptz)))::bigint AS en
-       FROM mic_sessions m JOIN x ON x.user_id = m.user_id
+       FROM mic_sessions m JOIN x ON x.user_id = m.user_id LEFT JOIN rooms r ON r.id = m.room_id
        WHERE m.started_at < $3::timestamptz AND COALESCE(m.ended_at, NOW()) > x.from_ts
      )
-     SELECT s.user_id, g.day::int AS day,
-       SUM(LEAST(s.en, (g.day + 1) * 86400 - 10800) - GREATEST(s.st, g.day * 86400 - 10800))::bigint AS sec
+     SELECT s.user_id, s.kind, g.day::int AS day,
+       SUM(LEAST(s.en, (g.day + 1) * 86400 - 10800) - GREATEST(s.st, g.day * 86400 - 10800))::bigint AS sec,
+       COALESCE(SUM(LEAST(s.en, (g.day + 1) * 86400 - 10800) - GREATEST(s.st, g.day * 86400 - 10800)) FILTER (WHERE s.en - s.st >= $4::bigint), 0)::bigint AS sec_ok
      FROM s CROSS JOIN LATERAL generate_series((s.st + 10800) / 86400, (s.en - 1 + 10800) / 86400) AS g(day)
      WHERE s.en > s.st
-     GROUP BY s.user_id, g.day`,
-    [ids, froms, endIso],
+     GROUP BY s.user_id, s.kind, g.day`,
+    [ids, froms, endIso, Math.max(0, Number(video.minSessionMinutes ?? 0)) * 60],
   );
+  const capSec = Math.max(0, Number(video.dailyCapMinutes ?? 0)) * 60;
   const today = dayIndex(new Date());
   const minSec = Math.max(1, Number(validDayMinutes)) * 60;
   for (const r of mic.rows) {
@@ -72,8 +89,22 @@ export async function hostPeriodMetrics(hosts, start, end, validDayMinutes = 60,
     if (!m) continue;
     const sec = Number(r.sec);
     m.days.set(r.day, (m.days.get(r.day) ?? 0) + sec);
+    if (r.kind === 'video') {
+      // Görüntülü: kısa oturumlar sayılmaz (sec_ok), günlük üst sınır uygulanır.
+      const counted = capSec > 0 ? Math.min(Number(r.sec_ok), capSec) : Number(r.sec_ok);
+      m.video.rawSeconds += sec;
+      m.video.days.set(r.day, (m.video.days.get(r.day) ?? 0) + counted);
+    } else {
+      m.audio.days.set(r.day, (m.audio.days.get(r.day) ?? 0) + sec);
+    }
   }
   for (const m of out.values()) {
+    for (const k of [m.audio, m.video]) {
+      for (const sec of k.days.values()) {
+        k.seconds += sec;
+        if (sec >= minSec) k.validDays += 1;
+      }
+    }
     for (const [d, sec] of m.days) {
       m.seconds += sec;
       if (sec >= minSec) m.validDays += 1;
@@ -83,10 +114,11 @@ export async function hostPeriodMetrics(hosts, start, end, validDayMinutes = 60,
   const gifts = await run(
     `WITH x AS (SELECT * FROM unnest($1::uuid[], $2::timestamptz[]) AS t(user_id, from_ts))
      SELECT g.receiver_id AS user_id, ((FLOOR(EXTRACT(EPOCH FROM g.created_at))::bigint + 10800) / 86400)::int AS day,
+       (CASE WHEN r.room_type = 'video' THEN 'video' ELSE 'audio' END) AS kind,
        SUM(COALESCE(g.diamond_amount, g.coin_amount))::text AS d
-     FROM gift_transactions g JOIN x ON x.user_id = g.receiver_id
+     FROM gift_transactions g JOIN x ON x.user_id = g.receiver_id LEFT JOIN rooms r ON r.id = g.room_id
      WHERE g.sender_id <> g.receiver_id AND g.created_at >= x.from_ts AND g.created_at < $3::timestamptz
-     GROUP BY 1, 2`,
+     GROUP BY 1, 2, 3`,
     [ids, froms, endIso],
   );
   for (const r of gifts.rows) {
@@ -95,6 +127,7 @@ export async function hostPeriodMetrics(hosts, start, end, validDayMinutes = 60,
     const d = BigInt(r.d);
     m.diamonds += d;
     m.giftDays.set(r.day, (m.giftDays.get(r.day) ?? 0n) + d);
+    (r.kind === 'video' ? m.video : m.audio).diamonds += d;
   }
   // Oyun süresi: yayıncının oyuncu olarak katıldığı oda oyunları (bir oyun en fazla 3 saat sayılır).
   const games = await run(
@@ -178,8 +211,34 @@ export async function eventCounts(userIds, start, end, run = query) {
 }
 
 /** Yayıncıların tahmini maaşı (canlı dönem). hosts: [{ user_id, approved_at, pay_method_pref }] */
+/** Görüntülü taraf kuralları (ayarlar → hostPeriodMetrics / evaluateVideoPay). */
+export const videoRules = (settings) => ({
+  dailyCapMinutes: settings.videoDailyCapMinutes ?? 0, minSessionMinutes: settings.videoMinSessionMinutes ?? 0,
+  shortfallCutBps: settings.videoShortfallCutBps ?? 0,
+});
+
+/**
+ * Bir yayıncının maaş hesabı: ayrı hesap açıkken sesli (cfg.levels) ve görüntülü (cfg.videoLevels) ayrı değerlendirilir.
+ * Dönüş: sesli değerlendirme + { salaryCents: TOPLAM, audioCents, videoCents, video: görüntülü değerlendirme | null }.
+ * Bakiye yöntemi (Yöntem 2) yalnızca sesli tabloda geçerlidir.
+ */
+export function evaluateHost(cfg, m, { pref = 0, eventsOk = true, balance = 0n } = {}) {
+  const split = cfg.settings.splitByRoomType !== false;
+  const src = split ? m.audio : m;
+  const audio = evaluatePay({
+    levels: cfg.levels, settings: cfg.settings, pref, eventsOk,
+    metrics: { seconds: src.seconds, validDays: src.validDays, gameSeconds: m.gameSeconds, diamonds: src.diamonds, balance },
+  });
+  const video = split ? evaluateVideoPay({
+    levels: cfg.videoLevels ?? cfg.levels, settings: cfg.settings, video: videoRules(cfg.settings), eventsOk,
+    metrics: { seconds: m.video.seconds, validDays: m.video.validDays, gameSeconds: m.gameSeconds, diamonds: m.video.diamonds },
+  }) : null;
+  const videoCents = video ? video.salaryCents : 0n;
+  return { ...audio, audioCents: audio.salaryCents, videoCents, salaryCents: audio.salaryCents + videoCents, video, split };
+}
+
 export async function estimateHosts(hosts, cfg, bounds, run = query) {
-  const metrics = await hostPeriodMetrics(hosts, bounds.start, bounds.end, cfg.settings.validDayMinutes, run);
+  const metrics = await hostPeriodMetrics(hosts, bounds.start, bounds.end, cfg.settings.validDayMinutes, run, videoRules(cfg.settings));
   const ids = hosts.map((h) => h.user_id);
   const bal = new Map();
   if (ids.length) {
@@ -190,10 +249,7 @@ export async function estimateHosts(hosts, cfg, bounds, run = query) {
   for (const h of hosts) {
     const m = metrics.get(h.user_id);
     const evOk = !cfg.settings.requireOfficialEvents || (ev.get(h.user_id) ?? 0) >= cfg.settings.minEventCount;
-    const e = evaluatePay({
-      levels: cfg.levels, settings: cfg.settings, pref: h.pay_method_pref ?? 0, eventsOk: evOk,
-      metrics: { seconds: m.seconds, validDays: m.validDays, gameSeconds: m.gameSeconds, diamonds: m.diamonds, balance: bal.get(h.user_id) ?? 0n },
-    });
+    const e = evaluateHost(cfg, m, { pref: h.pay_method_pref ?? 0, eventsOk: evOk, balance: bal.get(h.user_id) ?? 0n });
     out.set(h.user_id, { metrics: m, eval: e, balance: bal.get(h.user_id) ?? 0n, eventCount: ev.get(h.user_id) ?? 0, eventsOk: evOk });
   }
   return out;

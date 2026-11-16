@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import express from 'express';
 import { query, tx } from '../database.js';
+import { creditPeriod, creditStatement, isWalletPeriod } from '../services/usd_wallet.js';
 import { requireAuth, requireStaff, requireSuperAdmin, hashPassword, passwordRules } from '../auth.js';
 import { USERNAME_RE, normalizePhone } from './auth.js';
 import { supportMayCall, banEnd, mayActOnUser } from '../staff_logic.js';
@@ -1203,6 +1204,8 @@ const SETTING_COLUMNS = {
   cycle: 'cycle', penaltyBps: 'penalty_bps', requireOfficialEvents: 'require_official_events', minEventCount: 'min_event_count', currency: 'currency',
   validDayMinutes: 'valid_day_minutes', requireGameHours: 'require_game_hours', allowBalanceMethod: 'allow_balance_method',
   maxAssistants: 'max_assistants', maxAssistantBps: 'max_assistant_bps', referralBps: 'referral_bps', transferWaitHours: 'transfer_wait_hours',
+  splitByRoomType: 'split_by_room_type', videoDailyCapMinutes: 'video_daily_cap_minutes', videoMinSessionMinutes: 'video_min_session_minutes',
+  videoShortfallCutBps: 'video_shortfall_cut_bps',
 };
 
 router.put('/agency-config', requireSuperAdmin, async (req, res) => {
@@ -1236,11 +1239,14 @@ router.put('/agency-config', requireSuperAdmin, async (req, res) => {
   res.json({ config: configJson(await loadConfig()) });
 });
 
-async function savePayLevels(c, levels) {
-  await c.query(`DELETE FROM host_pay_levels`);
+// kind: 'audio' (sesli oda tablosu) | 'video' (görüntülü yayın tablosu).
+const payTableOf = (kind) => (kind === 'video' ? 'host_pay_levels_video' : 'host_pay_levels');
+async function savePayLevels(c, levels, kind = 'audio') {
+  const table = payTableOf(kind);
+  await c.query(`DELETE FROM ${table}`);
   for (const l of levels) {
     await c.query(
-      `INSERT INTO host_pay_levels(level, required_days, required_hours, game_hours, diamonds, salary1_cents, salary2_cents, agency_cents,
+      `INSERT INTO ${table}(level, required_days, required_hours, game_hours, diamonds, salary1_cents, salary2_cents, agency_cents,
          vip_level, vip_days, badge, special_id_days, special_id_count) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
       [l.level, l.days, l.hours, l.gameHours, l.diamonds.toString(), l.salary1Cents.toString(), l.salary2Cents.toString(), l.agencyCents.toString(),
         l.vipLevel, l.vipDays, l.badge, l.specialIdDays, l.specialIdCount],
@@ -1250,18 +1256,20 @@ async function savePayLevels(c, levels) {
 
 router.put('/pay-levels', requireSuperAdmin, async (req, res) => {
   const levels = validatePayLevels(req.body?.levels);
+  const kind = req.body?.kind === 'video' || req.query.kind === 'video' ? 'video' : 'audio';
   await tx(async (c) => {
-    await savePayLevels(c, levels);
+    await savePayLevels(c, levels, kind);
     await c.query(`INSERT INTO financial_audit_logs(admin_id, action, reference_type, metadata) VALUES($1,'pay_levels_update','agency_config',$2)`,
-      [req.user.id, JSON.stringify({ levels: levels.length })]);
+      [req.user.id, JSON.stringify({ levels: levels.length, kind })]);
   });
   res.json({ config: configJson(await loadConfig()) });
 });
 
 router.post('/pay-levels/reset', requireSuperAdmin, async (req, res) => {
   await tx(async (c) => {
-    await savePayLevels(c, DEFAULT_PAY_LEVELS);
-    await c.query(`INSERT INTO financial_audit_logs(admin_id, action, reference_type, metadata) VALUES($1,'pay_levels_reset','agency_config','{}')`, [req.user.id]);
+    const kind = req.body?.kind === 'video' || req.query.kind === 'video' ? 'video' : 'audio';
+    await savePayLevels(c, DEFAULT_PAY_LEVELS, kind);
+    await c.query(`INSERT INTO financial_audit_logs(admin_id, action, reference_type, metadata) VALUES($1,'pay_levels_reset','agency_config',$2)`, [req.user.id, JSON.stringify({ kind })]);
   });
   res.json({ config: configJson(await loadConfig()) });
 });
@@ -1528,7 +1536,7 @@ router.get('/payouts/:id', async (req, res) => {
      WHERE s.period_id = $1 ORDER BY s.amount_cents DESC`, args,
   )).rows;
   res.json({
-    period: { id: p.id, periodKey: p.period_key, cycle: p.cycle, startsAt: p.starts_at, endsAt: p.ends_at, closedAt: p.closed_at, currency: p.config?.settings?.currency ?? null },
+    period: { id: p.id, periodKey: p.period_key, cycle: p.cycle, startsAt: p.starts_at, endsAt: p.ends_at, closedAt: p.closed_at, currency: p.config?.settings?.currency ?? null, walletMode: p.wallet_mode === true },
     hostStatements: hosts.map((h) => ({ ...hostStatementJson(h), publicId: h.public_id, kycStatus: h.kyc_status })),
     agencyStatements: agencies.map((a) => ({ ...agencyStatementJson(a), ownerUsername: a.owner_username, ownerKyc: a.owner_kyc })),
     assistantStatements: assistants.map((s) => ({ ...assistantStatementJson(s), kycStatus: s.kyc_status })),
@@ -1558,7 +1566,10 @@ router.post('/statements/:kind/:id/pay', requireSuperAdmin, async (req, res) => 
       const k = (await c.query(`SELECT kyc_status FROM users WHERE id = $1`, [row.user_id])).rows[0]?.kyc_status;
       if (k !== 'approved') throw fail('Yayıncının kimlik doğrulaması (KYC) onaylı değil.', 409);
     }
-    await c.query(`UPDATE ${t.table} SET status = 'paid', paid_at = NOW(), paid_by = $2, pay_note = $3 WHERE id = $1`, [id, req.user.id, note]);
+    // Cüzdan döneminde "öde" = tutarı alıcının dolar cüzdanına yatır (platform dışı ödeme yapılmaz).
+    const wallet = await isWalletPeriod(c, row.period_id);
+    if (wallet) await creditStatement(c, kind, row, req.user.id);
+    await c.query(`UPDATE ${t.table} SET status = 'paid', paid_at = NOW(), paid_by = $2, pay_note = $3 WHERE id = $1`, [id, req.user.id, note || (wallet ? 'Dolar cüzdanına yatırıldı' : null)]);
     await c.query(
       `INSERT INTO financial_audit_logs(admin_id, user_id, action, reference_type, reference_id, metadata) VALUES($1,$2,$3,$4,$5,$6)`,
       [req.user.id, row.user_id ?? null, t.action, t.table, id, JSON.stringify({ amountCents: String(row[t.amount] ?? 0), note })],
@@ -1574,6 +1585,8 @@ router.post('/payouts/:id/pay-all', requireSuperAdmin, async (req, res) => {
   const note = text(req.body?.note, 'Not', { max: 200 });
   const t = STATEMENT_TABLES[kind];
   const out = await tx(async (c) => {
+    // Cüzdan döneminde tutarlar önce cüzdanlara yatırılır (KYC'siz yayıncılar atlanır); kalan sıfır tutarlı özetler aşağıda kapanır.
+    const walletOut = (await isWalletPeriod(c, periodId)) ? await creditPeriod(c, periodId, req.user.id, { kinds: [kind], note: note || 'Dolar cüzdanına yatırıldı' }) : null;
     const r = kind === 'host'
       ? await c.query(
           `UPDATE host_statements h SET status = 'paid', paid_at = NOW(), paid_by = $2, pay_note = $3 FROM users u
@@ -1585,12 +1598,13 @@ router.post('/payouts/:id/pay-all', requireSuperAdmin, async (req, res) => {
            RETURNING id, ${t.amount} AS amount`, [periodId, req.user.id, note],
         );
     const left = (await c.query(`SELECT COUNT(*)::int AS n FROM ${t.table} WHERE period_id = $1 AND status = 'pending'`, [periodId])).rows[0].n;
-    const total = r.rows.reduce((s, x) => s + BigInt(x.amount ?? 0), 0n);
+    const total = r.rows.reduce((s, x) => s + BigInt(x.amount ?? 0), 0n) + (walletOut?.cents ?? 0n);
+    const paid = r.rowCount + (walletOut?.count ?? 0);
     await c.query(
       `INSERT INTO financial_audit_logs(admin_id, action, reference_type, reference_id, metadata) VALUES($1,$2,'payout_period',$3,$4)`,
-      [req.user.id, `${t.action}_bulk`, periodId, JSON.stringify({ count: r.rowCount, totalCents: total.toString(), skipped: left, note })],
+      [req.user.id, `${t.action}_bulk`, periodId, JSON.stringify({ count: paid, totalCents: total.toString(), skipped: left, note, wallet: walletOut !== null })],
     );
-    return { paid: r.rowCount, skipped: left, totalCents: total.toString() };
+    return { paid, skipped: left, totalCents: total.toString() };
   });
   res.json({ ok: true, ...out });
 });

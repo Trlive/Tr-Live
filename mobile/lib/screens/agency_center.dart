@@ -1,3 +1,4 @@
+import 'usd_wallet_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/api.dart';
@@ -456,6 +457,7 @@ class _AgencyHomeViewState extends State<AgencyHomeView> {
       if (canAnnounce) (Icons.campaign_outlined, const Color(0xFF38BDF8), 'Duyuru', 0, () => _open(AgencyInfoScreen(agencyId: widget.agencyId, editAnnouncement: true))),
       (Icons.table_chart_outlined, const Color(0xFFA78BFA), 'Maaş tablosu', 0, () => _open(const PayTableScreen())),
       (Icons.receipt_long, const Color(0xFFB3A584), 'Hesap özetleri', 0, () => _open(AgencyStatementsScreen(agencyId: widget.agencyId, assistant: !isOwner))),
+      (Icons.account_balance_wallet_outlined, const Color(0xFFF2B92A), 'Fasulye cüzdanı', 0, () => _open(const UsdWalletScreen())),
     ];
     return AgCard(
       padding: const EdgeInsets.fromLTRB(6, 12, 6, 6),
@@ -766,17 +768,24 @@ class _AgencyInfoScreenState extends State<AgencyInfoScreen> {
 /// 44 seviyeli yayıncı maaş tablosu (Yöntem 1 / Yöntem 2 / ajans primi / ödüller).
 class PayTableScreen extends StatelessWidget {
   final int? highlight;
-  const PayTableScreen({super.key, this.highlight});
+  /// true: görüntülü yayın tablosu; false: sesli oda tablosu.
+  final bool video;
+  const PayTableScreen({super.key, this.highlight, this.video = false});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Yayıncı maaş tablosu')),
+      appBar: AppBar(title: Text(video ? 'Maaş tablosu: görüntülü' : 'Maaş tablosu: sesli'), actions: [
+        TextButton(
+          onPressed: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => PayTableScreen(video: !video))),
+          child: Text(video ? 'Sesli' : 'Görüntülü'),
+        ),
+      ]),
       body: AsyncBody<Map<String, dynamic>>(
         load: () => Api.get('/api/agency-center/pay-table'),
         builder: (context, d, reload) {
           final cur = (d['currency'] ?? 'USD').toString();
-          final levels = listOf(d['levels']);
+          final levels = listOf(video && d['videoLevels'] != null ? d['videoLevels'] : d['levels']);
           final s = mapOf(d['settings']) ?? {};
           String money(dynamic c) {
             final v = agBig(c) ~/ BigInt.from(100);

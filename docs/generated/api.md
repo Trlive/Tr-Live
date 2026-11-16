@@ -4,7 +4,7 @@
 
 Kimlik: **🔒** giriş gerekli · **👑** yalnızca yönetici · **🛠** yönetici + yardımcı admin (destek) · **⏱** hız sınırı adı
 
-**Toplam 405 uç.**
+**Toplam 411 uç.**
 
 ## system.js  (`/api`)
 
@@ -435,6 +435,17 @@ Kimlik: **🔒** giriş gerekli · **👑** yalnızca yönetici · **🛠** yön
 | GET | `/api/admin/users/:userId/credentials` | 👑 |  | Kullanıcı adı, telefon ve şifre. Şifre hiçbir zaman gösterilmez; yalnızca yenisi verilebilir. |
 | POST | `/api/admin/users/:userId/credentials` | 👑 |  | Şifre değişince kullanıcının tüm oturumları kapanır (yeni şifreyle yeniden giriş yapar). |
 | POST | `/api/admin/users/:userId/sessions/revoke-all` | 👑 |  | Kullanıcının tüm cihazlarındaki oturumları kapatır (hesap çalındı şüphesi vb.). |
+
+## usd.js  (`/api/usd`)
+
+| Yöntem | Yol | Kimlik | ⏱ | Not |
+|---|---|---|---|---|
+| GET | `/api/usd/me` | 🔒 |  |  |
+| GET | `/api/usd/dealers` | 🔒 |  |  |
+| POST | `/api/usd/withdrawals` | 🔒 | usd_withdraw | Admin'e gönderim: { amountCents, method, account }. Ödeme bilgisi (IBAN / cüzdan adresi vb.) yalnızca admin'e görünür. |
+| POST | `/api/usd/withdrawals/:id/cancel` | 🔒 | usd_cancel |  |
+| POST | `/api/usd/dealer-transfers` | 🔒 | usd_dealer | Bayiye gönderim: { dealerId, amountCents }. Anında işlenir ve geri alınamaz. |
+| POST | `/api/usd/coin-exchanges` | 🔒 | usd_exchange | Anında işlenir ve geri alınamaz. |
 
 ## events.js  (`/api/events`)
 

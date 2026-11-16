@@ -143,6 +143,27 @@ export function evaluatePay({ levels, metrics, settings = {}, pref = 0, eventsOk
 }
 
 /** Ajans primi: yayıncının ajanstayken aldığı elmasa göre seviye (şart aranmaz). */
+/**
+ * Görüntülü yayın maaşı (v2.110.0): yalnızca Yöntem 1 (dönem elması) ile hesaplanır; bakiye yöntemi sesli tabloya özgüdür.
+ * video.shortfallCutBps > 0 ise: elması tutan ama gün / saat şartı tutmayan seviye, bu oranda KESİNTİYLE ödenir
+ * (şartı tutan daha düşük seviyenin maaşı daha yüksekse o ödenir). 0 ise şartı tutmayan seviye ödenmez (sesli taraftaki gibi).
+ */
+export function evaluateVideoPay({ levels, metrics, settings = {}, video = {}, eventsOk = true }) {
+  const e = evaluatePay({ levels, metrics: { ...metrics, balance: 0n }, settings: { ...settings, allowBalanceMethod: false }, pref: 1, eventsOk });
+  const cut = BigInt(Math.min(10000, Math.max(0, Number(video.shortfallCutBps ?? 0))));
+  let shortfall = false;
+  let { level, baseCents, salaryCents } = e;
+  if (cut > 0n && e.blocked) {
+    let reduced = (e.blocked.salary1Cents * (10000n - cut)) / 10000n;
+    if (!e.eventsMet) {
+      const penaltyBps = BigInt(Math.min(10000, Math.max(0, Number(settings.penaltyBps ?? 0))));
+      reduced = (reduced * (10000n - penaltyBps)) / 10000n;
+    }
+    if (reduced > salaryCents) { shortfall = true; level = e.blocked; baseCents = e.blocked.salary1Cents; salaryCents = reduced; }
+  }
+  return { ...e, level, baseCents, salaryCents, shortfall, consume: 0n };
+}
+
 export function agencyPrim(levels, diamonds) {
   const l = bestLevel(levels, diamonds, {}, {}, false);
   return { level: l ? l.level : null, cents: l ? l.agencyCents : 0n };

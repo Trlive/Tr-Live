@@ -2,15 +2,18 @@
 import { query, tx } from '../database.js';
 import { fail } from '../http.js';
 import { periodBounds, parsePeriodKey, commissionFor, nextCommissionTier } from '../settlement.js';
-import { loadPayConfig, gradesJson, hostPeriodMetrics, agencyGiftRows, eventCounts, estimateHosts } from './agency_metrics.js';
+import { loadPayConfig, gradesJson, hostPeriodMetrics, agencyGiftRows, eventCounts, estimateHosts, evaluateHost, videoRules } from './agency_metrics.js';
 import { evaluatePay, agencyPrim, payLevelJson } from '../paytable.js';
 import { grantLevelRewards } from './agency_rewards.js';
+import { creditPeriod } from './usd_wallet.js';
+import { getConfig } from './app_config.js';
 
 export const loadConfig = loadPayConfig;
 
 export const configJson = (cfg) => ({
   settings: cfg.settings,
   payLevels: cfg.levels.map(payLevelJson),
+  videoPayLevels: (cfg.videoLevels ?? cfg.levels).map(payLevelJson),
   agencyGrades: gradesJson(cfg.grades),
   // v2.65 ve öncesi uygulamalar için: maaş tablosu eski kademe biçiminde (Maaş 1), komisyon tablosu artık yok.
   salaryTiers: cfg.levels.map((l) => ({ level: l.level, hours: l.hours ?? 0, diamonds: String(l.diamonds), salaryCents: String(l.salary1Cents) })),
@@ -35,6 +38,15 @@ export function progressJson(x, cfg, b, pref = 0) {
     salary1Cents: String(e.salary1), salary2Cents: String(e.salary2),
     tier: e.level?.level ?? null, current: e.level ? payLevelJson(e.level) : null,
     estimatedCents: String(e.salaryCents), baseCents: String(e.baseCents), atRisk: e.penalty,
+    // Sesli / görüntülü ayrı hesap: estimatedCents iki tarafın toplamıdır.
+    split: e.split === true,
+    audio: { seconds: m.audio.seconds, validDays: m.audio.validDays, diamonds: String(m.audio.diamonds), level: e.level?.level ?? null, cents: String(e.audioCents ?? e.salaryCents) },
+    video: e.video ? {
+      seconds: m.video.seconds, rawSeconds: m.video.rawSeconds, validDays: m.video.validDays, diamonds: String(m.video.diamonds),
+      level: e.video.level?.level ?? null, cents: String(e.videoCents), shortfall: e.video.shortfall === true,
+      blocked: e.video.blocked ? e.video.blocked.level : null, blockedBy: e.video.blockedBy,
+      next: e.video.next ? { level: e.video.next.level, remaining: String(e.video.nextRemaining) } : null,
+    } : null,
     consumeDiamonds: String(e.consume),
     blocked: e.blocked ? payLevelJson(e.blocked) : null, blockedBy: e.blockedBy,
     hoursMet: !e.blockedBy.includes('hours'), eventsMet: e.eventsMet, eventCount: x.eventCount,
@@ -104,7 +116,7 @@ export async function closePeriod({ adminId, periodKey, force = false }) {
       `SELECT b.user_id, b.agency_id, b.approved_at, b.pay_method_pref FROM broadcasters b
        WHERE b.status = 'approved' AND b.agency_id IS NOT NULL ORDER BY b.user_id`,
     )).rows;
-    const metrics = await hostPeriodMetrics(hosts, b.start, b.end, cfg.settings.validDayMinutes, run);
+    const metrics = await hostPeriodMetrics(hosts, b.start, b.end, cfg.settings.validDayMinutes, run, videoRules(cfg.settings));
     const ev = cfg.settings.requireOfficialEvents ? await eventCounts(hosts.map((h) => h.user_id), b.start, b.end, run) : new Map();
     let totalSalary = 0n; let hostCount = 0;
     const rewarded = []; const paidHosts = [];
@@ -114,8 +126,8 @@ export async function closePeriod({ adminId, periodKey, force = false }) {
       // Satır kilitlenmez (dönem kapanırken yayıncıya hediye bekletilmesin); Yöntem 2 düşümü aşağıda koşullu UPDATE ile yapılır.
       const balance = BigInt((await c.query(`SELECT diamonds FROM users WHERE id = $1`, [h.user_id])).rows[0]?.diamonds ?? 0);
       const evOk = !cfg.settings.requireOfficialEvents || (ev.get(h.user_id) ?? 0) >= cfg.settings.minEventCount;
-      const input = { seconds: m.seconds, validDays: m.validDays, gameSeconds: m.gameSeconds, diamonds: m.diamonds, balance };
-      let e = evaluatePay({ levels: cfg.levels, settings: cfg.settings, pref: h.pay_method_pref, eventsOk: evOk, metrics: input });
+      // Sesli ve görüntülü ayrı hesaplanır (ayar açıksa); e.salaryCents iki tarafın toplamıdır.
+      let e = evaluateHost(cfg, m, { pref: h.pay_method_pref, eventsOk: evOk, balance });
       let consumed = 0n;
       if (e.method === 2) {
         const r = await c.query(
@@ -129,7 +141,7 @@ export async function closePeriod({ adminId, periodKey, force = false }) {
             [h.user_id, (-consumed).toString(), b.key, `${b.key} maaşı (Yöntem 2): ${consumed} elmas maaşa çevrildi`],
           );
         } else {
-          e = evaluatePay({ levels: cfg.levels, settings: cfg.settings, pref: 1, eventsOk: evOk, metrics: input });
+          e = evaluateHost(cfg, m, { pref: 1, eventsOk: evOk, balance });
         }
       }
       const rewards = e.level ? await grantLevelRewards(c, h.user_id, e.level) : {};
@@ -139,11 +151,14 @@ export async function closePeriod({ adminId, periodKey, force = false }) {
       if (e.salaryCents > 0n) paidHosts.push({ userId: h.user_id, cents: e.salaryCents });
       await c.query(
         `INSERT INTO host_statements(period_id, user_id, agency_id, seconds, diamonds, tier_level, base_salary_cents, penalty_applied, salary_cents, events_ok,
-           valid_days, game_seconds, balance_diamonds, level1, level2, salary1_cents, salary2_cents, pay_method, consumed_diamonds, rewards)
-         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
+           valid_days, game_seconds, balance_diamonds, level1, level2, salary1_cents, salary2_cents, pay_method, consumed_diamonds, rewards,
+           audio_seconds, audio_diamonds, audio_cents, video_seconds, video_diamonds, video_level, video_cents, video_shortfall)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28)`,
         [p.id, h.user_id, h.agency_id, m.seconds, m.diamonds.toString(), e.level?.level ?? null, e.baseCents.toString(), e.penalty, e.salaryCents.toString(), evOk,
           m.validDays, m.gameSeconds, balance.toString(), e.level1?.level ?? null, e.level2?.level ?? null, e.salary1.toString(), e.salary2.toString(),
-          e.method, consumed.toString(), JSON.stringify(rewards)],
+          e.method, consumed.toString(), JSON.stringify(rewards),
+          e.split ? m.audio.seconds : m.seconds, (e.split ? m.audio.diamonds : m.diamonds).toString(), e.audioCents.toString(),
+          e.split ? m.video.seconds : 0, (e.split ? m.video.diamonds : 0n).toString(), e.video?.level?.level ?? null, e.videoCents.toString(), e.video?.shortfall === true],
       );
     }
 
@@ -221,7 +236,15 @@ export async function closePeriod({ adminId, periodKey, force = false }) {
       [adminId, p.id, JSON.stringify({ periodKey: b.key, hosts: hostCount, agencies: agencyCount, assistants: assistantCount, referrals: referralCount,
         totalSalaryCents: totalSalary.toString(), totalPrimCents: totalPrim.toString() })],
     );
+    // Maaş ve primler dolar cüzdanlarına yatar, özetler "ödendi" olur (ayar kapalıysa eskisi gibi bekler; admin elle işaretler).
+    // KYC onayı olmayan yayıncının maaşı yatmaz; özeti bekler (admin KYC'yi onaylayıp özeti ödeyince cüzdana geçer).
+    let credited = { count: 0, cents: 0n };
+    if ((await getConfig()).usdAutoCredit !== false) {
+      await c.query(`UPDATE payout_periods SET wallet_mode = TRUE WHERE id = $1`, [p.id]);
+      credited = await creditPeriod(c, p.id, adminId);
+    }
     return {
+      walletCredits: credited.count, walletCents: credited.cents.toString(),
       periodId: p.id, periodKey: b.key, hostStatements: hostCount, agencyStatements: agencyCount, assistantStatements: assistantCount,
       referralStatements: referralCount, totalSalaryCents: totalSalary.toString(), totalPrimCents: totalPrim.toString(),
       rewardedUserIds: rewarded, paidHosts: paidHosts.map((x) => ({ userId: x.userId, cents: x.cents.toString() })), currency: cfg.settings.currency,

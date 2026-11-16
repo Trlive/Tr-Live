@@ -2,9 +2,9 @@
 
 > Otomatik üretildi: `node backend/scripts/gen_docs.mjs`. Elle düzenlemeyin.
 
-**113 tablo**, 72 migration dosyası (PostgreSQL 16).
+**118 tablo**, 75 migration dosyası (PostgreSQL 16).
 
-[agencies](#agencies) · [agency_applications](#agency_applications) · [agency_assistants](#agency_assistants) · [agency_commission_tiers](#agency_commission_tiers) · [agency_commissions](#agency_commissions) · [agency_requests](#agency_requests) · [agency_settings](#agency_settings) · [agency_statements](#agency_statements) · [agency_transfers](#agency_transfers) · [announcements](#announcements) · [app_config](#app_config) · [asset_items](#asset_items) · [asset_seeds](#asset_seeds) · [assistant_statements](#assistant_statements) · [banners](#banners) · [broadcast_sessions](#broadcast_sessions) · [broadcasters](#broadcasters) · [client_errors](#client_errors) · [coin_packages](#coin_packages) · [cp_pairs](#cp_pairs) · [custom_room_themes](#custom_room_themes) · [daily_checkins](#daily_checkins) · [daily_progress](#daily_progress) · [daily_streak](#daily_streak) · [dealer_accounts](#dealer_accounts) · [dealer_topup_requests](#dealer_topup_requests) · [dealer_transactions](#dealer_transactions) · [direct_messages](#direct_messages) · [dm_cleared](#dm_cleared) · [email_codes](#email_codes) · [entrance_effects](#entrance_effects) · [families](#families) · [family_contrib_weekly](#family_contrib_weekly) · [family_daily_login](#family_daily_login) · [family_join_requests](#family_join_requests) · [family_members](#family_members) · [family_messages](#family_messages) · [family_week_rewards](#family_week_rewards) · [favorite_hosts](#favorite_hosts) · [financial_audit_logs](#financial_audit_logs) · [firewall_blocks](#firewall_blocks) · [follows](#follows) · [frames](#frames) · [friend_requests](#friend_requests) · [gift_transactions](#gift_transactions) · [gifts](#gifts) · [global_gift_events](#global_gift_events) · [guardian_decay_runs](#guardian_decay_runs) · [guardians](#guardians) · [host_badges](#host_badges) · [host_pay_levels](#host_pay_levels) · [host_salary_tiers](#host_salary_tiers) · [host_statements](#host_statements) · [idempotency_keys](#idempotency_keys) · [inventory_items](#inventory_items) · [lucky_bag_claims](#lucky_bag_claims) · [lucky_bags](#lucky_bags) · [lucky_pools](#lucky_pools) · [media_files](#media_files) · [mic_sessions](#mic_sessions) · [mic_skins](#mic_skins) · [moderation_strikes](#moderation_strikes) · [music_tracks](#music_tracks) · [oauth_states](#oauth_states) · [official_event_attendance](#official_event_attendance) · [official_events](#official_events) · [payout_periods](#payout_periods) · [pk_battles](#pk_battles) · [pk_supporters](#pk_supporters) · [post_comments](#post_comments) · [post_likes](#post_likes) · [posts](#posts) · [profile_visitors](#profile_visitors) · [push_messages](#push_messages) · [recent_rooms](#recent_rooms) · [referral_statements](#referral_statements) · [reports](#reports) · [room_bans](#room_bans) · [room_blocks](#room_blocks) · [room_game_players](#room_game_players) · [room_games](#room_games) · [room_gift_totals](#room_gift_totals) · [room_members](#room_members) · [room_messages](#room_messages) · [room_mic_queue](#room_mic_queue) · [room_mod_logs](#room_mod_logs) · [room_music](#room_music) · [room_music_queue](#room_music_queue) · [room_mutes](#room_mutes) · [room_pk](#room_pk) · [room_pk_points](#room_pk_points) · [room_profiles](#room_profiles) · [room_staff](#room_staff) · [room_themes](#room_themes) · [rooms](#rooms) · [screenshot_events](#screenshot_events) · [security_events](#security_events) · [special_ids](#special_ids) · [store_items](#store_items) · [support_messages](#support_messages) · [upload_owners](#upload_owners) · [user_blocks](#user_blocks) · [user_identities](#user_identities) · [user_notifications](#user_notifications) · [user_sessions](#user_sessions) · [user_wip](#user_wip) · [users](#users) · [wallet_transactions](#wallet_transactions) · [weekly_event_config](#weekly_event_config) · [weekly_event_results](#weekly_event_results) · [weekly_event_settlements](#weekly_event_settlements) · [wip_plans](#wip_plans) · [wip_tiers](#wip_tiers)
+[agencies](#agencies) · [agency_applications](#agency_applications) · [agency_assistants](#agency_assistants) · [agency_commission_tiers](#agency_commission_tiers) · [agency_commissions](#agency_commissions) · [agency_requests](#agency_requests) · [agency_settings](#agency_settings) · [agency_statements](#agency_statements) · [agency_transfers](#agency_transfers) · [announcements](#announcements) · [app_config](#app_config) · [asset_items](#asset_items) · [asset_seeds](#asset_seeds) · [assistant_statements](#assistant_statements) · [banners](#banners) · [broadcast_sessions](#broadcast_sessions) · [broadcasters](#broadcasters) · [client_errors](#client_errors) · [coin_packages](#coin_packages) · [cp_pairs](#cp_pairs) · [custom_room_themes](#custom_room_themes) · [daily_checkins](#daily_checkins) · [daily_progress](#daily_progress) · [daily_streak](#daily_streak) · [dealer_accounts](#dealer_accounts) · [dealer_topup_requests](#dealer_topup_requests) · [dealer_transactions](#dealer_transactions) · [direct_messages](#direct_messages) · [dm_cleared](#dm_cleared) · [email_codes](#email_codes) · [entrance_effects](#entrance_effects) · [families](#families) · [family_contrib_weekly](#family_contrib_weekly) · [family_daily_login](#family_daily_login) · [family_join_requests](#family_join_requests) · [family_members](#family_members) · [family_messages](#family_messages) · [family_week_rewards](#family_week_rewards) · [favorite_hosts](#favorite_hosts) · [financial_audit_logs](#financial_audit_logs) · [firewall_blocks](#firewall_blocks) · [follows](#follows) · [frames](#frames) · [friend_requests](#friend_requests) · [gift_transactions](#gift_transactions) · [gifts](#gifts) · [global_gift_events](#global_gift_events) · [guardian_decay_runs](#guardian_decay_runs) · [guardians](#guardians) · [host_badges](#host_badges) · [host_pay_levels](#host_pay_levels) · [host_pay_levels_video](#host_pay_levels_video) · [host_salary_tiers](#host_salary_tiers) · [host_statements](#host_statements) · [idempotency_keys](#idempotency_keys) · [inventory_items](#inventory_items) · [lucky_bag_claims](#lucky_bag_claims) · [lucky_bags](#lucky_bags) · [lucky_pools](#lucky_pools) · [media_files](#media_files) · [mic_sessions](#mic_sessions) · [mic_skins](#mic_skins) · [moderation_strikes](#moderation_strikes) · [music_tracks](#music_tracks) · [oauth_states](#oauth_states) · [official_event_attendance](#official_event_attendance) · [official_events](#official_events) · [payout_periods](#payout_periods) · [pk_battles](#pk_battles) · [pk_supporters](#pk_supporters) · [post_comments](#post_comments) · [post_likes](#post_likes) · [posts](#posts) · [profile_visitors](#profile_visitors) · [push_messages](#push_messages) · [recent_rooms](#recent_rooms) · [referral_statements](#referral_statements) · [reports](#reports) · [room_bans](#room_bans) · [room_blocks](#room_blocks) · [room_game_players](#room_game_players) · [room_games](#room_games) · [room_gift_totals](#room_gift_totals) · [room_members](#room_members) · [room_messages](#room_messages) · [room_mic_queue](#room_mic_queue) · [room_mod_logs](#room_mod_logs) · [room_music](#room_music) · [room_music_queue](#room_music_queue) · [room_mutes](#room_mutes) · [room_pk](#room_pk) · [room_pk_points](#room_pk_points) · [room_profiles](#room_profiles) · [room_staff](#room_staff) · [room_themes](#room_themes) · [rooms](#rooms) · [screenshot_events](#screenshot_events) · [security_events](#security_events) · [special_ids](#special_ids) · [store_items](#store_items) · [support_messages](#support_messages) · [upload_owners](#upload_owners) · [usd_coin_exchanges](#usd_coin_exchanges) · [usd_dealer_transfers](#usd_dealer_transfers) · [usd_transactions](#usd_transactions) · [usd_withdrawals](#usd_withdrawals) · [user_blocks](#user_blocks) · [user_identities](#user_identities) · [user_notifications](#user_notifications) · [user_sessions](#user_sessions) · [user_wip](#user_wip) · [users](#users) · [wallet_transactions](#wallet_transactions) · [weekly_event_config](#weekly_event_config) · [weekly_event_results](#weekly_event_results) · [weekly_event_settlements](#weekly_event_settlements) · [wip_plans](#wip_plans) · [wip_tiers](#wip_tiers)
 
 ## agencies
 
@@ -149,6 +149,10 @@ Oluşturan: `006_room_features_pk_games_agency.sql`
 | referral_bps | `INT NOT NULL DEFAULT 500 CHECK (referral_bps BETWEEN 0 AND 10000)` | 047 |
 | transfer_wait_hours | `INT NOT NULL DEFAULT 72 CHECK (transfer_wait_hours BETWEEN 0 AND 720)` | 047 |
 | agency_grades | `JSONB NOT NULL DEFAULT '[{"name":"D","min":"0"},{"name":"C","min":"50000000"},{"name":"B","min":"200000000"},{"name":"A","min":"1000000000"},{"name":"S","min":"3000000000"}]'::jsonb` | 047 |
+| split_by_room_type | `BOOLEAN NOT NULL DEFAULT TRUE` | 076 |
+| video_daily_cap_minutes | `INT NOT NULL DEFAULT 0` | 076 |
+| video_min_session_minutes | `INT NOT NULL DEFAULT 0` | 076 |
+| video_shortfall_cut_bps | `INT NOT NULL DEFAULT 0` | 076 |
 
 ## agency_statements
 
@@ -904,6 +908,14 @@ Oluşturan: `047_agency_v2.sql`
 | special_id_days | `INT NOT NULL DEFAULT 0 CHECK (special_id_days BETWEEN 0 AND 365)` | 047 |
 | special_id_count | `INT NOT NULL DEFAULT 1 CHECK (special_id_count BETWEEN 1 AND 5)` | 047 |
 
+## host_pay_levels_video
+
+Oluşturan: `076_voice_video_pay.sql`
+
+| Sütun | Tür / kural | Ekleyen |
+|---|---|---|
+| LIKE | `host_pay_levels INCLUDING ALL` | 076 |
+
 ## host_salary_tiers
 
 Oluşturan: `006_room_features_pk_games_agency.sql`
@@ -943,6 +955,14 @@ Oluşturan: `006_room_features_pk_games_agency.sql`
 | consumed_diamonds | `BIGINT NOT NULL DEFAULT 0` | 047 |
 | rewards | `JSONB NOT NULL DEFAULT '{}'::jsonb` | 047 |
 | pay_note | `TEXT` | 047 |
+| audio_seconds | `BIGINT NOT NULL DEFAULT 0` | 076 |
+| audio_diamonds | `BIGINT NOT NULL DEFAULT 0` | 076 |
+| audio_cents | `BIGINT NOT NULL DEFAULT 0` | 076 |
+| video_seconds | `BIGINT NOT NULL DEFAULT 0` | 076 |
+| video_diamonds | `BIGINT NOT NULL DEFAULT 0` | 076 |
+| video_level | `INT` | 076 |
+| video_cents | `BIGINT NOT NULL DEFAULT 0` | 076 |
+| video_shortfall | `BOOLEAN NOT NULL DEFAULT FALSE` | 076 |
 
 Kısıtlar: `UNIQUE (period_id, user_id)`
 
@@ -1192,6 +1212,7 @@ Oluşturan: `006_room_features_pk_games_agency.sql`
 | closed_by | `UUID REFERENCES users(id)` | 006 |
 | closed_at | `TIMESTAMPTZ NOT NULL DEFAULT NOW()` | 006 |
 | config | `JSONB NOT NULL DEFAULT '{}'::jsonb` | 006 |
+| wallet_mode | `BOOLEAN NOT NULL DEFAULT FALSE` | 076 |
 
 ## pk_battles
 
@@ -1823,6 +1844,85 @@ Oluşturan: `026_hardening.sql`
 | owner_id | `UUID REFERENCES users(id) ON DELETE SET NULL` | 026 |
 | created_at | `TIMESTAMPTZ NOT NULL DEFAULT NOW()` | 026 |
 
+## usd_coin_exchanges
+
+Oluşturan: `077_bean_coin_exchange.sql`
+
+| Sütun | Tür / kural | Ekleyen |
+|---|---|---|
+| id | `UUID PRIMARY KEY DEFAULT gen_random_uuid()` | 077 |
+| user_id | `UUID NOT NULL REFERENCES users(id)` | 077 |
+| target_user_id | `UUID NOT NULL REFERENCES users(id)` | 077 |
+| amount_cents | `BIGINT NOT NULL CHECK (amount_cents > 0)` | 077 |
+| coins_per_usd | `BIGINT NOT NULL CHECK (coins_per_usd > 0)` | 077 |
+| coins | `BIGINT NOT NULL CHECK (coins > 0)` | 077 |
+| created_at | `TIMESTAMPTZ NOT NULL DEFAULT NOW()` | 077 |
+
+İndeksler:
+- `idx_usd_ce_user (user_id, created_at DESC)`
+- `idx_usd_ce_target (target_user_id, created_at DESC)`
+
+## usd_dealer_transfers
+
+Oluşturan: `075_usd_wallet.sql`
+
+| Sütun | Tür / kural | Ekleyen |
+|---|---|---|
+| id | `UUID PRIMARY KEY DEFAULT gen_random_uuid()` | 075 |
+| user_id | `UUID NOT NULL REFERENCES users(id)` | 075 |
+| dealer_id | `UUID NOT NULL REFERENCES dealer_accounts(id)` | 075 |
+| amount_cents | `BIGINT NOT NULL CHECK (amount_cents > 0)` | 075 |
+| coins_per_usd | `BIGINT NOT NULL CHECK (coins_per_usd > 0)` | 075 |
+| coins | `BIGINT NOT NULL CHECK (coins > 0)` | 075 |
+| created_at | `TIMESTAMPTZ NOT NULL DEFAULT NOW()` | 075 |
+
+İndeksler:
+- `idx_usd_dt_user (user_id, created_at DESC)`
+- `idx_usd_dt_dealer (dealer_id, created_at DESC)`
+
+## usd_transactions
+
+Oluşturan: `075_usd_wallet.sql`
+
+| Sütun | Tür / kural | Ekleyen |
+|---|---|---|
+| id | `UUID PRIMARY KEY DEFAULT gen_random_uuid()` | 075 |
+| user_id | `UUID NOT NULL REFERENCES users(id)` | 075 |
+| type | `VARCHAR(30) NOT NULL CHECK (type IN ('salary', 'agency_bonus', 'assistant_share', 'referral_bonus', 'withdraw_request', 'withdraw_refund', 'dealer_transfer', 'admin_adjust'))` | 075 |
+| amount_cents | `BIGINT NOT NULL CHECK (amount_cents <> 0)` | 075 |
+| balance_after | `BIGINT NOT NULL CHECK (balance_after >= 0)` | 075 |
+| ref_type | `VARCHAR(30)` | 075 |
+| ref_id | `UUID` | 075 |
+| note | `TEXT` | 075 |
+| created_by | `UUID REFERENCES users(id)` | 075 |
+| created_at | `TIMESTAMPTZ NOT NULL DEFAULT NOW()` | 075 |
+
+İndeksler:
+- `idx_usd_tx_user (user_id, created_at DESC)`
+- `UNIQUE uq_usd_tx_once (type, ref_id) WHERE type IN ('salary', 'agency_bonus', 'assistant_share', 'referral_bonus', 'withdraw_request', 'withdraw_refund', 'dealer_transfer')`
+- `UNIQUE uq_usd_tx_once (type, ref_id) WHERE type IN ('salary', 'agency_bonus', 'assistant_share', 'referral_bonus', 'withdraw_request', 'withdraw_refund', 'dealer_transfer', 'coin_exchange', 'coin_send')`
+
+## usd_withdrawals
+
+Oluşturan: `075_usd_wallet.sql`
+
+| Sütun | Tür / kural | Ekleyen |
+|---|---|---|
+| id | `UUID PRIMARY KEY DEFAULT gen_random_uuid()` | 075 |
+| user_id | `UUID NOT NULL REFERENCES users(id)` | 075 |
+| amount_cents | `BIGINT NOT NULL CHECK (amount_cents > 0)` | 075 |
+| method | `VARCHAR(60) NOT NULL` | 075 |
+| account | `TEXT NOT NULL` | 075 |
+| status | `VARCHAR(12) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'paid', 'rejected', 'cancelled'))` | 075 |
+| admin_note | `TEXT` | 075 |
+| decided_by | `UUID REFERENCES users(id)` | 075 |
+| decided_at | `TIMESTAMPTZ` | 075 |
+| created_at | `TIMESTAMPTZ NOT NULL DEFAULT NOW()` | 075 |
+
+İndeksler:
+- `idx_usd_wd_status (status, created_at)`
+- `idx_usd_wd_user (user_id, created_at DESC)`
+
 ## user_blocks
 
 Oluşturan: `005_music_chat_social_security.sql`
@@ -1987,6 +2087,7 @@ Oluşturan: `001_core.sql`
 | email | `VARCHAR(254)` | 068 |
 | email_verified_at | `TIMESTAMPTZ` | 068 |
 | phone_verified_at | `TIMESTAMPTZ` | 068 |
+| usd_cents | `BIGINT NOT NULL DEFAULT 0` | 075 |
 
 İndeksler:
 - `UNIQUE idx_users_username_lower (lower(username))`

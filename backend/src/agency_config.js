@@ -33,6 +33,15 @@ export function validateAgencyConfig(input) {
       out.settings.currency = s.currency;
     }
     // v2.66: maaş tablosu, asistan, transfer ve davet merkezi ayarları.
+    if (s.splitByRoomType !== undefined) {
+      if (typeof s.splitByRoomType !== 'boolean') throw fail('splitByRoomType true/false olmalı.');
+      out.settings.splitByRoomType = s.splitByRoomType;
+    }
+    for (const [k, max, label] of [['videoDailyCapMinutes', 1440, 'Görüntülü günlük süre sınırı'], ['videoMinSessionMinutes', 240, 'Görüntülü en kısa oturum'], ['videoShortfallCutBps', 10000, 'Görüntülü kesinti oranı']]) {
+      if (s[k] === undefined) continue;
+      if (!Number.isInteger(s[k]) || s[k] < 0 || s[k] > max) throw fail(`${label} 0-${max} olmalı.`);
+      out.settings[k] = s[k];
+    }
     const ints = {
       validDayMinutes: [1, 1440, 'Geçerli gün için dakika 1-1440 olmalı.'],
       maxAssistants: [0, 50, 'Asistan sayısı 0-50 olmalı.'],

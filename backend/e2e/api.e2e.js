@@ -533,9 +533,16 @@ test('ajans/yayıncı: başvuru, kod, onay, katılma, hedef/maaş, komisyon kade
   ok(await api('POST', '/api/me/kyc/request', { token: U.f.token }));
   status(await api('POST', '/api/me/kyc/request', { token: U.f.token }), 409);
   ok(await api('POST', `/api/admin/users/${U.f.id}/kyc`, { token: U.d.token, body: { status: 'approved' } }));
+  // Dolar cüzdanı: KYC'siz yayıncının maaşı dönem kapanışında yatmadı; ajans primi yattı.
+  assert.equal((await api('GET', '/api/usd/me', { token: U.f.token })).body.balanceCents, '0');
+  assert.equal(hs.status, 'pending');
+  assert.equal(as.status, 'paid', 'ajans primi dönem kapanınca cüzdana yatar');
+  assert.equal((await api('GET', '/api/usd/me', { token: U.e.token })).body.balanceCents, '300');
   ok(await api('POST', `/api/admin/statements/host/${hs.id}/pay`, { token: U.d.token }));
+  assert.equal((await api('GET', '/api/usd/me', { token: U.f.token })).body.balanceCents, '1000', 'KYC onayından sonra ödenince maaş cüzdana yatar');
   status(await api('POST', `/api/admin/statements/host/${hs.id}/pay`, { token: U.d.token }), 409, 'iki kez ödenemez');
-  ok(await api('POST', `/api/admin/statements/agency/${as.id}/pay`, { token: U.d.token }));
+  status(await api('POST', `/api/admin/statements/agency/${as.id}/pay`, { token: U.d.token }), 409, 'ajans primi zaten cüzdanda');
+  assert.equal((await api('GET', '/api/usd/me', { token: U.e.token })).body.balanceCents, '300', 'ikinci kez yatmaz');
   const stm = await api('GET', '/api/broadcaster/statements', { token: U.f.token });
   assert.equal(stm.body.statements[0].status, 'paid');
   const astm = await api('GET', `/api/agencies/${agencyId}/statements`, { token: U.e.token });
@@ -1839,4 +1846,173 @@ test('koruyucu: Coin ile koruyucu olunur, profilde görünür, kapatılabilir', 
   ok(await api('PUT', '/api/guardians/settings', { token: o.token, body: { enabled: false } }));
   ok(await api('POST', `/api/guardians/of/${o.id}/leave`, { token: g.token }));
   status(await api('POST', `/api/guardians/of/${o.id}/join`, { token: g.token }), 400, 'kapalıyken olunmaz');
+});
+
+test('dolar cüzdanı: bakiye, admin\'e gönderim (öde / reddet / vazgeç), bayiye gönderim, yetkiler', { skip, timeout: 60000 }, async () => {
+  const h = await register('usdhost');
+  const d = await register('usddealer');
+  const cents = async (u) => (await api('GET', '/api/usd/me', { token: u.token })).body.balanceCents;
+  // Boş cüzdan ve ayarlar
+  let me = await api('GET', '/api/usd/me', { token: h.token });
+  ok(me);
+  assert.equal(me.body.balanceCents, '0');
+  assert.deepEqual(me.body.settings, { enabled: true, withdrawMinCents: '1000', dealerMinCents: '1000', coinsPerUsd: '4000', exchangeCoinsPerUsd: '4000', exchangeMinCents: '100' });
+  status(await api('POST', '/api/usd/withdrawals', { token: h.token, body: { amountCents: 1000, method: 'IBAN', account: 'TR00 1111' } }), 409, 'bakiye yok');
+  // Yönetim uçları yalnızca tam yetkili admin'e açıktır
+  status(await api('GET', '/api/admin/usd', { token: h.token }), 403, 'kullanıcı yönetim ucuna giremez');
+  status(await api('POST', '/api/admin/usd/adjust', { token: h.token, body: { userId: h.id, amountCents: 100000, note: 'x' } }), 403, 'kullanıcı kendine dolar yazamaz');
+  const adj = await api('POST', '/api/admin/usd/adjust', { token: U.d.token, body: { userId: h.id, amountCents: 10000, note: 'e2e' } });
+  ok(adj);
+  assert.equal(adj.body.balanceCents, '10000');
+  status(await api('POST', '/api/admin/usd/adjust', { token: U.d.token, body: { userId: h.id, amountCents: -99999, note: 'fazla' } }), 409, 'eksiye düşmez');
+  // Admin'e gönderim
+  status(await api('POST', '/api/usd/withdrawals', { token: h.token, body: { amountCents: 999, method: 'IBAN', account: 'TR00 1111' } }), 400, 'alt sınır 10 dolar');
+  status(await api('POST', '/api/usd/withdrawals', { token: h.token, body: { amountCents: '10.5', method: 'IBAN', account: 'TR00 1111' } }), 400, 'kesirli sent yok');
+  status(await api('POST', '/api/usd/withdrawals', { token: h.token, body: { amountCents: 20000, method: 'IBAN', account: 'TR00 1111' } }), 409, 'bakiyeden fazla');
+  const key = `usd-${Date.now()}`;
+  const w1 = await api('POST', '/api/usd/withdrawals', { token: h.token, headers: { 'Idempotency-Key': key }, body: { amountCents: 3000, method: 'IBAN', account: 'TR00 1111' } });
+  status(w1, 201);
+  assert.equal(w1.body.wallet.balanceCents, '7000');
+  // Aynı anahtarla yinelenen istek ikinci kez düşmez
+  await api('POST', '/api/usd/withdrawals', { token: h.token, headers: { 'Idempotency-Key': key }, body: { amountCents: 3000, method: 'IBAN', account: 'TR00 1111' } });
+  assert.equal(await cents(h), '7000', 'yinelenen istek bakiyeyi ikinci kez düşürmez');
+  const w2 = await api('POST', '/api/usd/withdrawals', { token: h.token, body: { amountCents: 2000, method: 'USDT', account: 'T-adres-1' } });
+  status(w2, 201);
+  const w3 = await api('POST', '/api/usd/withdrawals', { token: h.token, body: { amountCents: 1000, method: 'USDT', account: 'T-adres-1' } });
+  status(w3, 201);
+  assert.equal(await cents(h), '4000');
+  const list = await api('GET', '/api/admin/usd?status=pending', { token: U.d.token });
+  ok(list);
+  assert.ok(list.body.withdrawals.some((x) => x.id === w1.body.withdrawal.id && x.account === 'TR00 1111' && x.username));
+  assert.ok(BigInt(list.body.totals.pendingCents) >= 6000n);
+  status(await api('POST', `/api/usd/withdrawals/${w3.body.withdrawal.id}/cancel`, { token: d.token }), 404, 'başkasının talebi');
+  const c3 = await api('POST', `/api/usd/withdrawals/${w3.body.withdrawal.id}/cancel`, { token: h.token });
+  ok(c3);
+  assert.equal(c3.body.wallet.balanceCents, '5000', 'vazgeçince tutar döner');
+  const paid = await api('POST', `/api/admin/usd/withdrawals/${w1.body.withdrawal.id}/pay`, { token: U.d.token, body: { note: 'Havale' } });
+  ok(paid);
+  assert.equal(paid.body.withdrawal.status, 'paid');
+  assert.equal(await cents(h), '5000', 'ödenince bakiye değişmez');
+  status(await api('POST', `/api/admin/usd/withdrawals/${w1.body.withdrawal.id}/reject`, { token: U.d.token, body: { note: 'geç' } }), 409, 'ödenmiş talep reddedilemez');
+  status(await api('POST', `/api/admin/usd/withdrawals/${w2.body.withdrawal.id}/reject`, { token: U.d.token, body: {} }), 400, 'ret nedeni zorunlu');
+  const rej = await api('POST', `/api/admin/usd/withdrawals/${w2.body.withdrawal.id}/reject`, { token: U.d.token, body: { note: 'Adres hatalı' } });
+  ok(rej);
+  assert.equal(await cents(h), '7000', 'reddedilince tutar döner');
+  // Bayiye gönderim: anında, Coin bayinin stokuna
+  const mk = await api('POST', '/api/admin/dealers', { token: U.d.token, body: { name: `E2E Bayi ${Date.now()}`, ownerUserId: d.id } });
+  status(mk, 201);
+  const dealerId = mk.body.dealer.id;
+  const dl = await api('GET', '/api/usd/dealers', { token: h.token });
+  ok(dl);
+  assert.ok(dl.body.dealers.some((x) => x.id === dealerId));
+  status(await api('POST', '/api/usd/dealer-transfers', { token: h.token, body: { dealerId, amountCents: 500 } }), 400, 'alt sınır 10 dolar');
+  status(await api('POST', '/api/usd/dealer-transfers', { token: h.token, body: { dealerId, amountCents: 50000 } }), 409, 'bakiyeden fazla');
+  status(await api('POST', '/api/usd/dealer-transfers', { token: h.token, body: { dealerId: h.id, amountCents: 1000 } }), 404, 'bayi yok');
+  const tr = await api('POST', '/api/usd/dealer-transfers', { token: h.token, body: { dealerId, amountCents: 2500 } });
+  status(tr, 201);
+  assert.equal(tr.body.transfer.coins, '100000');
+  assert.equal(tr.body.wallet.balanceCents, '4500');
+  const dm = await api('GET', '/api/dealers/me', { token: d.token });
+  ok(dm);
+  assert.equal(dm.body.dealer.coinBalance, '100000');
+  assert.ok(dm.body.transactions.some((x) => x.type === 'usd_transfer' && x.coinAmount === '100000'));
+  // Defter bakiyeyle tutarlı
+  const led = await sql(`SELECT COALESCE(SUM(amount_cents),0)::text AS s, (SELECT usd_cents::text FROM users WHERE id = $1) AS b FROM usd_transactions WHERE user_id = $1`, [h.id]);
+  assert.equal(led.rows[0].s, '4500');
+  assert.equal(led.rows[0].b, '4500');
+  // Genel anahtar kapalıyken gönderim yapılamaz
+  ok(await api('PUT', '/api/admin/app-config', { token: U.d.token, body: { usdEnabled: false } }));
+  status(await api('POST', '/api/usd/withdrawals', { token: h.token, body: { amountCents: 1000, method: 'IBAN', account: 'TR00 1111' } }), 403, 'kapalı');
+  status(await api('POST', '/api/usd/dealer-transfers', { token: h.token, body: { dealerId, amountCents: 1000 } }), 403, 'kapalı');
+  ok(await api('PUT', '/api/admin/app-config', { token: U.d.token, body: { usdEnabled: true, usdDealerCoinsPerUsd: 4000, usdWithdrawMinCents: 1000, usdDealerMinCents: 1000 } }));
+  status(await api('PUT', '/api/admin/app-config', { token: U.d.token, body: { usdDealerCoinsPerUsd: 0 } }), 400, 'kur 0 olamaz');
+});
+
+test('Fasulye: Coin\'e çevirme (kendine) ve başka kullanıcıya Coin gönderme', { skip, timeout: 60000 }, async () => {
+  const h = await register('beanhost');
+  const r = await register('beanfriend');
+  const usd = async (u) => (await api('GET', '/api/usd/me', { token: u.token })).body.balanceCents;
+  ok(await api('POST', '/api/admin/usd/adjust', { token: U.d.token, body: { userId: h.id, amountCents: 5000, note: 'e2e fasulye' } }));
+  const c0 = await coins(h); const r0 = await coins(r);
+  status(await api('POST', '/api/usd/coin-exchanges', { token: h.token, body: { amountCents: 50 } }), 400, 'alt sınır 1 Fasulye');
+  status(await api('POST', '/api/usd/coin-exchanges', { token: h.token, body: { amountCents: 999999 } }), 409, 'bakiyeden fazla');
+  status(await api('POST', '/api/usd/coin-exchanges', { token: r.token, body: { amountCents: 100 } }), 409, 'Fasulyesi olmayan çeviremez');
+  status(await api('POST', '/api/usd/coin-exchanges', { token: h.token, body: { amountCents: 100, targetUserId: '00000000-0000-4000-8000-000000000000' } }), 404, 'alıcı yok');
+  // Kendine çevirme (aynı anahtarla yinelenen istek ikinci kez düşmez)
+  const key = `bean-${Date.now()}`;
+  const self = await api('POST', '/api/usd/coin-exchanges', { token: h.token, headers: { 'Idempotency-Key': key }, body: { amountCents: 1250 } });
+  status(self, 201);
+  assert.equal(self.body.exchange.coins, '50000');
+  assert.equal(self.body.exchange.self, true);
+  assert.equal(self.body.wallet.balanceCents, '3750');
+  await api('POST', '/api/usd/coin-exchanges', { token: h.token, headers: { 'Idempotency-Key': key }, body: { amountCents: 1250 } });
+  assert.equal(await usd(h), '3750', 'yinelenen istek ikinci kez düşmez');
+  assert.equal(await coins(h), c0 + 50000n);
+  // Başka kullanıcıya Coin gönderme
+  const send = await api('POST', '/api/usd/coin-exchanges', { token: h.token, body: { amountCents: 2000, targetUserId: r.id } });
+  status(send, 201);
+  assert.equal(send.body.exchange.self, false);
+  assert.equal(send.body.exchange.coins, '80000');
+  assert.equal(send.body.exchange.target.id, r.id);
+  assert.equal(await usd(h), '1750');
+  assert.equal(await coins(r), r0 + 80000n, 'Coin alıcıya yüklendi');
+  assert.equal(await coins(h), c0 + 50000n, 'gönderenin Coin bakiyesi değişmez');
+  assert.equal(await usd(r), '0', 'alıcıya Fasulye geçmez');
+  // Alıcının Coin geçmişinde ve bildirimlerinde görünür
+  const hist = await api('GET', '/api/me/wallet?group=exchange', { token: r.token });
+  ok(hist);
+  assert.ok(JSON.stringify(hist.body).includes('bean_received'));
+  // Engelleyen kullanıcıya gönderilemez
+  ok(await api('POST', `/api/blocks/${h.id}`, { token: r.token }));
+  status(await api('POST', '/api/usd/coin-exchanges', { token: h.token, body: { amountCents: 100, targetUserId: r.id } }), 403, 'engelli');
+  // Defter bakiyeyle tutarlı; her çevirme bir kayıt
+  const led = await sql(`SELECT COALESCE(SUM(amount_cents),0)::text AS s, (SELECT usd_cents::text FROM users WHERE id = $1) AS b,
+    (SELECT COUNT(*)::int FROM usd_coin_exchanges WHERE user_id = $1) AS n FROM usd_transactions WHERE user_id = $1`, [h.id]);
+  assert.equal(led.rows[0].s, '1750');
+  assert.equal(led.rows[0].b, '1750');
+  assert.equal(led.rows[0].n, 2);
+  // Kur ve alt sınır panelden ayarlanır
+  ok(await api('PUT', '/api/admin/app-config', { token: U.d.token, body: { usdCoinsPerUsd: 8000, usdExchangeMinCents: 500 } }));
+  status(await api('POST', '/api/usd/coin-exchanges', { token: h.token, body: { amountCents: 400 } }), 400, 'yeni alt sınır');
+  const again = await api('POST', '/api/usd/coin-exchanges', { token: h.token, body: { amountCents: 500 } });
+  status(again, 201);
+  assert.equal(again.body.exchange.coins, '40000');
+  status(await api('PUT', '/api/admin/app-config', { token: U.d.token, body: { usdCoinsPerUsd: 0 } }), 400, 'kur 0 olamaz');
+  ok(await api('PUT', '/api/admin/app-config', { token: U.d.token, body: { usdCoinsPerUsd: 4000, usdExchangeMinCents: 100 } }));
+});
+
+test('sesli / görüntülü ayrı maaş: ayarlar, görüntülü tablo ve maaş tablosu ucu', { skip, timeout: 60000 }, async () => {
+  const get = async () => (await api('GET', '/api/admin/agency-config', { token: U.d.token })).body.config;
+  let cfg = await get();
+  assert.equal(cfg.settings.splitByRoomType, true, 'varsayılan: ayrı hesap açık');
+  assert.equal(cfg.settings.videoDailyCapMinutes, 0);
+  assert.equal(cfg.settings.videoShortfallCutBps, 0);
+  assert.ok(cfg.payLevels.length >= 1);
+  assert.equal(cfg.videoPayLevels.length, cfg.payLevels.length, 'görüntülü tablo başlangıçta sesli tablonun kopyası');
+  // Görüntülü kuralları
+  ok(await api('PUT', '/api/admin/agency-config', { token: U.d.token, body: { settings: { videoDailyCapMinutes: 120, videoMinSessionMinutes: 30, videoShortfallCutBps: 5000 } } }));
+  status(await api('PUT', '/api/admin/agency-config', { token: U.d.token, body: { settings: { videoDailyCapMinutes: 5000 } } }), 400, 'sınır dışı');
+  status(await api('PUT', '/api/admin/agency-config', { token: U.d.token, body: { settings: { splitByRoomType: 'evet' } } }), 400, 'boolean değil');
+  cfg = await get();
+  assert.deepEqual([cfg.settings.videoDailyCapMinutes, cfg.settings.videoMinSessionMinutes, cfg.settings.videoShortfallCutBps], [120, 30, 5000]);
+  // Görüntülü tablo ayrı kaydedilir; sesli tablo değişmez
+  const audioBefore = JSON.stringify(cfg.payLevels);
+  const video = cfg.videoPayLevels.map((l, i) => (i === 0 ? { ...l, salary1Cents: String(BigInt(l.salary1Cents) + 500n) } : l));
+  const saved = await api('PUT', '/api/admin/pay-levels', { token: U.d.token, body: { levels: video, kind: 'video' } });
+  ok(saved);
+  assert.equal(saved.body.config.videoPayLevels[0].salary1Cents, String(BigInt(cfg.payLevels[0].salary1Cents) + 500n));
+  assert.equal(JSON.stringify(saved.body.config.payLevels), audioBefore, 'sesli tablo değişmedi');
+  status(await api('PUT', '/api/admin/pay-levels', { token: U.a.token, body: { levels: video, kind: 'video' } }), 403, 'kullanıcı tablo değiştiremez');
+  // Uygulamanın maaş tablosu ucu iki tabloyu ve kuralları verir
+  const pt = await api('GET', '/api/agency-center/pay-table', { token: U.a.token });
+  ok(pt);
+  assert.equal(pt.body.split, true);
+  assert.equal(pt.body.videoLevels[0].salary1Cents, saved.body.config.videoPayLevels[0].salary1Cents);
+  assert.deepEqual(pt.body.video, { dailyCapMinutes: 120, minSessionMinutes: 30, shortfallCutBps: 5000 });
+  // Eski hâline döndür
+  ok(await api('POST', '/api/admin/pay-levels/reset', { token: U.d.token, body: { kind: 'video' } }));
+  ok(await api('PUT', '/api/admin/pay-levels', { token: U.d.token, body: { levels: cfg.payLevels, kind: 'video' } }));
+  ok(await api('PUT', '/api/admin/agency-config', { token: U.d.token, body: { settings: { videoDailyCapMinutes: 0, videoMinSessionMinutes: 0, videoShortfallCutBps: 0 } } }));
+  cfg = await get();
+  assert.equal(JSON.stringify(cfg.payLevels), audioBefore);
 });

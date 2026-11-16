@@ -69,8 +69,12 @@ class _PayoutsTabState extends State<PayoutsTab> {
     var events = st['requireOfficialEvents'] == true;
     var game = st['requireGameHours'] == true;
     var balance = st['allowBalanceMethod'] != false;
+    var split = st['splitByRoomType'] != false;
     final c = <String, TextEditingController>{
       'validDay': TextEditingController(text: '${st['validDayMinutes'] ?? 60}'),
+      'vCap': TextEditingController(text: '${st['videoDailyCapMinutes'] ?? 0}'),
+      'vMin': TextEditingController(text: '${st['videoMinSessionMinutes'] ?? 0}'),
+      'vCut': TextEditingController(text: '${((st['videoShortfallCutBps'] as num?) ?? 0) / 100}'),
       'penalty': TextEditingController(text: '${((st['penaltyBps'] as num?) ?? 5000) / 100}'),
       'minEv': TextEditingController(text: '${st['minEventCount'] ?? 0}'),
       'cur': TextEditingController(text: (st['currency'] ?? 'USD').toString()),
@@ -94,6 +98,17 @@ class _PayoutsTabState extends State<PayoutsTab> {
                 onChanged: (v) => setS(() => cycle = v ?? cycle),
               ),
               TextField(controller: c['validDay'], keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Geçerli gün için en az yayın (dakika)')),
+              SwitchListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Sesli ve görüntülü ayrı hesaplansın'),
+                subtitle: const Text('Açıkken elmas ve süre oda türüne göre ayrılır; iki maaş ayrı tablodan hesaplanıp toplanır.'),
+                value: split,
+                onChanged: (v) => setS(() => split = v),
+              ),
+              TextField(controller: c['vCap'], keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Görüntülü: günde sayılan en fazla süre (dk; 0 = sınırsız)')),
+              TextField(controller: c['vMin'], keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Görüntülü: en kısa geçerli oturum (dk; 0 = yok)')),
+              TextField(controller: c['vCut'], keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Görüntülü: gün/saat şartı tutmazsa kesinti (%; 0 = ödenmez)')),
               SwitchListTile(dense: true, contentPadding: EdgeInsets.zero, title: const Text('Oyun saati şartı uygulansın'), value: game, onChanged: (v) => setS(() => game = v)),
               SwitchListTile(dense: true, contentPadding: EdgeInsets.zero, title: const Text('Yöntem 2 (bakiye) açık'), value: balance, onChanged: (v) => setS(() => balance = v)),
               TextField(controller: c['maxA'], keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Ajans başına en fazla asistan')),
@@ -120,6 +135,9 @@ class _PayoutsTabState extends State<PayoutsTab> {
     }
     final values = {
       'validDayMinutes': i('validDay'),
+      'videoDailyCapMinutes': i('vCap'),
+      'videoMinSessionMinutes': i('vMin'),
+      'videoShortfallCutBps': bps('vCut'),
       'penaltyBps': bps('penalty'),
       'minEventCount': i('minEv'),
       'maxAssistants': i('maxA'),
@@ -137,6 +155,7 @@ class _PayoutsTabState extends State<PayoutsTab> {
       () => Api.put('/api/admin/agency-config', {
         'settings': {
           'cycle': cycle, 'requireOfficialEvents': events, 'requireGameHours': game, 'allowBalanceMethod': balance, 'currency': currency,
+          'splitByRoomType': split,
           ...values,
         },
       }),
@@ -286,13 +305,22 @@ class _PayoutsTabState extends State<PayoutsTab> {
                         if (mounted) setState(() => _v++);
                       },
                       icon: const Icon(Icons.edit),
-                      label: const Text('Tabloyu düzenle'),
+                      label: const Text('Sesli tabloyu düzenle'),
+                    ),
+                  if (admin)
+                    FilledButton.tonalIcon(
+                      onPressed: () async {
+                        await Navigator.push(context, MaterialPageRoute(builder: (_) => PayLevelsEditorScreen(levels: listOf(cfg['videoPayLevels']), video: true)));
+                        if (mounted) setState(() => _v++);
+                      },
+                      icon: const Icon(Icons.videocam_outlined),
+                      label: const Text('Görüntülü tabloyu düzenle'),
                     ),
                   if (admin) OutlinedButton.icon(onPressed: () => _editGrades(grades), icon: const Icon(Icons.stairs_outlined), label: const Text('Ajans seviyeleri')),
                 ]),
                 const SizedBox(height: 4),
                 Text('Ajans seviyeleri: ${grades.map((g) => '${g['name']} ≥${fmtNumber(g['min'])}').join(' · ')}', style: const TextStyle(fontSize: 11, color: Pal.textDim)),
-                const Text('Ödemeler platform dışında (banka/havale) yapılır; burada "ödendi" işaretlenir.', style: TextStyle(fontSize: 11, color: Pal.textDim)),
+                const Text('Dönem kapanınca maaş ve primler dolar cüzdanına yatar. Kimlik doğrulaması (KYC) onaylı olmayan yayıncının maaşı bekler; onaylayıp özeti ödeyince cüzdana geçer.', style: TextStyle(fontSize: 11, color: Pal.textDim)),
               ]),
             ),
             if (transfers.isNotEmpty)
@@ -402,7 +430,9 @@ class _PayoutsTabState extends State<PayoutsTab> {
 // ------------------------------------------------------------------ Maaş tablosu düzenleyici
 class PayLevelsEditorScreen extends StatefulWidget {
   final List<Map<String, dynamic>> levels;
-  const PayLevelsEditorScreen({super.key, required this.levels});
+  /// true: görüntülü yayın tablosu; false: sesli oda tablosu.
+  final bool video;
+  const PayLevelsEditorScreen({super.key, required this.levels, this.video = false});
 
   @override
   State<PayLevelsEditorScreen> createState() => _PayLevelsEditorScreenState();
@@ -529,13 +559,13 @@ class _PayLevelsEditorScreenState extends State<PayLevelsEditorScreen> {
   Future<void> _save() async {
     if (_saving) return;
     setState(() => _saving = true);
-    final r = await guard(context, () => Api.put('/api/admin/pay-levels', {'levels': _levels}));
+    final r = await guard(context, () => Api.put('/api/admin/pay-levels', {'levels': _levels, 'kind': widget.video ? 'video' : 'audio'}));
     if (!mounted) return;
     setState(() => _saving = false);
     if (r == null) return;
     final cfg = mapOf(r['config']);
     setState(() {
-      _levels = listOf(cfg?['payLevels']).map((l) => Map<String, dynamic>.from(l)).toList();
+      _levels = listOf(cfg?[widget.video ? 'videoPayLevels' : 'payLevels']).map((l) => Map<String, dynamic>.from(l)).toList();
       _dirty = false;
     });
     toast(context, 'Maaş tablosu kaydedildi.');
@@ -544,10 +574,10 @@ class _PayLevelsEditorScreenState extends State<PayLevelsEditorScreen> {
   Future<void> _reset() async {
     if (!await confirm(context, 'Tablo varsayılan 44 seviyeye (mavi tablo, elmas ×10) döndürülsün mü? Yaptığınız değişiklikler silinir.', action: 'Varsayılana döndür', destructive: true)) return;
     if (!mounted) return;
-    final r = await guard(context, () => Api.post('/api/admin/pay-levels/reset'));
+    final r = await guard(context, () => Api.post('/api/admin/pay-levels/reset', {'kind': widget.video ? 'video' : 'audio'}));
     if (r == null || !mounted) return;
     setState(() {
-      _levels = listOf(mapOf(r['config'])?['payLevels']).map((l) => Map<String, dynamic>.from(l)).toList();
+      _levels = listOf(mapOf(r['config'])?[widget.video ? 'videoPayLevels' : 'payLevels']).map((l) => Map<String, dynamic>.from(l)).toList();
       _dirty = false;
     });
     toast(context, 'Varsayılan tablo yüklendi.');
@@ -566,7 +596,7 @@ class _PayLevelsEditorScreenState extends State<PayLevelsEditorScreen> {
         }
       },
       child: Scaffold(
-        appBar: AppBar(title: const Text('Maaş tablosu'), actions: [
+        appBar: AppBar(title: Text(widget.video ? 'Maaş tablosu: görüntülü' : 'Maaş tablosu: sesli'), actions: [
           IconButton(tooltip: 'Varsayılana döndür', icon: const Icon(Icons.restore), onPressed: _reset),
           IconButton(tooltip: 'Son seviyeyi sil', icon: const Icon(Icons.remove), onPressed: _removeLast),
           IconButton(tooltip: 'Seviye ekle', icon: const Icon(Icons.add), onPressed: _addLevel),
@@ -618,6 +648,8 @@ class _PeriodDetailScreenState extends State<PeriodDetailScreen> {
 
   String? _periodCurrency;
   String get _cur => _periodCurrency ?? widget.currency;
+  // Cüzdan dönemi: "öde" tutarı alıcının dolar cüzdanına yatırır (platform dışı ödeme yapılmaz).
+  bool _wallet = false;
 
   Future<String?> _noteDialog(String title, String message, String action) async {
     final ctl = TextEditingController();
@@ -642,11 +674,13 @@ class _PeriodDetailScreenState extends State<PeriodDetailScreen> {
   }
 
   Future<void> _pay(String kind, Map<String, dynamic> s, String who, dynamic cents) async {
-    final note = await _noteDialog('Ödendi işaretle', '$who için ${fmtMoney(cents, _cur)} ödemesi platform dışında yapıldı mı?', 'Ödendi');
+    final note = _wallet
+        ? await _noteDialog('Cüzdana yatır', '$who için ${fmtMoney(cents, _cur)} dolar cüzdanına yatırılsın mı?', 'Yatır')
+        : await _noteDialog('Ödendi işaretle', '$who için ${fmtMoney(cents, _cur)} ödemesi platform dışında yapıldı mı?', 'Ödendi');
     if (note == null || !mounted) return;
     final r = await guard(context, () => Api.post('/api/admin/statements/$kind/${s['id']}/pay', {if (note.isNotEmpty) 'note': note}));
     if (r != null && mounted) {
-      toast(context, 'Ödendi olarak işaretlendi.');
+      toast(context, _wallet ? 'Dolar cüzdanına yatırıldı.' : 'Ödendi olarak işaretlendi.');
       setState(() => _v++);
     }
   }
@@ -666,7 +700,7 @@ class _PeriodDetailScreenState extends State<PeriodDetailScreen> {
   }
 
   Future<void> _payAll(String kind, int count, String label) async {
-    final note = await _noteDialog('Toplu ödendi', 'Bekleyen $count $label "ödendi" işaretlensin mi?${kind == 'host' ? ' Kimlik doğrulaması (KYC) onaylı olmayan ve maaşı olan yayıncılar atlanır.' : ''}', 'Hepsini işaretle');
+    final note = await _noteDialog(_wallet ? 'Toplu cüzdana yatır' : 'Toplu ödendi', _wallet ? 'Bekleyen $count $label dolar cüzdanına yatırılsın mı?' : 'Bekleyen $count $label "ödendi" işaretlensin mi?${kind == 'host' ? ' Kimlik doğrulaması (KYC) onaylı olmayan ve maaşı olan yayıncılar atlanır.' : ''}', 'Hepsini işaretle');
     if (note == null || !mounted) return;
     final r = await guard(context, () => Api.post('/api/admin/payouts/${widget.periodId}/pay-all', {'kind': kind, if (note.isNotEmpty) 'note': note}));
     if (r != null && mounted) {
@@ -749,6 +783,7 @@ class _PeriodDetailScreenState extends State<PeriodDetailScreen> {
             final period = mapOf(data['period']) ?? {};
             // Dönem kapanırken geçerli olan para birimi (sonradan değişse de doğru gösterilir).
             _periodCurrency = period['currency']?.toString();
+            _wallet = period['walletMode'] == true;
             final hosts = listOf(data['hostStatements']);
             final ags = listOf(data['agencyStatements']);
             final asst = listOf(data['assistantStatements']);
