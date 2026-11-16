@@ -1,7 +1,13 @@
 name: Backend
+# Testler YENİ kodu sınar: zip yüklenince "Zip ile güncelle" zip'i açtıktan sonra bu iş akışını başlatır
+# (workflow_dispatch). Yalnızca zip dosyası eklenen gönderimde çalışmaz: o anda depoda hâlâ ESKİ kod vardır;
+# eskiden testler bu yüzden hep bir sürüm geriden geliyordu (yeni sürüm yüklenince eski sürümün sonucu görünüyordu).
 on:
   push:
+    paths-ignore:
+      - "*.zip"
   pull_request:
+  workflow_dispatch:
 jobs:
   unit:
     runs-on: ubuntu-latest

@@ -1,10 +1,13 @@
 name: Mobile
+# Testler YENİ kodu sınar: zip yüklenince "Zip ile güncelle" zip'i açtıktan sonra bu iş akışını başlatır
+# (workflow_dispatch). Yalnızca zip dosyası eklenen gönderimde çalışmaz: o anda depoda hâlâ ESKİ kod vardır;
+# eskiden testler bu yüzden hep bir sürüm geriden geliyordu (yeni sürüm yüklenince eski sürümün sonucu görünüyordu).
 on:
   push:
+    paths-ignore:
+      - "*.zip"
   pull_request:
-# İş akışı depoyu yalnızca okur (en az yetki).
-permissions:
-  contents: read
+  workflow_dispatch:
 jobs:
   analyze:
     runs-on: ubuntu-latest
@@ -24,5 +27,18 @@ jobs:
           echo "pubspec: $P · version.dart: $V"
           if [ "$P" != "$V" ]; then echo "::error::lib/version.dart ($V) pubspec.yaml sürümüyle ($P) aynı olmalı"; exit 1; fi
       - run: flutter pub get
-      - run: flutter analyze --no-fatal-infos
+      - name: flutter analyze (hata ve uyarılar en sonda ayrıca listelenir)
+        run: |
+          set +e
+          flutter analyze --no-fatal-infos > analyze.txt 2>&1
+          code=$?
+          grep -vE '^\s*info •' analyze.txt | tail -n 400
+          grep -E '^\s*(error|warning) •' analyze.txt > problems.txt
+          if [ -s problems.txt ]; then
+            echo "=================== HATA / UYARI ($(wc -l < problems.txt)) ==================="
+            cat problems.txt
+            while IFS= read -r l; do echo "::error::$l"; done < problems.txt
+          fi
+          echo "Bilgi (info) satırı: $(grep -cE '^\s*info •' analyze.txt)"
+          exit $code
       - run: flutter test

@@ -1,7 +1,8 @@
 name: Zip ile güncelle
 
 # Kullanım (token gerekmez): depoya GitHub sitesinden "Add file > Upload files" ile TR-Live-v....zip dosyasını ANA DİZİNE yükleyin.
-# Bu iş akışı zip'i açar, projeyi içindekiyle birebir eşitler (eski/fazla dosyalar silinir), zip'i siler ve APK derlemesini başlatır.
+# Bu iş akışı zip'i açar, projeyi içindekiyle birebir eşitler (eski/fazla dosyalar silinir), zip'i siler; APK derlemesini ve
+# testleri (arka uç + mobil) YENİ kod üzerinde başlatır.
 # TR-Live-paket-*.zip (hazır hediye paketi) buraya değil, uygulamadaki Yönetim → Katalog sayfasından yüklenir.
 # Not: .github/workflows klasörü GitHub kuralı gereği buradan güncellenemez; bir iş akışı dosyası değiştiyse onu elle yükleyin.
 on:
@@ -93,3 +94,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: gh workflow run apk_build.yml --ref main || echo "APK derlemesi otomatik başlatılamadı; Actions sekmesinden 'Build Android APK' > Run workflow ile başlatın."
+
+      # Testler zip açıldıktan SONRA, yeni kod üzerinde çalışır (eskiden zip'in eklendiği gönderimde, yani eski kodda
+      # çalışıyor ve sonuç hep bir sürüm geriden geliyordu). İş akışları eski sürümdeyse (workflow_dispatch yoksa)
+      # başlatılamaz; bu durumda yalnızca uyarı yazılır.
+      - name: Testleri yeni kodda başlat
+        if: env.NOZIP != '1' && env.PKONLY != '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh workflow run backend.yml --ref main || echo "::warning::Arka uç testleri başlatılamadı (backend.yml güncel mi?)."
+          gh workflow run mobile.yml --ref main || echo "::warning::Mobil testleri başlatılamadı (mobile.yml güncel mi?)."
