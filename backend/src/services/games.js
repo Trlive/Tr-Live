@@ -1,15 +1,60 @@
 import { query, tx } from '../database.js';
 import { hub } from '../realtime.js';
 import * as ludo from '../ludo.js';
+import * as tek from '../tek.js';
 import { loadPublicRows } from './users.js';
 import { roomUser } from '../views.js';
 import { fail } from '../http.js';
 import { nonOverlapping } from '../ticker.js';
 
-export async function gameView(gameId, run = query) {
+// Oyun türleri: saf motor + oyuncu sınırı. Yeni oyun eklerken buraya ve 074 geçişindeki CHECK listesine yazılır.
+export const GAME_TYPES = {
+  ludo: { engine: ludo, min: 2, max: 4, event: 'room_game_state' },
+  // TEK durumu ayrı olay adıyla yayınlanır: eski sürümlerdeki Ludo ekranı tanımadığı bir oyunu çizmeye çalışmasın.
+  tek: { engine: tek, min: tek.MIN_PLAYERS, max: tek.MAX_PLAYERS, event: 'room_tek_state' },
+};
+export const engineOf = (g) => (GAME_TYPES[g.game_type] ?? GAME_TYPES.ludo).engine;
+
+// TEK görünümü. Herkese giden kısımda eller YOKTUR (yalnızca kart sayıları); [viewerId] verilirse o kişinin kendi eli ve
+// yapabilecekleri "me" altında eklenir. Yayınlarda (broadcastGame) viewerId verilmez.
+async function tekView(g, waiting, run, viewerId) {
+  const st = g.state && g.state.players ? g.state : null;
+  const ids = st ? st.players.map((p) => p.userId) : waiting.map((p) => p.user_id);
+  const users = new Map((await loadPublicRows(ids, run)).map((u) => [u.id, u]));
+  const userOf = (id) => roomUser(users.get(id));
+  const pub = st ? tek.publicView(st) : null;
+  const players = st
+    ? pub.players.map((p) => ({ user: userOf(p.userId), seat: p.seat, cards: p.cards, out: p.out, auto: p.auto }))
+    : waiting.map((p, i) => ({ user: userOf(p.user_id), seat: i, cards: 0, out: false, auto: 0 }));
+  const playing = st && g.status === 'playing';
+  const view = {
+    id: g.id, roomId: g.room_id, type: 'tek', status: g.status, createdBy: g.created_by, winnerId: g.winner_id,
+    minPlayers: tek.MIN_PLAYERS, maxPlayers: tek.MAX_PLAYERS,
+    players,
+    turnSeat: playing ? pub.turnSeat : null,
+    turnUserId: playing && pub.turnSeat !== null ? st.players[pub.turnSeat]?.userId ?? null : null,
+    top: pub?.top ?? null, color: pub?.color ?? null, dir: pub?.dir ?? 1, dealerSeat: pub?.dealerSeat ?? null,
+    phase: playing ? pub.phase : null, drawCount: pub?.drawCount ?? 0, challengeBy: playing ? pub.challengeBy : null,
+    turnMsLeft: playing ? pub.turnMsLeft : null, turnMs: tek.TURN_MS,
+    roundMsLeft: playing ? pub.roundMsLeft : null, lastRound: playing ? pub.lastRound : false,
+    seq: pub?.seq ?? 0, last: pub?.last ?? [],
+    result: g.status === 'finished' && pub?.result ? pub.result.map((r) => ({ ...r, user: userOf(r.userId) })) : null,
+  };
+  if (viewerId) {
+    const mine = st ? tek.privateView(st, viewerId) : null;
+    const idx = st ? -1 : waiting.findIndex((p) => p.user_id === viewerId);
+    view.me = mine ?? { seat: idx >= 0 ? idx : null, out: false, hand: [], playable: [], canDraw: false, canPass: false, drawn: null, mustAnswer: false };
+    view.me.joined = st ? mine !== null : idx >= 0;
+    view.me.isCreator = g.created_by === viewerId;
+  }
+  return view;
+}
+
+export async function gameView(gameId, run = query, viewerId = null) {
   const g = (await run(`SELECT * FROM room_games WHERE id = $1`, [gameId])).rows[0];
   if (!g) return null;
   const waiting = (await run(`SELECT user_id, seat FROM room_game_players WHERE game_id = $1 ORDER BY seat`, [gameId])).rows;
+  if (g.game_type === 'tek') return tekView(g, waiting, run, viewerId);
   const st = g.state && g.state.players ? g.state : null;
   const ids = st ? st.players.map((p) => p.userId) : waiting.map((p) => p.user_id);
   const users = new Map((await loadPublicRows(ids, run)).map((u) => [u.id, u]));
@@ -33,12 +78,17 @@ export async function gameView(gameId, run = query) {
 
 export async function broadcastGame(gameId) {
   const view = await gameView(gameId);
-  if (view) hub.broadcastRoom(view.roomId, { type: 'room_game_state', game: view });
+  if (view) hub.broadcastRoom(view.roomId, { type: (GAME_TYPES[view.type] ?? GAME_TYPES.ludo).event, game: view });
   return view;
 }
 
 export async function openGameOfRoom(roomId, run = query) {
   return (await run(`SELECT * FROM room_games WHERE room_id = $1 AND status IN ('waiting','playing')`, [roomId])).rows[0] || null;
+}
+
+/** Oyun satırı beklenen türde değilse hata verir (bir oyunun hamle ucu başka oyunun durumunu bozmasın). */
+export function assertGameType(g, type) {
+  if (g.game_type !== type) throw fail('Bu işlem bu oyun için geçerli değil.', 409);
 }
 
 // Kilitli satır üzerinde saf motoru çalıştırıp durumu yazar. fn(state, game) → { state, extra }.
@@ -68,7 +118,7 @@ export async function startGame(gameId, requesterId) {
     if (g.created_by !== requesterId) throw fail('Oyunu yalnızca kuran başlatabilir.', 403);
     const ps = (await c.query(`SELECT user_id FROM room_game_players WHERE game_id = $1 ORDER BY seat`, [gameId])).rows;
     if (ps.length < 2) throw fail('En az 2 oyuncu gerekir.', 409);
-    const st = ludo.newGame(ps.map((p) => p.user_id));
+    const st = engineOf(g).newGame(ps.map((p) => p.user_id));
     await c.query(`UPDATE room_games SET status = 'playing', state = $2, started_at = NOW() WHERE id = $1`, [gameId, JSON.stringify(st)]);
     return st;
   });
@@ -88,7 +138,7 @@ export async function forfeitUserInRoom(userId, roomId) {
   }
   if (!g.state?.players?.some((p) => p.userId === userId)) return;
   try {
-    await mutateGame(g.id, (state) => ({ state: ludo.forfeit(state, userId) }));
+    await mutateGame(g.id, (state, row) => ({ state: engineOf(row).forfeit(state, userId) }));
   } catch (error) {
     if (error.status !== 409) throw error;
   }
@@ -109,7 +159,10 @@ export function startGameTicker() {
         `SELECT id FROM room_games WHERE status = 'playing' AND (state->>'deadline')::bigint <= $1`, [Date.now()],
       );
       for (const g of due.rows) {
-        try { await mutateGame(g.id, (state) => ludo.autoPlay(state)); } catch (e) { if (e.status !== 409) console.error('Oyun otomatik hamle hatası:', e.message); }
+        // Süre, satır kilitlendikten sonra yeniden denetlenir: oyuncu tam o anda oynadıysa otomatik hamle yapılmaz.
+        try {
+          await mutateGame(g.id, (state, row) => (state.deadline != null && Number(state.deadline) <= Date.now() ? engineOf(row).autoPlay(state) : { state }));
+        } catch (e) { if (e.status !== 409) console.error('Oyun otomatik hamle hatası:', e.message); }
       }
     } catch (error) {
       console.error('Oyun zamanlayıcı hatası:', error.message);

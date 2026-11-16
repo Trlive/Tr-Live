@@ -35,6 +35,10 @@ export const config = {
   uploadDir: env.UPLOAD_DIR || path.join(process.cwd(), 'uploads'),
   // Bu değerin (Coin) üstündeki hediyeler tüm kullanıcılara global şerit olarak gider.
   globalGiftMinCoins: BigInt(env.GLOBAL_GIFT_MIN_COINS || 1000),
+  // Yardımcı adminin 24 saatte yükleyebileceği toplam Coin (tek seferde en fazla 100.000 ve saatte 30 yükleme ayrıca
+  // sınırlıdır). 0 = yardımcı adminin Coin yüklemesi kapalı. Bu ayar yönetim kodunda kullanılıyor ama burada tanımlı
+  // değildi: yardımcı admin Coin yüklemeye çalışınca "Sunucu hatası" alıyordu (tanımsız değerle BigInt işlemi).
+  supportCoinDailyLimit: /^\d{1,15}$/.test(env.SUPPORT_COIN_DAILY_LIMIT ?? '') ? BigInt(env.SUPPORT_COIN_DAILY_LIMIT) : 1000000n,
   databaseSsl: env.DATABASE_SSL ?? (isProd ? 'no-verify' : 'false'),
   bannedWords: (env.BANNED_WORDS || '').split(',').map((w) => w.trim()).filter(Boolean),
   firewall: {

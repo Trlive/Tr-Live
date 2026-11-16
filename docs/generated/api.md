@@ -4,7 +4,7 @@
 
 Kimlik: **🔒** giriş gerekli · **👑** yalnızca yönetici · **🛠** yönetici + yardımcı admin (destek) · **⏱** hız sınırı adı
 
-**Toplam 399 uç.**
+**Toplam 405 uç.**
 
 ## system.js  (`/api`)
 
@@ -24,6 +24,12 @@ Kimlik: **🔒** giriş gerekli · **👑** yalnızca yönetici · **🛠** yön
 | Yöntem | Yol | Kimlik | ⏱ | Not |
 |---|---|---|---|---|
 | GET | `/room-activities` | açık | room_activities |  |
+
+## room_game_page.js  (`/room-game`)
+
+| Yöntem | Yol | Kimlik | ⏱ | Not |
+|---|---|---|---|---|
+| GET | `/room-game/tek` | açık | room_game_page |  |
 
 ## dealer_topup_page.js  (`/dealer-topup`)
 
@@ -562,7 +568,8 @@ Kimlik: **🔒** giriş gerekli · **👑** yalnızca yönetici · **🛠** yön
 
 | Yöntem | Yol | Kimlik | ⏱ | Not |
 |---|---|---|---|---|
-| GET | `/api/rooms/:roomId/game` | 🔒 |  |  |
+| GET | `/api/rooms/:roomId/game` | 🔒 | game_view | `?type=tek` TEK oyununu, isteyenin kendi eliyle birlikte verir. canManage: bu kişi oyun kurabilir mi. |
+| GET | `/api/games/:id` | 🔒 | game_view | Tek bir oyun (bitmiş olsa da): sonuç ekranı ve sayfanın kendini yenilemesi için. Eller yalnızca sahibine gider. |
 | POST | `/api/rooms/:roomId/games` | 🔒 | game_create | Oyun kurma: oda sahibi / yardımcı sahip / moderatör. Ücretsizdir, Coin bahsi yoktur. |
 | POST | `/api/games/:id/join` | 🔒 | game |  |
 | POST | `/api/games/:id/leave` | 🔒 |  |  |
@@ -570,6 +577,10 @@ Kimlik: **🔒** giriş gerekli · **👑** yalnızca yönetici · **🛠** yön
 | POST | `/api/games/:id/cancel` | 🔒 |  |  |
 | POST | `/api/games/:id/roll` | 🔒 | game_move |  |
 | POST | `/api/games/:id/move` | 🔒 | game_move |  |
+| POST | `/api/games/:id/tek/play` | 🔒 | game_move |  |
+| POST | `/api/games/:id/tek/draw` | 🔒 | game_move |  |
+| POST | `/api/games/:id/tek/pass` | 🔒 | game_move |  |
+| POST | `/api/games/:id/tek/challenge` | 🔒 | game_move |  |
 
 ## safety.js  (`/api`)
 

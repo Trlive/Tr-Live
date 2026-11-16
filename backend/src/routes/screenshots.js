@@ -19,10 +19,12 @@ router.post('/', userLimit('screenshot', 30, 3600e3), async (req, res) => {
   const platform = ['android', 'ios'].includes(b.platform) ? b.platform : null;
   const appVersion = typeof req.get('X-App-Version') === 'string' ? req.get('X-App-Version').slice(0, 20) : null;
   // Aynı ekranda art arda gelen olaylar (çoklu bildirim) 5 sn içinde tek sayılır.
+  // Türler açık yazılır: aynı değişken hem SELECT listesinde hem karşılaştırmada geçince PostgreSQL türü çıkaramayıp
+  // sorguyu reddediyordu ("inconsistent types deduced for parameter") ve bu uç her çağrıda "Sunucu hatası" veriyordu.
   await query(
     `INSERT INTO screenshot_events(user_id, screen, room_id, target_user_id, platform, app_version)
-     SELECT $1, $2, (SELECT id FROM rooms WHERE id = $3), (SELECT id FROM users WHERE id = $4), $5, $6
-     WHERE NOT EXISTS (SELECT 1 FROM screenshot_events WHERE user_id = $1 AND screen = $2 AND created_at > NOW() - INTERVAL '5 seconds')`,
+     SELECT $1::uuid, $2::text, (SELECT id FROM rooms WHERE id = $3::uuid), (SELECT id FROM users WHERE id = $4::uuid), $5::text, $6::text
+     WHERE NOT EXISTS (SELECT 1 FROM screenshot_events WHERE user_id = $1::uuid AND screen = $2::text AND created_at > NOW() - INTERVAL '5 seconds')`,
     [req.user.id, screen, roomId, targetUserId, platform, appVersion],
   );
   res.json({ ok: true });

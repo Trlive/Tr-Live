@@ -1,3 +1,43 @@
+## v2.107.0 — TEK kart oyunu (oda içi, WebView) · kırmızı test düzeltmesi · ekran görüntüsü kaydı hatası
+TEK kart oyunu (yeni)
+- Odadaki oyun menüsüne (Ludo'nun yanına) **TEK** eklendi: 2–9 kişilik renk-sayı eşleştirme kart oyunu. Ücretsizdir,
+  Coin bahsi yoktur. Oyunu oda sahibi / yardımcı sahip / moderatör açar; odadaki herkes katılır ya da izler.
+- Oyun odanın üst kısmında açılan pencerede (kendi sunucumuzdaki sabit sayfa, WebView) oynanır; sohbet ve alt çubuk
+  açık kalır, ses bağlantısı etkilenmez. Pencere küçültülünce sağda oyun balonu kalır ("Katıl", "3/9", "Sıra sende");
+  oyun başlayınca oyuncuların penceresi kendiliğinden açılır.
+- Kurallar: 108 kart (76 sayı, 24 aksiyon, 8 joker); Atla, Yön değiştir, +2, Renk seç, +4. +4'e itiraz edilebilir
+  (atanın elinde o renkten kart varsa 4 kartı o çeker, yoksa itiraz eden 6 çeker). Elde en fazla 20 kart. Elini ilk
+  bitiren kazanır; sıralama puana göre (sayı kartı sayısı kadar, aksiyon 20, joker 50). El en fazla 15 dakika; süre
+  dolunca herkes birer kez daha oynar. Hamle süresi 20 sn; üst üste 3 kez oynamayan oyundan düşer.
+- Kurallar sunucudadır (`backend/src/tek.js`, saf motor); sayfa yalnızca gösterir. Eller yalnızca sahibine gider:
+  odadaki herkese giden canlı yayında yalnızca kart sayıları vardır. Oyun durumu Ludo ile aynı tablolarda durur
+  (074 geçişi yalnızca oyun türü ve koltuk aralığını genişletir).
+- Sayfa dört dildedir (Türkçe, İngilizce, Arapça, Hintçe), uygulama renklerindedir; kart tasarımı ve ad özgündür
+  ("UNO" adı ve kart tasarımı Mattel'e, "ONO" görselleri Yoho'ya aittir; kullanılmadı).
+- Müzik / ses efekti yok: WebView sesi sesli sohbetin ses odağını bozabileceği için eklenmedi; sıra gelince titreşim var.
+- Yönetim → Uygulama ayarları: "TEK kart oyunu açık" anahtarı (kapalıyken menüde görünmez, yeni oyun açılamaz).
+- Kaynak olarak verilen keyprocedure/real-time-uno (MIT) incelendi; kod alınmadı. O proje Socket.io + EJS + kendi
+  oturum/veritabanı yapısıyla çalışıyor ve itiraz, puanlama, süre, 20 kart sınırı içermiyor (ayrıca +2 / +4 cezasını
+  iki kez uygulayan bir hata var). Oyun bizim altyapımıza (JWT, WebSocket yayını, PostgreSQL) göre baştan yazıldı.
+- Eski uygulama sürümleri etkilenmez: TEK durumu ayrı olayla (`room_tek_state`) yayınlanır, tür verilmeyen oyun
+  sorgusu yalnızca Ludo döndürür; Ludo hamle uçları TEK oyununda (ve tersi) reddedilir.
+Hata düzeltmeleri
+- Yardımcı admin Coin yüklerken "Sunucu hatası" alıyordu: `supportCoinDailyLimit` ayarı kodda kullanılıyor ama
+  tanımlı değildi (kırmızı uçtan uca testin sebebi). Varsayılan: 24 saatte 1.000.000 Coin (`SUPPORT_COIN_DAILY_LIMIT`).
+  Yeni test (`config_keys.test.js`) kodda kullanılan her ayarın tanımlı olduğunu denetler.
+- Ekran görüntüsü kaydı (`POST /api/screenshots`) her çağrıda "Sunucu hatası" veriyordu: sorgudaki değişken türlerini
+  PostgreSQL çıkaramıyordu. Türler açık yazıldı. (Bütün SQL metinleri gerçek şemaya karşı denetlenirken bulundu.)
+Doğrulama
+- Oyun motoru: 16 birim testi + 400 rastgele oyun (kart sayısı korunur, el 20'yi aşmaz, oyun her zaman biter).
+- Sunucu akışı gerçek PostgreSQL ile çalıştırıldı (kurma, katılma, tam oyun, ayrılma, iptal, süre dolunca otomatik
+  oyun, Ludo'nun bozulmadığı). 72 geçiş dosyası ve koddaki 1107 SQL metni gerçek şemaya karşı denetlendi.
+- Oyun sayfası gerçek tarayıcıda 3–9 oyuncuyla, dört dilde ve sunucudaki içerik güvenlik ilkesiyle oynatıldı.
+- Uygulama tarafı (Flutter) yerelde derlenemedi; APK derlemesi ve `flutter analyze` GitHub'da çalışır.
+İş akışları (isteğe bağlı, ELLE yüklenir)
+- `backend.yml`, `mobile.yml`, `zip_ile_guncelle.yml`: testler artık zip açıldıktan sonra, YENİ kod üzerinde başlatılır.
+  Eskiden zip'in yüklendiği anda (depoda hâlâ eski kod varken) çalışıyor, sonuç hep bir sürüm geriden geliyordu.
+  Üçü birlikte yüklenmelidir.
+
 ## v2.106.0 — Atılan 24 saat giremez · yönetici kayıtları · hediye sınırı 180 · APK derlemesi · hata kayıtlarındaki hatalar
 APK derlemesi ("exit code 143")
 - v2.100 sonrası APK derlemeleri hiçbir hata yazmadan duruyordu (kullanıcıların telefonundaki son sürüm 2.99.1). Derleme

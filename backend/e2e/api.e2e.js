@@ -681,6 +681,129 @@ test('Ludo: kurma, katılma, başlatma, zar/hamle yetkisi, ayrılma', { skip, ti
   assert.equal(done.rows[0].winner_id, U.a.id);
 });
 
+test('TEK kart oyunu: kurma, katılma, gizli eller, hamleler, ayrılma, oyun sayfası', { skip, timeout: 90000 }, async () => {
+  const view = async (u, id) => (await api('GET', `/api/games/${id}`, { token: u.token })).body.game;
+  status(await api('POST', `/api/rooms/${roomId}/games`, { token: U.b.token, body: { type: 'tek' } }), 403, 'sıradan üye kuramaz');
+  status(await api('POST', `/api/rooms/${roomId}/games`, { token: U.a.token, body: { type: 'satranc' } }), 400, 'bilinmeyen oyun');
+  const made = await api('POST', `/api/rooms/${roomId}/games`, { token: U.a.token, body: { type: 'tek' } });
+  status(made, 201);
+  const gid = made.body.game.id;
+  assert.equal(made.body.game.type, 'tek');
+  assert.equal(made.body.game.maxPlayers, 9);
+  assert.equal(made.body.game.me.joined, true);
+  assert.equal(made.body.game.me.isCreator, true);
+  // Tür verilmeyen sorgu (eski Ludo ekranı) TEK oyununu görmez; tür verilince görünür.
+  let r = await api('GET', `/api/rooms/${roomId}/game`, { token: U.b.token });
+  assert.equal(r.body.game, null);
+  assert.equal(r.body.otherGame, 'tek');
+  r = await api('GET', `/api/rooms/${roomId}/game?type=tek`, { token: U.b.token });
+  assert.equal(r.body.game.id, gid);
+  assert.equal(r.body.game.me.joined, false);
+  assert.equal(r.body.canManage, false);
+  const dup = await api('POST', `/api/rooms/${roomId}/games`, { token: U.a.token, body: { type: 'ludo' } });
+  status(dup, 409, 'tek açık oyun');
+  assert.match(dup.body.message, /TEK/);
+  status(await api('POST', `/api/games/${gid}/join`, { token: U.x.token }), 403, 'odada olmayan katılamaz');
+  status(await api('GET', `/api/games/${gid}`, { token: U.x.token }), 403, 'odada olmayan göremez');
+  status(await api('POST', `/api/games/${gid}/start`, { token: U.a.token }), 409, 'tek kişiyle başlamaz');
+  ok(await api('POST', `/api/games/${gid}/join`, { token: U.b.token }));
+  status(await api('POST', `/api/games/${gid}/start`, { token: U.b.token }), 403, 'yalnızca kurucu başlatır');
+  status(await api('POST', `/api/games/${gid}/tek/draw`, { token: U.a.token }), 409, 'başlamadan hamle yok');
+  const started = await api('POST', `/api/games/${gid}/start`, { token: U.a.token });
+  ok(started);
+  let g = started.body.game;
+  assert.equal(g.status, 'playing');
+  assert.equal(g.me.hand.length, 7);
+  assert.equal(g.drawCount, 108 - 14 - 1);
+  assert.deepEqual(g.players.map((p) => p.cards), [7, 7]);
+  assert.ok(g.turnMsLeft > 10000 && g.roundMsLeft > 14 * 60e3);
+  // Odadaki başka bir üye (oyuncu değil) el göremez; oyuncular yalnızca kendi elini görür.
+  const mineA = (await view(U.a, gid)).me.hand.map((c) => c.id);
+  const mineB = (await view(U.b, gid)).me.hand.map((c) => c.id);
+  assert.equal(mineA.length, 7);
+  assert.ok(!mineA.some((id) => mineB.includes(id)), 'eller ayrı');
+  // Ludo uçları bu oyunda çalışmaz (durumu bozmasın); oyuncu olmayan hamle yapamaz.
+  status(await api('POST', `/api/games/${gid}/roll`, { token: U.a.token }), 409, 'ludo ucu TEK oyununda geçersiz');
+  status(await api('POST', `/api/games/${gid}/tek/draw`, { token: U.x.token }), 403, 'odada olmayan');
+  const who = (v) => (v.turnUserId === U.a.id ? U.a : U.b);
+  const other = (v) => (v.turnUserId === U.a.id ? U.b : U.a);
+  status(await api('POST', `/api/games/${gid}/tek/draw`, { token: other(g).token }), 409, 'sıra sizde değil');
+  status(await api('POST', `/api/games/${gid}/tek/play`, { token: who(g).token, body: { card: 999 } }), 409, 'elde olmayan kart');
+  status(await api('POST', `/api/games/${gid}/tek/pass`, { token: who(g).token }), 409, 'çekmeden geçilmez');
+  status(await api('POST', `/api/games/${gid}/tek/challenge`, { token: who(g).token, body: { challenge: true } }), 409, '+4 yokken itiraz yok');
+  // Birkaç tur gerçek hamle: her adımda sırası gelen oyuncu sunucunun izin verdiği hamleyi yapar.
+  let moves = 0;
+  for (let i = 0; i < 24; i++) {
+    g = await view(U.a, gid);
+    if (g.status !== 'playing') break;
+    const u = who(g);
+    const me = (await view(u, gid)).me;
+    let res;
+    if (me.mustAnswer) res = await api('POST', `/api/games/${gid}/tek/challenge`, { token: u.token, body: { challenge: i % 2 === 0 } });
+    else if (me.playable.length) {
+      const card = me.hand.find((c) => c.id === me.playable[0]);
+      if (card.code[0] === 'w') status(await api('POST', `/api/games/${gid}/tek/play`, { token: u.token, body: { card: card.id } }), 409, 'jokerde renk zorunlu');
+      res = await api('POST', `/api/games/${gid}/tek/play`, { token: u.token, body: { card: card.id, color: card.code[0] === 'w' ? 'g' : undefined } });
+    } else if (me.canPass) res = await api('POST', `/api/games/${gid}/tek/pass`, { token: u.token });
+    else res = await api('POST', `/api/games/${gid}/tek/draw`, { token: u.token });
+    ok(res, `hamle ${i}`);
+    assert.ok(Array.isArray(res.body.game.me.hand), 'yanıtta kendi elim');
+    moves += 1;
+  }
+  assert.ok(moves > 0);
+  const st = (await sql(`SELECT state, status FROM room_games WHERE id = $1`, [gid])).rows[0];
+  if (st.status === 'playing') {
+    const total = st.state.draw.length + st.state.discard.length + st.state.players.reduce((n, p) => n + p.hand.length, 0);
+    assert.equal(total, 108, 'kart sayısı korunur');
+    // B ayrılırsa A kazanır; ayrılan sıralamada sondadır.
+    const left = await api('POST', `/api/games/${gid}/leave`, { token: U.b.token });
+    ok(left);
+    assert.equal(left.body.game.status, 'finished');
+    assert.equal(left.body.game.winnerId, U.a.id);
+    assert.deepEqual(left.body.game.result.map((x) => [x.userId, x.left]), [[U.a.id, false], [U.b.id, true]]);
+  }
+  g = await view(U.a, gid);
+  assert.equal(g.status, 'finished');
+  assert.equal(g.result.length, 2);
+  assert.equal(g.result[0].rank, 1);
+  assert.ok(g.result[0].user.displayName);
+  r = await api('GET', `/api/rooms/${roomId}/game?type=tek`, { token: U.a.token });
+  assert.equal(r.body.game, null, 'biten oyun açık oyun değildir');
+  // Kurucu oyuncu listesinden çıkıp izleyebilir; iptal yalnızca kurucu / oda sahibi.
+  const again = await api('POST', `/api/rooms/${roomId}/games`, { token: U.a.token, body: { type: 'tek' } });
+  status(again, 201);
+  const gid2 = again.body.game.id;
+  const lv = await api('POST', `/api/games/${gid2}/leave`, { token: U.a.token });
+  ok(lv, 'TEK kurucusu listeden çıkabilir');
+  assert.equal(lv.body.game.players.length, 0);
+  assert.equal(lv.body.game.me.isCreator, true);
+  status(await api('POST', `/api/games/${gid2}/cancel`, { token: U.b.token }), 403, 'üye iptal edemez');
+  const cancelled = await api('POST', `/api/games/${gid2}/cancel`, { token: U.a.token });
+  ok(cancelled);
+  assert.equal(cancelled.body.game.status, 'cancelled');
+  // Genel anahtar kapalıyken yeni oyun açılamaz ve sayfa verilmez.
+  ok(await api('PUT', '/api/admin/app-config', { token: U.d.token, body: { cardGameEnabled: false } }));
+  status(await api('POST', `/api/rooms/${roomId}/games`, { token: U.a.token, body: { type: 'tek' } }), 403, 'oyun kapalı');
+  assert.equal((await api('GET', '/api/app/config')).body.cardGameEnabled, false);
+  let page = await fetch(`${BASE}/room-game/tek?roomId=${roomId}`, { headers: { Authorization: `Bearer ${U.a.token}` } });
+  assert.equal(page.status, 404);
+  ok(await api('PUT', '/api/admin/app-config', { token: U.d.token, body: { cardGameEnabled: true } }));
+  // Oyun sayfası (WebView): yalnızca oturumu olan oda üyesine; sıkı içerik güvenlik ilkesiyle.
+  page = await fetch(`${BASE}/room-game/tek?roomId=${roomId}&lang=ar`, { headers: { Authorization: `Bearer ${U.a.token}`, 'X-App-Version': '2.107.0' } });
+  assert.equal(page.status, 200);
+  const html = await page.text();
+  assert.ok(html.includes(`data-room="${roomId}"`) && html.includes('data-lang="ar"') && html.includes('data-ver="2.107.0"'));
+  assert.ok(!html.includes('__NONCE__') && !html.includes('__ROOM_ID__'), 'yer tutucu kalmadı');
+  const csp = page.headers.get('content-security-policy');
+  assert.match(csp, /default-src 'none'/);
+  assert.match(csp, /script-src 'nonce-[A-Za-z0-9+/=]+'/);
+  assert.ok(!csp.includes('unsafe-inline'));
+  assert.equal((await fetch(`${BASE}/room-game/tek?roomId=${roomId}&lang=<script>`, { headers: { Authorization: `Bearer ${U.a.token}` } }).then((x) => x.text())).includes('data-lang="tr"'), true, 'bilinmeyen dil → tr');
+  assert.equal((await fetch(`${BASE}/room-game/tek?roomId=${roomId}`)).status, 401);
+  assert.equal((await fetch(`${BASE}/room-game/tek?roomId=${roomId}`, { headers: { Authorization: `Bearer ${U.x.token}` } })).status, 403);
+  assert.equal((await fetch(`${BASE}/room-game/tek?roomId=abc`, { headers: { Authorization: `Bearer ${U.a.token}` } })).status, 400);
+});
+
 test('özel mesaj, gizlilik, engelleme', { skip, timeout: 60000 }, async () => {
   // Özel mesaj yalnızca arkadaşlar arasında (v2.27+)
   status(await api('POST', `/api/messages/with/${U.c.id}`, { token: U.b.token, body: { text: 'selam C' } }), 403, 'arkadaş değil');

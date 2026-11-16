@@ -21,7 +21,7 @@ router.get('/app/config', async (_req, res) => {
   const c = await getConfig();
   res.json({
     minAppVersion: c.minAppVersion, latestAppVersion: c.latestAppVersion, updateUrl: c.updateUrl || null, updateMessage: c.updateMessage,
-    roomNotice: c.roomNotice || '', flyTextCoins: c.flyTextCoins, roomActivitiesEnabled: c.roomActivitiesEnabled !== false, serverVersion: SERVER_VERSION,
+    roomNotice: c.roomNotice || '', flyTextCoins: c.flyTextCoins, roomActivitiesEnabled: c.roomActivitiesEnabled !== false, cardGameEnabled: c.cardGameEnabled !== false, serverVersion: SERVER_VERSION,
     termsVersion: TERMS_VERSION, legalSite: LEGAL_SITE,
     // Telefon doğrulaması (Firebase): uygulama bu değerlerle Firebase'i başlatır. Kapalıysa null.
     phoneVerify: phoneVerifyOn(c) && c.firebaseApiKey && c.firebaseAppId

@@ -506,6 +506,7 @@ class _AppConfigScreenState extends State<AppConfigScreen> {
   bool _blockPhones = true;
   bool _luckyEnabled = true;
   bool _roomActivities = true;
+  bool _cardGame = true;
   bool _blockRooted = false;
   bool _sslPinning = false;
   bool _loading = true;
@@ -553,6 +554,7 @@ class _AppConfigScreenState extends State<AppConfigScreen> {
         _blockPhones = c['blockPhones'] != false;
         _luckyEnabled = c['luckyEnabled'] != false;
         _roomActivities = c['roomActivitiesEnabled'] != false;
+        _cardGame = c['cardGameEnabled'] != false;
         _blockRooted = c['blockRooted'] == true;
         _sslPinning = c['sslPinning'] == true;
         _phoneVerifyRequired = c['phoneVerifyRequired'] != false;
@@ -585,6 +587,7 @@ class _AppConfigScreenState extends State<AppConfigScreen> {
       'sslPinning': _sslPinning,
       'luckyEnabled': _luckyEnabled,
       'roomActivitiesEnabled': _roomActivities,
+      'cardGameEnabled': _cardGame,
       'phoneVerifyRequired': _phoneVerifyRequired,
       'smtpSecure': _smtpSecure,
       for (final k in _strs) k: _text[k]!.text.trim(),
@@ -679,6 +682,13 @@ class _AppConfigScreenState extends State<AppConfigScreen> {
                     subtitle: const Text('Herkes için geçerli. Kapalıyken odada Etkinlikler menüsü görünmez ve sayfa açılmaz.'),
                     value: _roomActivities,
                     onChanged: (v) => setState(() => _roomActivities = v),
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('TEK kart oyunu açık'),
+                    subtitle: const Text('Herkes için geçerli. Kapalıyken odadaki oyun menüsünde görünmez ve yeni oyun açılamaz.'),
+                    value: _cardGame,
+                    onChanged: (v) => setState(() => _cardGame = v),
                   ),
                   const Divider(height: Gap.xl),
                   const Text('Telefon doğrulaması (Firebase SMS)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),

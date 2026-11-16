@@ -5,6 +5,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../widgets/anim_asset.dart';
 import '../widgets/app_webview_modal.dart';
+import '../widgets/room_tek_dock.dart';
 import '../widgets/room_theme_sheet.dart';
 import '../widgets/beauty_sheet.dart';
 import 'family_screen.dart';
@@ -158,6 +159,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   bool _flyMode = false;
   int _flyCost = 99;
   bool _activitiesOn = true; // yönetimdeki genel "Oda Etkinlikleri" anahtarı
+  bool _cardGameOn = true; // yönetimdeki genel "TEK kart oyunu" anahtarı
+  final _tekDockKey = GlobalKey<RoomTekDockState>(); // odadaki TEK oyunu balonu / penceresi
   String _appNotice = '';
   Timer? _followTimer;
   final Set<String> _welcomed = {};
@@ -475,6 +478,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         _appNotice = (c['roomNotice'] ?? '').toString().trim();
         _flyCost = (c['flyTextCoins'] as num?)?.toInt() ?? _flyCost;
         _activitiesOn = c['roomActivitiesEnabled'] != false;
+        _cardGameOn = c['cardGameEnabled'] != false;
       });
     } catch (_) {}
   }
@@ -2181,6 +2185,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         colors: const [Color(0xFF1A237E), Color(0xFF0D0D1A), Color(0xFFB71C1C)],
                       ),
                     tile(const Text('🎲', style: TextStyle(fontSize: 30)), 'Ludo', () => run(_openGames), colors: kGoldDeep),
+                    // TEK kart oyunu: odanın üstünde açılan oyun penceresi (herkes açabilir; oyunu oda yetkilisi kurar).
+                    if (_cardGameOn) tile(const TekLogo(size: 44), 'TEK', () => run(() => _tekDockKey.currentState?.openPanel()), colors: const [Color(0xFF2A2010), Color(0xFF0B0906)]),
                     if (_activitiesOn) tile(const Icon(Icons.celebration, size: 30, color: Colors.white), tx('Etkinlikler'), () => run(_openRoomActivities), colors: const [Color(0xFF14506B), Color(0xFF0A1F2B)]),
                     tile(Image.asset('assets/images/lucky_pouch.webp', width: 48, height: 48), tx('Şanslı Çanta'), () => run(() => showBagSend(context, widget.roomId)), colors: const [Color(0xFF3A1010), Color(0xFF1A0808)]),
                   ]),
@@ -4893,6 +4899,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       },
                     ),
                   ),
+                // TEK kart oyunu: açık oyun varken sağda balon; dokununca üstte oyun penceresi. En üstte durur.
+                if (_cardGameOn) Positioned.fill(child: RoomTekDock(key: _tekDockKey, roomId: widget.roomId)),
                 ]);
                 }))),
       ),

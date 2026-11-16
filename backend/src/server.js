@@ -54,6 +54,7 @@ import { router as gamesRouter } from './routes/games.js';
 import { router as feedRouter } from './routes/feed.js';
 import { router as systemRouter } from './routes/system.js';
 import { router as roomActivitiesRouter } from './routes/room_activities.js';
+import { router as roomGamePageRouter } from './routes/room_game_page.js';
 import { router as dealerTopupPageRouter } from './routes/dealer_topup_page.js';
 import { getConfig, compareVersions } from './services/app_config.js';
 import { startMusicTicker } from './services/music.js';
@@ -138,6 +139,7 @@ app.use('/api', async (req, res, next) => {
 app.use('/api', systemRouter);
 // Oda içi etkinlikler H5 sayfası (WebView). /api dışındadır; kendi CSP'sini ve token denetimini uygular.
 app.use('/room-activities', roomActivitiesRouter);
+app.use('/room-game', roomGamePageRouter); // oda içi oyun sayfası (WebView): TEK kart oyunu
 app.use('/dealer-topup', dealerTopupPageRouter); // bayi bakiye talebi H5 sayfası (WebView)
 
 const authIpLimit = ipLimit('auth', 60, 15 * 60e3);

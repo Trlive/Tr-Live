@@ -1,0 +1,53 @@
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import { Router } from 'express';
+import { authenticateToken } from '../auth.js';
+import { isUuid } from '../http.js';
+import { ipLimit } from '../firewall.js';
+import { isRoomMember } from '../services/rooms.js';
+import { getConfig } from '../services/app_config.js';
+import { renderErrorPage, safeVersion } from '../room_activities_page.js';
+
+// GET /room-game/tek?roomId=<uuid>&lang=tr|en|ar|hi
+// Odadaki oyun penceresinin (WebView) açtığı SABİT sayfa: TEK kart oyunu. Adres veritabanından okunmaz, dışarıdan
+// değişmez; sayfa yalnızca kendi betiğini (nonce) çalıştırır ve yalnızca kendi sunucusuna bağlanır.
+// İlk istek `Authorization: Bearer <token>` başlığıyla gelir; token geçersizse ya da kişi odada değilse sayfa verilmez.
+// Oyunun kendisi /api/games uçlarıyla oynanır (kurallar sunucuda; sayfa yalnızca gösterir).
+export const router = Router();
+
+const TEMPLATE = fs.readFileSync(new URL('../pages/tek.html', import.meta.url), 'utf8');
+const LANGS = ['tr', 'en', 'ar', 'hi'];
+
+/** Sayfayı üretir. [roomId] doğrulanmış UUID olmalıdır; dil yalnızca bilinen dört koddan biri olabilir. */
+export function renderTekPage({ roomId, lang, nonce, appVersion = '' }) {
+  const safeLang = LANGS.includes(lang) ? lang : 'tr';
+  return TEMPLATE.replaceAll('__NONCE__', nonce).replaceAll('__ROOM_ID__', roomId).replaceAll('__LANG__', safeLang)
+    .replaceAll('__APP_VERSION__', safeVersion(appVersion));
+}
+
+router.get('/tek', ipLimit('room_game_page', 600, 3600e3), async (req, res) => {
+  const nonce = crypto.randomBytes(16).toString('base64');
+  res.set({
+    'Content-Security-Policy': `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'nonce-${nonce}'; connect-src 'self'; img-src 'self' data: https:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
+    'Cache-Control': 'no-store',
+    'X-Content-Type-Options': 'nosniff',
+    'Referrer-Policy': 'no-referrer',
+  });
+  const page = (status, text) => res.status(status).type('html').send(renderErrorPage(text, nonce));
+
+  if ((await getConfig()).cardGameEnabled === false) return page(404, 'Bu oyun şu an kapalı.');
+
+  const h = req.headers.authorization || '';
+  const token = h.startsWith('Bearer ') ? h.slice(7) : '';
+  let user;
+  try { user = await authenticateToken(token); } catch (e) {
+    if (e?.status === 401) return page(401, 'Oturum doğrulanamadı. Pencereyi kapatıp yeniden aç.');
+    throw e; // veritabanı hatası vb.: ortak hata yöneticisine gider
+  }
+
+  const roomId = String(req.query.roomId ?? '');
+  if (!isUuid(roomId)) return page(400, 'Oda bilgisi geçersiz.');
+  if (!(await isRoomMember(user.id, roomId))) return page(403, 'Bu oyuna yalnızca odadaki üyeler katılabilir.');
+
+  res.type('html').send(renderTekPage({ roomId, lang: String(req.query.lang ?? 'tr'), nonce, appVersion: req.get('X-App-Version') }));
+});

@@ -33,6 +33,8 @@ export const CONFIG_DEFAULTS = Object.freeze({
   flyTextCoins: 99,
   // Oda içi etkinlikler (WebView H5 sayfası + menü). Herkes için geçerli genel anahtar; kapalıyken menü gizlenir, /room-activities 404 verir.
   roomActivitiesEnabled: true,
+  // TEK kart oyunu (oda içi, WebView). Herkes için geçerli genel anahtar; kapalıyken menüde görünmez, yeni oyun açılamaz.
+  cardGameEnabled: true,
   // Günlük giriş (7 gün): gün gün Coin ödülü; 7. gün ayrıca çerçeve / araç (boşsa verilmez), eşya süresi gün.
   checkinEnabled: true,
   checkinCoins: '20,20,20,20,50,50,100',
