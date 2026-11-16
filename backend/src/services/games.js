@@ -62,8 +62,21 @@ export async function gameView(gameId, run = query, viewerId = null) {
     ? st.players.map((p) => ({ user: roomUser(users.get(p.userId)), seat: p.seat, color: ludo.COLORS[p.seat], auto: p.auto }))
     : waiting.map((p) => ({ user: roomUser(users.get(p.user_id)), seat: p.seat, color: ludo.COLORS[p.seat], auto: 0 }));
   const turnSeat = st && g.status === 'playing' ? st.turn : null;
+  // Mod: oyun başlamadan önce kurulurken seçilen değer (state.options), başladıktan sonra oyun durumundaki değer.
+  const mode = st ? ludo.modeOf(st) : (ludo.MODES.includes(g.state?.options?.mode) ? g.state.options.mode : 'classic');
+  const me = viewerId ? {
+    seat: players.find((p) => p.user?.id === viewerId)?.seat ?? null,
+    joined: players.some((p) => p.user?.id === viewerId),
+    isCreator: g.created_by === viewerId,
+  } : undefined;
   return {
     id: g.id, roomId: g.room_id, type: g.game_type, status: g.status, createdBy: g.created_by, winnerId: g.winner_id,
+    mode, minPlayers: 2, maxPlayers: 4,
+    items: mode === 'items' ? ludo.ITEM_CELLS : null,
+    frozen: st?.frozen ?? [], kills: st?.kills ?? {},
+    seq: st ? (st.seq ?? st.moves ?? 0) : 0,
+    turnMsLeft: st?.deadline && g.status === 'playing' ? Math.max(0, st.deadline - Date.now()) : null, turnMs: ludo.TURN_MS,
+    ...(me ? { me } : {}),
     players,
     turnSeat,
     turnUserId: st && turnSeat !== null ? st.players.find((p) => p.seat === turnSeat)?.userId ?? null : null,
@@ -118,7 +131,9 @@ export async function startGame(gameId, requesterId) {
     if (g.created_by !== requesterId) throw fail('Oyunu yalnızca kuran başlatabilir.', 403);
     const ps = (await c.query(`SELECT user_id FROM room_game_players WHERE game_id = $1 ORDER BY seat`, [gameId])).rows;
     if (ps.length < 2) throw fail('En az 2 oyuncu gerekir.', 409);
-    const st = engineOf(g).newGame(ps.map((p) => p.user_id));
+    const ids = ps.map((p) => p.user_id);
+    // Ludo modu oyun kurulurken seçilir ve bekleyen oyunun state.options alanında durur.
+    const st = g.game_type === 'tek' ? tek.newGame(ids) : ludo.newGame(ids, Date.now(), g.state?.options ?? {});
     await c.query(`UPDATE room_games SET status = 'playing', state = $2, started_at = NOW() WHERE id = $1`, [gameId, JSON.stringify(st)]);
     return st;
   });

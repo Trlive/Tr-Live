@@ -21,13 +21,15 @@ const MANAGERS = ['owner', 'cohost', 'moderator'];
 const GAME_NAMES = { ludo: 'Ludo', tek: 'TEK' };
 
 // Odadaki açık oyun. `type` verilmezse yalnızca Ludo döner (eski sürümlerdeki Ludo ekranı tanımadığı oyunu görmesin);
-// `?type=tek` TEK oyununu, isteyenin kendi eliyle birlikte verir. canManage: bu kişi oyun kurabilir mi.
+// `?type=tek` TEK oyununu, isteyenin kendi eliyle birlikte verir; `?type=any` hangisi açıksa onu (odadaki oyun balonu
+// için). canManage: bu kişi oyun kurabilir mi.
 router.get('/rooms/:roomId/game', userLimit('game_view', 240, 60e3), async (req, res) => {
   const roomId = uuid(req.params.roomId, 'Oda');
   const m = await assertMember(roomId, req.user.id);
-  const type = GAME_TYPES[req.query.type] ? String(req.query.type) : 'ludo';
+  const any = req.query.type === 'any';
+  const type = Object.hasOwn(GAME_TYPES, String(req.query.type)) ? String(req.query.type) : 'ludo';
   const g = await openGameOfRoom(roomId);
-  const mine = g && g.game_type === type;
+  const mine = g && (any || g.game_type === type);
   res.json({
     game: mine ? await gameView(g.id, query, req.user.id) : null,
     canManage: MANAGERS.includes(m.role),
@@ -56,7 +58,9 @@ router.post('/rooms/:roomId/games', userLimit('game_create', 10, 60e3), async (r
     await c.query(`SELECT id FROM rooms WHERE id = $1 AND is_active = TRUE FOR UPDATE`, [roomId]);
     const open = await openGameOfRoom(roomId, (t, p) => c.query(t, p));
     if (open) throw fail(`Odada zaten açık bir oyun var (${GAME_NAMES[open.game_type] ?? open.game_type}).`, 409);
-    const g = (await c.query(`INSERT INTO room_games(room_id, created_by, game_type) VALUES($1,$2,$3) RETURNING id`, [roomId, req.user.id, type])).rows[0];
+    // Ludo modu (klasik / seri / eşyalı) kurulurken seçilir; oyun başlayınca motor bu seçimi kullanır.
+    const options = type === 'ludo' && ludo.MODES.includes(req.body?.mode) ? { mode: req.body.mode } : {};
+    const g = (await c.query(`INSERT INTO room_games(room_id, created_by, game_type, state) VALUES($1,$2,$3,$4) RETURNING id`, [roomId, req.user.id, type, JSON.stringify({ options })])).rows[0];
     await c.query(`INSERT INTO room_game_players(game_id, user_id, seat) VALUES($1,$2,0)`, [g.id, req.user.id]);
     return g.id;
   });
@@ -128,7 +132,7 @@ router.post('/games/:id/roll', userLimit('game_move', 120, 60e3), async (req, re
     if (seat === null) throw fail('Bu oyunda değilsiniz.', 403);
     try { return ludo.roll(ludo.markActive(state, seat), seat); } catch (e) { throw fail(e.message, 409); }
   });
-  res.json({ dice: out.dice, skipped: out.skipped, legal: out.legal, game: await gameView(id) });
+  res.json({ dice: out.dice, skipped: out.skipped, legal: out.legal, game: await gameView(id, query, req.user.id) });
 });
 
 router.post('/games/:id/move', userLimit('game_move', 120, 60e3), async (req, res) => {
@@ -141,7 +145,7 @@ router.post('/games/:id/move', userLimit('game_move', 120, 60e3), async (req, re
     if (seat === null) throw fail('Bu oyunda değilsiniz.', 403);
     try { return ludo.move(ludo.markActive(state, seat), seat, token); } catch (e) { throw fail(e.message, 409); }
   });
-  res.json({ captured: out.captured, extraTurn: out.extraTurn, won: out.won, game: await gameView(id) });
+  res.json({ captured: out.captured, extraTurn: out.extraTurn, won: out.won, game: await gameView(id, query, req.user.id) });
 });
 
 // ---------- TEK (kart oyunu) hamleleri ----------

@@ -12,52 +12,33 @@ import '../services/socket_service.dart';
 import '../version.dart';
 import 'app_theme.dart';
 
-/// TEK kart oyununun küçük işareti (menü kutusu ve odadaki oyun balonu).
+/// Oyun işaretleri (menü kutusu ve odadaki oyun balonu). Görseller özgündür: assets/images/game_*.webp.
 class TekLogo extends StatelessWidget {
   final double size;
   const TekLogo({super.key, this.size = 40});
 
   @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: size,
-      height: size,
-      child: Stack(alignment: Alignment.center, children: [
-        Transform.rotate(angle: -0.22, child: _card(const Color(0xFFE5483D), size)),
-        Transform.rotate(angle: 0.16, child: _card(const Color(0xFF3D8BFD), size)),
-        Text(
-          'TEK',
-          style: TextStyle(
-            fontSize: size * 0.3,
-            fontWeight: FontWeight.w900,
-            letterSpacing: 0.5,
-            color: Pal.gold,
-            shadows: const [Shadow(color: Colors.black, blurRadius: 3, offset: Offset(0, 1))],
-          ),
-        ),
-      ]),
-    );
-  }
-
-  static Widget _card(Color c, double size) => Container(
-        width: size * 0.5,
-        height: size * 0.72,
-        decoration: BoxDecoration(
-          color: c,
-          borderRadius: BorderRadius.circular(size * 0.08),
-          border: Border.all(color: Pal.bg, width: 1.5),
-        ),
-      );
+  Widget build(BuildContext context) => Image.asset('assets/images/game_tek.webp', width: size, height: size, fit: BoxFit.contain);
 }
 
-/// Odadaki TEK kart oyunu: açık oyun varken sağda küçük bir balon durur; dokununca odanın üst kısmında oyun penceresi
-/// (kendi sunucumuzdaki sabit H5 sayfası, WebView) açılır. Sohbet ve alt çubuk açık kalır; ses bağlantısı etkilenmez.
+class LudoLogo extends StatelessWidget {
+  final double size;
+  const LudoLogo({super.key, this.size = 40});
+
+  @override
+  Widget build(BuildContext context) => Image.asset('assets/images/game_ludo.webp', width: size, height: size, fit: BoxFit.contain);
+}
+
+/// Odadaki oyunlar (TEK kart oyunu ve Ludo): açık oyun varken sağda küçük bir balon durur; dokununca odanın üst
+/// kısmında oyun penceresi (kendi sunucumuzdaki sabit H5 sayfası, WebView) açılır. Sohbet ve alt çubuk açık kalır;
+/// ses bağlantısı etkilenmez. Odada aynı anda tek oyun açık olabilir; pencere hangi oyun açıksa onu gösterir.
 ///
 /// Güvenlik kuralları [AppWebViewModal] ile aynıdır: yalnızca [Api.baseUrl] ile aynı kaynak yüklenir, oturum bileti
 /// adrese yazılmaz (ilk istekte başlıkla gider; sayfa isteyince yalnızca aynı kaynaktaki sayfaya verilir).
 ///
 /// Sayfanın gönderebileceği kanal mesajları: getToken, minimize, haptic, ready.
-/// Uygulama, odadaki canlı oyun durumunu (`room_tek_state`; el içermez) sayfaya `window.TEK.push(...)` ile iletir.
+/// Uygulama, odadaki canlı oyun durumunu (`room_tek_state` / `room_game_state`; el içermez) sayfaya
+/// `window.TRGame.push(...)` ile iletir.
 class RoomTekDock extends StatefulWidget {
   final String roomId;
   const RoomTekDock({super.key, required this.roomId});
@@ -69,6 +50,7 @@ class RoomTekDock extends StatefulWidget {
 class RoomTekDockState extends State<RoomTekDock> with SingleTickerProviderStateMixin {
   Map<String, dynamic>? _game; // odadaki açık oyun (bekliyor / oynanıyor); yoksa null
   bool _open = false; // oyun penceresi açık mı
+  String _pageType = 'tek'; // açık penceredeki oyun sayfası: 'tek' | 'ludo'
   WebViewController? _wv;
   bool _trusted = false; // gösterilen sayfa bizim sunucumuzdan mı
   bool _failed = false;
@@ -122,7 +104,8 @@ class RoomTekDockState extends State<RoomTekDock> with SingleTickerProviderState
       _load(); // bağlantı yeniden kuruldu: kaçan durum olabilir
       return;
     }
-    if (type != 'room_tek_state') return;
+    // TEK ayrı olayla, Ludo eski olay adıyla yayınlanır.
+    if (type != 'room_tek_state' && type != 'room_game_state') return;
     final g = mapOf(e['game']);
     if (g == null || g['roomId'] != widget.roomId) return;
     _pushToPage(g);
@@ -131,7 +114,7 @@ class RoomTekDockState extends State<RoomTekDock> with SingleTickerProviderState
 
   Future<void> _load() async {
     try {
-      final r = await Api.get('/api/rooms/${widget.roomId}/game', query: {'type': 'tek'});
+      final r = await Api.get('/api/rooms/${widget.roomId}/game', query: {'type': 'any'});
       if (!mounted) return;
       final g = mapOf(r['game']);
       if (g != null) {
@@ -189,9 +172,12 @@ class RoomTekDockState extends State<RoomTekDock> with SingleTickerProviderState
     }
   }
 
-  /// Oyun penceresini açar (oyun menüsünden ya da balondan). Açık oyun yoksa sayfa "oyun aç" ekranını gösterir.
-  void openPanel() {
+  /// Oyun penceresini açar (oyun menüsünden ya da balondan). Açık oyun yoksa [type] oyununun "oyun aç" ekranı görünür;
+  /// odada açık bir oyun varsa her zaman o oyunun sayfası açılır.
+  void openPanel({String? type}) {
     if (_open || !mounted) return;
+    final current = _game?['type']?.toString();
+    _pageType = current == 'ludo' ? 'ludo' : (current == 'tek' ? 'tek' : (type == 'ludo' ? 'ludo' : 'tek'));
     final c = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(Pal.bg)
@@ -215,7 +201,7 @@ class RoomTekDockState extends State<RoomTekDock> with SingleTickerProviderState
   }
 
   Future<void> _loadPage(WebViewController c) async {
-    final url = '${Api.baseUrl}/room-game/tek?roomId=${Uri.encodeQueryComponent(widget.roomId)}&lang=${Uri.encodeQueryComponent(L10n.lang.value)}';
+    final url = '${Api.baseUrl}/room-game/$_pageType?roomId=${Uri.encodeQueryComponent(widget.roomId)}&lang=${Uri.encodeQueryComponent(L10n.lang.value)}';
     if (!_sameOrigin(url)) {
       if (mounted) setState(() => _failed = true);
       return;
@@ -284,8 +270,8 @@ class RoomTekDockState extends State<RoomTekDock> with SingleTickerProviderState
   // Odadaki herkese giden canlı durum (el içermez) açık sayfaya iletilir; sayfa kendi elini sunucudan ayrıca alır.
   void _pushToPage(Map<String, dynamic> g) {
     final c = _wv;
-    if (c == null || !_trusted || !_open) return;
-    c.runJavaScript('window.TEK&&window.TEK.push(${jsonEncode(g)});').catchError((_) {});
+    if (c == null || !_trusted || !_open || g['type'] != _pageType) return;
+    c.runJavaScript('window.TRGame&&window.TRGame.push(${jsonEncode(g)});').catchError((_) {});
   }
 
   @override
@@ -369,7 +355,7 @@ class RoomTekDockState extends State<RoomTekDock> with SingleTickerProviderState
         top: top,
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onTap: openPanel,
+          onTap: () => openPanel(),
           onVerticalDragUpdate: (d) => setState(() => _chipDy += d.delta.dy),
           child: ScaleTransition(
             scale: Tween<double>(begin: 1, end: 1.1).animate(CurvedAnimation(parent: _pulse, curve: Curves.easeInOut)),
@@ -384,7 +370,7 @@ class RoomTekDockState extends State<RoomTekDock> with SingleTickerProviderState
                   border: Border.all(color: hot ? Pal.gold : Pal.outline, width: 2),
                   boxShadow: [BoxShadow(color: hot ? const Color(0x99F2B92A) : Colors.black54, blurRadius: hot ? 12 : 6)],
                 ),
-                child: const TekLogo(size: 38),
+                child: g['type'] == 'ludo' ? const LudoLogo(size: 46) : const TekLogo(size: 46),
               ),
               const SizedBox(height: 3),
               Container(

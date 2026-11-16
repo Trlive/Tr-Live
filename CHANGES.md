@@ -1,3 +1,32 @@
+## v2.108.0 — Ludo yenilendi: oda içi pencere (WebView), Klasik / Seri / Eşyalı modlar
+- Ludo artık TEK ile aynı düzende çalışır: odanın üst kısmında açılan oyun penceresi (kendi sunucumuzdaki sabit sayfa,
+  WebView). Sohbet ve alt çubuk açık kalır; pencere küçültülünce sağda oyun balonu durur, oyun başlayınca oyuncuların
+  penceresi kendiliğinden açılır. Eski tam ekran Ludo ekranı menüden kaldırıldı.
+- Oyunu açan kişi modu seçer:
+  - **Klasik:** 4 taşını da bitişe ulaştıran kazanır.
+  - **Seri:** tek taş yeter; ama en az bir rakip taşı kırmadan taşlar ev yoluna giremez (ana yolda bir tur daha döner).
+  - **Eşyalı:** klasik kurallar + tahtada 12 eşya karesi: 🌀 kapı (16 kare ilerideki yıldızlı kareye ışınlar),
+    🚀 füze (ilerideki en yakın rakip taşını üssüne yollar; güvenli karedeki taş korunur), ❄️ buz (en yakın rakip taşının
+    sahibi bir tur atlar), 💣 bomba (üstüne gelen taş üssüne döner), 🎲 zar (bir hak daha).
+- Değişmeyen kurallar: 6 ile çıkış ve tekrar atış, kırınca / taş bitirince ek hak, yıldızlı ve başlangıç kareleri
+  güvenli, üst üste üç 6'da sıra geçer, bitişe tam sayı, 30 sn hamle süresi, üst üste 3 kez oynamayan düşer.
+- Tahta kendi üssün sol altta görünecek şekilde döner; taşlar kare kare yürür; tek hamle varsa kendiliğinden oynanır.
+  Sayfa dört dildedir, uygulama renklerindedir; görseller özgündür.
+- Kurallar sunucudadır (`backend/src/ludo.js`); sayfa yalnızca gösterir. Veritabanı değişikliği yok: mod, oyun
+  durumunun içinde durur. Mod yazmayan eski oyunlar klasik sayılır.
+- Eski uygulama sürümleri etkilenmez: Ludo'nun olay adı ve uçları aynıdır; eski ekran yeni modlu oyunu da oynatır
+  (eşya simgelerini göstermez, kurallar yine sunucuda işler).
+- Odadaki oyun balonu / penceresi artık iki oyunu da taşır (`RoomTekDock`); `GET /api/rooms/:id/game?type=any` hangi
+  oyun açıksa onu verir. Oyun sayfaları: `/room-game/ludo`, `/room-game/tek`.
+- Ludo ve TEK için uygulama renklerinde (koyu zemin + altın çerçeve) özgün logolar: oyun menüsünde, odadaki oyun
+  balonunda ve oyun sayfalarının açılışında (`mobile/assets/images/game_ludo.webp`, `game_tek.webp`; ikisi toplam 25 KB).
+- Ses efekti / müzik ve oyun içi ifade (emoji) yok: sesli sohbetin ses odağını bozmamak için eklenmedi.
+Doğrulama
+- Ludo motoru: 9 yeni birim testi (modlar, barikat, beş eşya, otomatik oyun) + üç modda 120 rastgele tam oyun.
+- Gerçek PostgreSQL ile sunucu akışı (mod seçimi, başlatma, zar / hamle, iptal) ve gerçek tarayıcıda oyun sayfası:
+  Seri modda 2 kişilik tam oyun sonuna kadar; Eşyalı ve Klasik modda 3–4 kişiyle yüzlerce hamle, konsol hatası yok.
+- Uygulama tarafı (Flutter) yerelde derlenemedi; APK derlemesi ve `flutter analyze` GitHub'da çalışır.
+
 ## v2.107.0 — TEK kart oyunu (oda içi, WebView) · kırmızı test düzeltmesi · ekran görüntüsü kaydı hatası
 TEK kart oyunu (yeni)
 - Odadaki oyun menüsüne (Ludo'nun yanına) **TEK** eklendi: 2–9 kişilik renk-sayı eşleştirme kart oyunu. Ücretsizdir,

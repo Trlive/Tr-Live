@@ -52,7 +52,6 @@ import '../widgets/chat_merge.dart';
 import '../widgets/lucky_win_fx.dart';
 import '../widgets/video_grid.dart';
 import 'gift_sheet.dart';
-import 'ludo_screen.dart';
 import 'pk_sheet.dart';
 import '../widgets/reconnect_pill.dart';
 import '../widgets/room_moderation_sheet.dart';
@@ -696,7 +695,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     // Yeni bir oda açıldıysa (bu ekran kapanmak üzere) ona dokunulmaz, eski odanın mesajı da gösterilmez.
     if (_dockSerial != RoomDock.serial) return;
     toast(context, message);
-    // Oda açıkken üstünde duran pencereler (Ludo, alt pencereler, diyaloglar) kapanmış odanın üstünde kalmasın.
+    // Oda açıkken üstünde duran pencereler (alt pencereler, diyaloglar) kapanmış odanın üstünde kalmasın.
     if (!RoomDock.minimized.value) Navigator.of(context).popUntil((r) => r.isFirst);
     RoomDock.closeIf(_dockSerial);
   }
@@ -825,7 +824,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       }
       return;
     }
-    if (type == 'room_game_state') return; // Ludo ekranı kendisi dinler
+    if (type == 'room_game_state' || type == 'room_tek_state') return; // oyun balonu / penceresi kendisi dinler (RoomTekDock)
     // Sesli oda içi PK: durum (başladı / skor / bitti) ve 2 sn'de bir süre-skor güncellemesi.
     if (type == 'room_pk_state') {
       final pk = mapOf(e['pk']);
@@ -2184,9 +2183,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                 : run(() => _isVideo ? showPkChallengeSheet(context, roomId: widget.roomId) : showRoomPkSetup(context, roomId: widget.roomId, seatCount: _seatCount)),
                         colors: const [Color(0xFF1A237E), Color(0xFF0D0D1A), Color(0xFFB71C1C)],
                       ),
-                    tile(const Text('🎲', style: TextStyle(fontSize: 30)), 'Ludo', () => run(_openGames), colors: kGoldDeep),
+                    tile(const LudoLogo(size: 56), 'Ludo', () => run(() => _tekDockKey.currentState?.openPanel(type: 'ludo')), colors: kGoldDeep),
                     // TEK kart oyunu: odanın üstünde açılan oyun penceresi (herkes açabilir; oyunu oda yetkilisi kurar).
-                    if (_cardGameOn) tile(const TekLogo(size: 44), 'TEK', () => run(() => _tekDockKey.currentState?.openPanel()), colors: const [Color(0xFF2A2010), Color(0xFF0B0906)]),
+                    if (_cardGameOn) tile(const TekLogo(size: 56), 'TEK', () => run(() => _tekDockKey.currentState?.openPanel(type: 'tek')), colors: const [Color(0xFF2A2010), Color(0xFF0B0906)]),
                     if (_activitiesOn) tile(const Icon(Icons.celebration, size: 30, color: Colors.white), tx('Etkinlikler'), () => run(_openRoomActivities), colors: const [Color(0xFF14506B), Color(0xFF0A1F2B)]),
                     tile(Image.asset('assets/images/lucky_pouch.webp', width: 48, height: 48), tx('Şanslı Çanta'), () => run(() => showBagSend(context, widget.roomId)), colors: const [Color(0xFF3A1010), Color(0xFF1A0808)]),
                   ]),
@@ -2328,7 +2327,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         title: tx('Etkinlikler'),
       );
 
-  void _openGames() => Navigator.push(context, MaterialPageRoute(builder: (_) => LudoScreen(roomId: widget.roomId, canManage: _isManager)));
 
   /// Renkli saydam sohbet balonu: kullanıcı seviyesine göre renk (Yoho tarzı lacivert taban).
   Color _bubbleColor(Map<String, dynamic>? u) {
@@ -4899,8 +4897,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       },
                     ),
                   ),
-                // TEK kart oyunu: açık oyun varken sağda balon; dokununca üstte oyun penceresi. En üstte durur.
-                if (_cardGameOn) Positioned.fill(child: RoomTekDock(key: _tekDockKey, roomId: widget.roomId)),
+                // Oda oyunları (Ludo, TEK): açık oyun varken sağda balon; dokununca üstte oyun penceresi. En üstte durur.
+                Positioned.fill(child: RoomTekDock(key: _tekDockKey, roomId: widget.roomId)),
                 ]);
                 }))),
       ),

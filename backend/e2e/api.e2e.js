@@ -681,6 +681,46 @@ test('Ludo: kurma, katılma, başlatma, zar/hamle yetkisi, ayrılma', { skip, ti
   assert.equal(done.rows[0].winner_id, U.a.id);
 });
 
+test('Ludo modları: seri ve eşyalı oyun kurma, görünüm, oyun sayfası', { skip, timeout: 60000 }, async () => {
+  // Seri mod: kurulurken seçilir, bekleyen oyunda ve başlayınca görünümde yer alır.
+  let g = await api('POST', `/api/rooms/${roomId}/games`, { token: U.a.token, body: { type: 'ludo', mode: 'quick' } });
+  status(g, 201);
+  let gid = g.body.game.id;
+  assert.equal(g.body.game.mode, 'quick');
+  assert.equal(g.body.game.me.isCreator, true);
+  assert.equal(g.body.game.items, null);
+  const any = await api('GET', `/api/rooms/${roomId}/game?type=any`, { token: U.b.token });
+  assert.equal(any.body.game.id, gid, 'type=any hangi oyun açıksa onu verir');
+  assert.equal((await api('GET', `/api/rooms/${roomId}/game?type=tek`, { token: U.b.token })).body.otherGame, 'ludo');
+  ok(await api('POST', `/api/games/${gid}/join`, { token: U.b.token }));
+  const st = await api('POST', `/api/games/${gid}/start`, { token: U.a.token });
+  ok(st);
+  assert.equal(st.body.game.mode, 'quick');
+  assert.deepEqual(st.body.game.kills, { 0: 0, 2: 0 });
+  assert.ok(st.body.game.seq >= 1 && st.body.game.turnMsLeft > 20000);
+  const cur = st.body.game.turnUserId === U.a.id ? U.a : U.b;
+  const roll = await api('POST', `/api/games/${gid}/roll`, { token: cur.token });
+  ok(roll);
+  assert.equal(roll.body.game.me.joined, true, 'zar yanıtında kendi görünümüm');
+  assert.ok(roll.body.game.seq > st.body.game.seq);
+  ok(await api('POST', `/api/games/${gid}/cancel`, { token: U.a.token }));
+  // Eşyalı mod: eşya kareleri görünümde. (Oyun kurma dakikada 10 ile sınırlı; bu yüzden az oyun kurulur.)
+  g = await api('POST', `/api/rooms/${roomId}/games`, { token: U.a.token, body: { type: 'ludo', mode: 'items' } });
+  status(g, 201);
+  gid = g.body.game.id;
+  assert.equal(g.body.game.mode, 'items');
+  assert.equal(Object.keys(g.body.game.items).length, 12);
+  assert.equal(g.body.game.items[5], 'portal');
+  ok(await api('POST', `/api/games/${gid}/cancel`, { token: U.a.token }));
+  // Ludo sayfası (WebView) ve bilinmeyen oyun adı.
+  const page = await fetch(`${BASE}/room-game/ludo?roomId=${roomId}&lang=en`, { headers: { Authorization: `Bearer ${U.a.token}` } });
+  assert.equal(page.status, 200);
+  const html = await page.text();
+  assert.ok(html.includes('<title>Ludo</title>') && html.includes(`data-room="${roomId}"`) && !html.includes('__NONCE__'));
+  assert.equal((await fetch(`${BASE}/room-game/satranc?roomId=${roomId}`, { headers: { Authorization: `Bearer ${U.a.token}` } })).status, 404);
+  assert.equal((await fetch(`${BASE}/room-game/ludo?roomId=${roomId}`)).status, 401);
+});
+
 test('TEK kart oyunu: kurma, katılma, gizli eller, hamleler, ayrılma, oyun sayfası', { skip, timeout: 90000 }, async () => {
   const view = async (u, id) => (await api('GET', `/api/games/${id}`, { token: u.token })).body.game;
   status(await api('POST', `/api/rooms/${roomId}/games`, { token: U.b.token, body: { type: 'tek' } }), 403, 'sıradan üye kuramaz');

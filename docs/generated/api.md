@@ -29,7 +29,7 @@ Kimlik: **🔒** giriş gerekli · **👑** yalnızca yönetici · **🛠** yön
 
 | Yöntem | Yol | Kimlik | ⏱ | Not |
 |---|---|---|---|---|
-| GET | `/room-game/tek` | açık | room_game_page |  |
+| GET | `/room-game/:game` | açık | room_game_page |  |
 
 ## dealer_topup_page.js  (`/dealer-topup`)
 
@@ -568,7 +568,7 @@ Kimlik: **🔒** giriş gerekli · **👑** yalnızca yönetici · **🛠** yön
 
 | Yöntem | Yol | Kimlik | ⏱ | Not |
 |---|---|---|---|---|
-| GET | `/api/rooms/:roomId/game` | 🔒 | game_view | `?type=tek` TEK oyununu, isteyenin kendi eliyle birlikte verir. canManage: bu kişi oyun kurabilir mi. |
+| GET | `/api/rooms/:roomId/game` | 🔒 | game_view | için). canManage: bu kişi oyun kurabilir mi. |
 | GET | `/api/games/:id` | 🔒 | game_view | Tek bir oyun (bitmiş olsa da): sonuç ekranı ve sayfanın kendini yenilemesi için. Eller yalnızca sahibine gider. |
 | POST | `/api/rooms/:roomId/games` | 🔒 | game_create | Oyun kurma: oda sahibi / yardımcı sahip / moderatör. Ücretsizdir, Coin bahsi yoktur. |
 | POST | `/api/games/:id/join` | 🔒 | game |  |

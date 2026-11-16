@@ -1,0 +1,576 @@
+<!doctype html>
+<html lang="__LANG__"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>Ludo</title>
+<style nonce="__NONCE__">
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none}
+html,body{margin:0;height:100%;overflow:hidden;background:#0b0906;color:#f6efdf;font:14px system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:pointer}
+:root{--gold:#f2b92a;--gold2:#ffd54f;--line:#4d3c1c;--surf:#17130c;--surf2:#221b10;--dim:#b3a584;--r:#e5483d;--y:#f2b92a;--g:#2fbf71;--b:#3d8bfd;--cw:52px}
+#app{position:absolute;inset:0;display:flex;flex-direction:column;background:radial-gradient(120% 80% at 50% 38%,#2a2010 0%,#15100a 55%,#0b0906 100%)}
+.scr{display:none;flex:1;min-height:0;flex-direction:column}.scr.on{display:flex}
+/* ---------- üst çubuk ---------- */
+.bar{height:38px;flex:none;display:flex;align-items:center;gap:8px;padding:0 10px}
+.chip{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 9px;border-radius:12px;background:rgba(0,0,0,.35);border:1px solid var(--line);font-size:12px;color:var(--dim);font-variant-numeric:tabular-nums}
+.chip.hot{color:#1c1405;background:var(--gold);border-color:var(--gold)}
+.sp{flex:1}
+.ib{width:30px;height:30px;border-radius:50%;background:rgba(0,0,0,.4);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;color:var(--gold2)}
+.ib svg{width:16px;height:16px}
+.ib:active{background:var(--surf2)}
+/* ---------- bekleme ---------- */
+#lobby{align-items:center;padding:0 16px 14px;text-align:center;overflow-y:auto}
+.logoimg{width:88px;height:88px;flex:none;margin-top:2px;filter:drop-shadow(0 4px 10px rgba(0,0,0,.5))}
+.logo{font-weight:900;font-size:30px;letter-spacing:5px;line-height:1;margin:6px 0 2px;background:linear-gradient(180deg,#fff0b3,#f2b92a 55%,#b9770a);-webkit-background-clip:text;background-clip:text;color:transparent;text-shadow:0 2px 10px rgba(242,185,42,.25)}
+.logo small{display:block;font-size:10px;letter-spacing:3px;color:var(--dim);-webkit-text-fill-color:var(--dim);font-weight:600;margin-top:4px}
+#lmsg{font-size:15px;font-weight:700;margin:12px 0 2px}
+#lcount{color:var(--gold2);font-size:13px;min-height:18px}
+#lplayers{display:flex;flex-wrap:wrap;justify-content:center;gap:10px 8px;margin:12px 0;min-height:66px;max-width:420px}
+.lp{width:58px;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;color:var(--dim)}
+.lp span{max-width:58px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.btns{display:flex;gap:10px;width:100%;max-width:420px;margin-top:auto}
+.btn{flex:1;height:44px;border-radius:22px;font-weight:800;font-size:15px;background:linear-gradient(180deg,#ffd54f,#f2b92a);color:#1c1405;display:flex;align-items:center;justify-content:center;padding:0 12px}
+.btn.alt{background:var(--surf2);color:#f6efdf;border:1px solid var(--line)}
+.btn.red{background:#3a1512;color:#ff9b93;border:1px solid #6b2a24}
+.btn:disabled{opacity:.4}
+.btn:active:not(:disabled){transform:scale(.97)}
+.link{margin-top:10px;color:var(--dim);font-size:12px;text-decoration:underline;padding:4px 8px}
+/* ---------- avatar ---------- */
+.av{position:relative;width:44px;height:44px;border-radius:50%;background:#3a2c12;border:2px solid var(--line);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:18px;color:var(--gold2);flex:none}
+.av img{position:absolute;inset:0;width:100%;height:100%;border-radius:50%;object-fit:cover}
+/* ---------- ludo ---------- */
+.modes{display:flex;flex-direction:column;gap:8px;width:100%;max-width:420px;margin:10px 0}
+.mode{display:flex;align-items:center;gap:10px;text-align:start;padding:10px 12px;border-radius:14px;background:var(--surf);border:1.5px solid var(--line)}
+.mode.on{border-color:var(--gold);background:var(--surf2);box-shadow:0 0 12px -4px var(--gold)}
+.mode i{font-style:normal;font-size:24px;width:34px;text-align:center}
+.mode b{display:block;font-size:14px}.mode small{color:var(--dim);font-size:11.5px;line-height:1.3}
+#board{align-items:center}
+#pl{flex:none;display:flex;justify-content:center;gap:6px;padding:2px 6px 6px;width:100%}
+.pc{flex:1;max-width:96px;min-width:0;display:flex;flex-direction:column;align-items:center;gap:2px;padding:3px 2px;border-radius:12px;border:1.5px solid transparent;position:relative}
+.pc .av{width:36px;height:36px;font-size:15px;border-width:3px}
+.pc .nm{max-width:100%;font-size:10.5px;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pc.turn{border-color:var(--gold);background:rgba(242,185,42,.10)}.pc.turn .nm{color:var(--gold2);font-weight:700}
+.pc .bar2{width:80%;height:3px;border-radius:2px;background:rgba(255,255,255,.12);overflow:hidden;visibility:hidden}
+.pc.turn .bar2{visibility:visible}.pc .bar2 i{display:block;height:100%;width:100%;background:var(--gold2);transform-origin:left}
+[dir=rtl] .pc .bar2 i{transform-origin:right}
+.pc .bd{position:absolute;right:4px;top:0;font-size:13px}
+.pc .kl{font-size:9.5px;color:var(--dim)}
+.s0{--c:#e5483d;--d:#8f1f17}.s1{--c:#2fbf71;--d:#136b3a}.s2{--c:#f2b92a;--d:#9a6a07}.s3{--c:#3d8bfd;--d:#1a479f}
+@keyframes spin{to{transform:rotate(360deg)}}
+.pc .av{border-color:var(--c)}
+#bwrap{flex:1;min-height:0;width:100%;display:flex;align-items:center;justify-content:center;padding:0 8px}
+#bd{position:relative;border-radius:12px;border:3px solid var(--gold);box-shadow:0 6px 24px rgba(0,0,0,.6);background:#f3ead6;overflow:hidden;transition:transform .4s}
+#bd svg{position:absolute;inset:0;width:100%;height:100%;display:block}
+.it{position:absolute;width:6.6667%;height:6.6667%;display:flex;align-items:center;justify-content:center;font-size:var(--fs,14px);line-height:1;pointer-events:none}
+.it span{display:block}
+.tk{position:absolute;width:5.4%;height:5.4%;margin:-2.7% 0 0 -2.7%;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff 0 12%,var(--c) 34%,var(--d) 100%);border:1.5px solid rgba(0,0,0,.65);box-shadow:0 1px 3px rgba(0,0,0,.6);transition:left .11s linear,top .11s linear;padding:0;z-index:2}
+.tk.ok{z-index:4;box-shadow:0 0 0 2px #fff,0 0 0 4px var(--gold),0 0 12px 3px var(--gold);animation:tkp .8s ease-in-out infinite}
+@keyframes tkp{50%{transform:scale(1.22)}}
+#ctl{flex:none;width:100%;display:flex;align-items:center;justify-content:center;gap:12px;min-height:64px;padding:6px 12px}
+#dice{width:52px;height:52px;border-radius:13px;background:linear-gradient(160deg,#fff,#e9dfc8);color:#1c1405;font-size:44px;line-height:52px;text-align:center;border:2px solid var(--line);box-shadow:0 3px 8px rgba(0,0,0,.5);flex:none;padding:0;overflow:hidden}
+#dice span{display:block;margin-top:-4px}
+#dice.can{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold2),0 0 16px var(--gold);animation:bob2 .9s ease-in-out infinite}
+#dice.rolling span{animation:spin .35s linear infinite}
+@keyframes bob2{50%{transform:translateY(-4px)}}
+#st{font-size:13px;color:var(--dim);text-align:center}#st.me{color:var(--gold2);font-weight:700}
+/* bildirim oyuncu satırını örtmesin: tahtanın alt kenarında çıkar */
+#toast{top:auto;bottom:78px}
+/* ---------- pencereler ---------- */
+#modal{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.62);padding:14px;z-index:20}
+#modal.on{display:flex}
+.box{width:100%;max-width:380px;max-height:100%;display:flex;flex-direction:column;background:var(--surf);border:1px solid var(--gold);border-radius:18px;padding:14px;box-shadow:0 10px 40px rgba(0,0,0,.6)}
+.box h3{margin:0 0 8px;font-size:16px;text-align:center;color:var(--gold2)}
+.box p{margin:0 0 10px;color:var(--dim);font-size:13px;text-align:center;line-height:1.4}
+.box .btns{margin-top:6px}
+.scroll{overflow-y:auto;min-height:0;-webkit-overflow-scrolling:touch}
+.rules{font-size:13px;line-height:1.5;color:#e6dcc3}
+.rules h4{margin:10px 0 4px;color:var(--gold2);font-size:13.5px}
+.rules ul{margin:0;padding:0 0 0 18px}.rules li{margin:2px 0}
+[dir=rtl] .rules ul{padding:0 18px 0 0}
+.rank{display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:12px}
+.rank:nth-child(odd){background:rgba(255,255,255,.04)}
+.rank.first{background:linear-gradient(90deg,rgba(242,185,42,.28),rgba(242,185,42,.05))}
+.rank .no{width:18px;text-align:center;font-weight:900;color:var(--gold2)}
+.rank .av{width:36px;height:36px;font-size:15px}
+.rank .who{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700}
+.rank .pt{font-size:12px;color:var(--dim);white-space:nowrap}
+.rank.first .pt{color:var(--gold2);font-weight:800}
+#toast{position:absolute;left:50%;top:44px;transform:translateX(-50%);max-width:88%;padding:6px 14px;border-radius:14px;background:rgba(11,9,6,.92);border:1px solid var(--line);font-size:12.5px;text-align:center;opacity:0;transition:opacity .2s;pointer-events:none;z-index:30}
+#toast.on{opacity:1}#toast.bad{border-color:#6b2a24;color:#ff9b93}
+#load{position:absolute;inset:0;display:flex;flex-direction:column;gap:10px;align-items:center;justify-content:center;background:#0b0906;z-index:40;color:var(--dim);padding:20px;text-align:center}
+#load.off{display:none}
+.spin{width:26px;height:26px;border-radius:50%;border:3px solid var(--line);border-top-color:var(--gold);animation:spin .8s linear infinite}
+</style></head>
+<body>
+<div id="app" data-room="__ROOM_ID__" data-lang="__LANG__" data-ver="__APP_VERSION__">
+  <div class="bar">
+    <span class="chip" id="info"></span><span class="sp"></span>
+    <button class="ib" id="bleave" aria-label="leave"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4"/><path d="M10 16l-4-4 4-4"/><path d="M6 12h10"/></svg></button>
+    <button class="ib" id="brules" aria-label="rules"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M9 9a3 3 0 1 1 4.5 2.6c-.9.5-1.5 1.2-1.5 2.4"/><path d="M12 18h.01"/></svg></button>
+    <button class="ib" id="bmin" aria-label="minimize"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
+  </div>
+  <div class="scr" id="lobby">
+    <svg class="logoimg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><defs><radialGradient id="lbg" cx="50%" cy="34%" r="75%"><stop offset="0" stop-color="#4a3814"/><stop offset=".55" stop-color="#1d1509"/><stop offset="1" stop-color="#0b0906"/></radialGradient><linearGradient id="lgold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff0b3"/><stop offset=".5" stop-color="#f2b92a"/><stop offset="1" stop-color="#a8740a"/></linearGradient><linearGradient id="lr" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff8a7e"/><stop offset=".5" stop-color="#e5483d"/><stop offset="1" stop-color="#9c241b"/></linearGradient><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7cebad"/><stop offset=".5" stop-color="#2fbf71"/><stop offset="1" stop-color="#157a43"/></linearGradient><linearGradient id="ly" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffe89a"/><stop offset=".5" stop-color="#f2b92a"/><stop offset="1" stop-color="#a8740a"/></linearGradient><linearGradient id="lb" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#93bfff"/><stop offset=".5" stop-color="#3d8bfd"/><stop offset="1" stop-color="#1b4fb0"/></linearGradient><linearGradient id="lw" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#e3d6b4"/></linearGradient></defs><rect x="10" y="10" width="236" height="236" rx="56" fill="url(#lbg)" stroke="url(#lgold)" stroke-width="9"/><rect x="22" y="22" width="212" height="212" rx="45" fill="none" stroke="#f2b92a" stroke-opacity=".28" stroke-width="2"/><g transform="rotate(-10 128 128)"><rect x="58" y="58" width="64" height="64" rx="15" fill="url(#lr)" stroke="#0b0906" stroke-width="4"/><circle cx="90" cy="90" r="15" fill="#fff" fill-opacity=".28"/><circle cx="90" cy="90" r="8" fill="#fff" fill-opacity=".55"/><rect x="134" y="58" width="64" height="64" rx="15" fill="url(#lg)" stroke="#0b0906" stroke-width="4"/><circle cx="166" cy="90" r="15" fill="#fff" fill-opacity=".28"/><circle cx="166" cy="90" r="8" fill="#fff" fill-opacity=".55"/><rect x="58" y="134" width="64" height="64" rx="15" fill="url(#lb)" stroke="#0b0906" stroke-width="4"/><circle cx="90" cy="166" r="15" fill="#fff" fill-opacity=".28"/><circle cx="90" cy="166" r="8" fill="#fff" fill-opacity=".55"/><rect x="134" y="134" width="64" height="64" rx="15" fill="url(#ly)" stroke="#0b0906" stroke-width="4"/><circle cx="166" cy="166" r="15" fill="#fff" fill-opacity=".28"/><circle cx="166" cy="166" r="8" fill="#fff" fill-opacity=".55"/></g><g transform="translate(131 133) rotate(14)"><rect x="-44" y="-40" width="88" height="88" rx="22" fill="#000" fill-opacity=".45"/><rect x="-44" y="-44" width="88" height="88" rx="22" fill="url(#lw)" stroke="url(#lgold)" stroke-width="5"/><circle cx="-22" cy="-22" r="7.5" fill="#1c1405"/><circle cx="22" cy="-22" r="7.5" fill="#1c1405"/><circle cx="0" cy="0" r="7.5" fill="#1c1405"/><circle cx="-22" cy="22" r="7.5" fill="#1c1405"/><circle cx="22" cy="22" r="7.5" fill="#1c1405"/></g><path d="M205 40l5 13 13 5-13 5-5 13-5-13-13-5 13-5z" fill="#fff0b3"/></svg>
+    <div class="logo">LUDO<small id="ltag"></small></div>
+    <div id="lmsg"></div><div id="lcount"></div>
+    <div class="modes" id="lmodes"></div>
+    <div id="lplayers"></div>
+    <div class="btns" id="lbtns"></div>
+    <button class="link" id="lclose"></button>
+  </div>
+  <div class="scr" id="board">
+    <div id="pl"></div>
+    <div id="bwrap"><div id="bd"></div></div>
+    <div id="ctl"><button id="dice"><span></span></button><div id="st"></div></div>
+  </div>
+</div>
+<div id="modal"></div>
+<div id="toast" role="status"></div>
+<div id="load"><div class="spin"></div><div id="loadmsg"></div></div>
+<script nonce="__NONCE__">
+(() => {
+'use strict';
+const $ = (id) => document.getElementById(id);
+const app = $('app');
+const ROOM = app.dataset.room;
+const VER = app.dataset.ver || '';
+const LANGS = {
+tr: { tag: "ODA OYUNU", none: "Açık oyun yok", noneHint: "Oda yetkilisi oyun açınca burada görünecek.", other: "Odada başka bir oyun açık: {g}", open: "Oyun aç", pickMode: "Oyun modunu seç", classic: "Klasik", quick: "Seri", items: "Eşyalı", dClassic: "4 taşını da bitişe ulaştıran kazanır.", dQuick: "Tek taş yeter; ama önce bir rakip taşı kırmalısın.", dItems: "Klasik kurallar + kapı, füze, buz, bomba ve zar kareleri.", waitHost: "Oyun açıldı, oyuncuların katılması bekleniyor", waitJoined: "Katıldın, oyunun başlaması bekleniyor", waitJoin: "Oyun açıldı, katılmak için dokun!", count: "{n}/{m} kişi oyuna katıldı", join: "Katıl", leave: "Ayrıl", start: "Başla", closeGame: "Oyunu kapat", need2: "Başlamak için en az 2 oyuncu gerekir", roll: "Zar at", yourRoll: "Sıra sende: zar at", yourMove: "Oynatacağın taşı seç", turnOf: "Sıra: {n}", watching: "Oyunu izliyorsun", eCapture: "{n} bir taş kırdı!", eSix3: "{n} üç kez 6 attı, sıra geçti", eNoMove: "{n} için hamle yok", eFrozen: "{n} dondu, bir tur atladı", eBomb: "Bomba! {n} taşı üsse döndü", ePortal: "{n} kapıdan geçti", eRocket: "Füze! {n} bir taşı üsse yolladı", eIce: "{n} rakibini dondurdu", eDice: "{n} bir zar hakkı daha kazandı", eLeft: "{n} oyundan ayrıldı", over: "Oyun bitti", won: "Kazandı", close: "Kapat", again: "Tekrar oyna", cancelled: "Oyun kapatıldı", rules: "Oyun kuralları", ok: "Anladım", leaveQ: "Oyundan ayrılmak istiyor musun?", leaveHint: "Ayrılırsan taşların oyundan çıkar.", closeQ: "Oyun herkes için kapatılsın mı?", yes: "Evet", cancel: "Vazgeç", net: "Bağlantı sorunu, yeniden deneniyor…", err: "İşlem yapılamadı", appOnly: "Bu sayfa yalnızca uygulama içinde açılır.", loading: "Yükleniyor…", kills: "Kırma: {k}" },
+en: { tag: "ROOM GAME", none: "No open game", noneHint: "It will appear here when a room manager opens a game.", other: "Another game is open in this room: {g}", open: "Open game", pickMode: "Choose the game mode", classic: "Classic", quick: "Quick", items: "Items", dClassic: "Get all 4 tokens home to win.", dQuick: "One token is enough, but you must capture an opponent first.", dItems: "Classic rules + portal, rocket, ice, bomb and dice squares.", waitHost: "Game opened, waiting for players to join", waitJoined: "Joined, waiting for the game to start", waitJoin: "Game opened, tap to join!", count: "{n}/{m} players joined", join: "Join", leave: "Leave", start: "Start", closeGame: "Close game", need2: "At least 2 players are needed to start", roll: "Roll", yourRoll: "Your turn: roll the dice", yourMove: "Pick a token to move", turnOf: "Turn: {n}", watching: "You are watching", eCapture: "{n} captured a token!", eSix3: "{n} rolled three 6s, turn passed", eNoMove: "No move for {n}", eFrozen: "{n} is frozen and skipped a turn", eBomb: "Bomb! {n}'s token went back to base", ePortal: "{n} went through a portal", eRocket: "Rocket! {n} sent a token back to base", eIce: "{n} froze an opponent", eDice: "{n} won an extra roll", eLeft: "{n} left the game", over: "Game over", won: "Winner", close: "Close", again: "Play again", cancelled: "The game was closed", rules: "Game rules", ok: "Got it", leaveQ: "Leave the game?", leaveHint: "Your tokens are removed from the game.", closeQ: "Close the game for everyone?", yes: "Yes", cancel: "Cancel", net: "Connection problem, retrying…", err: "Action failed", appOnly: "This page only opens inside the app.", loading: "Loading…", kills: "Captures: {k}" },
+ar: { tag: "لعبة الغرفة", none: "لا توجد لعبة مفتوحة", noneHint: "ستظهر هنا عندما يفتح مشرف الغرفة لعبة.", other: "توجد لعبة أخرى مفتوحة في الغرفة: {g}", open: "افتح لعبة", pickMode: "اختر نمط اللعب", classic: "كلاسيكي", quick: "سريع", items: "أدوات", dClassic: "من يوصل أحجاره الأربعة إلى النهاية يفوز.", dQuick: "حجر واحد يكفي، لكن عليك أولًا أكل حجر للخصم.", dItems: "القواعد الكلاسيكية + مربعات البوابة والصاروخ والجليد والقنبلة والنرد.", waitHost: "تم فتح اللعبة، بانتظار انضمام اللاعبين", waitJoined: "انضممت، بانتظار بدء اللعبة", waitJoin: "تم فتح اللعبة، اضغط للانضمام!", count: "انضم {n}/{m} لاعبين", join: "انضم", leave: "غادر", start: "ابدأ", closeGame: "إغلاق اللعبة", need2: "يلزم لاعبان على الأقل للبدء", roll: "ارمِ النرد", yourRoll: "دورك: ارمِ النرد", yourMove: "اختر الحجر الذي ستحركه", turnOf: "الدور: {n}", watching: "أنت تشاهد اللعبة", eCapture: "{n} أكل حجرًا!", eSix3: "{n} رمى 6 ثلاث مرات، انتقل الدور", eNoMove: "لا توجد حركة لـ {n}", eFrozen: "{n} تجمّد وفاته دور", eBomb: "قنبلة! عاد حجر {n} إلى القاعدة", ePortal: "{n} عبر البوابة", eRocket: "صاروخ! {n} أعاد حجرًا إلى القاعدة", eIce: "{n} جمّد خصمه", eDice: "{n} حصل على رمية إضافية", eLeft: "{n} غادر اللعبة", over: "انتهت اللعبة", won: "الفائز", close: "إغلاق", again: "العب مجددًا", cancelled: "تم إغلاق اللعبة", rules: "قواعد اللعبة", ok: "فهمت", leaveQ: "هل تريد مغادرة اللعبة؟", leaveHint: "ستُزال أحجارك من اللعبة.", closeQ: "إغلاق اللعبة للجميع؟", yes: "نعم", cancel: "إلغاء", net: "مشكلة في الاتصال، جارٍ إعادة المحاولة…", err: "تعذّر تنفيذ العملية", appOnly: "هذه الصفحة تفتح داخل التطبيق فقط.", loading: "جارٍ التحميل…", kills: "الأكل: {k}" },
+hi: { tag: "रूम गेम", none: "कोई खुला गेम नहीं", noneHint: "रूम मैनेजर गेम खोलेगा तो यहाँ दिखेगा।", other: "रूम में दूसरा गेम खुला है: {g}", open: "गेम खोलें", pickMode: "गेम मोड चुनें", classic: "क्लासिक", quick: "क्विक", items: "आइटम", dClassic: "जो चारों गोटियाँ घर पहुँचाए वह जीतता है।", dQuick: "एक गोटी काफ़ी है, पर पहले विरोधी की एक गोटी काटनी होगी।", dItems: "क्लासिक नियम + पोर्टल, रॉकेट, बर्फ़, बम और पासा वाले खाने।", waitHost: "गेम खुल गया, खिलाड़ियों के जुड़ने का इंतज़ार", waitJoined: "आप जुड़ गए, गेम शुरू होने का इंतज़ार", waitJoin: "गेम खुल गया, जुड़ने के लिए टैप करें!", count: "{n}/{m} खिलाड़ी जुड़े", join: "जुड़ें", leave: "छोड़ें", start: "शुरू करें", closeGame: "गेम बंद करें", need2: "शुरू करने के लिए कम से कम 2 खिलाड़ी चाहिए", roll: "पासा फेंकें", yourRoll: "आपकी बारी: पासा फेंकें", yourMove: "चलने वाली गोटी चुनें", turnOf: "बारी: {n}", watching: "आप गेम देख रहे हैं", eCapture: "{n} ने एक गोटी काटी!", eSix3: "{n} ने तीन बार 6 फेंका, बारी गई", eNoMove: "{n} के लिए कोई चाल नहीं", eFrozen: "{n} जम गए, एक बारी छूटी", eBomb: "बम! {n} की गोटी वापस अड्डे पर", ePortal: "{n} पोर्टल से गुज़रे", eRocket: "रॉकेट! {n} ने एक गोटी अड्डे पर भेजी", eIce: "{n} ने विरोधी को जमा दिया", eDice: "{n} को एक और पासा मिला", eLeft: "{n} ने गेम छोड़ा", over: "गेम समाप्त", won: "विजेता", close: "बंद करें", again: "फिर खेलें", cancelled: "गेम बंद कर दिया गया", rules: "गेम के नियम", ok: "समझ गया", leaveQ: "गेम छोड़ना चाहते हैं?", leaveHint: "आपकी गोटियाँ गेम से हट जाएँगी।", closeQ: "सबके लिए गेम बंद करें?", yes: "हाँ", cancel: "रद्द करें", net: "कनेक्शन समस्या, दोबारा कोशिश…", err: "कार्रवाई नहीं हो सकी", appOnly: "यह पेज सिर्फ़ ऐप के अंदर खुलता है।", loading: "लोड हो रहा है…", kills: "काट: {k}" },
+};
+const RULES = {
+tr: [["Klasik", ["Zarda 6 gelince bir taşını başlangıç karesine çıkarırsın; 6 atan bir kez daha atar.", "Rakibin taşının üstüne gelirsen o taş üssüne döner ve bir zar hakkı daha kazanırsın.", "Yıldızlı kareler ve başlangıç kareleri güvenlidir; oradaki taş kırılmaz.", "Üst üste üç kez 6 atarsan sıran geçer.", "Bitişe tam sayı gerekir. 4 taşını da bitişe ilk ulaştıran kazanır.", "Her hamle için 30 saniyen var; üst üste 3 kez oynamayan oyundan düşer."]], ["Seri", ["Tek taşını bitişe ulaştırman yeter.", "Barikat: en az bir rakip taşı kırmadan taşların ev yoluna giremez; ana yolda bir tur daha döner."]], ["Eşyalı", ["Klasik kurallar geçerlidir; tahtada eşya kareleri vardır.", "🌀 Kapı: taşın 16 kare ilerideki yıldızlı kareye ışınlanır.", "🚀 Füze: ilerideki en yakın rakip taşı üssüne döner (güvenli karedeki taş korunur).", "❄️ Buz: ilerideki en yakın rakip taşının sahibi bir tur atlar.", "💣 Bomba: üstüne gelen taşın üssüne döner.", "🎲 Zar: bir zar hakkı daha kazanırsın."]]],
+en: [["Classic", ["Roll a 6 to bring a token to its start square; a 6 gives another roll.", "Land on an opponent token to send it back to base and win another roll.", "Star squares and start squares are safe; tokens there cannot be captured.", "Three 6s in a row end your turn.", "An exact roll is needed to finish. The first to bring all 4 tokens home wins.", "You have 30 seconds per move; missing 3 turns in a row removes you."]], ["Quick", ["Bringing one token home is enough.", "Barrier: until you capture an opponent token your tokens cannot enter the home lane; they go around again."]], ["Items", ["Classic rules apply; the board has item squares.", "🌀 Portal: your token jumps to the star square 16 squares ahead.", "🚀 Rocket: the nearest opponent token ahead goes back to base (tokens on safe squares are protected).", "❄️ Ice: the owner of the nearest opponent token ahead skips a turn.", "💣 Bomb: the token that lands on it goes back to base.", "🎲 Dice: you win another roll."]]],
+ar: [["كلاسيكي", ["عند رمي 6 تُخرج حجرًا إلى مربع البداية؛ ومن يرمي 6 يرمي مرة أخرى.", "إذا وقفت على حجر خصم يعود إلى قاعدته وتحصل على رمية إضافية.", "مربعات النجمة ومربعات البداية آمنة؛ لا يؤكل الحجر فيها.", "إذا رميت 6 ثلاث مرات متتالية ينتقل دورك.", "يلزم رقم مطابق للوصول. أول من يوصل أحجاره الأربعة يفوز.", "لديك 30 ثانية لكل حركة؛ من لا يلعب 3 مرات متتالية يخرج."]], ["سريع", ["يكفي إيصال حجر واحد إلى النهاية.", "الحاجز: لا تدخل أحجارك مسار البيت قبل أن تأكل حجرًا للخصم؛ تدور دورة أخرى."]], ["أدوات", ["تُطبَّق القواعد الكلاسيكية مع مربعات أدوات على اللوحة.", "🌀 البوابة: ينتقل حجرك إلى مربع النجمة بعد 16 مربعًا.", "🚀 الصاروخ: أقرب حجر للخصم أمامك يعود إلى قاعدته (الحجر في مربع آمن محمي).", "❄️ الجليد: صاحب أقرب حجر للخصم أمامك يفوته دور.", "💣 القنبلة: الحجر الذي يقف عليها يعود إلى قاعدته.", "🎲 النرد: تحصل على رمية إضافية."]]],
+hi: [["क्लासिक", ["6 आने पर एक गोटी शुरुआती खाने पर आती है; 6 पर एक और बार पासा।", "विरोधी की गोटी पर पहुँचें तो वह अड्डे पर लौटती है और आपको एक और पासा मिलता है।", "तारे वाले और शुरुआती खाने सुरक्षित हैं; वहाँ गोटी नहीं कटती।", "लगातार तीन बार 6 आने पर बारी चली जाती है।", "घर पहुँचने के लिए सटीक अंक चाहिए। जो चारों गोटियाँ पहले पहुँचाए वह जीतता है।", "हर चाल के लिए 30 सेकंड; लगातार 3 बार न खेलने पर खिलाड़ी बाहर।"]], ["क्विक", ["एक गोटी घर पहुँचाना काफ़ी है।", "बैरियर: विरोधी की गोटी काटे बिना आपकी गोटियाँ घर की गली में नहीं जा सकतीं; एक चक्कर और लगाती हैं।"]], ["आइटम", ["क्लासिक नियम लागू हैं; बोर्ड पर आइटम वाले खाने हैं।", "🌀 पोर्टल: गोटी 16 खाने आगे तारे वाले खाने पर पहुँचती है।", "🚀 रॉकेट: आगे की सबसे नज़दीकी विरोधी गोटी अड्डे पर लौटती है (सुरक्षित खाने की गोटी बची रहती है)।", "❄️ बर्फ़: आगे की सबसे नज़दीकी विरोधी गोटी के मालिक की एक बारी छूटती है।", "💣 बम: जो गोटी इस पर आए वह अड्डे पर लौटती है।", "🎲 पासा: एक और बार पासा।"]]],
+};
+const LANG = LANGS[app.dataset.lang] ? app.dataset.lang : 'tr';
+const T = LANGS[LANG];
+const t = (k, v) => (T[k] ?? LANGS.tr[k] ?? k).replace(/\{(\w+)\}/g, (_, x) => (v && v[x] != null ? v[x] : ''));
+const RTL = LANG === 'ar';
+
+// ---------- küçük yardımcılar ----------
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
+}
+function avatar(user) {
+  const a = el('div', 'av');
+  const name = (user && user.displayName) || '?';
+  a.textContent = Array.from(name.trim())[0] || '?';
+  const url = user && user.avatarUrl;
+  if (url) {
+    const img = new Image();
+    img.alt = '';
+    img.addEventListener('error', () => img.remove());
+    try { img.src = new URL(url, location.origin).href; a.appendChild(img); } catch (_) { /* geçersiz adres: baş harf kalır */ }
+  }
+  return a;
+}
+const nameOf = (p) => (p && p.user && p.user.displayName) || '?';
+let toastTimer = 0;
+function toast(msg, bad) {
+  const x = $('toast');
+  x.textContent = msg;
+  x.className = 'on' + (bad ? ' bad' : '');
+  x.dir = RTL ? 'rtl' : 'ltr';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { x.className = ''; }, bad ? 2600 : 1900);
+}
+function post(o) { try { if (window.TRLive) window.TRLive.postMessage(JSON.stringify(o)); } catch (_) { /* uygulama dışı */ } }
+
+// ---------- oturum bileti ve API ----------
+let token = null;
+let tokenWaiters = [];
+window.TRLiveAuth = { set(v) { token = String(v || '') || null; const w = tokenWaiters; tokenWaiters = []; w.forEach((f) => f()); } };
+function askToken() {
+  return new Promise((resolve) => {
+    tokenWaiters.push(resolve);
+    post({ type: 'getToken' });
+    setTimeout(resolve, 4000);
+  });
+}
+async function api(method, path, body, retried) {
+  if (!token) await askToken();
+  let res;
+  try {
+    res = await fetch(path, {
+      method, cache: 'no-store',
+      // Sürüm başlığı uygulamanınkiyle aynı gider (zorunlu güncelleme denetimi API'de bu başlığa bakar).
+      headers: Object.assign({ Authorization: 'Bearer ' + (token || ''), 'Content-Type': 'application/json' }, VER ? { 'X-App-Version': VER } : {}),
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  } catch (e) { const er = new Error('net'); er.net = true; throw er; }
+  if (res.status === 401 && !retried) { token = null; await askToken(); return api(method, path, body, true); }
+  let data = null;
+  try { data = await res.json(); } catch (_) { /* gövde yok */ }
+  if (!res.ok) { const er = new Error((data && data.message) || 'err'); er.status = res.status; throw er; }
+  return data;
+}
+function fail(e) {
+  if (e && e.net) toast(t('net'), true);
+  else toast(LANG === 'tr' && e && e.message && e.message !== 'err' ? e.message : t('err'), true);
+}
+
+
+// ---------- tahta geometrisi (sunucudaki ludo.js ile aynı sıra; 15x15 ızgara) ----------
+const PATH = (() => {
+  const p = [];
+  for (let x = 1; x <= 5; x++) p.push([x, 6]);
+  for (let y = 5; y >= 0; y--) p.push([6, y]);
+  p.push([7, 0], [8, 0]);
+  for (let y = 1; y <= 5; y++) p.push([8, y]);
+  for (let x = 9; x <= 14; x++) p.push([x, 6]);
+  p.push([14, 7], [14, 8]);
+  for (let x = 13; x >= 9; x--) p.push([x, 8]);
+  for (let y = 9; y <= 14; y++) p.push([8, y]);
+  p.push([7, 14], [6, 14]);
+  for (let y = 13; y >= 9; y--) p.push([6, y]);
+  for (let x = 5; x >= 0; x--) p.push([x, 8]);
+  p.push([0, 7], [0, 6]);
+  return p;
+})();
+const SAFE = [0, 8, 13, 21, 26, 34, 39, 47];
+const BASE = [[0, 0], [9, 0], [9, 9], [0, 9]];
+const COL = ['#e5483d', '#2fbf71', '#f2b92a', '#3d8bfd'];
+const homeCell = (s, i) => [[1 + i, 7], [7, 1 + i], [13 - i, 7], [7, 13 - i]][s];
+function center(seat, prog, tok) {
+  if (prog < 0) return [BASE[seat][0] + 2 + (tok % 2) * 2, BASE[seat][1] + 2 + Math.floor(tok / 2) * 2];
+  if (prog <= 50) { const c = PATH[(seat * 13 + prog) % 52]; return [c[0] + 0.5, c[1] + 0.5]; }
+  if (prog <= 55) { const c = homeCell(seat, prog - 51); return [c[0] + 0.5, c[1] + 0.5]; }
+  const d = [[-0.7, 0], [0, -0.7], [0.7, 0], [0, 0.7]][seat];
+  const sp = [[-0.3, -0.3], [0.3, -0.3], [-0.3, 0.3], [0.3, 0.3]][tok];
+  return [7.5 + d[0] + sp[0] * 0.6, 7.5 + d[1] + sp[1] * 0.6];
+}
+const ICON = { portal: '🌀', rocket: '🚀', ice: '❄️', bomb: '💣', dice: '🎲' };
+function boardSvg() {
+  const r = (x, y, w, h, f, ex) => '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" fill="' + f + '"' + (ex || '') + '/>';
+  let s = '<svg viewBox="0 0 15 15" preserveAspectRatio="none">' + r(0, 0, 15, 15, '#f3ead6');
+  PATH.forEach((c) => { s += r(c[0], c[1], 1, 1, '#fbf5e6', ' stroke="#b9a77c" stroke-width=".04"'); });
+  for (let k = 0; k < 4; k++) {
+    s += r(BASE[k][0], BASE[k][1], 6, 6, COL[k]) + r(BASE[k][0] + 1, BASE[k][1] + 1, 4, 4, '#fbf5e6', ' rx=".5"');
+    for (let i = 0; i < 4; i++) { const c = center(k, -1, i); s += '<circle cx="' + c[0] + '" cy="' + c[1] + '" r=".62" fill="' + COL[k] + '" opacity=".35"/>'; }
+    for (let i = 0; i < 5; i++) { const c = homeCell(k, i); s += r(c[0], c[1], 1, 1, COL[k], ' stroke="#b9a77c" stroke-width=".04"'); }
+    const st = PATH[k * 13]; s += r(st[0], st[1], 1, 1, COL[k], ' stroke="#b9a77c" stroke-width=".04"');
+  }
+  s += '<polygon points="6,6 7.5,7.5 6,9" fill="' + COL[0] + '"/><polygon points="6,6 9,6 7.5,7.5" fill="' + COL[1] + '"/><polygon points="9,6 9,9 7.5,7.5" fill="' + COL[2] + '"/><polygon points="6,9 7.5,7.5 9,9" fill="' + COL[3] + '"/>';
+  SAFE.forEach((n) => { const c = PATH[n]; s += '<path transform="translate(' + (c[0] + 0.5) + ' ' + (c[1] + 0.5) + ') scale(.034)" d="M0-11 3.2-3.4 11-3.4 4.8 1.6 7 9.4 0 4.8-7 9.4-4.8 1.6-11-3.4-3.2-3.4z" fill="' + (n % 13 === 0 ? '#fff' : '#b9770a') + '" opacity=".9"/>'; });
+  return s + '</svg>';
+}
+
+// ---------- durum ----------
+let G = null, canManage = false, otherGame = null;
+let busy = false, closedResult = null, seenSeq = -1, seenGame = null, turnEnd = 0, prevTurnMine = false;
+let pickedMode = 'classic';
+let shown = {};          // "koltuk:taş" → ekranda gösterilen ilerleme (adım adım yürütme için)
+let walkGen = 0;
+let lastDice = null;
+const ORDER = { waiting: 0, playing: 1, finished: 2, cancelled: 2 };
+function accept(v) {
+  if (G && v && G.id === v.id) {
+    if (ORDER[v.status] < ORDER[G.status]) return false;
+    if (v.status === 'playing' && G.status === 'playing' && v.seq < G.seq) return false;
+  }
+  return true;
+}
+function apply(v) {
+  if (v && !accept(v)) return;
+  const was = G;
+  if (v && !v.me && was && was.id === v.id && was.me) v.me = was.me;
+  G = v;
+  if (G && G.status === 'playing') turnEnd = G.turnMsLeft == null ? 0 : performance.now() + G.turnMsLeft;
+  render(was);
+}
+let refreshing = false, refreshAgain = false, netBad = 0;
+async function refresh() {
+  if (refreshing) { refreshAgain = true; return; }
+  refreshing = true;
+  try {
+    let d;
+    if (G && (G.status === 'waiting' || G.status === 'playing')) { d = await api('GET', '/api/games/' + G.id); canManage = !!d.canManage; apply(d.game); }
+    else {
+      d = await api('GET', '/api/rooms/' + ROOM + '/game?type=ludo');
+      canManage = !!d.canManage; otherGame = d.otherGame || null;
+      if (d.game) apply(d.game); else if (!G) render(null);
+    }
+    $('load').className = 'off'; netBad = 0;
+  } catch (e) {
+    netBad += 1;
+    if (e.status === 403 || e.status === 404) { G = null; render(null); $('load').className = 'off'; } else if (netBad === 3) toast(t('net'), true);
+  } finally { refreshing = false; if (refreshAgain) { refreshAgain = false; refresh(); } }
+}
+// Uygulamadan gelen canlı durum (odadaki herkese giden yayın).
+window.TRGame = { push(v) { try { if (!v || v.roomId !== ROOM || v.type !== 'ludo') return; if (G && G.id !== v.id && (v.status === 'finished' || v.status === 'cancelled')) return; if (G && G.id !== v.id) { G = null; apply(v); refresh(); return; } apply(v); } catch (_) { refresh(); } } };
+async function act(fn) {
+  if (busy) return;
+  busy = true;
+  try { const d = await fn(); if (d && d.game) apply(d.game); else await refresh(); return d; } catch (e) { fail(e); refresh(); return null; } finally { busy = false; }
+}
+
+// ---------- pencereler ----------
+let modalKind = null;
+function closeModal() { const m = $('modal'); m.className = ''; m.textContent = ''; modalKind = null; clearInterval(resultTimer); }
+let resultTimer = 0;
+function openModal(kind, build) {
+  const m = $('modal');
+  m.textContent = '';
+  const box = el('div', 'box');
+  box.dir = RTL ? 'rtl' : 'ltr';
+  build(box);
+  m.appendChild(box);
+  m.className = 'on';
+  modalKind = kind;
+}
+function btn(label, cls, fn) { const b = el('button', 'btn' + (cls ? ' ' + cls : ''), label); b.addEventListener('click', fn); return b; }
+function confirmBox(title, hint, yes, fn) {
+  openModal('confirm', (box) => {
+    box.appendChild(el('h3', '', title));
+    if (hint) box.appendChild(el('p', '', hint));
+    const r = el('div', 'btns');
+    r.append(btn(t('cancel'), 'alt', closeModal), btn(yes, 'red', () => { closeModal(); fn(); }));
+    box.appendChild(r);
+  });
+}
+function showRules() {
+  openModal('rules', (box) => {
+    box.appendChild(el('h3', '', t('rules')));
+    const s = el('div', 'scroll rules');
+    for (const [head, items] of RULES[LANG] || RULES.tr) { s.appendChild(el('h4', '', head)); const ul = el('ul'); items.forEach((i) => ul.appendChild(el('li', '', i))); s.appendChild(ul); }
+    box.appendChild(s);
+    const r = el('div', 'btns'); r.appendChild(btn(t('ok'), '', closeModal)); box.appendChild(r);
+  });
+}
+function showResult() {
+  const id = G.id;
+  openModal('result', (box) => {
+    box.appendChild(el('h3', '', t('over')));
+    const s = el('div', 'scroll');
+    const ps = G.players.slice().sort((a, b) => (b.user && b.user.id === G.winnerId) - (a.user && a.user.id === G.winnerId));
+    ps.forEach((p, i) => {
+      const win = p.user && p.user.id === G.winnerId;
+      const row = el('div', 'rank' + (win ? ' first' : ''));
+      row.append(el('span', 'no', win ? '👑' : String(i + 1)), avatar(p.user), el('span', 'who', nameOf(p)), el('span', 'pt', win ? t('won') : ''));
+      s.appendChild(row);
+    });
+    box.appendChild(s);
+    const r = el('div', 'btns');
+    let left = 12;
+    const done = async () => { closedResult = id; closeModal(); if (G && G.id === id) G = null; await refresh(); if (!G && !canManage) post({ type: 'minimize' }); };
+    const c = btn(t('close') + ' (' + left + ')', 'alt', done);
+    r.appendChild(c);
+    if (canManage) r.appendChild(btn(t('again'), '', () => { closedResult = id; closeModal(); G = null; render(null); }));
+    box.appendChild(r);
+    clearInterval(resultTimer);
+    resultTimer = setInterval(() => { left -= 1; c.textContent = t('close') + ' (' + Math.max(0, left) + ')'; if (left <= 0) done(); }, 1000);
+  });
+}
+
+// ---------- çizim ----------
+function show(id) { for (const s of ['lobby', 'board']) $(s).className = 'scr' + (s === id ? ' on' : ''); }
+const MODE_ICON = { classic: '🎲', quick: '⚡', items: '🚀' };
+const modeDesc = { classic: 'dClassic', quick: 'dQuick', items: 'dItems' };
+function renderLobby() {
+  show('lobby');
+  $('info').style.display = 'none'; $('bleave').style.display = 'none';
+  $('ltag').textContent = t('tag');
+  const msg = $('lmsg'), cnt = $('lcount'), list = $('lplayers'), btns = $('lbtns'), close = $('lclose'), modes = $('lmodes');
+  msg.dir = cnt.dir = modes.dir = RTL ? 'rtl' : 'ltr';
+  list.textContent = ''; btns.textContent = ''; modes.textContent = ''; close.style.display = 'none';
+  const modeCard = (m, on, pick) => {
+    const b = el('button', 'mode' + (on ? ' on' : ''));
+    const tx = el('span'); tx.append(el('b', '', t(m)), el('small', '', t(modeDesc[m])));
+    b.append(el('i', '', MODE_ICON[m]), tx);
+    if (pick) b.addEventListener('click', () => { pickedMode = m; renderLobby(); });
+    return b;
+  };
+  if (!G || G.status !== 'waiting') {
+    if (otherGame) { msg.textContent = t('other', { g: otherGame === 'tek' ? 'TEK' : otherGame }); cnt.textContent = ''; return; }
+    if (!canManage) { msg.textContent = t('none'); cnt.textContent = t('noneHint'); return; }
+    msg.textContent = t('pickMode'); cnt.textContent = '';
+    ['classic', 'quick', 'items'].forEach((m) => modes.appendChild(modeCard(m, m === pickedMode, true)));
+    btns.appendChild(btn(t('open'), '', () => act(() => api('POST', '/api/rooms/' + ROOM + '/games', { type: 'ludo', mode: pickedMode }))));
+    return;
+  }
+  const joined = !!(G.me && G.me.joined), creator = !!(G.me && G.me.isCreator), gid = G.id;
+  msg.textContent = creator ? t('waitHost') : joined ? t('waitJoined') : t('waitJoin');
+  cnt.textContent = t('count', { n: G.players.length, m: G.maxPlayers || 4 });
+  modes.appendChild(modeCard(G.mode || 'classic', true, false));
+  G.players.forEach((p) => { const d = el('div', 'lp'); d.append(avatar(p.user), el('span', '', nameOf(p))); list.appendChild(d); });
+  if (joined && !creator) btns.appendChild(btn(t('leave'), 'alt', () => act(() => api('POST', '/api/games/' + gid + '/leave'))));
+  else if (!joined) { const j = btn(t('join'), '', () => act(() => api('POST', '/api/games/' + gid + '/join'))); j.disabled = G.players.length >= (G.maxPlayers || 4); btns.appendChild(j); }
+  if (creator) {
+    const s = btn(t('start'), '', () => act(() => api('POST', '/api/games/' + gid + '/start')));
+    s.disabled = G.players.length < 2;
+    btns.appendChild(s);
+    if (G.players.length < 2) cnt.textContent += ' · ' + t('need2');
+  }
+  if (creator || canManage) { close.textContent = t('closeGame'); close.style.display = ''; close.onclick = () => confirmBox(t('closeQ'), '', t('yes'), () => act(() => api('POST', '/api/games/' + gid + '/cancel'))); }
+}
+let builtFor = null;
+function buildBoard() {
+  const bd = $('bd');
+  const key = G.id + ':' + (G.mode || 'classic');
+  if (builtFor !== key) {
+    bd.innerHTML = boardSvg();
+    if (G.items) for (const c of Object.keys(G.items)) {
+      const p = PATH[Number(c)], d = el('div', 'it'), s = el('span', '', ICON[G.items[c]] || '');
+      d.style.left = (p[0] / 15) * 100 + '%'; d.style.top = (p[1] / 15) * 100 + '%';
+      d.appendChild(s); bd.appendChild(d);
+    }
+    builtFor = key; shown = {};
+  }
+  const wrap = $('bwrap'), side = Math.max(120, Math.min(wrap.clientWidth - 16, wrap.clientHeight - 4));
+  bd.style.width = side + 'px'; bd.style.height = side + 'px';
+  bd.style.setProperty('--fs', Math.round(side / 15 * 0.74) + 'px');
+  // Kendi üssüm sol altta görünsün diye tahta döndürülür; eşya simgeleri ters yönde döndürülüp dik tutulur.
+  const seat = G.me && G.me.joined && G.me.seat != null ? G.me.seat : 3;
+  const rot = [-90, 180, 90, 0][seat] || 0;
+  bd.style.transform = 'rotate(' + rot + 'deg)';
+  bd.querySelectorAll('.it span').forEach((s) => { s.style.transform = 'rotate(' + -rot + 'deg)'; });
+}
+function place(e, seat, prog, tok, stack) {
+  const c = center(seat, prog, tok);
+  const off = stack ? [(stack.i - (stack.n - 1) / 2) * 0.32, (stack.i - (stack.n - 1) / 2) * -0.18] : [0, 0];
+  e.style.left = ((c[0] + off[0]) / 15) * 100 + '%'; e.style.top = ((c[1] + off[1]) / 15) * 100 + '%';
+}
+function renderTokens() {
+  const bd = $('bd'), gen = ++walkGen;
+  const me = G.me && G.me.joined ? G.me : null;
+  const myTurn = !!(me && G.status === 'playing' && G.turnSeat === me.seat);
+  const legal = myTurn && G.dice != null ? (G.legal || []) : [];
+  const groups = {};
+  for (const p of G.players) (G.tokens[p.seat] || []).forEach((pr, i) => { if (pr >= 0 && pr <= 55) { const k = pr <= 50 ? 'c' + ((p.seat * 13 + pr) % 52) : 'h' + p.seat + ':' + pr; (groups[k] = groups[k] || []).push(p.seat + ':' + i); } });
+  const stackOf = {};
+  Object.values(groups).forEach((g) => { if (g.length > 1) g.forEach((id, i) => { stackOf[id] = { i, n: g.length }; }); });
+  const live = new Set();
+  for (const p of G.players) (G.tokens[p.seat] || []).forEach((pr, i) => {
+    const id = p.seat + ':' + i; live.add(id);
+    let e = bd.querySelector('[data-t="' + id + '"]');
+    if (!e) { e = el('button', 'tk s' + p.seat); e.dataset.t = id; bd.appendChild(e); shown[id] = pr; place(e, p.seat, pr, i, stackOf[id]); e.addEventListener('click', () => moveToken(p.seat, i)); }
+    e.classList.toggle('ok', p.seat === (me && me.seat) && legal.includes(i));
+    const from = shown[id];
+    if (from === pr) { place(e, p.seat, pr, i, stackOf[id]); return; }
+    // Kısa ileri hamle kare kare yürütülür; yakalanma, kapı, bomba ve tur dönüşü doğrudan konulur.
+    if (from >= 0 && pr > from && pr - from <= 6) {
+      let cur = from;
+      const stepper = () => { if (gen !== walkGen) return; cur += 1; shown[id] = cur; place(e, p.seat, cur, i, cur === pr ? stackOf[id] : null); if (cur < pr) setTimeout(stepper, 120); };
+      stepper();
+    } else { shown[id] = pr; place(e, p.seat, pr, i, stackOf[id]); }
+  });
+  bd.querySelectorAll('.tk').forEach((e) => { if (!live.has(e.dataset.t)) { delete shown[e.dataset.t]; e.remove(); } });
+}
+function renderPlayers() {
+  const box = $('pl'); box.textContent = '';
+  for (const p of G.players) {
+    const d = el('div', 'pc s' + p.seat + (G.turnSeat === p.seat ? ' turn' : ''));
+    d.dataset.seat = String(p.seat);
+    const bar = el('div', 'bar2'); bar.appendChild(el('i'));
+    d.append(avatar(p.user), el('span', 'nm', nameOf(p)), bar);
+    if ((G.frozen || []).includes(p.seat)) d.appendChild(el('span', 'bd', '❄️'));
+    if (G.mode === 'quick') d.appendChild(el('span', 'kl', t('kills', { k: (G.kills && G.kills[p.seat]) || 0 })));
+    box.appendChild(d);
+  }
+}
+const FACE = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
+function renderCtl() {
+  const me = G.me && G.me.joined ? G.me : null;
+  const myTurn = !!(me && G.status === 'playing' && G.turnSeat === me.seat);
+  const dice = $('dice'), st = $('st');
+  if (G.dice != null) lastDice = G.dice;
+  else { const l = (G.log || []).slice().reverse().find((e) => e.dice); if (l) lastDice = l.dice; }
+  dice.firstChild.textContent = FACE[lastDice || 0] || '🎲';
+  dice.className = myTurn && G.dice == null ? 'can' : '';
+  st.dir = RTL ? 'rtl' : 'ltr';
+  st.className = myTurn ? 'me' : '';
+  const cur = G.players.find((p) => p.seat === G.turnSeat);
+  st.textContent = G.status !== 'playing' ? '' : myTurn ? (G.dice == null ? t('yourRoll') : t('yourMove')) : me ? t('turnOf', { n: nameOf(cur) }) : t('watching') + ' · ' + t('turnOf', { n: nameOf(cur) });
+}
+async function rollDice() {
+  const me = G && G.me && G.me.joined ? G.me : null;
+  if (!me || busy || G.status !== 'playing' || G.turnSeat !== me.seat || G.dice != null) return;
+  const gid = G.id;
+  $('dice').className = 'rolling';
+  const d = await act(() => api('POST', '/api/games/' + gid + '/roll'));
+  // Tek hamle varsa kendiliğinden oynanır (seçilecek bir şey yok).
+  if (d && !d.skipped && d.legal && d.legal.length === 1) setTimeout(() => moveToken(me.seat, d.legal[0]), 450);
+}
+function moveToken(seat, tok) {
+  const me = G && G.me && G.me.joined ? G.me : null;
+  if (!me || busy || seat !== me.seat || G.status !== 'playing' || G.turnSeat !== me.seat || G.dice == null || !(G.legal || []).includes(tok)) return;
+  const gid = G.id;
+  act(() => api('POST', '/api/games/' + gid + '/move', { token: tok }));
+}
+function events(was) {
+  if (seenGame === G.id && G.seq <= seenSeq) return;
+  const first = seenGame !== G.id, since = seenSeq;
+  seenGame = G.id; seenSeq = G.seq;
+  if (first) return;
+  const name = (seat) => nameOf(G.players.find((p) => p.seat === seat) || (was && was.players.find((p) => p.seat === seat)));
+  const msgs = [];
+  for (const e of G.log || []) {
+    if (!(e.n > since)) continue;
+    if (e.event === 'three_sixes') msgs.push(t('eSix3', { n: name(e.seat) }));
+    else if (e.event === 'no_move') msgs.push(t('eNoMove', { n: name(e.seat) }));
+    else if (e.event === 'frozen_skip') msgs.push(t('eFrozen', { n: name(e.seat) }));
+    else if (e.event === 'forfeit') msgs.push(t('eLeft', { n: name(e.seat) }));
+    else {
+      const f = (e.fx || [])[0];
+      if (f) msgs.push(t({ bomb: 'eBomb', portal: 'ePortal', rocket: 'eRocket', ice: 'eIce', dice: 'eDice' }[f.item], { n: name(e.seat) }));
+      else if (e.event === 'capture') msgs.push(t('eCapture', { n: name(e.seat) }));
+    }
+  }
+  if (msgs.length) toast(msgs.slice(-2).join(' · '));
+}
+function renderBoard(was) {
+  show('board');
+  const me = G.me && G.me.joined ? G.me : null;
+  $('info').style.display = ''; $('info').textContent = MODE_ICON[G.mode || 'classic'] + ' ' + t(G.mode || 'classic');
+  $('bleave').style.display = me && G.status === 'playing' ? '' : 'none';
+  events(was);
+  buildBoard(); renderPlayers(); renderTokens(); renderCtl();
+  const mine = !!(me && G.status === 'playing' && G.turnSeat === me.seat);
+  if (mine && !prevTurnMine) post({ type: 'haptic' });
+  prevTurnMine = mine;
+}
+function render(was) {
+  if (G && G.status === 'playing') { if (modalKind === 'result') closeModal(); renderBoard(was); return; }
+  if (G && G.status === 'finished') {
+    if (closedResult === G.id) { G = null; renderLobby(); return; }
+    if (G.tokens && (was && was.id === G.id && was.status === 'playing' || $('board').classList.contains('on'))) renderBoard(was); else renderLobby();
+    if (modalKind !== 'result') showResult();
+    return;
+  }
+  if (G && G.status === 'cancelled') { if (was && was.id === G.id && was.status !== 'cancelled') toast(t('cancelled')); G = null; }
+  if (modalKind === 'result' && G) closeModal();
+  prevTurnMine = false; lastDice = null;
+  renderLobby();
+}
+setInterval(() => {
+  if (!G || G.status !== 'playing' || !turnEnd) return;
+  const b = document.querySelector('.pc.turn .bar2 i');
+  if (b) b.style.transform = 'scaleX(' + Math.max(0, Math.min(1, (turnEnd - performance.now()) / (G.turnMs || 30000))) + ')';
+}, 250);
+
+// ---------- olaylar ----------
+$('brules').addEventListener('click', showRules);
+$('bmin').addEventListener('click', () => post({ type: 'minimize' }));
+$('bleave').addEventListener('click', () => { if (!G) return; const gid = G.id; confirmBox(t('leaveQ'), t('leaveHint'), t('leave'), () => act(() => api('POST', '/api/games/' + gid + '/leave'))); });
+$('dice').addEventListener('click', rollDice);
+window.addEventListener('resize', () => { if (G && G.tokens && $('board').classList.contains('on')) { buildBoard(); renderTokens(); } });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') refresh(); });
+setInterval(() => { if (document.visibilityState === 'visible' && !busy) refresh(); }, 4000);
+
+(async () => {
+  $('loadmsg').textContent = t('loading');
+  if (!window.TRLive) { $('load').querySelector('.spin').remove(); $('loadmsg').textContent = t('appOnly'); return; }
+  await refresh();
+  $('load').className = 'off';
+  post({ type: 'ready' });
+})();
+})();
+</script>
+</body></html>
