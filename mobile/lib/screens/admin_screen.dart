@@ -1,3 +1,4 @@
+import 'admin_media_budget_screen.dart';
 import 'dart:io' show File;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -354,6 +355,11 @@ class _CatalogListPageState extends State<CatalogListPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Katalog önizleme'), actions: [
+        IconButton(
+          tooltip: 'Medya bütçesi: dosya boyut sınırları',
+          icon: const Icon(Icons.compress),
+          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminMediaBudgetScreen())),
+        ),
         IconButton(
           tooltip: 'Küçük resmi olmayan hediyelere otomatik küçük resim',
           icon: const Icon(Icons.auto_fix_high),

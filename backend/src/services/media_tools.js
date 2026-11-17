@@ -16,7 +16,7 @@ const GIFT = [540, 960];
 const FRAME = [360, 360];
 const MAX_FPS = 20;
 
-function run(cmd, args, { input = null, timeoutMs = 240000 } = {}) {
+export function run(cmd, args, { input = null, timeoutMs = 240000 } = {}) {
   return new Promise((resolve, reject) => {
     let p;
     try {
@@ -54,7 +54,7 @@ export async function ffmpegAvailable() {
   return available;
 }
 
-async function withTemp(buf, ext, fn) {
+export async function withTemp(buf, ext, fn) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'trmedia-'));
   const file = path.join(dir, `in.${ext}`);
   try {
@@ -65,7 +65,7 @@ async function withTemp(buf, ext, fn) {
   }
 }
 
-async function probe(file) {
+export async function probe(file) {
   const out = await run('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries',
     'stream=width,height,r_frame_rate:format=duration', '-of', 'json', file], { timeoutMs: 30000 });
   const j = JSON.parse(out.toString());
@@ -190,10 +190,14 @@ async function iconFromPlain(file, info) {
  */
 // Aynı anda tek video işlenir (sunucuda ses sunucusu da çalışıyor; işlemciyi boğmasın).
 let chain = Promise.resolve();
-export function prepareMp4(buf, alpha = 'auto', opts = {}) {
-  const p = chain.then(() => prepare(buf, alpha, opts));
+/** Ağır medya işlerini (ffmpeg) sırayla çalıştırır. Medya bütçesi de aynı sırayı kullanır. */
+export function heavy(fn) {
+  const p = chain.then(fn);
   chain = p.catch(() => {});
   return p;
+}
+export function prepareMp4(buf, alpha = 'auto', opts = {}) {
+  return heavy(() => prepare(buf, alpha, opts));
 }
 
 async function prepare(buf, alpha, { frame = false, iconOnly = false } = {}) {

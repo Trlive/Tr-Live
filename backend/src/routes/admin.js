@@ -7,6 +7,7 @@ import { USERNAME_RE, normalizePhone } from './auth.js';
 import { supportMayCall, banEnd, mayActOnUser } from '../staff_logic.js';
 import { fail, uuid, bigAmount, positiveInt, text, oneOf, httpsUrl, assetUrl } from '../http.js';
 import { prepareMp4 } from '../services/media_tools.js';
+import * as budget from '../services/media_budget.js';
 import { applyPackZip, packStatus } from '../asset_packs.js';
 import { SERVER_VERSION } from './system.js';
 import { validateAgencyConfig } from '../agency_config.js';
@@ -759,11 +760,23 @@ router.post('/media', requireSuperAdmin, express.raw({ type: () => true, limit: 
       note = r.injected ? 'Şeffaflık ayarı eklendi.' : 'Dosyada şeffaflık ayarı zaten vardı.';
     }
   }
+  // Medya bütçesi: sınırı aşan dosya otomatik sınıra indirilir (ayar kapatılabilir).
+  let budgetMeta = null;
+  if (['mp4', 'svga', 'json', 'png', 'jpg', 'webp', 'gif'].includes(d.kind) && req.query.purpose !== 'auto_icon') {
+    try {
+      const cls = req.query.purpose === 'frame' || req.query.purpose === 'seat' ? 'small' : req.query.purpose === 'icon' ? 'icon' : 'gift';
+      const fit = await budget.fitOnUpload(data, d.kind, cls);
+      data = fit.buf; budgetMeta = fit.meta;
+      if (fit.note) note = note ? `${note} ${fit.note}` : fit.note;
+    } catch (e) {
+      console.error('Medya bütçesi uygulanamadı:', e.message);
+    }
+  }
   const save = (kind, mime, ext, bytes, meta) => query(
     `INSERT INTO media_files(kind, mime, ext, size_bytes, data, meta, created_by) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
     [kind, mime, ext, bytes.length, bytes, JSON.stringify(meta ?? {}), req.user.id],
   );
-  const ins = await save(d.kind, mimeFor(d.ext), d.ext, data, d.meta);
+  const ins = await save(d.kind, mimeFor(d.ext), d.ext, data, budgetMeta ? { ...(d.meta ?? {}), budget: budgetMeta } : d.meta);
   const url = `/media/${ins.rows[0].id}.${d.ext}`;
   // Küçük resim (hediye ikonu): videodan otomatik; görsel dosyalarda dosyanın kendisi.
   let iconUrl = null;
@@ -771,6 +784,37 @@ router.post('/media', requireSuperAdmin, express.raw({ type: () => true, limit: 
   else if (['png', 'jpg', 'webp', 'gif'].includes(d.kind)) iconUrl = url;
   const format = { mp4: 'mp4', svga: 'svga', json: 'lottie', webp: 'webp', gif: 'gif', png: 'png', jpg: 'png' }[d.kind];
   res.status(201).json({ url, kind: d.kind, format, size: data.length, note, iconUrl });
+});
+// Medya bütçesi: dosya boyutu / çözünürlük sınırları, otomatik küçültme, geri alma, sınır dışı hediyeler.
+router.get('/media-budget', requireSuperAdmin, async (_req, res) => {
+  res.json(await budget.status());
+});
+// Sıradaki dosyayı denetler / küçültür (her çağrıda bir dosya; uygulama "left" bitene kadar tekrar çağırır).
+router.post('/media-budget/run', requireSuperAdmin, async (req, res) => {
+  const r = await budget.runNext(req.user.id);
+  if (r.result?.changed) await auditStaff({ query }, req.user.id, null, 'media_budget_fix', { id: r.result.id, newId: r.result.newId, before: r.result.beforeBytes, after: r.result.afterBytes });
+  res.json(r);
+});
+router.post('/media-budget/optimize/:id', requireSuperAdmin, async (req, res) => {
+  const r = await budget.runOne(String(req.params.id), req.user.id);
+  if (r.changed) await auditStaff({ query }, req.user.id, null, 'media_budget_fix', { id: r.id, newId: r.newId, before: r.beforeBytes, after: r.afterBytes });
+  res.json(r);
+});
+router.post('/media-budget/revert/:id', requireSuperAdmin, async (req, res) => {
+  const r = await budget.revert(String(req.params.id));
+  await auditStaff({ query }, req.user.id, null, 'media_budget_revert', { id: String(req.params.id), restored: r.restored });
+  res.json({ ok: true, ...r });
+});
+router.post('/media-budget/exempt', requireSuperAdmin, async (req, res) => {
+  const giftId = uuid(req.body?.giftId, 'Hediye');
+  await budget.setExempt(giftId, req.body?.exempt === true);
+  await auditStaff({ query }, req.user.id, null, 'media_budget_exempt', { giftId, exempt: req.body?.exempt === true });
+  res.json({ ok: true });
+});
+router.post('/media-budget/cleanup', requireSuperAdmin, async (req, res) => {
+  const r = await budget.cleanup();
+  await auditStaff({ query }, req.user.id, null, 'media_budget_cleanup', r);
+  res.json({ ok: true, ...r });
 });
 // İkon verilmediyse animasyondan otomatik: görsel dosyada kendisi, yüklenmiş mp4'te ortalardaki kare.
 async function autoIcon(animationUrl, userId) {

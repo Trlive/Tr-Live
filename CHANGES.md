@@ -1,3 +1,32 @@
+## v2.112.0 — Medya bütçesi: hediye dosyalarına üst sınır ve otomatik küçültme
+Hediye / çerçeve / efekt dosyalarının telefonu zorlamaması için boyut ve çözünürlük sınırları. Belleği dolduran şey
+dosya boyutundan çok dosyanın AÇILINCA kaplayacağı yerdir (svga içindeki görsellerin piksel sayısı, mp4 çözünürlüğü),
+bu yüzden sınırlar piksel ve kare hızı üzerinden de konur.
+
+**Varsayılan sınırlar (yönetim panelinden değişir)**
+- mp4 (şeffaf / VAP): görüntü 540x960'ı, 24 kare/sn'yi ve 6 MB'ı geçmez. Çerçeve ve mikte oynayan hediyelerde 480 px.
+- svga: dosya 10 MB, içindeki görseller en uzun kenar 720 px, açılınca en çok 48 MB bellek.
+- webp / gif / png: en uzun kenar 720 px, 3 MB. Hediye küçük resmi 512 px.
+
+**Nasıl çalışır**
+- Yüklemede: sınırı aşan dosya otomatik sınıra indirilir (ayardan kapatılabilir).
+- Mevcut dosyalar: Yönetim panelinde "Medya bütçesi" ekranından "Hepsini kontrol et ve sınıra indir" ile. Sunucu
+  her seferde bir dosya işler, ilerleme gösterilir. Ayar değişirse dosyalar yeni sınıra göre yeniden denetlenir.
+- mp4: renk ve şeffaflık yarıları ayrı ayrı küçültülür (düzen ve şeffaflık korunur), kare hızı sınırlanır, boyut
+  sınırı için kalite kademeli düşürülür; çıktı süre, çözünürlük ve çözülebilirlik açısından doğrulanır.
+- svga: içindeki görseller kendi oranıyla küçültülür (şeffaf kenarlarda koyu halka olmasın diye renk şeffaflıkla
+  çarpılmış halde); ses ve diğer alanlar aynen kalır. Toplam bellek sınırı aşılırsa hepsi aynı oranda küçülür.
+- webp / gif / png / jpg küçültülür; hareketli dosyada hareket kaybolursa ya da çıktı daha kötüyse orijinal korunur.
+- Özel şeffaflık düzenli mp4, Lottie ve ffmpeg'in okuyamadığı dosyalar otomatik değişmez; "Elle çözülmeli" diye
+  nedeniyle listelenir.
+- Küçültülen dosya yeni adresle kaydedilir (telefonlar hafif dosyayı indirir); hediye / çerçeve / ürün adresleri
+  otomatik çevrilir. Orijinal yedek kalır: dosya başına "Geri al" ve toplu "Yedekleri temizle".
+- Hediye bazında "Sınır dışı" anahtarı: işaretli hediyelerin dosyasına dokunulmaz (kral, kraliçe, çift hediyeleri gibi).
+
+**Teknik:** migration 078 (`gifts.budget_exempt`), `services/media_optimize.js` (analiz + küçültme),
+`services/media_budget.js` (adres çevirme, geri alma, temizlik), `/api/admin/media-budget*` rotaları, yeni ayarlar
+`media*`. Testler: `test/media_budget.test.js` (ffmpeg yoksa atlanır).
+
 ## v2.111.0 — Hediye yağmurunda çökme ve donma düzeltmesi
 Çok hediye atılınca uygulamanın "TR Live durdu" diye kapanması. Bu kapanma bir Dart hatası değil, telefonun
 belleği / video çözücüleri tükenince Android'in uygulamayı kapatmasıydı; bu yüzden hata kayıtlarına düşmüyordu.

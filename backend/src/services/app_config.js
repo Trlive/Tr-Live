@@ -70,6 +70,20 @@ export const CONFIG_DEFAULTS = Object.freeze({
   // GEÇİCİ değer: bayi liste fiyatına (100 Coin ≈ 1 TL, 1 dolar ≈ 40 TL) göre, bayi kuruyla aynı seçildi; panelden ayarlanır.
   usdCoinsPerUsd: 4000,
   usdExchangeMinCents: 100,
+  // Medya bütçesi: hediye / çerçeve / efekt dosyalarının üst sınırları. Telefonun belleği ve video çözücüsü sınırlı;
+  // sınırı aşan dosya yüklenirken (ve "Medya bütçesi" ekranından mevcutlarda) otomatik olarak bu sınıra indirilir.
+  mediaBudgetAuto: true, // yüklenen dosyayı otomatik sınıra indir
+  mediaMp4MaxWidth: 540, // mp4: görüntü (renk) kısmının en büyük genişliği; dosya yan yana şeffaflık içerir, toplam genişlik 2 katıdır
+  mediaMp4MaxHeight: 960, // mp4: en büyük yükseklik
+  mediaMp4MaxFps: 24, // mp4: en çok kare/sn
+  mediaMp4MaxKb: 6144, // mp4: en büyük dosya boyutu (KB)
+  mediaSvgaMaxKb: 10240, // svga: en büyük dosya boyutu (KB)
+  mediaSvgaMaxSide: 720, // svga: içindeki görsellerin en uzun kenarı (px)
+  mediaSvgaMaxDecodedMb: 48, // svga: görseller açılınca kaplayacağı bellek (MB)
+  mediaImageMaxSide: 720, // webp / gif / png: en uzun kenar (px)
+  mediaImageMaxKb: 3072, // webp / gif / png: en büyük dosya boyutu (KB)
+  mediaSmallMaxSide: 480, // çerçeve ve mikte oynayan hediyeler: en uzun kenar (px; mp4'te görüntü kısmı)
+  mediaIconMaxSide: 512, // hediye küçük resmi: en uzun kenar (px)
 });
 
 /** Yönetim paneline giden ayarlarda SMTP şifresi gösterilmez; bu değer geri gelirse şifre değiştirilmez. */
@@ -148,6 +162,9 @@ export function validateConfigPatch(body) {
         flyTextCoins: [0, 1000000], checkinItemDays: [1, 90], smtpPort: [1, 65535],
         usdWithdrawMinCents: [100, 100000000], usdDealerMinCents: [100, 100000000], usdDealerCoinsPerUsd: [1, 100000000],
         usdCoinsPerUsd: [1, 100000000], usdExchangeMinCents: [1, 100000000],
+        mediaMp4MaxWidth: [180, 1080], mediaMp4MaxHeight: [180, 1920], mediaMp4MaxFps: [10, 30], mediaMp4MaxKb: [256, 40960],
+        mediaSvgaMaxKb: [256, 40960], mediaSvgaMaxSide: [128, 2048], mediaSvgaMaxDecodedMb: [8, 256],
+        mediaImageMaxSide: [128, 2048], mediaImageMaxKb: [64, 20480], mediaSmallMaxSide: [128, 1024], mediaIconMaxSide: [64, 1024],
       }[k];
       if (!limits) throw fail(`${k} için sınır tanımlı değil.`);
       if (!Number.isInteger(v) || v < limits[0] || v > limits[1]) throw fail(`${k} ${limits[0]}-${limits[1]} arasında tam sayı olmalı.`);

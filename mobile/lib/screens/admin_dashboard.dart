@@ -12,6 +12,7 @@ import 'admin_room_themes_screen.dart';
 import 'admin_screenshots_screen.dart';
 import 'admin_checkin_screen.dart';
 import 'admin_lucky_pools_screen.dart';
+import 'admin_media_budget_screen.dart';
 
 String _dt(dynamic iso) {
   final d = DateTime.tryParse((iso ?? '').toString())?.toLocal();
@@ -806,6 +807,12 @@ class _AppConfigScreenState extends State<AppConfigScreen> {
                     onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminUsdScreen())),
                     icon: const Icon(Icons.account_balance_wallet_outlined),
                     label: const Text('Fasulye cüzdanı: çekim talepleri ve ayarlar'),
+                  ),
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminMediaBudgetScreen())),
+                    icon: const Icon(Icons.compress),
+                    label: const Text('Medya bütçesi: hediye dosyası boyut sınırları'),
                   ),
                   const SizedBox(height: Gap.s),
                   FilledButton.icon(
