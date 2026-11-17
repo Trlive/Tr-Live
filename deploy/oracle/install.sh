@@ -172,6 +172,11 @@ $HOSTS {
   handle /panel* {
     reverse_proxy 127.0.0.1:8090
   }
+  # Yönetim / ajans paneli (adminler, ajans sahipleri, bayiler linkle girer) ve tanıtım sitesi.
+  @web path /yonetim /yonetim/* / /index.html /privacy.html /terms.html /kvkk.html /community.html /child-safety.html /contact.html /assets/*
+  handle @web {
+    reverse_proxy 127.0.0.1:8091
+  }
   handle {
     reverse_proxy 127.0.0.1:3000
   }

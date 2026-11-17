@@ -11,7 +11,6 @@ import '../widgets/app_theme.dart';
 import '../widgets/common.dart';
 import '../widgets/id_badge.dart';
 import '../widgets/cp_widgets.dart';
-import 'admin_screen.dart';
 import 'agency_screen.dart';
 import 'agency_center.dart';
 import 'dealer_screen.dart';
@@ -334,7 +333,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         row(Icons.shield_outlined, const Color(0xFFFF4FA8), tx('Koruyuculuğum'), () => _open(MyGuardianScreen(profileBuilder: (id) => UserProfileScreen(userId: id))), sub: tx('Koruyucuların ve koruduğun kişiler')),
         row(Icons.event_available, Pal.gold, tx('Günlük Giriş'), () => showCheckinDialog(context)),
         if (isDealer) row(Icons.store_mall_directory, Pal.cyan, tx('Bayi paneli'), () => _open(const DealerScreen())),
-        if (Session.isStaff) row(Icons.admin_panel_settings, Colors.redAccent, Session.isAdmin ? tx('Yönetim paneli') : tx('Yardımcı admin paneli'), () => _open(const AdminScreen())),
       ]),
     );
   }

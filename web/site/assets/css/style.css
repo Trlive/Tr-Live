@@ -1,0 +1,772 @@
+
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap');
+
+:root {
+  --bg: #08090c;
+  --panel: #111319;
+  --gold: #d7b56d;
+  --text: #f5f3ee;
+  --muted: #a7a7ad;
+  --line: #282a30;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.header {
+  height: 78px;
+  padding: 0 max(6vw, 22px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #ffffff10;
+  background: #08090cef;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  backdrop-filter: blur(14px);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  font: 800 18px Manrope, sans-serif;
+  letter-spacing: 1px;
+}
+
+.brand b,
+.mini-brand b,
+.screen-brand b {
+  color: var(--gold);
+}
+
+.brand-mark {
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--gold);
+  border-radius: 11px;
+  display: grid;
+  place-items: center;
+  color: var(--gold);
+}
+
+.nav {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  color: #d3d0ca;
+  font-size: 13px;
+}
+
+.nav a:hover,
+.footer-links a:hover {
+  color: var(--gold);
+}
+
+.lang-toggle,
+.menu-toggle {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--gold);
+  border-radius: 8px;
+  padding: 9px 12px;
+  cursor: pointer;
+}
+
+.menu-toggle {
+  display: none;
+}
+
+/* ANA SAYFA */
+
+.hero {
+  min-height: 610px;
+  padding: 65px 10vw 50px;
+  display: grid;
+  grid-template-columns: 1.1fr .9fr;
+  align-items: center;
+  gap: 35px;
+  overflow: hidden;
+  background: radial-gradient(
+    ellipse at 76% 50%,
+    #8d6b2b24,
+    transparent 42%
+  );
+}
+
+.eyebrow {
+  color: var(--gold);
+  letter-spacing: 3px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.hero h1,
+.section h2,
+.cta h2 {
+  font: 800 clamp(38px, 5vw, 64px)/1.12 Manrope, sans-serif;
+  letter-spacing: -2px;
+  margin: 18px 0;
+}
+
+.hero h1 span {
+  color: var(--gold);
+}
+
+.hero-copy > p:not(.eyebrow) {
+  color: var(--muted);
+  line-height: 1.8;
+  max-width: 490px;
+  font-size: 16px;
+  margin: 0 0 30px;
+}
+
+.gold-button {
+  display: inline-block;
+  background: linear-gradient(110deg, #b38b42, #f0d99e);
+  color: #17130b;
+  padding: 14px 23px;
+  border-radius: 8px;
+  font-weight: 800;
+  font-size: 13px;
+  box-shadow: 0 8px 28px #d7b56d22;
+}
+
+/* TELEFON GÖRSELLERİ */
+
+.hero-art {
+  height: 485px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.glow {
+  position: absolute;
+  width: 340px;
+  height: 340px;
+  background: #d4a94b24;
+  filter: blur(75px);
+  border-radius: 50%;
+}
+
+.hero-phone {
+  position: absolute;
+  width: 218px;
+  height: 438px;
+  padding: 8px;
+  border: 1px solid #686868;
+  border-radius: 34px;
+  background: #17191e;
+  box-shadow: 0 28px 70px #000;
+}
+
+.front {
+  z-index: 2;
+  transform: translateX(28px) rotate(5deg);
+}
+
+.rear {
+  transform: translate(-100px, 12px) rotate(-12deg);
+  opacity: .82;
+}
+
+.hero-screen {
+  height: 100%;
+  border-radius: 27px;
+  background: linear-gradient(160deg, #211d18, #090a0e 55%);
+  padding: 15px;
+  overflow: hidden;
+  position: relative;
+}
+
+.status {
+  font-size: 8px;
+  display: flex;
+  justify-content: space-between;
+  color: #ddd;
+}
+
+.mini-brand,
+.screen-brand {
+  font: 800 16px Manrope, sans-serif;
+  margin-top: 24px;
+}
+
+.hero-message {
+  margin-top: 43px;
+  font-size: 18px;
+  line-height: 1.5;
+  letter-spacing: 2px;
+}
+
+.hero-message strong {
+  color: var(--gold);
+  font-size: 23px;
+}
+
+.avatar-row {
+  display: flex;
+  margin-top: 24px;
+}
+
+.avatar-row i,
+.screen-people i {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(140deg, #e8c77d, #5c4630);
+  border: 2px solid #17191e;
+  margin-right: -5px;
+}
+
+.hero-room {
+  height: 100px;
+  border-radius: 13px;
+  margin-top: 24px;
+  background: linear-gradient(130deg, #8c683a, #27201b 65%, #111);
+}
+
+.mock-nav {
+  position: absolute;
+  bottom: 14px;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-around;
+  color: var(--gold);
+}
+
+.rear-screen {
+  background: linear-gradient(145deg, #34291e, #090a0e);
+}
+
+.mini-circle {
+  width: 130px;
+  height: 130px;
+  border: 2px solid var(--gold);
+  border-radius: 50%;
+  margin: 55px auto 30px;
+  box-shadow: 0 0 30px #d7b56d55;
+}
+
+.mini-lines {
+  height: 80px;
+  border-radius: 12px;
+  background: repeating-linear-gradient(
+    to bottom,
+    #ffffff20 0 5px,
+    transparent 5px 22px
+  );
+}
+
+.live-chip {
+  position: absolute;
+  z-index: 3;
+  right: 2%;
+  top: 20%;
+  background: #1d1b16;
+  border: 1px solid #8c7041;
+  border-radius: 30px;
+  padding: 10px 15px;
+  font-size: 11px;
+  letter-spacing: 2px;
+}
+
+.live-chip b {
+  color: #e65f5f;
+}
+
+/* ÖZELLİKLER */
+
+.section {
+  padding: 95px 10vw;
+  text-align: center;
+}
+
+.section h2 {
+  font-size: clamp(30px, 4vw, 46px);
+  letter-spacing: -1.3px;
+}
+
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 17px;
+  margin-top: 48px;
+  text-align: left;
+}
+
+.feature-grid article {
+  background: linear-gradient(145deg, #15171d, #0d0e12);
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  padding: 25px 22px;
+  min-height: 190px;
+}
+
+.feature-icon {
+  color: var(--gold);
+  font-size: 27px;
+}
+
+.feature-grid h3 {
+  font: 700 17px Manrope, sans-serif;
+}
+
+.feature-grid p,
+.section-heading > p:last-child,
+.about > p:last-child {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+/* TELEFON EKRAN GEÇİŞ ALANI */
+
+.screens-section {
+  background: linear-gradient(
+    180deg,
+    #0b0c10,
+    #111116 55%,
+    #08090c
+  );
+}
+
+.showcase {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  margin: 35px auto 18px;
+}
+
+.device {
+  width: 260px;
+  height: 500px;
+  padding: 9px;
+  border: 1px solid #777;
+  border-radius: 38px;
+  background: #1a1b20;
+  box-shadow: 0 25px 70px #000;
+}
+
+.device-screen {
+  height: 100%;
+  border-radius: 29px;
+  overflow: hidden;
+  background: linear-gradient(160deg, #211d18, #090a0e);
+  position: relative;
+  padding: 14px;
+}
+
+.screen-content {
+  padding: 0 7px;
+  transition: opacity .25s;
+}
+
+.screen-kicker {
+  font-size: 9px;
+  color: var(--gold);
+  letter-spacing: 3px;
+  margin: 34px 0 9px;
+}
+
+.screen-content h3 {
+  font: 800 27px/1.15 Manrope, sans-serif;
+  margin: 0 0 22px;
+}
+
+.screen-card {
+  height: 155px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #8c683a, #30251d 65%, #171317);
+  padding: 17px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 5px;
+}
+
+.screen-people {
+  display: flex;
+  margin-bottom: 14px;
+}
+
+.screen-card small {
+  color: #e5d5b4;
+}
+
+.screen-lines {
+  margin-top: 20px;
+  display: grid;
+  gap: 10px;
+}
+
+.screen-lines i {
+  height: 10px;
+  border-radius: 8px;
+  background: #ffffff18;
+}
+
+.screen-lines i:nth-child(2) {
+  width: 80%;
+}
+
+.screen-lines i:nth-child(3) {
+  width: 60%;
+}
+
+.screen-bottom {
+  position: absolute;
+  bottom: 17px;
+  left: 12px;
+  right: 12px;
+  display: flex;
+  justify-content: space-around;
+  color: var(--gold);
+}
+
+.slide-arrow {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 1px solid #51452f;
+  background: #15130f;
+  color: var(--gold);
+  font-size: 28px;
+  cursor: pointer;
+}
+
+.slide-caption {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  color: #ddd;
+  font-size: 13px;
+}
+
+.dots {
+  display: flex;
+  gap: 8px;
+}
+
+.dot {
+  width: 7px;
+  height: 7px;
+  border: 0;
+  border-radius: 50%;
+  background: #555;
+  cursor: pointer;
+  padding: 0;
+}
+
+.dot.active {
+  width: 22px;
+  border-radius: 6px;
+  background: var(--gold);
+}
+
+/* HAKKIMIZDA VE ALT ALAN */
+
+.about {
+  max-width: 900px;
+  margin: auto;
+}
+
+.about > p:last-child {
+  max-width: 700px;
+  margin: 25px auto;
+}
+
+.cta {
+  text-align: center;
+  padding: 65px 20px;
+  background: radial-gradient(ellipse at center, #5b46231f, transparent 65%);
+  border-top: 1px solid var(--line);
+}
+
+.cta h2 {
+  font-size: clamp(27px, 4vw, 40px);
+}
+
+.cta p {
+  color: var(--muted);
+  margin-bottom: 25px;
+}
+
+.footer {
+  border-top: 1px solid var(--line);
+  padding: 35px 8vw;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.footer-links {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: #b8b6b1;
+}
+
+.footer small {
+  color: #777;
+  font-size: 11px;
+}
+
+/* YASAL SAYFALAR */
+
+.legal-wrap {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 70px 24px 90px;
+}
+
+.legal-wrap h1 {
+  font: 800 clamp(32px, 5vw, 48px) Manrope, sans-serif;
+  margin: 12px 0 8px;
+}
+
+.legal-wrap .updated {
+  color: #9a9a9f;
+  font-size: 12px;
+  margin-bottom: 35px;
+}
+
+.legal-wrap h2 {
+  font: 700 19px Manrope, sans-serif;
+  color: var(--gold);
+  margin: 30px 0 10px;
+}
+
+.legal-wrap p,
+.legal-wrap li {
+  color: #c4c2bd;
+  line-height: 1.8;
+  font-size: 14px;
+}
+
+.legal-wrap a {
+  color: var(--gold);
+  text-decoration: underline;
+}
+
+.legal-note {
+  border: 1px solid #51452f;
+  background: #15130f;
+  padding: 15px;
+  border-radius: 10px;
+  color: #d8c69e;
+  font-size: 13px;
+}
+
+/* MOBİL UYUMLULUK */
+
+@media (max-width: 800px) {
+  .header {
+    height: 68px;
+  }
+
+  .menu-toggle {
+    display: block;
+  }
+
+  .nav {
+    display: none;
+    position: absolute;
+    top: 68px;
+    left: 0;
+    right: 0;
+    background: #0d0e12;
+    padding: 22px;
+    flex-direction: column;
+    align-items: flex-start;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .nav.open {
+    display: flex;
+  }
+
+  .hero {
+    grid-template-columns: 1fr;
+    padding: 65px 8vw 20px;
+    text-align: center;
+  }
+
+  .hero-copy > p:not(.eyebrow) {
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .hero-art {
+    height: 440px;
+  }
+
+  .front {
+    transform: translateX(25px) rotate(4deg);
+  }
+
+  .rear {
+    transform: translate(-90px, 8px) rotate(-10deg);
+  }
+
+  .feature-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .section {
+    padding: 70px 7vw;
+  }
+
+  .footer {
+    justify-content: center;
+    text-align: center;
+    flex-direction: column;
+  }
+
+  .footer-links {
+    justify-content: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .hero h1 {
+    font-size: 42px;
+  }
+
+  .hero-art {
+    height: 410px;
+  }
+
+  .hero-phone {
+    width: 190px;
+    height: 385px;
+  }
+
+  .feature-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .showcase {
+    gap: 10px;
+  }
+
+  .device {
+    width: 230px;
+    height: 455px;
+  }
+
+  .slide-arrow {
+    width: 34px;
+    height: 34px;
+  }
+
+  .slide-caption {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .footer-links {
+    gap: 12px;
+  }
+}
+
+/* YASAL SAYFALAR: belge sekmeleri, listeler, doldurulacak alanlar */
+
+.legal-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 34px;
+}
+
+.legal-tabs a {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 7px 13px;
+  font-size: 12px;
+  color: #c9c6bf;
+  text-decoration: none;
+  transition: border-color .2s, color .2s, background .2s;
+}
+
+.legal-tabs a:hover {
+  border-color: #6b5a35;
+  color: var(--gold);
+}
+
+.legal-tabs a.active {
+  border-color: var(--gold);
+  background: #d7b56d1a;
+  color: var(--gold);
+  font-weight: 700;
+}
+
+.legal-wrap ul {
+  padding-left: 20px;
+  margin: 8px 0 14px;
+}
+
+.legal-wrap li {
+  margin-bottom: 6px;
+}
+
+.legal-wrap b {
+  color: #ece8df;
+}
+
+.legal-wrap h2 {
+  scroll-margin-top: 96px;
+}
+
+.legal-note {
+  line-height: 1.7;
+  margin-bottom: 8px;
+}
+
+/* Şirket bilgileri girilene kadar görünür işaret (yayından önce doldurulmalı). */
+.fill {
+  background: #3a2c10;
+  color: #ffd97a;
+  border: 1px dashed #b8903f;
+  border-radius: 5px;
+  padding: 0 5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+@media (max-width: 800px) {
+  .legal-wrap {
+    padding: 44px 18px 70px;
+  }
+
+  .legal-tabs a {
+    font-size: 11.5px;
+    padding: 6px 11px;
+  }
+}

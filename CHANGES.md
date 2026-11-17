@@ -1,3 +1,51 @@
+## v2.115.0 — Yönetim tamamen web panelinde; uygulamadan yönetim ekranları kaldırıldı
+- Uygulamadaki **Yönetim paneli / Yardımcı admin paneli** girişi ve tüm yönetim ekranları kaldırıldı (11 ekran).
+  Yönetim artık yalnızca `https://SUNUCU/yonetim/admin/login/` adresinden yapılır; yönetim değişiklikleri için
+  APK güncellemesi gerekmez. Oda içi moderasyon (çıkarma, susturma vb.) uygulamada kalır.
+- Yayıncılar kazanç ve yayın sürelerini, ajans sahipleri ajans ekranlarını, bayiler bayi ekranını uygulamada görmeye
+  devam eder; ajans sahipleri ve bayiler ayrıca web panelinden girebilir.
+- Web yönetim paneline eklenenler (v2.114.0'dakilere ek):
+  - **İçerik Yükle**: hediye (animasyon + küçük resim; mp4 şeffaflığı, otomatik küçük resim ve medya bütçesi
+    sunucuda), çerçeve, giriş efekti, mağaza ürünü, hazır paket zip'i, eksik küçük resimleri tamamlama.
+  - **Oda Temaları**: tema listesi (düzenle, aç / kapat, sil), yeni tema (görsel yükleme), özel tema onayları,
+    tema ve özel tema hakkı hediye etme.
+  - **Şanslı Havuzlar**: havuz durumları, havuza Coin ekleme, şanslı hediye ayarları.
+  - **Etkinlikler**: haftalık etkinlikler (aç / kapat, yıldız hediyesi, 1-2-3. sıra ödülleri, kurallar), resmi
+    etkinlikler ve yayıncı katılımı, günlük giriş ödülü.
+  - **Ekran Görüntüleri** ve **Sunucu** (sürüm, şimdi güncelle, kayıtlar, GitHub anahtarı).
+- Panelde tüm para işlemleri onay penceresiyle ve çift gönderime karşı işlem anahtarıyla yapılır.
+
+## v2.114.0 — Web paneli: bayi paneli ve uygulamadaki yönetim ekranlarının taşınması (1. kısım)
+- **Bayi paneli** (`/yonetim/dealer/login/`): Coin satışı (çift gönderim korumalı, onaylı), bakiye talebi (toptan
+  paket seçimi, taleplerim) ve aranabilir / süzülebilir hareket listesi.
+- **Yönetim → Bayiler**: bayi oluşturma (sahip hesabı seçerek), bakiye yükleme (mali kayda yazılır, çift gönderim
+  korumalı), ad değiştirme, bayiyi durdurma / açma, bayi hareketleri; bekleyen ve sonuçlanan bayi bakiye talepleri
+  (onay / ret, not). Sunucu: `POST /api/admin/dealers/:id/update`, `GET /api/admin/dealers/:id/transactions`.
+- **Yönetim → Fasulye Cüzdanı**: özet, bekleyen / ödenen / reddedilen / vazgeçilen çekim talepleri (ödendi, ret ve
+  iade), elle düzeltme (kullanıcı seçerek), Fasulye ayarları.
+- **Yönetim → Ayarlar → Ajans**: sesli ve görüntülü maaş tabloları artık webde düzenlenir (satır ekle / sil,
+  doğrulama, varsayılana dön) ve görüntülü yayın kuralları (ayrı hesap, günlük sınır, en kısa oturum, kesinti).
+- **Yönetim → Medya Bütçesi**: dosya listesi, toplu küçültme (ilerlemeli, durdurulabilir), tek dosya küçültme /
+  geri alma, yedek temizliği, sınır dışı hediyeler, üst sınırlar.
+- Yayıncılar kazançlarını ve yayın sürelerini uygulamada görmeye devam eder; ajans sahipleri hem uygulamada hem
+  ajans panelinde (yayıncı başına süre, geçerli gün, elmas, maaş; ajans primi).
+
+## v2.113.0 — Web paneli ve site sunucuya taşındı
+- **Yönetim / ajans paneli** artık sunucunun kendi adresinde: `https://SUNUCU/yonetim/`. Adminler ve ajans sahipleri
+  linkle girer (uygulamaya düğme eklenmedi). Eski Trlive-Web deposu `web/panel/` klasörüne, Trlive.github.io sitesi
+  `web/site/` klasörüne alındı; tek zip artık uygulamayı, sunucuyu ve paneli birlikte günceller.
+- Yeni `web` kabı (Oracle kurulumu): paneli derler (Next.js statik) ve siteyle birlikte yayınlar. Caddy `/yonetim*`,
+  `/` ve site sayfalarını bu kaba, geri kalan her şeyi uygulama sunucusuna yönlendirir.
+- Panel derlenemezse sunucu güncellemesi durmaz: "panel derlenemedi" sayfası görünür, uygulama sunucusu güncellenir.
+- Panel istekleri aynı adrese gider (`NEXT_PUBLIC_API_BASE_URL=same-origin`).
+- GitHub Pages'teki eski panel ve site, kapatılana kadar eskisi gibi çalışır. Yasal metin bağlantıları
+  (Play Store) şimdilik trlive.github.io'da kalır.
+
+## v2.112.1 — Uçtan uca test düzeltmesi
+- `dolar cüzdanı` uçtan uca testi: bayiye gönderilen Coin'in bayi stokuna ve bayi hareketlerine geçtiği artık
+  doğrudan veritabanından doğrulanır. `GET /api/dealer/me` yanıtı 200 değilse test düşmez, günlüğe UYARI yazar
+  (CI'da 404 döndü; kodda uç tanımlı, nedeni araştırılıyor). Uygulama kodunda değişiklik yok.
+
 ## v2.112.0 — Medya bütçesi: hediye dosyalarına üst sınır ve otomatik küçültme
 Hediye / çerçeve / efekt dosyalarının telefonu zorlamaması için boyut ve çözünürlük sınırları. Belleği dolduran şey
 dosya boyutundan çok dosyanın AÇILINCA kaplayacağı yerdir (svga içindeki görsellerin piksel sayısı, mp4 çözünürlüğü),

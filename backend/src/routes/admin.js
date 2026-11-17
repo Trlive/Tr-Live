@@ -1029,7 +1029,7 @@ router.post('/dealers', requireSuperAdmin, async (req, res) => {
   res.status(201).json({ dealer: r.rows[0] });
 });
 
-router.post('/dealers/:dealerId/coins', requireSuperAdmin, async (req, res) => {
+router.post('/dealers/:dealerId/coins', requireSuperAdmin, idempotent('dealer_credit'), async (req, res) => {
   const dealerId = uuid(req.params.dealerId, 'Bayi');
   const amount = bigAmount(req.body?.amount, 'Bayi Coin miktarı');
   const result = await tx(async (c) => {
@@ -1050,6 +1050,37 @@ router.post('/dealers/:dealerId/coins', requireSuperAdmin, async (req, res) => {
     return { balance: balance.toString() };
   });
   res.json(result);
+});
+
+// Bayi adını değiştir / bayiyi durdur-aç (pasif bayi satış yapamaz, panelden giremez; bakiyesi korunur).
+router.post('/dealers/:dealerId/update', requireSuperAdmin, async (req, res) => {
+  const dealerId = uuid(req.params.dealerId, 'Bayi');
+  const name = req.body?.name === undefined ? null : text(req.body.name, 'Bayi adı', { min: 2, max: 100, required: true });
+  const active = typeof req.body?.isActive === 'boolean' ? req.body.isActive : null;
+  const r = await query(
+    `UPDATE dealer_accounts SET name = COALESCE($2, name), is_active = COALESCE($3, is_active) WHERE id = $1 RETURNING id, name, is_active`,
+    [dealerId, name, active],
+  );
+  if (!r.rowCount) throw fail('Bayi bulunamadı.', 404);
+  await auditStaff({ query }, req.user.id, null, 'dealer_update', { dealerId, name, isActive: active });
+  res.json({ dealer: { id: r.rows[0].id, name: r.rows[0].name, isActive: r.rows[0].is_active } });
+});
+
+// Bayinin hareketleri (sayfalı).
+router.get('/dealers/:dealerId/transactions', requireSuperAdmin, async (req, res) => {
+  const dealerId = uuid(req.params.dealerId, 'Bayi');
+  const before = req.query.before ? new Date(String(req.query.before)) : null;
+  if (before && Number.isNaN(before.getTime())) throw fail('Tarih geçersiz.');
+  const r = await query(
+    `SELECT t.id, t.type, t.coin_amount, t.description, t.created_at, u.username, a.username AS admin_username
+       FROM dealer_transactions t LEFT JOIN users u ON u.id = t.user_id LEFT JOIN users a ON a.id = t.admin_id
+      WHERE t.dealer_id = $1 AND ($2::timestamptz IS NULL OR t.created_at < $2) ORDER BY t.created_at DESC LIMIT 100`,
+    [dealerId, before ? before.toISOString() : null],
+  );
+  res.json({ transactions: r.rows.map((t) => ({
+    id: t.id, type: t.type, coinAmount: String(t.coin_amount), description: t.description, username: t.username,
+    adminUsername: t.admin_username, createdAt: t.created_at,
+  })) });
 });
 
 router.post('/dealers/:dealerId/sell', requireSuperAdmin, async (req, res) => {

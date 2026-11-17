@@ -1,0 +1,29 @@
+# Web kabı: yalnızca sunucunun kendi Caddy'sinden (127.0.0.1:8091) istek alır; HTTPS dıştaki Caddy'dedir.
+{
+  admin off
+  auto_https off
+}
+:8091 {
+  encode gzip
+  header {
+    X-Content-Type-Options nosniff
+    Referrer-Policy strict-origin-when-cross-origin
+    X-Frame-Options SAMEORIGIN
+  }
+  handle /yonetim* {
+    root * /srv
+    @static path /yonetim/_next/static/*
+    @page not path /yonetim/_next/static/*
+    header @static Cache-Control "public, max-age=31536000, immutable"
+    header @page Cache-Control "no-cache"
+    header X-Robots-Tag "noindex, nofollow"
+    try_files {path} {path}/index.html /yonetim/index.html
+    file_server
+  }
+  handle {
+    root * /srv/site
+    header Cache-Control "public, max-age=600"
+    try_files {path} {path}.html {path}/index.html
+    file_server
+  }
+}

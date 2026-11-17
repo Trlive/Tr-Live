@@ -1,4 +1,4 @@
-# TR Live tek sunucu: PostgreSQL + uygulama sunucusu + LiveKit + Caddy (HTTPS) + yönetim paneli.
+# TR Live tek sunucu: PostgreSQL + uygulama sunucusu + LiveKit + Caddy (HTTPS) + sunucu paneli + web (yönetim paneli, site).
 # install.sh tarafından /opt/trlive/env altındaki ayarlarla çalıştırılır; elle düzenlemeye gerek yok.
 services:
   postgres:
@@ -55,6 +55,14 @@ services:
     volumes:
       - /opt/trlive/env:/data/env
       - /opt/trlive/state:/data/state
+    networks: [internal]
+
+  # Web: yönetim / ajans paneli (/yonetim) ve tanıtım sitesi (/). Statik dosyalar; veritabanına erişmez.
+  web:
+    build: ../../web
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8091:8091"
     networks: [internal]
 
   # Medya (UDP) için host ağı en sorunsuz yöntem.
