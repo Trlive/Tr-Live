@@ -7,99 +7,134 @@
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none}
 html,body{margin:0;height:100%;overflow:hidden;background:#0b0906;color:#f6efdf;font:14px system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:pointer}
-:root{--gold:#f2b92a;--gold2:#ffd54f;--line:#4d3c1c;--surf:#17130c;--surf2:#221b10;--dim:#b3a584;--r:#e5483d;--y:#f2b92a;--g:#2fbf71;--b:#3d8bfd;--cw:52px}
-#app{position:absolute;inset:0;display:flex;flex-direction:column;background:radial-gradient(120% 80% at 50% 38%,#2a2010 0%,#15100a 55%,#0b0906 100%)}
+:root{--gold:#f2b92a;--gold2:#ffd54f;--line:#4d3c1c;--surf:#17130c;--surf2:#221b10;--dim:#b3a584}
+#app{position:absolute;inset:0;display:flex;flex-direction:column;overflow:hidden;background:radial-gradient(130% 70% at 50% 30%,#33260f 0%,#17110a 52%,#0b0906 100%)}
+#app::before{content:"";position:absolute;inset:0;pointer-events:none;background-image:radial-gradient(1.6px 1.6px at 12% 14%,#fff9 50%,#0000 52%),radial-gradient(1px 1px at 78% 9%,#fff7 50%,#0000 52%),radial-gradient(1.6px 1.6px at 40% 72%,#ffe9a899 50%,#0000 52%),radial-gradient(1px 1px at 90% 58%,#fff6 50%,#0000 52%),radial-gradient(1px 1px at 22% 90%,#fff6 50%,#0000 52%),radial-gradient(1.6px 1.6px at 64% 38%,#ffe9a877 50%,#0000 52%),radial-gradient(1px 1px at 52% 6%,#fff6 50%,#0000 52%);animation:tw 3.6s ease-in-out infinite alternate}
+@keyframes tw{from{opacity:.45}to{opacity:1}}
+#app>*{position:relative}
 .scr{display:none;flex:1;min-height:0;flex-direction:column}.scr.on{display:flex}
 /* ---------- üst çubuk ---------- */
-.bar{height:38px;flex:none;display:flex;align-items:center;gap:8px;padding:0 10px}
-.chip{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 9px;border-radius:12px;background:rgba(0,0,0,.35);border:1px solid var(--line);font-size:12px;color:var(--dim);font-variant-numeric:tabular-nums}
-.chip.hot{color:#1c1405;background:var(--gold);border-color:var(--gold)}
+.bar{height:36px;flex:none;display:flex;align-items:center;gap:8px;padding:0 10px}
+.chip{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 10px;border-radius:12px;background:linear-gradient(180deg,rgba(255,213,79,.16),rgba(0,0,0,.4));border:1px solid var(--line);font-size:12px;font-weight:700;color:var(--gold2)}
 .sp{flex:1}
-.ib{width:30px;height:30px;border-radius:50%;background:rgba(0,0,0,.4);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;color:var(--gold2)}
+.ib{width:30px;height:30px;border-radius:50%;background:rgba(0,0,0,.45);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;color:var(--gold2)}
 .ib svg{width:16px;height:16px}
 .ib:active{background:var(--surf2)}
 /* ---------- bekleme ---------- */
 #lobby{align-items:center;padding:0 16px 14px;text-align:center;overflow-y:auto}
-.logoimg{width:88px;height:88px;flex:none;margin-top:2px;filter:drop-shadow(0 4px 10px rgba(0,0,0,.5))}
-.logo{font-weight:900;font-size:30px;letter-spacing:5px;line-height:1;margin:6px 0 2px;background:linear-gradient(180deg,#fff0b3,#f2b92a 55%,#b9770a);-webkit-background-clip:text;background-clip:text;color:transparent;text-shadow:0 2px 10px rgba(242,185,42,.25)}
+.logoimg{width:84px;height:84px;flex:none;margin-top:0;filter:drop-shadow(0 4px 12px rgba(0,0,0,.6));animation:float 3.4s ease-in-out infinite}
+@keyframes float{50%{transform:translateY(-5px) rotate(-2deg)}}
+.logo{font-weight:900;font-size:30px;letter-spacing:6px;line-height:1;margin:6px 0 2px;background:linear-gradient(180deg,#fff0b3,#f2b92a 55%,#b9770a);-webkit-background-clip:text;background-clip:text;color:transparent}
 .logo small{display:block;font-size:10px;letter-spacing:3px;color:var(--dim);-webkit-text-fill-color:var(--dim);font-weight:600;margin-top:4px}
-#lmsg{font-size:15px;font-weight:700;margin:12px 0 2px}
+#lmsg{font-size:15px;font-weight:700;margin:10px 0 2px}
 #lcount{color:var(--gold2);font-size:13px;min-height:18px}
-#lplayers{display:flex;flex-wrap:wrap;justify-content:center;gap:10px 8px;margin:12px 0;min-height:66px;max-width:420px}
-.lp{width:58px;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;color:var(--dim)}
-.lp span{max-width:58px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.slots{display:flex;justify-content:center;gap:10px;margin:12px 0;max-width:420px}
+.slot{width:64px;display:flex;flex-direction:column;align-items:center;gap:4px;font-size:11px;color:var(--dim)}
+.slot .av{width:54px;height:54px;font-size:21px;border:3px solid var(--c);box-shadow:0 0 12px -2px var(--c)}
+.slot.empty .av{background:rgba(255,255,255,.04);border:2px dashed rgba(255,255,255,.25);box-shadow:none;color:rgba(255,255,255,.35);animation:blink 1.6s ease-in-out infinite}
+.slot span{max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@keyframes blink{50%{opacity:.45}}
 .btns{display:flex;gap:10px;width:100%;max-width:420px;margin-top:auto}
-.btn{flex:1;height:44px;border-radius:22px;font-weight:800;font-size:15px;background:linear-gradient(180deg,#ffd54f,#f2b92a);color:#1c1405;display:flex;align-items:center;justify-content:center;padding:0 12px}
-.btn.alt{background:var(--surf2);color:#f6efdf;border:1px solid var(--line)}
-.btn.red{background:#3a1512;color:#ff9b93;border:1px solid #6b2a24}
+.btn{flex:1;height:46px;border-radius:23px;font-weight:800;font-size:15px;background:linear-gradient(180deg,#ffe27a,#f2b92a 55%,#c98a08);color:#1c1405;display:flex;align-items:center;justify-content:center;padding:0 12px;box-shadow:0 3px 0 #8a5a05,0 6px 14px rgba(0,0,0,.45)}
+.btn.alt{background:var(--surf2);color:#f6efdf;border:1px solid var(--line);box-shadow:0 3px 0 #0b0906}
+.btn.red{background:#3a1512;color:#ff9b93;border:1px solid #6b2a24;box-shadow:none}
 .btn:disabled{opacity:.4}
-.btn:active:not(:disabled){transform:scale(.97)}
+.btn:active:not(:disabled){transform:translateY(2px);box-shadow:0 1px 0 #8a5a05}
 .link{margin-top:10px;color:var(--dim);font-size:12px;text-decoration:underline;padding:4px 8px}
 /* ---------- avatar ---------- */
 .av{position:relative;width:44px;height:44px;border-radius:50%;background:#3a2c12;border:2px solid var(--line);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:18px;color:var(--gold2);flex:none}
 .av img{position:absolute;inset:0;width:100%;height:100%;border-radius:50%;object-fit:cover}
-/* ---------- ludo ---------- */
-.modes{display:flex;flex-direction:column;gap:8px;width:100%;max-width:420px;margin:10px 0}
-.mode{display:flex;align-items:center;gap:10px;text-align:start;padding:10px 12px;border-radius:14px;background:var(--surf);border:1.5px solid var(--line)}
-.mode.on{border-color:var(--gold);background:var(--surf2);box-shadow:0 0 12px -4px var(--gold)}
-.mode i{font-style:normal;font-size:24px;width:34px;text-align:center}
+/* ---------- modlar ---------- */
+.modes{display:flex;flex-direction:column;gap:8px;width:100%;max-width:420px;margin:8px 0}
+.mode{display:flex;align-items:center;gap:10px;text-align:start;padding:10px 12px;border-radius:16px;background:linear-gradient(135deg,#1d160b,#120e07);border:1.5px solid var(--line);transition:transform .15s}
+.mode:active{transform:scale(.98)}
+.mode.on{border-color:var(--gold);background:linear-gradient(135deg,#33260f,#17110a);box-shadow:0 0 16px -4px var(--gold)}
+.mode i{font-style:normal;font-size:24px;width:40px;height:40px;border-radius:12px;background:radial-gradient(circle at 35% 30%,#4a3814,#1d1509);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;flex:none}
 .mode b{display:block;font-size:14px}.mode small{color:var(--dim);font-size:11.5px;line-height:1.3}
+/* ---------- oyun ---------- */
 #board{align-items:center}
-#pl{flex:none;display:flex;justify-content:center;gap:6px;padding:2px 6px 6px;width:100%}
-.pc{flex:1;max-width:96px;min-width:0;display:flex;flex-direction:column;align-items:center;gap:2px;padding:3px 2px;border-radius:12px;border:1.5px solid transparent;position:relative}
-.pc .av{width:36px;height:36px;font-size:15px;border-width:3px}
-.pc .nm{max-width:100%;font-size:10.5px;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.pc.turn{border-color:var(--gold);background:rgba(242,185,42,.10)}.pc.turn .nm{color:var(--gold2);font-weight:700}
-.pc .bar2{width:80%;height:3px;border-radius:2px;background:rgba(255,255,255,.12);overflow:hidden;visibility:hidden}
-.pc.turn .bar2{visibility:visible}.pc .bar2 i{display:block;height:100%;width:100%;background:var(--gold2);transform-origin:left}
-[dir=rtl] .pc .bar2 i{transform-origin:right}
-.pc .bd{position:absolute;right:4px;top:0;font-size:13px}
-.pc .kl{font-size:9.5px;color:var(--dim)}
-.s0{--c:#e5483d;--d:#8f1f17}.s1{--c:#2fbf71;--d:#136b3a}.s2{--c:#f2b92a;--d:#9a6a07}.s3{--c:#3d8bfd;--d:#1a479f}
-@keyframes spin{to{transform:rotate(360deg)}}
-.pc .av{border-color:var(--c)}
+#pl{flex:none;display:flex;justify-content:center;gap:6px;padding:0 6px 4px;width:100%;height:50px}
+.pc{flex:1;max-width:92px;min-width:0;display:flex;align-items:center;gap:5px;padding:3px 5px 3px 3px;border-radius:22px;background:rgba(0,0,0,.38);border:1.5px solid rgba(255,255,255,.08);position:relative;transition:transform .25s,background .25s,border-color .25s}
+.pc .rg{flex:none;width:34px;height:34px;border-radius:50%;padding:3px;background:conic-gradient(var(--c) calc(var(--p,1)*360deg),rgba(255,255,255,.14) 0)}
+.pc .av{width:100%;height:100%;font-size:14px;border:0;background:#2b210f}
+.pc .tx{min-width:0;display:flex;flex-direction:column;gap:3px;flex:1}
+.pc .nm{font-size:10px;line-height:1;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.pc .dots{display:flex;gap:3px}
+.pc .dots i{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.18)}
+.pc .dots i.on{background:var(--c);border-color:#fff;box-shadow:0 0 5px var(--c)}
+.pc.turn{transform:translateY(-1px) scale(1.05);background:linear-gradient(180deg,rgba(255,213,79,.2),rgba(0,0,0,.45));border-color:var(--c);box-shadow:0 0 14px -2px var(--c);animation:glow 1.2s ease-in-out infinite alternate}
+.pc.turn .nm{color:#fff;font-weight:800}
+@keyframes glow{to{box-shadow:0 0 20px 1px var(--c)}}
+.pc .bd{position:absolute;right:2px;top:-6px;font-size:13px}
+.pc .kl{position:absolute;right:6px;bottom:-5px;font-size:9px;padding:0 5px;border-radius:7px;background:#0b0906;border:1px solid var(--line);color:var(--gold2)}
+.s0{--c:#e5483d}.s1{--c:#2fbf71}.s2{--c:#f2b92a}.s3{--c:#3d8bfd}
 #bwrap{flex:1;min-height:0;width:100%;display:flex;align-items:center;justify-content:center;padding:0 8px}
-#bd{position:relative;border-radius:12px;border:3px solid var(--gold);box-shadow:0 6px 24px rgba(0,0,0,.6);background:#f3ead6;overflow:hidden;transition:transform .4s}
-#bd svg{position:absolute;inset:0;width:100%;height:100%;display:block}
-.it{position:absolute;width:6.6667%;height:6.6667%;display:flex;align-items:center;justify-content:center;font-size:var(--fs,14px);line-height:1;pointer-events:none}
-.it span{display:block}
-.tk{position:absolute;width:5.4%;height:5.4%;margin:-2.7% 0 0 -2.7%;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff 0 12%,var(--c) 34%,var(--d) 100%);border:1.5px solid rgba(0,0,0,.65);box-shadow:0 1px 3px rgba(0,0,0,.6);transition:left .11s linear,top .11s linear;padding:0;z-index:2}
-.tk.ok{z-index:4;box-shadow:0 0 0 2px #fff,0 0 0 4px var(--gold),0 0 12px 3px var(--gold);animation:tkp .8s ease-in-out infinite}
-@keyframes tkp{50%{transform:scale(1.22)}}
-#ctl{flex:none;width:100%;display:flex;align-items:center;justify-content:center;gap:12px;min-height:64px;padding:6px 12px}
-#dice{width:52px;height:52px;border-radius:13px;background:linear-gradient(160deg,#fff,#e9dfc8);color:#1c1405;font-size:44px;line-height:52px;text-align:center;border:2px solid var(--line);box-shadow:0 3px 8px rgba(0,0,0,.5);flex:none;padding:0;overflow:hidden}
-#dice span{display:block;margin-top:-4px}
-#dice.can{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold2),0 0 16px var(--gold);animation:bob2 .9s ease-in-out infinite}
-#dice.rolling span{animation:spin .35s linear infinite}
-@keyframes bob2{50%{transform:translateY(-4px)}}
-#st{font-size:13px;color:var(--dim);text-align:center}#st.me{color:var(--gold2);font-weight:700}
-/* bildirim oyuncu satırını örtmesin: tahtanın alt kenarında çıkar */
-#toast{top:auto;bottom:78px}
+#stage{position:relative}
+#bd{position:absolute;inset:0;border-radius:14px;overflow:hidden;background:#20170b;box-shadow:0 0 0 3px #7a4f06,0 0 0 6px var(--gold),0 0 0 8px #3b2704,0 12px 30px rgba(0,0,0,.7);transition:transform .5s cubic-bezier(.3,1.3,.5,1)}
+#bd svg.bs{position:absolute;inset:0;width:100%;height:100%;display:block}
+.it{position:absolute;width:6.6667%;height:6.6667%;display:flex;align-items:center;justify-content:center;pointer-events:none}
+.it span{display:flex;align-items:center;justify-content:center;width:86%;height:86%;border-radius:50%;font-size:var(--fs,14px);line-height:1;background:radial-gradient(circle at 35% 30%,#fff,#ffe6a8 70%);box-shadow:0 0 0 1.5px #c98a08,0 0 9px rgba(242,185,42,.95);animation:itf 1.8s ease-in-out infinite}
+@keyframes itf{50%{transform:translateY(-8%) scale(1.07)}}
+.tk{position:absolute;width:6.4%;height:6.4%;margin:-3.2% 0 0 -3.2%;padding:0;z-index:3;transition:left .12s linear,top .12s linear}
+.tk .un{display:block;width:100%;height:100%;transform:rotate(var(--un,0deg))}
+.tk svg{display:block;width:100%;height:100%;overflow:visible;filter:drop-shadow(0 2px 2px rgba(0,0,0,.55))}
+.tk.ok{z-index:6}
+.tk.ok svg{animation:tkp .7s ease-in-out infinite;filter:drop-shadow(0 0 5px #ffd54f) drop-shadow(0 0 9px #ffd54f)}
+@keyframes tkp{50%{transform:translateY(-14%) scale(1.2)}}
+.gh{position:absolute;width:6.4%;height:6.4%;margin:-3.2% 0 0 -3.2%;border-radius:50%;border:2.5px dashed var(--c);background:rgba(255,255,255,.22);z-index:2;padding:0;animation:gh 1s ease-in-out infinite}
+@keyframes gh{50%{transform:scale(1.25);background:rgba(255,255,255,.45)}}
+.pf{position:absolute;width:5px;height:5px;margin:-2.5px 0 0 -2.5px;border-radius:50%;pointer-events:none;z-index:8}
+.rp{position:absolute;width:6.4%;height:6.4%;margin:-3.2% 0 0 -3.2%;border-radius:50%;border:3px solid #fff;pointer-events:none;z-index:7}
+.pt{position:absolute;z-index:9;pointer-events:none;font-size:var(--fs2,22px);line-height:1;transform:translate(-50%,-50%)}
+#ctl{flex:none;width:100%;display:flex;align-items:center;justify-content:center;gap:16px;min-height:72px;padding:6px 12px}
+#dice{width:56px;height:56px;perspective:300px;padding:0;flex:none;border-radius:14px}
+#dice .tilt{width:100%;height:100%;transform-style:preserve-3d;transform:rotateX(-22deg) rotateY(-26deg)}
+#dice .cube{position:relative;width:100%;height:100%;transform-style:preserve-3d;transition:transform .9s cubic-bezier(.15,.85,.25,1)}
+#dice .f{position:absolute;inset:0;border-radius:13px;background:linear-gradient(145deg,#fff,#e6dabb);border:2px solid var(--dc,#c98a08);display:grid;grid-template:repeat(3,1fr)/repeat(3,1fr);padding:7px;backface-visibility:hidden;box-shadow:inset 0 0 8px rgba(0,0,0,.18)}
+#dice .f b{width:100%;height:100%;border-radius:50%;background:radial-gradient(circle at 35% 30%,#555,#111 70%);transform:scale(.0)}
+#dice .f b.on{transform:scale(.82);background:radial-gradient(circle at 35% 30%,var(--dc,#e5483d),#2a0c08 130%)}
+#dice .f1{transform:translateZ(28px)}#dice .f6{transform:rotateY(180deg) translateZ(28px)}
+#dice .f2{transform:rotateY(90deg) translateZ(28px)}#dice .f5{transform:rotateY(-90deg) translateZ(28px)}
+#dice .f3{transform:rotateX(90deg) translateZ(28px)}#dice .f4{transform:rotateX(-90deg) translateZ(28px)}
+#dice.can{animation:bob2 .9s ease-in-out infinite;filter:drop-shadow(0 0 10px var(--gold)) drop-shadow(0 0 4px var(--gold2))}
+@keyframes bob2{50%{transform:translateY(-6px)}}
+#dice .sh{position:absolute;left:10%;right:10%;bottom:-9px;height:8px;border-radius:50%;background:rgba(0,0,0,.4);filter:blur(3px)}
+#st{font-size:13px;color:var(--dim);text-align:center;max-width:55%;line-height:1.3}
+#st.me{color:#1c1405;font-weight:800;padding:7px 14px;border-radius:16px;background:linear-gradient(180deg,#ffe27a,#f2b92a);animation:pill 1.1s ease-in-out infinite alternate}
+@keyframes pill{to{box-shadow:0 0 16px rgba(242,185,42,.9)}}
+#turnb{position:absolute;left:50%;top:44%;z-index:12;transform:translate(-50%,-50%) scale(0);padding:10px 22px;border-radius:26px;background:linear-gradient(180deg,#ffe27a,#f2b92a);color:#1c1405;font-weight:900;font-size:20px;letter-spacing:.5px;pointer-events:none;box-shadow:0 0 28px rgba(242,185,42,.9)}
+#cf{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:25}
 /* ---------- pencereler ---------- */
-#modal{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.62);padding:14px;z-index:20}
+#modal{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.66);padding:14px;z-index:20}
 #modal.on{display:flex}
-.box{width:100%;max-width:380px;max-height:100%;display:flex;flex-direction:column;background:var(--surf);border:1px solid var(--gold);border-radius:18px;padding:14px;box-shadow:0 10px 40px rgba(0,0,0,.6)}
-.box h3{margin:0 0 8px;font-size:16px;text-align:center;color:var(--gold2)}
+.box{width:100%;max-width:380px;max-height:100%;display:flex;flex-direction:column;background:linear-gradient(180deg,#221b10,#130f08);border:1px solid var(--gold);border-radius:20px;padding:14px;box-shadow:0 10px 40px rgba(0,0,0,.65),0 0 24px -6px var(--gold);animation:boxin .28s cubic-bezier(.2,1.4,.4,1)}
+@keyframes boxin{from{transform:scale(.8);opacity:0}}
+.box h3{margin:0 0 8px;font-size:17px;text-align:center;color:var(--gold2)}
 .box p{margin:0 0 10px;color:var(--dim);font-size:13px;text-align:center;line-height:1.4}
-.box .btns{margin-top:6px}
+.box .btns{margin-top:8px}
 .scroll{overflow-y:auto;min-height:0;-webkit-overflow-scrolling:touch}
 .rules{font-size:13px;line-height:1.5;color:#e6dcc3}
 .rules h4{margin:10px 0 4px;color:var(--gold2);font-size:13.5px}
 .rules ul{margin:0;padding:0 0 0 18px}.rules li{margin:2px 0}
 [dir=rtl] .rules ul{padding:0 18px 0 0}
-.rank{display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:12px}
+.rank{display:flex;align-items:center;gap:10px;padding:7px 8px;border-radius:14px;animation:rin .4s both}
 .rank:nth-child(odd){background:rgba(255,255,255,.04)}
-.rank.first{background:linear-gradient(90deg,rgba(242,185,42,.28),rgba(242,185,42,.05))}
-.rank .no{width:18px;text-align:center;font-weight:900;color:var(--gold2)}
-.rank .av{width:36px;height:36px;font-size:15px}
+.rank.first{background:linear-gradient(90deg,rgba(242,185,42,.32),rgba(242,185,42,.05));border:1px solid rgba(242,185,42,.5)}
+.rank .no{width:22px;text-align:center;font-weight:900;color:var(--gold2);font-size:17px}
+.rank .av{width:38px;height:38px;font-size:15px;border-color:var(--c,var(--line))}
+.rank.first .av{box-shadow:0 0 14px var(--gold)}
 .rank .who{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700}
-.rank .pt{font-size:12px;color:var(--dim);white-space:nowrap}
-.rank.first .pt{color:var(--gold2);font-weight:800}
-#toast{position:absolute;left:50%;top:44px;transform:translateX(-50%);max-width:88%;padding:6px 14px;border-radius:14px;background:rgba(11,9,6,.92);border:1px solid var(--line);font-size:12.5px;text-align:center;opacity:0;transition:opacity .2s;pointer-events:none;z-index:30}
+.rank .pt2{font-size:12px;color:var(--dim);white-space:nowrap}
+.rank.first .pt2{color:var(--gold2);font-weight:800}
+@keyframes rin{from{transform:translateX(-18px);opacity:0}}
+.trophy{font-size:54px;text-align:center;line-height:1;margin:2px 0 6px;animation:trophy 1.2s ease-in-out infinite alternate;filter:drop-shadow(0 0 14px rgba(242,185,42,.8))}
+@keyframes trophy{from{transform:rotate(-6deg) scale(1)}to{transform:rotate(6deg) scale(1.1)}}
+#toast{position:absolute;left:50%;bottom:84px;transform:translateX(-50%);max-width:88%;padding:7px 15px;border-radius:15px;background:rgba(11,9,6,.94);border:1px solid var(--gold);font-size:12.5px;font-weight:600;text-align:center;opacity:0;transition:opacity .2s;pointer-events:none;z-index:30}
 #toast.on{opacity:1}#toast.bad{border-color:#6b2a24;color:#ff9b93}
 #load{position:absolute;inset:0;display:flex;flex-direction:column;gap:10px;align-items:center;justify-content:center;background:#0b0906;z-index:40;color:var(--dim);padding:20px;text-align:center}
 #load.off{display:none}
 .spin{width:26px;height:26px;border-radius:50%;border:3px solid var(--line);border-top-color:var(--gold);animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
 </style></head>
 <body>
 <div id="app" data-room="__ROOM_ID__" data-lang="__LANG__" data-ver="__APP_VERSION__">
@@ -114,16 +149,18 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
     <div class="logo">LUDO<small id="ltag"></small></div>
     <div id="lmsg"></div><div id="lcount"></div>
     <div class="modes" id="lmodes"></div>
-    <div id="lplayers"></div>
+    <div class="slots" id="lplayers"></div>
     <div class="btns" id="lbtns"></div>
     <button class="link" id="lclose"></button>
   </div>
   <div class="scr" id="board">
     <div id="pl"></div>
-    <div id="bwrap"><div id="bd"></div></div>
-    <div id="ctl"><button id="dice"><span></span></button><div id="st"></div></div>
+    <div id="bwrap"><div id="stage"><div id="bd"></div></div></div>
+    <div id="ctl"><button id="dice" aria-label="dice"><div class="tilt"><div class="cube" id="cube"></div></div><div class="sh"></div></button><div id="st"></div></div>
   </div>
+  <div id="turnb"></div>
 </div>
+<canvas id="cf"></canvas>
 <div id="modal"></div>
 <div id="toast" role="status"></div>
 <div id="load"><div class="spin"></div><div id="loadmsg"></div></div>
@@ -135,10 +172,10 @@ const app = $('app');
 const ROOM = app.dataset.room;
 const VER = app.dataset.ver || '';
 const LANGS = {
-tr: { tag: "ODA OYUNU", none: "Açık oyun yok", noneHint: "Oda yetkilisi oyun açınca burada görünecek.", other: "Odada başka bir oyun açık: {g}", open: "Oyun aç", pickMode: "Oyun modunu seç", classic: "Klasik", quick: "Seri", items: "Eşyalı", dClassic: "4 taşını da bitişe ulaştıran kazanır.", dQuick: "Tek taş yeter; ama önce bir rakip taşı kırmalısın.", dItems: "Klasik kurallar + kapı, füze, buz, bomba ve zar kareleri.", waitHost: "Oyun açıldı, oyuncuların katılması bekleniyor", waitJoined: "Katıldın, oyunun başlaması bekleniyor", waitJoin: "Oyun açıldı, katılmak için dokun!", count: "{n}/{m} kişi oyuna katıldı", join: "Katıl", leave: "Ayrıl", start: "Başla", closeGame: "Oyunu kapat", need2: "Başlamak için en az 2 oyuncu gerekir", roll: "Zar at", yourRoll: "Sıra sende: zar at", yourMove: "Oynatacağın taşı seç", turnOf: "Sıra: {n}", watching: "Oyunu izliyorsun", eCapture: "{n} bir taş kırdı!", eSix3: "{n} üç kez 6 attı, sıra geçti", eNoMove: "{n} için hamle yok", eFrozen: "{n} dondu, bir tur atladı", eBomb: "Bomba! {n} taşı üsse döndü", ePortal: "{n} kapıdan geçti", eRocket: "Füze! {n} bir taşı üsse yolladı", eIce: "{n} rakibini dondurdu", eDice: "{n} bir zar hakkı daha kazandı", eLeft: "{n} oyundan ayrıldı", over: "Oyun bitti", won: "Kazandı", close: "Kapat", again: "Tekrar oyna", cancelled: "Oyun kapatıldı", rules: "Oyun kuralları", ok: "Anladım", leaveQ: "Oyundan ayrılmak istiyor musun?", leaveHint: "Ayrılırsan taşların oyundan çıkar.", closeQ: "Oyun herkes için kapatılsın mı?", yes: "Evet", cancel: "Vazgeç", net: "Bağlantı sorunu, yeniden deneniyor…", err: "İşlem yapılamadı", appOnly: "Bu sayfa yalnızca uygulama içinde açılır.", loading: "Yükleniyor…", kills: "Kırma: {k}" },
-en: { tag: "ROOM GAME", none: "No open game", noneHint: "It will appear here when a room manager opens a game.", other: "Another game is open in this room: {g}", open: "Open game", pickMode: "Choose the game mode", classic: "Classic", quick: "Quick", items: "Items", dClassic: "Get all 4 tokens home to win.", dQuick: "One token is enough, but you must capture an opponent first.", dItems: "Classic rules + portal, rocket, ice, bomb and dice squares.", waitHost: "Game opened, waiting for players to join", waitJoined: "Joined, waiting for the game to start", waitJoin: "Game opened, tap to join!", count: "{n}/{m} players joined", join: "Join", leave: "Leave", start: "Start", closeGame: "Close game", need2: "At least 2 players are needed to start", roll: "Roll", yourRoll: "Your turn: roll the dice", yourMove: "Pick a token to move", turnOf: "Turn: {n}", watching: "You are watching", eCapture: "{n} captured a token!", eSix3: "{n} rolled three 6s, turn passed", eNoMove: "No move for {n}", eFrozen: "{n} is frozen and skipped a turn", eBomb: "Bomb! {n}'s token went back to base", ePortal: "{n} went through a portal", eRocket: "Rocket! {n} sent a token back to base", eIce: "{n} froze an opponent", eDice: "{n} won an extra roll", eLeft: "{n} left the game", over: "Game over", won: "Winner", close: "Close", again: "Play again", cancelled: "The game was closed", rules: "Game rules", ok: "Got it", leaveQ: "Leave the game?", leaveHint: "Your tokens are removed from the game.", closeQ: "Close the game for everyone?", yes: "Yes", cancel: "Cancel", net: "Connection problem, retrying…", err: "Action failed", appOnly: "This page only opens inside the app.", loading: "Loading…", kills: "Captures: {k}" },
-ar: { tag: "لعبة الغرفة", none: "لا توجد لعبة مفتوحة", noneHint: "ستظهر هنا عندما يفتح مشرف الغرفة لعبة.", other: "توجد لعبة أخرى مفتوحة في الغرفة: {g}", open: "افتح لعبة", pickMode: "اختر نمط اللعب", classic: "كلاسيكي", quick: "سريع", items: "أدوات", dClassic: "من يوصل أحجاره الأربعة إلى النهاية يفوز.", dQuick: "حجر واحد يكفي، لكن عليك أولًا أكل حجر للخصم.", dItems: "القواعد الكلاسيكية + مربعات البوابة والصاروخ والجليد والقنبلة والنرد.", waitHost: "تم فتح اللعبة، بانتظار انضمام اللاعبين", waitJoined: "انضممت، بانتظار بدء اللعبة", waitJoin: "تم فتح اللعبة، اضغط للانضمام!", count: "انضم {n}/{m} لاعبين", join: "انضم", leave: "غادر", start: "ابدأ", closeGame: "إغلاق اللعبة", need2: "يلزم لاعبان على الأقل للبدء", roll: "ارمِ النرد", yourRoll: "دورك: ارمِ النرد", yourMove: "اختر الحجر الذي ستحركه", turnOf: "الدور: {n}", watching: "أنت تشاهد اللعبة", eCapture: "{n} أكل حجرًا!", eSix3: "{n} رمى 6 ثلاث مرات، انتقل الدور", eNoMove: "لا توجد حركة لـ {n}", eFrozen: "{n} تجمّد وفاته دور", eBomb: "قنبلة! عاد حجر {n} إلى القاعدة", ePortal: "{n} عبر البوابة", eRocket: "صاروخ! {n} أعاد حجرًا إلى القاعدة", eIce: "{n} جمّد خصمه", eDice: "{n} حصل على رمية إضافية", eLeft: "{n} غادر اللعبة", over: "انتهت اللعبة", won: "الفائز", close: "إغلاق", again: "العب مجددًا", cancelled: "تم إغلاق اللعبة", rules: "قواعد اللعبة", ok: "فهمت", leaveQ: "هل تريد مغادرة اللعبة؟", leaveHint: "ستُزال أحجارك من اللعبة.", closeQ: "إغلاق اللعبة للجميع؟", yes: "نعم", cancel: "إلغاء", net: "مشكلة في الاتصال، جارٍ إعادة المحاولة…", err: "تعذّر تنفيذ العملية", appOnly: "هذه الصفحة تفتح داخل التطبيق فقط.", loading: "جارٍ التحميل…", kills: "الأكل: {k}" },
-hi: { tag: "रूम गेम", none: "कोई खुला गेम नहीं", noneHint: "रूम मैनेजर गेम खोलेगा तो यहाँ दिखेगा।", other: "रूम में दूसरा गेम खुला है: {g}", open: "गेम खोलें", pickMode: "गेम मोड चुनें", classic: "क्लासिक", quick: "क्विक", items: "आइटम", dClassic: "जो चारों गोटियाँ घर पहुँचाए वह जीतता है।", dQuick: "एक गोटी काफ़ी है, पर पहले विरोधी की एक गोटी काटनी होगी।", dItems: "क्लासिक नियम + पोर्टल, रॉकेट, बर्फ़, बम और पासा वाले खाने।", waitHost: "गेम खुल गया, खिलाड़ियों के जुड़ने का इंतज़ार", waitJoined: "आप जुड़ गए, गेम शुरू होने का इंतज़ार", waitJoin: "गेम खुल गया, जुड़ने के लिए टैप करें!", count: "{n}/{m} खिलाड़ी जुड़े", join: "जुड़ें", leave: "छोड़ें", start: "शुरू करें", closeGame: "गेम बंद करें", need2: "शुरू करने के लिए कम से कम 2 खिलाड़ी चाहिए", roll: "पासा फेंकें", yourRoll: "आपकी बारी: पासा फेंकें", yourMove: "चलने वाली गोटी चुनें", turnOf: "बारी: {n}", watching: "आप गेम देख रहे हैं", eCapture: "{n} ने एक गोटी काटी!", eSix3: "{n} ने तीन बार 6 फेंका, बारी गई", eNoMove: "{n} के लिए कोई चाल नहीं", eFrozen: "{n} जम गए, एक बारी छूटी", eBomb: "बम! {n} की गोटी वापस अड्डे पर", ePortal: "{n} पोर्टल से गुज़रे", eRocket: "रॉकेट! {n} ने एक गोटी अड्डे पर भेजी", eIce: "{n} ने विरोधी को जमा दिया", eDice: "{n} को एक और पासा मिला", eLeft: "{n} ने गेम छोड़ा", over: "गेम समाप्त", won: "विजेता", close: "बंद करें", again: "फिर खेलें", cancelled: "गेम बंद कर दिया गया", rules: "गेम के नियम", ok: "समझ गया", leaveQ: "गेम छोड़ना चाहते हैं?", leaveHint: "आपकी गोटियाँ गेम से हट जाएँगी।", closeQ: "सबके लिए गेम बंद करें?", yes: "हाँ", cancel: "रद्द करें", net: "कनेक्शन समस्या, दोबारा कोशिश…", err: "कार्रवाई नहीं हो सकी", appOnly: "यह पेज सिर्फ़ ऐप के अंदर खुलता है।", loading: "लोड हो रहा है…", kills: "काट: {k}" },
+tr: { tag: "ODA OYUNU", none: "Açık oyun yok", noneHint: "Oda yetkilisi oyun açınca burada görünecek.", other: "Odada başka bir oyun açık: {g}", open: "Oyun aç", pickMode: "Oyun modunu seç", classic: "Klasik", quick: "Seri", items: "Eşyalı", dClassic: "4 taşını da bitişe ulaştıran kazanır.", dQuick: "Tek taş yeter; ama önce bir rakip taşı kırmalısın.", dItems: "Klasik kurallar + kapı, füze, buz, bomba ve zar kareleri.", waitHost: "Oyun açıldı, oyuncuların katılması bekleniyor", waitJoined: "Katıldın, oyunun başlaması bekleniyor", waitJoin: "Oyun açıldı, katılmak için dokun!", count: "{n}/{m} kişi oyuna katıldı", join: "Katıl", leave: "Ayrıl", start: "Başla", closeGame: "Oyunu kapat", need2: "Başlamak için en az 2 oyuncu gerekir", roll: "Zar at", yourRoll: "Sıra sende: zar at", yourMove: "Oynatacağın taşı seç", turnOf: "Sıra: {n}", watching: "Oyunu izliyorsun", eCapture: "{n} bir taş kırdı!", eSix3: "{n} üç kez 6 attı, sıra geçti", eNoMove: "{n} için hamle yok", eFrozen: "{n} dondu, bir tur atladı", eBomb: "Bomba! {n} taşı üsse döndü", ePortal: "{n} kapıdan geçti", eRocket: "Füze! {n} bir taşı üsse yolladı", eIce: "{n} rakibini dondurdu", eDice: "{n} bir zar hakkı daha kazandı", eLeft: "{n} oyundan ayrıldı", eHome: "{n} bir taşını eve ulaştırdı!", yourTurnB: "Sıra sende!", over: "Oyun bitti", won: "Kazandı", close: "Kapat", again: "Tekrar oyna", cancelled: "Oyun kapatıldı", rules: "Oyun kuralları", ok: "Anladım", leaveQ: "Oyundan ayrılmak istiyor musun?", leaveHint: "Ayrılırsan taşların oyundan çıkar.", closeQ: "Oyun herkes için kapatılsın mı?", yes: "Evet", cancel: "Vazgeç", net: "Bağlantı sorunu, yeniden deneniyor…", err: "İşlem yapılamadı", appOnly: "Bu sayfa yalnızca uygulama içinde açılır.", loading: "Yükleniyor…", kills: "Kırma: {k}" },
+en: { tag: "ROOM GAME", none: "No open game", noneHint: "It will appear here when a room manager opens a game.", other: "Another game is open in this room: {g}", open: "Open game", pickMode: "Choose the game mode", classic: "Classic", quick: "Quick", items: "Items", dClassic: "Get all 4 tokens home to win.", dQuick: "One token is enough, but you must capture an opponent first.", dItems: "Classic rules + portal, rocket, ice, bomb and dice squares.", waitHost: "Game opened, waiting for players to join", waitJoined: "Joined, waiting for the game to start", waitJoin: "Game opened, tap to join!", count: "{n}/{m} players joined", join: "Join", leave: "Leave", start: "Start", closeGame: "Close game", need2: "At least 2 players are needed to start", roll: "Roll", yourRoll: "Your turn: roll the dice", yourMove: "Pick a token to move", turnOf: "Turn: {n}", watching: "You are watching", eCapture: "{n} captured a token!", eSix3: "{n} rolled three 6s, turn passed", eNoMove: "No move for {n}", eFrozen: "{n} is frozen and skipped a turn", eBomb: "Bomb! {n}'s token went back to base", ePortal: "{n} went through a portal", eRocket: "Rocket! {n} sent a token back to base", eIce: "{n} froze an opponent", eDice: "{n} won an extra roll", eLeft: "{n} left the game", eHome: "{n} brought a token home!", yourTurnB: "Your turn!", over: "Game over", won: "Winner", close: "Close", again: "Play again", cancelled: "The game was closed", rules: "Game rules", ok: "Got it", leaveQ: "Leave the game?", leaveHint: "Your tokens are removed from the game.", closeQ: "Close the game for everyone?", yes: "Yes", cancel: "Cancel", net: "Connection problem, retrying…", err: "Action failed", appOnly: "This page only opens inside the app.", loading: "Loading…", kills: "Captures: {k}" },
+ar: { tag: "لعبة الغرفة", none: "لا توجد لعبة مفتوحة", noneHint: "ستظهر هنا عندما يفتح مشرف الغرفة لعبة.", other: "توجد لعبة أخرى مفتوحة في الغرفة: {g}", open: "افتح لعبة", pickMode: "اختر نمط اللعب", classic: "كلاسيكي", quick: "سريع", items: "أدوات", dClassic: "من يوصل أحجاره الأربعة إلى النهاية يفوز.", dQuick: "حجر واحد يكفي، لكن عليك أولًا أكل حجر للخصم.", dItems: "القواعد الكلاسيكية + مربعات البوابة والصاروخ والجليد والقنبلة والنرد.", waitHost: "تم فتح اللعبة، بانتظار انضمام اللاعبين", waitJoined: "انضممت، بانتظار بدء اللعبة", waitJoin: "تم فتح اللعبة، اضغط للانضمام!", count: "انضم {n}/{m} لاعبين", join: "انضم", leave: "غادر", start: "ابدأ", closeGame: "إغلاق اللعبة", need2: "يلزم لاعبان على الأقل للبدء", roll: "ارمِ النرد", yourRoll: "دورك: ارمِ النرد", yourMove: "اختر الحجر الذي ستحركه", turnOf: "الدور: {n}", watching: "أنت تشاهد اللعبة", eCapture: "{n} أكل حجرًا!", eSix3: "{n} رمى 6 ثلاث مرات، انتقل الدور", eNoMove: "لا توجد حركة لـ {n}", eFrozen: "{n} تجمّد وفاته دور", eBomb: "قنبلة! عاد حجر {n} إلى القاعدة", ePortal: "{n} عبر البوابة", eRocket: "صاروخ! {n} أعاد حجرًا إلى القاعدة", eIce: "{n} جمّد خصمه", eDice: "{n} حصل على رمية إضافية", eLeft: "{n} غادر اللعبة", eHome: "{n} أوصل حجرًا إلى البيت!", yourTurnB: "دورك!", over: "انتهت اللعبة", won: "الفائز", close: "إغلاق", again: "العب مجددًا", cancelled: "تم إغلاق اللعبة", rules: "قواعد اللعبة", ok: "فهمت", leaveQ: "هل تريد مغادرة اللعبة؟", leaveHint: "ستُزال أحجارك من اللعبة.", closeQ: "إغلاق اللعبة للجميع؟", yes: "نعم", cancel: "إلغاء", net: "مشكلة في الاتصال، جارٍ إعادة المحاولة…", err: "تعذّر تنفيذ العملية", appOnly: "هذه الصفحة تفتح داخل التطبيق فقط.", loading: "جارٍ التحميل…", kills: "الأكل: {k}" },
+hi: { tag: "रूम गेम", none: "कोई खुला गेम नहीं", noneHint: "रूम मैनेजर गेम खोलेगा तो यहाँ दिखेगा।", other: "रूम में दूसरा गेम खुला है: {g}", open: "गेम खोलें", pickMode: "गेम मोड चुनें", classic: "क्लासिक", quick: "क्विक", items: "आइटम", dClassic: "जो चारों गोटियाँ घर पहुँचाए वह जीतता है।", dQuick: "एक गोटी काफ़ी है, पर पहले विरोधी की एक गोटी काटनी होगी।", dItems: "क्लासिक नियम + पोर्टल, रॉकेट, बर्फ़, बम और पासा वाले खाने।", waitHost: "गेम खुल गया, खिलाड़ियों के जुड़ने का इंतज़ार", waitJoined: "आप जुड़ गए, गेम शुरू होने का इंतज़ार", waitJoin: "गेम खुल गया, जुड़ने के लिए टैप करें!", count: "{n}/{m} खिलाड़ी जुड़े", join: "जुड़ें", leave: "छोड़ें", start: "शुरू करें", closeGame: "गेम बंद करें", need2: "शुरू करने के लिए कम से कम 2 खिलाड़ी चाहिए", roll: "पासा फेंकें", yourRoll: "आपकी बारी: पासा फेंकें", yourMove: "चलने वाली गोटी चुनें", turnOf: "बारी: {n}", watching: "आप गेम देख रहे हैं", eCapture: "{n} ने एक गोटी काटी!", eSix3: "{n} ने तीन बार 6 फेंका, बारी गई", eNoMove: "{n} के लिए कोई चाल नहीं", eFrozen: "{n} जम गए, एक बारी छूटी", eBomb: "बम! {n} की गोटी वापस अड्डे पर", ePortal: "{n} पोर्टल से गुज़रे", eRocket: "रॉकेट! {n} ने एक गोटी अड्डे पर भेजी", eIce: "{n} ने विरोधी को जमा दिया", eDice: "{n} को एक और पासा मिला", eLeft: "{n} ने गेम छोड़ा", eHome: "{n} ने एक गोटी घर पहुँचाई!", yourTurnB: "आपकी बारी!", over: "गेम समाप्त", won: "विजेता", close: "बंद करें", again: "फिर खेलें", cancelled: "गेम बंद कर दिया गया", rules: "गेम के नियम", ok: "समझ गया", leaveQ: "गेम छोड़ना चाहते हैं?", leaveHint: "आपकी गोटियाँ गेम से हट जाएँगी।", closeQ: "सबके लिए गेम बंद करें?", yes: "हाँ", cancel: "रद्द करें", net: "कनेक्शन समस्या, दोबारा कोशिश…", err: "कार्रवाई नहीं हो सकी", appOnly: "यह पेज सिर्फ़ ऐप के अंदर खुलता है।", loading: "लोड हो रहा है…", kills: "काट: {k}" },
 };
 const RULES = {
 tr: [["Klasik", ["Zarda 6 gelince bir taşını başlangıç karesine çıkarırsın; 6 atan bir kez daha atar.", "Rakibin taşının üstüne gelirsen o taş üssüne döner ve bir zar hakkı daha kazanırsın.", "Yıldızlı kareler ve başlangıç kareleri güvenlidir; oradaki taş kırılmaz.", "Üst üste üç kez 6 atarsan sıran geçer.", "Bitişe tam sayı gerekir. 4 taşını da bitişe ilk ulaştıran kazanır.", "Her hamle için 30 saniyen var; üst üste 3 kez oynamayan oyundan düşer."]], ["Seri", ["Tek taşını bitişe ulaştırman yeter.", "Barikat: en az bir rakip taşı kırmadan taşların ev yoluna giremez; ana yolda bir tur daha döner."]], ["Eşyalı", ["Klasik kurallar geçerlidir; tahtada eşya kareleri vardır.", "🌀 Kapı: taşın 16 kare ilerideki yıldızlı kareye ışınlanır.", "🚀 Füze: ilerideki en yakın rakip taşı üssüne döner (güvenli karedeki taş korunur).", "❄️ Buz: ilerideki en yakın rakip taşının sahibi bir tur atlar.", "💣 Bomba: üstüne gelen taşın üssüne döner.", "🎲 Zar: bir zar hakkı daha kazanırsın."]]],
@@ -146,10 +183,12 @@ en: [["Classic", ["Roll a 6 to bring a token to its start square; a 6 gives anot
 ar: [["كلاسيكي", ["عند رمي 6 تُخرج حجرًا إلى مربع البداية؛ ومن يرمي 6 يرمي مرة أخرى.", "إذا وقفت على حجر خصم يعود إلى قاعدته وتحصل على رمية إضافية.", "مربعات النجمة ومربعات البداية آمنة؛ لا يؤكل الحجر فيها.", "إذا رميت 6 ثلاث مرات متتالية ينتقل دورك.", "يلزم رقم مطابق للوصول. أول من يوصل أحجاره الأربعة يفوز.", "لديك 30 ثانية لكل حركة؛ من لا يلعب 3 مرات متتالية يخرج."]], ["سريع", ["يكفي إيصال حجر واحد إلى النهاية.", "الحاجز: لا تدخل أحجارك مسار البيت قبل أن تأكل حجرًا للخصم؛ تدور دورة أخرى."]], ["أدوات", ["تُطبَّق القواعد الكلاسيكية مع مربعات أدوات على اللوحة.", "🌀 البوابة: ينتقل حجرك إلى مربع النجمة بعد 16 مربعًا.", "🚀 الصاروخ: أقرب حجر للخصم أمامك يعود إلى قاعدته (الحجر في مربع آمن محمي).", "❄️ الجليد: صاحب أقرب حجر للخصم أمامك يفوته دور.", "💣 القنبلة: الحجر الذي يقف عليها يعود إلى قاعدته.", "🎲 النرد: تحصل على رمية إضافية."]]],
 hi: [["क्लासिक", ["6 आने पर एक गोटी शुरुआती खाने पर आती है; 6 पर एक और बार पासा।", "विरोधी की गोटी पर पहुँचें तो वह अड्डे पर लौटती है और आपको एक और पासा मिलता है।", "तारे वाले और शुरुआती खाने सुरक्षित हैं; वहाँ गोटी नहीं कटती।", "लगातार तीन बार 6 आने पर बारी चली जाती है।", "घर पहुँचने के लिए सटीक अंक चाहिए। जो चारों गोटियाँ पहले पहुँचाए वह जीतता है।", "हर चाल के लिए 30 सेकंड; लगातार 3 बार न खेलने पर खिलाड़ी बाहर।"]], ["क्विक", ["एक गोटी घर पहुँचाना काफ़ी है।", "बैरियर: विरोधी की गोटी काटे बिना आपकी गोटियाँ घर की गली में नहीं जा सकतीं; एक चक्कर और लगाती हैं।"]], ["आइटम", ["क्लासिक नियम लागू हैं; बोर्ड पर आइटम वाले खाने हैं।", "🌀 पोर्टल: गोटी 16 खाने आगे तारे वाले खाने पर पहुँचती है।", "🚀 रॉकेट: आगे की सबसे नज़दीकी विरोधी गोटी अड्डे पर लौटती है (सुरक्षित खाने की गोटी बची रहती है)।", "❄️ बर्फ़: आगे की सबसे नज़दीकी विरोधी गोटी के मालिक की एक बारी छूटती है।", "💣 बम: जो गोटी इस पर आए वह अड्डे पर लौटती है।", "🎲 पासा: एक और बार पासा।"]]],
 };
+
 const LANG = LANGS[app.dataset.lang] ? app.dataset.lang : 'tr';
 const T = LANGS[LANG];
 const t = (k, v) => (T[k] ?? LANGS.tr[k] ?? k).replace(/\{(\w+)\}/g, (_, x) => (v && v[x] != null ? v[x] : ''));
 const RTL = LANG === 'ar';
+const rnd = (a, b) => a + Math.random() * (b - a);
 
 // ---------- küçük yardımcılar ----------
 function el(tag, cls, text) {
@@ -179,9 +218,29 @@ function toast(msg, bad) {
   x.className = 'on' + (bad ? ' bad' : '');
   x.dir = RTL ? 'rtl' : 'ltr';
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { x.className = ''; }, bad ? 2600 : 1900);
+  toastTimer = setTimeout(() => { x.className = ''; }, bad ? 2600 : 2000);
 }
 function post(o) { try { if (window.TRLive) window.TRLive.postMessage(JSON.stringify(o)); } catch (_) { /* uygulama dışı */ } }
+
+// ---------- konfeti (kazanma, taş eve varınca) ----------
+const cf = $('cf'), cx = cf.getContext('2d');
+let parts = [], cfRun = false;
+function sizeCf() { cf.width = innerWidth; cf.height = innerHeight; }
+function confetti(n, x, y) {
+  sizeCf();
+  const cols = ['#ffd54f', '#f2b92a', '#e5483d', '#2fbf71', '#3d8bfd', '#fff'];
+  for (let i = 0; i < n; i++) parts.push({ x: x == null ? rnd(0, cf.width) : x, y: y == null ? rnd(-40, 0) : y, vx: rnd(-3, 3) * (x == null ? 0.5 : 1.6), vy: y == null ? rnd(1, 4) : rnd(-9, -3), s: rnd(5, 10), r: rnd(0, 6), vr: rnd(-.3, .3), c: cols[(Math.random() * cols.length) | 0], life: rnd(90, 170) });
+  if (!cfRun) { cfRun = true; requestAnimationFrame(cfTick); }
+}
+function cfTick() {
+  cx.clearRect(0, 0, cf.width, cf.height);
+  parts = parts.filter((p) => p.life > 0 && p.y < cf.height + 20);
+  for (const p of parts) {
+    p.x += p.vx; p.y += p.vy; p.vy += 0.12; p.r += p.vr; p.life -= 1;
+    cx.save(); cx.translate(p.x, p.y); cx.rotate(p.r); cx.globalAlpha = Math.min(1, p.life / 30); cx.fillStyle = p.c; cx.fillRect(-p.s / 2, -p.s / 3, p.s, p.s * 0.6); cx.restore();
+  }
+  if (parts.length) requestAnimationFrame(cfTick); else { cfRun = false; cx.clearRect(0, 0, cf.width, cf.height); }
+}
 
 // ---------- oturum bileti ve API ----------
 let token = null;
@@ -216,7 +275,6 @@ function fail(e) {
   else toast(LANG === 'tr' && e && e.message && e.message !== 'err' ? e.message : t('err'), true);
 }
 
-
 // ---------- tahta geometrisi (sunucudaki ludo.js ile aynı sıra; 15x15 ızgara) ----------
 const PATH = (() => {
   const p = [];
@@ -237,6 +295,7 @@ const PATH = (() => {
 const SAFE = [0, 8, 13, 21, 26, 34, 39, 47];
 const BASE = [[0, 0], [9, 0], [9, 9], [0, 9]];
 const COL = ['#e5483d', '#2fbf71', '#f2b92a', '#3d8bfd'];
+const GRAD = [['#ff8f84', '#e5483d', '#9c241b'], ['#84efb3', '#2fbf71', '#157a43'], ['#ffeaa0', '#f2b92a', '#a8740a'], ['#9cc5ff', '#3d8bfd', '#1b4fb0']];
 const homeCell = (s, i) => [[1 + i, 7], [7, 1 + i], [13 - i, 7], [7, 13 - i]][s];
 function center(seat, prog, tok) {
   if (prog < 0) return [BASE[seat][0] + 2 + (tok % 2) * 2, BASE[seat][1] + 2 + Math.floor(tok / 2) * 2];
@@ -249,17 +308,62 @@ function center(seat, prog, tok) {
 const ICON = { portal: '🌀', rocket: '🚀', ice: '❄️', bomb: '💣', dice: '🎲' };
 function boardSvg() {
   const r = (x, y, w, h, f, ex) => '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" fill="' + f + '"' + (ex || '') + '/>';
-  let s = '<svg viewBox="0 0 15 15" preserveAspectRatio="none">' + r(0, 0, 15, 15, '#f3ead6');
-  PATH.forEach((c) => { s += r(c[0], c[1], 1, 1, '#fbf5e6', ' stroke="#b9a77c" stroke-width=".04"'); });
+  let s = '<svg class="bs" viewBox="0 0 15 15" preserveAspectRatio="none"><defs>';
+  GRAD.forEach((g, k) => {
+    const st = '<stop offset="0" stop-color="' + g[0] + '"/><stop offset=".55" stop-color="' + g[1] + '"/><stop offset="1" stop-color="' + g[2] + '"/>';
+    s += '<linearGradient id="yg' + k + '" x1="0" y1="0" x2="1" y2="1">' + st + '</linearGradient><radialGradient id="tg' + k + '" cx=".35" cy=".3" r=".85">' + st + '</radialGradient>';
+  });
+  s += '<linearGradient id="cellg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fffaf0"/><stop offset="1" stop-color="#ecdcb8"/></linearGradient>'
+    + '<linearGradient id="gloss" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".24"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>'
+    + '<radialGradient id="hub" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#fff" stop-opacity=".95"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient></defs>';
+  s += r(0, 0, 15, 15, '#2a1d0a');
+  PATH.forEach((c) => { s += r(c[0] + 0.03, c[1] + 0.03, 0.94, 0.94, 'url(#cellg)', ' rx=".14" stroke="#b79a5c" stroke-width=".05"'); });
   for (let k = 0; k < 4; k++) {
-    s += r(BASE[k][0], BASE[k][1], 6, 6, COL[k]) + r(BASE[k][0] + 1, BASE[k][1] + 1, 4, 4, '#fbf5e6', ' rx=".5"');
-    for (let i = 0; i < 4; i++) { const c = center(k, -1, i); s += '<circle cx="' + c[0] + '" cy="' + c[1] + '" r=".62" fill="' + COL[k] + '" opacity=".35"/>'; }
-    for (let i = 0; i < 5; i++) { const c = homeCell(k, i); s += r(c[0], c[1], 1, 1, COL[k], ' stroke="#b9a77c" stroke-width=".04"'); }
-    const st = PATH[k * 13]; s += r(st[0], st[1], 1, 1, COL[k], ' stroke="#b9a77c" stroke-width=".04"');
+    const b = BASE[k];
+    s += r(b[0], b[1], 6, 6, 'url(#yg' + k + ')', ' rx=".55"') + r(b[0] + 0.12, b[1] + 0.12, 5.76, 5.76, 'none', ' rx=".45" stroke="#fff" stroke-opacity=".45" stroke-width=".07"');
+    s += r(b[0] + 0.85, b[1] + 0.85, 4.3, 4.3, '#000', ' rx=".55" opacity=".3"') + r(b[0] + 0.85, b[1] + 0.85, 4.3, 4.3, 'none', ' rx=".55" stroke="#fff" stroke-opacity=".25" stroke-width=".06"');
+    for (let i = 0; i < 4; i++) { const c = center(k, -1, i); s += '<circle cx="' + c[0] + '" cy="' + c[1] + '" r=".72" fill="#000" opacity=".35"/><circle cx="' + c[0] + '" cy="' + c[1] + '" r=".72" fill="none" stroke="' + GRAD[k][0] + '" stroke-opacity=".75" stroke-width=".07"/>'; }
+    for (let i = 0; i < 5; i++) { const c = homeCell(k, i); s += r(c[0] + 0.03, c[1] + 0.03, 0.94, 0.94, 'url(#yg' + k + ')', ' rx=".14" stroke="#fff" stroke-opacity=".35" stroke-width=".05"'); }
+    const st = PATH[k * 13]; s += r(st[0] + 0.03, st[1] + 0.03, 0.94, 0.94, 'url(#yg' + k + ')', ' rx=".14" stroke="#fff" stroke-opacity=".5" stroke-width=".06"');
   }
-  s += '<polygon points="6,6 7.5,7.5 6,9" fill="' + COL[0] + '"/><polygon points="6,6 9,6 7.5,7.5" fill="' + COL[1] + '"/><polygon points="9,6 9,9 7.5,7.5" fill="' + COL[2] + '"/><polygon points="6,9 7.5,7.5 9,9" fill="' + COL[3] + '"/>';
-  SAFE.forEach((n) => { const c = PATH[n]; s += '<path transform="translate(' + (c[0] + 0.5) + ' ' + (c[1] + 0.5) + ') scale(.034)" d="M0-11 3.2-3.4 11-3.4 4.8 1.6 7 9.4 0 4.8-7 9.4-4.8 1.6-11-3.4-3.2-3.4z" fill="' + (n % 13 === 0 ? '#fff' : '#b9770a') + '" opacity=".9"/>'; });
-  return s + '</svg>';
+  s += '<polygon points="6,6 7.5,7.5 6,9" fill="url(#yg0)"/><polygon points="6,6 9,6 7.5,7.5" fill="url(#yg1)"/><polygon points="9,6 9,9 7.5,7.5" fill="url(#yg2)"/><polygon points="6,9 7.5,7.5 9,9" fill="url(#yg3)"/>';
+  s += '<path d="M6 6L9 9M9 6L6 9" stroke="#fff" stroke-opacity=".55" stroke-width=".06"/><circle cx="7.5" cy="7.5" r="1.1" fill="url(#hub)"/>';
+  SAFE.forEach((n) => { const c = PATH[n]; s += '<path transform="translate(' + (c[0] + 0.5) + ' ' + (c[1] + 0.5) + ') scale(.036)" d="M0-11 3.2-3.4 11-3.4 4.8 1.6 7 9.4 0 4.8-7 9.4-4.8 1.6-11-3.4-3.2-3.4z" fill="' + (n % 13 === 0 ? '#fff' : '#d19a1c') + '" stroke="#00000033" stroke-width="1"/>'; });
+  return s + '<rect width="15" height="15" fill="url(#gloss)"/></svg>';
+}
+function tokenSvg(seat) {
+  return '<span class="un"><svg viewBox="0 0 40 40"><ellipse cx="20" cy="35" rx="11" ry="3.6" fill="#000" opacity=".35"/><circle cx="20" cy="19" r="15.5" fill="url(#tg' + seat + ')" stroke="#fff" stroke-width="2.6"/><circle cx="20" cy="19" r="10.8" fill="none" stroke="#000" stroke-opacity=".22" stroke-width="1.6"/><path d="M11.5 24.5l-1.8-9.5 5.3 4.2L20 11.5l5 7.7 5.3-4.2-1.8 9.5z" fill="#fff"/><ellipse cx="14.5" cy="10.5" rx="6.4" ry="3.2" fill="#fff" opacity=".42" transform="rotate(-32 14.5 10.5)"/></svg></span>';
+}
+
+// ---------- 3B zar ----------
+const PIPS = { 1: [4], 2: [0, 8], 3: [0, 4, 8], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8] };
+const FACE_ROT = { 1: [0, 0], 2: [0, -90], 3: [-90, 0], 4: [90, 0], 5: [0, 90], 6: [0, 180] }; // [x, y]
+(() => {
+  const cube = $('cube');
+  for (let v = 1; v <= 6; v++) {
+    const f = el('i', 'f f' + v);
+    for (let i = 0; i < 9; i++) f.appendChild(el('b', PIPS[v].includes(i) ? 'on' : ''));
+    cube.appendChild(f);
+  }
+})();
+let dAx = -20, dAy = -20; // son verilen açı
+function diceTo(v, spins) {
+  const [tx, ty] = FACE_ROT[v] || [0, 0];
+  const nx = tx + 360 * (Math.ceil((dAx - tx) / 360) + spins);
+  const ny = ty + 360 * (Math.ceil((dAy - ty) / 360) + spins + 1);
+  dAx = nx; dAy = ny;
+  const c = $('cube');
+  c.style.transition = 'transform ' + (0.55 + spins * 0.25) + 's cubic-bezier(.15,.85,.25,1)';
+  c.style.transform = 'rotateX(' + nx + 'deg) rotateY(' + ny + 'deg)';
+}
+function diceSet(v) { // animasyonsuz
+  const [tx, ty] = FACE_ROT[v] || [0, 0];
+  dAx = tx; dAy = ty;
+  const c = $('cube'); c.style.transition = 'none'; c.style.transform = 'rotateX(' + tx + 'deg) rotateY(' + ty + 'deg)';
+}
+function diceSpin() { // sunucu yanıtı beklenirken
+  dAx += 540; dAy += 720;
+  const c = $('cube'); c.style.transition = 'transform .9s linear'; c.style.transform = 'rotateX(' + dAx + 'deg) rotateY(' + dAy + 'deg)';
 }
 
 // ---------- durum ----------
@@ -268,7 +372,7 @@ let busy = false, closedResult = null, seenSeq = -1, seenGame = null, turnEnd = 
 let pickedMode = 'classic';
 let shown = {};          // "koltuk:taş" → ekranda gösterilen ilerleme (adım adım yürütme için)
 let walkGen = 0;
-let lastDice = null;
+let lastRollSeq = -1, diceReady = false;
 const ORDER = { waiting: 0, playing: 1, finished: 2, cancelled: 2 };
 function accept(v) {
   if (G && v && G.id === v.id) {
@@ -346,14 +450,18 @@ function showRules() {
 }
 function showResult() {
   const id = G.id;
+  confetti(160);
+  setTimeout(() => confetti(90), 700);
   openModal('result', (box) => {
+    box.appendChild(el('div', 'trophy', '🏆'));
     box.appendChild(el('h3', '', t('over')));
     const s = el('div', 'scroll');
     const ps = G.players.slice().sort((a, b) => (b.user && b.user.id === G.winnerId) - (a.user && a.user.id === G.winnerId));
     ps.forEach((p, i) => {
       const win = p.user && p.user.id === G.winnerId;
-      const row = el('div', 'rank' + (win ? ' first' : ''));
-      row.append(el('span', 'no', win ? '👑' : String(i + 1)), avatar(p.user), el('span', 'who', nameOf(p)), el('span', 'pt', win ? t('won') : ''));
+      const row = el('div', 'rank s' + p.seat + (win ? ' first' : ''));
+      row.style.animationDelay = i * 0.12 + 's';
+      row.append(el('span', 'no', win ? '👑' : String(i + 1)), avatar(p.user), el('span', 'who', nameOf(p)), el('span', 'pt2', win ? t('won') : ''));
       s.appendChild(row);
     });
     box.appendChild(s);
@@ -367,6 +475,37 @@ function showResult() {
     clearInterval(resultTimer);
     resultTimer = setInterval(() => { left -= 1; c.textContent = t('close') + ' (' + Math.max(0, left) + ')'; if (left <= 0) done(); }, 1000);
   });
+}
+
+// ---------- etkiler (tahta üzerinde) ----------
+const pct = (v) => (v / 15) * 100 + '%';
+function fxLayer() { return $('bd'); }
+function burst(cx0, cy0, color, n) {
+  const bd = fxLayer();
+  for (let i = 0; i < (n || 14); i++) {
+    const p = el('div', 'pf'); p.style.left = pct(cx0); p.style.top = pct(cy0); p.style.background = i % 3 === 0 ? '#fff' : color;
+    bd.appendChild(p);
+    const a = rnd(0, 6.283), d = rnd(26, 70);
+    p.animate([{ transform: 'translate(0,0) scale(1.2)', opacity: 1 }, { transform: 'translate(' + Math.cos(a) * d + 'px,' + Math.sin(a) * d + 'px) scale(.2)', opacity: 0 }], { duration: rnd(450, 850), easing: 'cubic-bezier(.1,.7,.3,1)' }).onfinish = () => p.remove();
+  }
+}
+function ripple(cx0, cy0, color) {
+  const p = el('div', 'rp'); p.style.left = pct(cx0); p.style.top = pct(cy0); p.style.borderColor = color || '#fff';
+  fxLayer().appendChild(p);
+  p.animate([{ transform: 'scale(.6)', opacity: .95 }, { transform: 'scale(3.2)', opacity: 0 }], { duration: 560, easing: 'ease-out' }).onfinish = () => p.remove();
+}
+function popText(cx0, cy0, text) {
+  const p = el('div', 'pt', text); p.style.left = pct(cx0); p.style.top = pct(cy0);
+  const rot = parseFloat(getComputedStyle($('bd')).getPropertyValue('--un')) || 0;
+  fxLayer().appendChild(p);
+  p.animate([{ transform: 'translate(-50%,-50%) rotate(' + rot + 'deg) scale(.3)', opacity: 0 }, { transform: 'translate(-50%,-90%) rotate(' + rot + 'deg) scale(1.5)', opacity: 1, offset: .35 }, { transform: 'translate(-50%,-190%) rotate(' + rot + 'deg) scale(1.1)', opacity: 0 }], { duration: 950, easing: 'ease-out' }).onfinish = () => p.remove();
+}
+function shake() {
+  $('stage').animate([{ transform: 'translate(0,0)' }, { transform: 'translate(-5px,2px)' }, { transform: 'translate(5px,-3px)' }, { transform: 'translate(-3px,2px)' }, { transform: 'translate(0,0)' }], { duration: 320 });
+}
+function turnBanner(text) {
+  const b = $('turnb'); b.textContent = text;
+  b.animate([{ transform: 'translate(-50%,-50%) scale(0)', opacity: 0 }, { transform: 'translate(-50%,-50%) scale(1.15)', opacity: 1, offset: .25 }, { transform: 'translate(-50%,-50%) scale(1)', opacity: 1, offset: .7 }, { transform: 'translate(-50%,-80%) scale(.9)', opacity: 0 }], { duration: 1200, easing: 'ease-out' });
 }
 
 // ---------- çizim ----------
@@ -399,9 +538,17 @@ function renderLobby() {
   msg.textContent = creator ? t('waitHost') : joined ? t('waitJoined') : t('waitJoin');
   cnt.textContent = t('count', { n: G.players.length, m: G.maxPlayers || 4 });
   modes.appendChild(modeCard(G.mode || 'classic', true, false));
-  G.players.forEach((p) => { const d = el('div', 'lp'); d.append(avatar(p.user), el('span', '', nameOf(p))); list.appendChild(d); });
+  const max = G.maxPlayers || 4;
+  for (let i = 0; i < max; i++) {
+    const p = G.players[i];
+    const d = el('div', 'slot' + (p ? '' : ' empty'));
+    d.style.setProperty('--c', COL[i % 4]);
+    if (p) d.append(avatar(p.user), el('span', '', nameOf(p)));
+    else { const a = el('div', 'av', '+'); d.append(a, el('span', '', '…')); }
+    list.appendChild(d);
+  }
   if (joined && !creator) btns.appendChild(btn(t('leave'), 'alt', () => act(() => api('POST', '/api/games/' + gid + '/leave'))));
-  else if (!joined) { const j = btn(t('join'), '', () => act(() => api('POST', '/api/games/' + gid + '/join'))); j.disabled = G.players.length >= (G.maxPlayers || 4); btns.appendChild(j); }
+  else if (!joined) { const j = btn(t('join'), '', () => act(() => api('POST', '/api/games/' + gid + '/join'))); j.disabled = G.players.length >= max; btns.appendChild(j); }
   if (creator) {
     const s = btn(t('start'), '', () => act(() => api('POST', '/api/games/' + gid + '/start')));
     s.disabled = G.players.length < 2;
@@ -410,9 +557,9 @@ function renderLobby() {
   }
   if (creator || canManage) { close.textContent = t('closeGame'); close.style.display = ''; close.onclick = () => confirmBox(t('closeQ'), '', t('yes'), () => act(() => api('POST', '/api/games/' + gid + '/cancel'))); }
 }
-let builtFor = null;
+let builtFor = null, curRot = 0;
 function buildBoard() {
-  const bd = $('bd');
+  const bd = $('bd'), stage = $('stage');
   const key = G.id + ':' + (G.mode || 'classic');
   if (builtFor !== key) {
     bd.innerHTML = boardSvg();
@@ -423,25 +570,37 @@ function buildBoard() {
     }
     builtFor = key; shown = {};
   }
-  const wrap = $('bwrap'), side = Math.max(120, Math.min(wrap.clientWidth - 16, wrap.clientHeight - 4));
-  bd.style.width = side + 'px'; bd.style.height = side + 'px';
-  bd.style.setProperty('--fs', Math.round(side / 15 * 0.74) + 'px');
-  // Kendi üssüm sol altta görünsün diye tahta döndürülür; eşya simgeleri ters yönde döndürülüp dik tutulur.
+  const wrap = $('bwrap'), side = Math.max(120, Math.min(wrap.clientWidth - 16, wrap.clientHeight - 6));
+  stage.style.width = side + 'px'; stage.style.height = side + 'px';
+  bd.style.setProperty('--fs', Math.round(side / 15 * 0.62) + 'px');
+  bd.style.setProperty('--fs2', Math.round(side / 15 * 1.3) + 'px');
+  // Kendi üssüm sol altta görünsün diye tahta döndürülür; eşya ve taş simgeleri ters yönde döndürülüp dik tutulur.
   const seat = G.me && G.me.joined && G.me.seat != null ? G.me.seat : 3;
   const rot = [-90, 180, 90, 0][seat] || 0;
+  curRot = rot;
   bd.style.transform = 'rotate(' + rot + 'deg)';
-  bd.querySelectorAll('.it span').forEach((s) => { s.style.transform = 'rotate(' + -rot + 'deg)'; });
+  bd.style.setProperty('--un', -rot + 'deg');
 }
 function place(e, seat, prog, tok, stack) {
   const c = center(seat, prog, tok);
   const off = stack ? [(stack.i - (stack.n - 1) / 2) * 0.32, (stack.i - (stack.n - 1) / 2) * -0.18] : [0, 0];
   e.style.left = ((c[0] + off[0]) / 15) * 100 + '%'; e.style.top = ((c[1] + off[1]) / 15) * 100 + '%';
 }
+// Sunucudaki targetOf ile aynı: seçilebilir taşın varacağı kare (gösterim için).
+function targetOf(seat, from, dice) {
+  if (dice == null || from === 56) return null;
+  if (from === -1) return dice === 6 ? 0 : null;
+  const to = from + dice;
+  if (from <= 50 && to > 50 && G.mode === 'quick' && !((G.kills && G.kills[seat]) > 0)) return to >= 52 ? to - 52 : null;
+  return to <= 56 ? to : null;
+}
+function hop(e) { const s = e.querySelector('svg'); if (s) s.animate([{ transform: 'translateY(0) scale(1)' }, { transform: 'translateY(-42%) scale(1.2)' }, { transform: 'translateY(0) scale(.92)' }, { transform: 'translateY(0) scale(1)' }], { duration: 150 }); }
 function renderTokens() {
   const bd = $('bd'), gen = ++walkGen;
   const me = G.me && G.me.joined ? G.me : null;
   const myTurn = !!(me && G.status === 'playing' && G.turnSeat === me.seat);
   const legal = myTurn && G.dice != null ? (G.legal || []) : [];
+  bd.querySelectorAll('.gh').forEach((x) => x.remove());
   const groups = {};
   for (const p of G.players) (G.tokens[p.seat] || []).forEach((pr, i) => { if (pr >= 0 && pr <= 55) { const k = pr <= 50 ? 'c' + ((p.seat * 13 + pr) % 52) : 'h' + p.seat + ':' + pr; (groups[k] = groups[k] || []).push(p.seat + ':' + i); } });
   const stackOf = {};
@@ -450,16 +609,30 @@ function renderTokens() {
   for (const p of G.players) (G.tokens[p.seat] || []).forEach((pr, i) => {
     const id = p.seat + ':' + i; live.add(id);
     let e = bd.querySelector('[data-t="' + id + '"]');
-    if (!e) { e = el('button', 'tk s' + p.seat); e.dataset.t = id; bd.appendChild(e); shown[id] = pr; place(e, p.seat, pr, i, stackOf[id]); e.addEventListener('click', () => moveToken(p.seat, i)); }
-    e.classList.toggle('ok', p.seat === (me && me.seat) && legal.includes(i));
+    if (!e) { e = el('button', 'tk s' + p.seat); e.innerHTML = tokenSvg(p.seat); e.dataset.t = id; bd.appendChild(e); shown[id] = pr; place(e, p.seat, pr, i, stackOf[id]); e.addEventListener('click', () => moveToken(p.seat, i)); }
+    const ok = p.seat === (me && me.seat) && legal.includes(i);
+    e.classList.toggle('ok', ok);
+    if (ok) {
+      const to = targetOf(p.seat, pr, G.dice);
+      if (to != null && to !== pr) {
+        const gh = el('button', 'gh s' + p.seat); place(gh, p.seat, to, i, null); gh.addEventListener('click', () => moveToken(p.seat, i)); bd.appendChild(gh);
+      }
+    }
     const from = shown[id];
     if (from === pr) { place(e, p.seat, pr, i, stackOf[id]); return; }
-    // Kısa ileri hamle kare kare yürütülür; yakalanma, kapı, bomba ve tur dönüşü doğrudan konulur.
+    // Yakalanan taş: üssüne dönmeden önce patlama.
+    if (from >= 0 && pr === -1) { const c0 = center(p.seat, from, i); burst(c0[0], c0[1], COL[p.seat], 18); ripple(c0[0], c0[1], COL[p.seat]); shake(); post({ type: 'haptic' }); }
+    // Kısa ileri hamle kare kare yürütülür (zıplayarak); yakalanma, kapı, bomba ve tur dönüşü doğrudan konulur.
     if (from >= 0 && pr > from && pr - from <= 6) {
       let cur = from;
-      const stepper = () => { if (gen !== walkGen) return; cur += 1; shown[id] = cur; place(e, p.seat, cur, i, cur === pr ? stackOf[id] : null); if (cur < pr) setTimeout(stepper, 120); };
+      const stepper = () => {
+        if (gen !== walkGen) return;
+        cur += 1; shown[id] = cur; place(e, p.seat, cur, i, cur === pr ? stackOf[id] : null); hop(e);
+        if (cur < pr) setTimeout(stepper, 150);
+        else { const c1 = center(p.seat, pr, i); ripple(c1[0], c1[1], COL[p.seat]); if (pr === 56) { burst(c1[0], c1[1], '#ffd54f', 24); confetti(50); } }
+      };
       stepper();
-    } else { shown[id] = pr; place(e, p.seat, pr, i, stackOf[id]); }
+    } else { shown[id] = pr; place(e, p.seat, pr, i, stackOf[id]); if (from === -1 && pr === 0) { hop(e); ripple(center(p.seat, 0, i)[0], center(p.seat, 0, i)[1], COL[p.seat]); } }
   });
   bd.querySelectorAll('.tk').forEach((e) => { if (!live.has(e.dataset.t)) { delete shown[e.dataset.t]; e.remove(); } });
 }
@@ -468,21 +641,32 @@ function renderPlayers() {
   for (const p of G.players) {
     const d = el('div', 'pc s' + p.seat + (G.turnSeat === p.seat ? ' turn' : ''));
     d.dataset.seat = String(p.seat);
-    const bar = el('div', 'bar2'); bar.appendChild(el('i'));
-    d.append(avatar(p.user), el('span', 'nm', nameOf(p)), bar);
+    const rg = el('div', 'rg'); rg.appendChild(avatar(p.user));
+    const tx = el('div', 'tx'); const dots = el('div', 'dots');
+    (G.tokens[p.seat] || [-1, -1, -1, -1]).forEach((pr) => dots.appendChild(el('i', pr === 56 ? 'on' : '')));
+    tx.append(el('span', 'nm', nameOf(p)), dots);
+    d.append(rg, tx);
     if ((G.frozen || []).includes(p.seat)) d.appendChild(el('span', 'bd', '❄️'));
-    if (G.mode === 'quick') d.appendChild(el('span', 'kl', t('kills', { k: (G.kills && G.kills[p.seat]) || 0 })));
+    if (G.mode === 'quick') d.appendChild(el('span', 'kl', '⚔ ' + ((G.kills && G.kills[p.seat]) || 0)));
     box.appendChild(d);
   }
 }
-const FACE = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
 function renderCtl() {
   const me = G.me && G.me.joined ? G.me : null;
   const myTurn = !!(me && G.status === 'playing' && G.turnSeat === me.seat);
   const dice = $('dice'), st = $('st');
-  if (G.dice != null) lastDice = G.dice;
-  else { const l = (G.log || []).slice().reverse().find((e) => e.dice); if (l) lastDice = l.dice; }
-  dice.firstChild.textContent = FACE[lastDice || 0] || '🎲';
+  const lastLog = (G.log || []).slice().reverse().find((e) => e.dice);
+  const rolled = G.dice != null ? G.dice : (lastLog ? lastLog.dice : null);
+  const roller = G.dice != null ? G.turnSeat : (lastLog ? lastLog.seat : G.turnSeat);
+  dice.style.setProperty('--dc', COL[roller] || '#c98a08');
+  if (rolled) {
+    // Zar yalnızca atış anında (yeni zar ya da "hamle yok" kaydı) döner; hamle sonrası aynı yüz kalır.
+    const fresh = (G.dice != null && G.seq !== lastRollSeq) || (lastLog && (lastLog.event === 'no_move' || lastLog.event === 'three_sixes') && lastLog.n > lastRollSeq);
+    if (!diceReady) diceSet(rolled);
+    else if (fresh) diceTo(rolled, 1);
+    if (fresh || !diceReady) lastRollSeq = Math.max(G.seq, lastRollSeq);
+    diceReady = true;
+  } else if (!diceReady) { diceSet(1); diceReady = true; }
   dice.className = myTurn && G.dice == null ? 'can' : '';
   st.dir = RTL ? 'rtl' : 'ltr';
   st.className = myTurn ? 'me' : '';
@@ -493,10 +677,12 @@ async function rollDice() {
   const me = G && G.me && G.me.joined ? G.me : null;
   if (!me || busy || G.status !== 'playing' || G.turnSeat !== me.seat || G.dice != null) return;
   const gid = G.id;
-  $('dice').className = 'rolling';
+  $('dice').className = '';
+  diceSpin();
+  post({ type: 'haptic' });
   const d = await act(() => api('POST', '/api/games/' + gid + '/roll'));
   // Tek hamle varsa kendiliğinden oynanır (seçilecek bir şey yok).
-  if (d && !d.skipped && d.legal && d.legal.length === 1) setTimeout(() => moveToken(me.seat, d.legal[0]), 450);
+  if (d && !d.skipped && d.legal && d.legal.length === 1) setTimeout(() => moveToken(me.seat, d.legal[0]), 900);
 }
 function moveToken(seat, tok) {
   const me = G && G.me && G.me.joined ? G.me : null;
@@ -519,8 +705,11 @@ function events(was) {
     else if (e.event === 'forfeit') msgs.push(t('eLeft', { n: name(e.seat) }));
     else {
       const f = (e.fx || [])[0];
-      if (f) msgs.push(t({ bomb: 'eBomb', portal: 'ePortal', rocket: 'eRocket', ice: 'eIce', dice: 'eDice' }[f.item], { n: name(e.seat) }));
-      else if (e.event === 'capture') msgs.push(t('eCapture', { n: name(e.seat) }));
+      if (f) {
+        msgs.push(t({ bomb: 'eBomb', portal: 'ePortal', rocket: 'eRocket', ice: 'eIce', dice: 'eDice' }[f.item], { n: name(e.seat) }));
+        if (e.land != null && e.land >= 0 && e.land <= 50) { const c = center(e.seat, e.land, 0); popText(c[0], c[1], ICON[f.item] || '✨'); if (f.item === 'bomb') { burst(c[0], c[1], '#ff9b3d', 22); shake(); } else ripple(c[0], c[1], '#ffd54f'); }
+      } else if (e.event === 'capture') msgs.push(t('eCapture', { n: name(e.seat) }));
+      else if (e.event === 'finish') msgs.push(t('eHome', { n: name(e.seat) }));
     }
   }
   if (msgs.length) toast(msgs.slice(-2).join(' · '));
@@ -533,7 +722,7 @@ function renderBoard(was) {
   events(was);
   buildBoard(); renderPlayers(); renderTokens(); renderCtl();
   const mine = !!(me && G.status === 'playing' && G.turnSeat === me.seat);
-  if (mine && !prevTurnMine) post({ type: 'haptic' });
+  if (mine && !prevTurnMine) { post({ type: 'haptic' }); turnBanner(t('yourTurnB')); }
   prevTurnMine = mine;
 }
 function render(was) {
@@ -546,26 +735,27 @@ function render(was) {
   }
   if (G && G.status === 'cancelled') { if (was && was.id === G.id && was.status !== 'cancelled') toast(t('cancelled')); G = null; }
   if (modalKind === 'result' && G) closeModal();
-  prevTurnMine = false; lastDice = null;
+  prevTurnMine = false; diceReady = false; lastRollSeq = -1; builtFor = null;
   renderLobby();
 }
 setInterval(() => {
   if (!G || G.status !== 'playing' || !turnEnd) return;
-  const b = document.querySelector('.pc.turn .bar2 i');
-  if (b) b.style.transform = 'scaleX(' + Math.max(0, Math.min(1, (turnEnd - performance.now()) / (G.turnMs || 30000))) + ')';
-}, 250);
+  const b = document.querySelector('.pc.turn .rg');
+  if (b) b.style.setProperty('--p', String(Math.max(0, Math.min(1, (turnEnd - performance.now()) / (G.turnMs || 30000)))));
+}, 120);
 
 // ---------- olaylar ----------
 $('brules').addEventListener('click', showRules);
 $('bmin').addEventListener('click', () => post({ type: 'minimize' }));
 $('bleave').addEventListener('click', () => { if (!G) return; const gid = G.id; confirmBox(t('leaveQ'), t('leaveHint'), t('leave'), () => act(() => api('POST', '/api/games/' + gid + '/leave'))); });
 $('dice').addEventListener('click', rollDice);
-window.addEventListener('resize', () => { if (G && G.tokens && $('board').classList.contains('on')) { buildBoard(); renderTokens(); } });
+window.addEventListener('resize', () => { sizeCf(); if (G && G.tokens && $('board').classList.contains('on')) { buildBoard(); renderTokens(); } });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') refresh(); });
 setInterval(() => { if (document.visibilityState === 'visible' && !busy) refresh(); }, 4000);
 
 (async () => {
   $('loadmsg').textContent = t('loading');
+  sizeCf();
   if (!window.TRLive) { $('load').querySelector('.spin').remove(); $('loadmsg').textContent = t('appOnly'); return; }
   await refresh();
   $('load').className = 'off';

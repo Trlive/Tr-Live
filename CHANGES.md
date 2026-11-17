@@ -1,3 +1,38 @@
+## v2.117.0 — Ludo ve TEK baştan tasarlandı; oyun penceresinde mikrofon koltukları ve sırası
+- Oyun sayfaları sunucudan gelir (APK gerekmez); yalnızca mikrofon şeridi uygulama tarafındadır.
+- **Ludo:** cilalı altın çerçeveli tahta, parlak yuvalar ve kaleler, taç işlemeli taşlar (zıplayarak yürür), gidilecek karenin gölgesi,
+  3B dönen zar (atanın rengiyle), kırılan taşta patlama ve sarsıntı, eşya karelerinde efektler, "Sıra sende!" bildirimi,
+  oyuncu kartlarında süre halkası ve eve ulaşan taş sayısı, kazanınca konfeti ve kupa.
+- **TEK:** yeni kart tasarımı (renkli yüz, eğik krem oval, altın çerçeveli sırt), neon masa ve ışık huzmeleri, kavisli altın el rafı.
+  Animasyonlar: kart dağıtma, atılan kartın oyuncudan yığına uçuşu, çekilen kartın desteden ele uçuşu, +2/+4 ve joker şok dalgası, "TEK!" çağrısı,
+  atlama simgesi, yön değişimi.
+- **Otomatik çekme:** atacak kartı olmayan oyuncu için kart kısa bir bekleyişle kendiliğinden çekilir.
+- **Mikrofon şeridi:** oyun penceresinin üstünde odadaki koltuklar (oturan, konuşan halkası, susturulmuş) ve mikrofon sırası (sıra sayısı / senin sıran) görünür.
+  Avatara dokununca profil açılır; sıra düğmesi sıraya girer ya da (yetkiliyse) mikrofon isteklerini açar.
+
+## v2.116.1 — ID tasarımı düzeltildi
+- **Özel ID** artık ayrı/rengarenk bir görünüm değil: yalnızca rakamları kullanıcının seçtiği ID'dir ve normal ID gibi görünür.
+- **Normal ID:** sade `ID:12345678` yazısı (kapsül yok).
+- **Renkli ID (bronz / gümüş / altın):** solda parlak kapsül "ID" etiketi, yanında aynı renkte numara. Animasyon ve ışık geçişi kaldırıldı.
+- Görünüm yalnızca takılı renkli ID'ye bağlıdır; özel ID'si olan biri de bronz/gümüş/altın takabilir.
+
+## v2.116.0 — Ajans Merkezi ve Yayıncı Merkezi sunucudan (WebView, 4 dil); bayi paneli uygulamadan kaldırıldı
+- **Ajans Merkezi** ve **Yayıncı Merkezi** artık sunucudaki sayfalardır (`/yonetim/m/agency/`, `/yonetim/m/host/`);
+  uygulama bunları tam ekran WebView ile açar. Değişiklikler APK güncellemesi olmadan herkese gelir; veriler canlıdır.
+  - Oturum adrese yazılmaz: sayfa uygulamadan "TRLive" kanalıyla ister, uygulama yalnızca kendi sunucusundaki sayfaya
+    verir; bilet süresi dolarsa sayfa yenisini ister.
+  - Dil uygulamanın diliyle aynı (Türkçe, İngilizce, Arapça, Hintçe); Arapça sağdan sola.
+  - Sayfalar uygulamada Fasulye cüzdanını ve kullanıcı profillerini açabilir (izinli ekranlar).
+- Ajans Merkezi: genel bakış (prim, elmas, canlı / aktif yayıncı, seviye, sıralama, görevler, duyuru, asistan yetkisi),
+  yayıncılar (her yayıncının bu dönem yayın süresi, bugünkü süresi, geçerli günü, elması, seviyesi, tahmini maaşı ve ajans
+  primi; süzgeçler; davet, bekleyen davetleri geri alma, ajanstan çıkarma), kazançlar, asistanlar, davet primi,
+  transferler, maaş tablosu.
+- Yayıncı Merkezi: ajans davetleri, bu dönem yayın süresi / geçerli gün / elmas / seviye / tahmini maaş, sesli-görüntülü
+  ayrımı, hedef, maaş yöntemi, kimlik doğrulama, ajanstan ayrılma ve transfer işlemleri, geçmiş dönemler, maaş tablosu.
+- Web ajans paneli de aynı bileşenleri kullanır (tek kod).
+- Uygulamadan kaldırılanlar: Bayi paneli (bayiler `/yonetim/dealer/login/` adresinden girer), eski Ajans Merkezi ve
+  Yayıncı Merkezi ekranları. Bildirimler ve Gelirlerim'deki bağlantılar yeni sayfaları açar.
+
 ## v2.115.0 — Yönetim tamamen web panelinde; uygulamadan yönetim ekranları kaldırıldı
 - Uygulamadaki **Yönetim paneli / Yardımcı admin paneli** girişi ve tüm yönetim ekranları kaldırıldı (11 ekran).
   Yönetim artık yalnızca `https://SUNUCU/yonetim/admin/login/` adresinden yapılır; yönetim değişiklikleri için

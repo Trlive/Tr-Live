@@ -5,6 +5,9 @@ import '../services/api.dart';
 import '../services/session.dart';
 import '../version.dart';
 import 'app_theme.dart';
+import '../l10n/l10n.dart';
+import '../screens/usd_wallet_screen.dart';
+import '../screens/user_screens.dart';
 
 /// Kendi sunucumuzdaki bir H5 sayfasını uygulama içinde gösteren genel pencere.
 ///
@@ -18,6 +21,8 @@ import 'app_theme.dart';
 ///  {"type":"getToken"}        → uygulama `window.TRLiveAuth.set(token)` çağırır
 ///  {"type":"refreshBalance"}  → bakiye yenilenir ([onRefreshBalance] ve oturum)
 ///  {"type":"close"}           → pencere kapanır
+///  {"type":"open","screen":"usd_wallet"}            → Fasulye cüzdanı açılır
+///  {"type":"open","screen":"profile","userId":"…"}  → kullanıcının profili açılır
 class AppWebViewModal extends StatefulWidget {
   final String url;
   final String title;
@@ -25,7 +30,10 @@ class AppWebViewModal extends StatefulWidget {
   /// Sayfa bakiyenin değiştiğini bildirdiğinde (ve pencere kapanırken) çağrılır.
   final Future<void> Function()? onRefreshBalance;
 
-  const AppWebViewModal({super.key, required this.url, required this.title, this.onRefreshBalance});
+  /// Tam sayfa (alt pencere değil): üstteki tutamak gizlenir.
+  final bool fullPage;
+
+  const AppWebViewModal({super.key, required this.url, required this.title, this.onRefreshBalance, this.fullPage = false});
 
   @override
   State<AppWebViewModal> createState() => _AppWebViewModalState();
@@ -93,8 +101,10 @@ class _AppWebViewModalState extends State<AppWebViewModal> {
   Future<void> _onMessage(JavaScriptMessage m) async {
     if (!_trusted) return;
     String type;
+    Map? data;
     try {
       final d = jsonDecode(m.message);
+      data = d is Map ? d : null;
       type = d is Map ? (d['type'] ?? '').toString() : m.message;
     } catch (_) {
       type = m.message;
@@ -106,7 +116,22 @@ class _AppWebViewModalState extends State<AppWebViewModal> {
         await _refreshBalance();
       case 'close':
         if (mounted) Navigator.of(context).maybePop();
+      case 'open':
+        _openScreen(data);
     }
+  }
+
+  /// Sayfanın açmak istediği uygulama ekranı (yalnızca izin verilen ekranlar).
+  void _openScreen(Map? d) {
+    if (!mounted || d == null) return;
+    final screen = d['screen']?.toString();
+    Widget? page;
+    if (screen == 'usd_wallet') page = const UsdWalletScreen();
+    if (screen == 'profile') {
+      final id = d['userId']?.toString() ?? '';
+      if (RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(id)) page = UserProfileScreen(userId: id);
+    }
+    if (page != null) Navigator.of(context).push(MaterialPageRoute(builder: (_) => page!));
   }
 
   Future<void> _sendToken() async {
@@ -138,8 +163,10 @@ class _AppWebViewModalState extends State<AppWebViewModal> {
   @override
   Widget build(BuildContext context) {
     return Column(children: [
-      const SizedBox(height: 8),
-      Container(width: 38, height: 4, decoration: BoxDecoration(color: Pal.outline, borderRadius: BorderRadius.circular(2))),
+      if (!widget.fullPage) ...[
+        const SizedBox(height: 8),
+        Container(width: 38, height: 4, decoration: BoxDecoration(color: Pal.outline, borderRadius: BorderRadius.circular(2))),
+      ],
       Padding(
         padding: const EdgeInsets.fromLTRB(16, 6, 6, 0),
         child: Row(children: [
@@ -207,3 +234,27 @@ Future<void> showAppWebViewSheet(
     ),
   );
 }
+
+
+/// Sunucudaki bir sayfayı tam ekran açar (Ajans Merkezi, Yayıncı Merkezi). Dil uygulamanın diliyle aynıdır.
+class AppWebPage extends StatelessWidget {
+  final String path; // ör. /yonetim/m/agency/
+  final String title;
+  final String? tab;
+  const AppWebPage({super.key, required this.path, required this.title, this.tab});
+
+  @override
+  Widget build(BuildContext context) {
+    final url = '${Api.baseUrl}$path?lang=${L10n.lang.value}${tab != null ? '#$tab' : ''}';
+    return Scaffold(
+      backgroundColor: Pal.bg,
+      body: SafeArea(child: AppWebViewModal(url: url, title: title, fullPage: true)),
+    );
+  }
+}
+
+/// Ajans Merkezi (sunucudan).
+AppWebPage agencyCenterPage() => AppWebPage(path: '/yonetim/m/agency/', title: tx('Ajans Merkezi'));
+
+/// Yayıncı Merkezi (sunucudan). tab: 'home' | 'history' | 'paytable'.
+AppWebPage hostCenterPage({String? tab}) => AppWebPage(path: '/yonetim/m/host/', title: tx('Yayıncı Merkezi'), tab: tab);

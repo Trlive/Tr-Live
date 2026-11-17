@@ -7,7 +7,7 @@ import '../services/session.dart';
 import '../services/socket_service.dart';
 import '../widgets/app_theme.dart';
 import '../widgets/common.dart';
-import 'agency_screen.dart';
+import '../widgets/app_webview_modal.dart';
 import 'family_screen.dart';
 import 'inbox_screens.dart';
 import 'user_screens.dart';
@@ -103,10 +103,10 @@ class _NotificationsPageState extends State<NotificationsPage> {
     } else if (kind == 'agency_assistant' && d['inviteId'] != null) {
       page = const AgencyInvitesScreen();
     } else if (kind == 'agency_salary') {
-      page = const HostStatementsScreen();
+      page = hostCenterPage(tab: 'history');
     } else if (kind == 'agency_notice' || kind == 'agency_transfer') {
       // Ajans sahibi / asistan Ajans Merkezi'ni, yayıncı Yayıncı Merkezi'ni açar.
-      page = d['transferId'] != null || d['agencyId'] == null ? const AgencyCenterOrHostScreen() : const AgencyScreen(mode: 'broadcaster');
+      page = d['transferId'] != null || d['agencyId'] == null ? const _AgencyOrHost() : hostCenterPage();
     } else if (d['userId'] != null) {
       page = UserProfileScreen(userId: d['userId'].toString());
     }
@@ -344,6 +344,25 @@ class _FamilyChatPageState extends State<FamilyChatPage> {
           ),
         ),
       ]),
+    );
+  }
+}
+
+
+/// Ajans sahibi / asistan için Ajans Merkezi, diğerleri için Yayıncı Merkezi (ikisi de sunucudan).
+class _AgencyOrHost extends StatelessWidget {
+  const _AgencyOrHost();
+
+  @override
+  Widget build(BuildContext context) {
+    return AsyncBody<Map<String, dynamic>>(
+      load: () => Api.get('/api/agency-center/me'),
+      shell: (context, child) => Scaffold(appBar: AppBar(), body: child),
+      builder: (context, me, reload) {
+        final owned = mapOf(me['owned']);
+        if ((owned != null && owned['status'] == 'active') || mapOf(me['assistant']) != null) return agencyCenterPage();
+        return hostCenterPage();
+      },
     );
   }
 }

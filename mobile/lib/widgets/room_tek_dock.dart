@@ -41,7 +41,9 @@ class LudoLogo extends StatelessWidget {
 /// `window.TRGame.push(...)` ile iletir.
 class RoomTekDock extends StatefulWidget {
   final String roomId;
-  const RoomTekDock({super.key, required this.roomId});
+  /// Oyun penceresinin üstünde durur: odadaki mikrofon koltukları (oturanlar, konuşanlar) ve mikrofon sırası.
+  final WidgetBuilder? seatStrip;
+  const RoomTekDock({super.key, required this.roomId, this.seatStrip});
 
   @override
   State<RoomTekDock> createState() => RoomTekDockState();
@@ -287,7 +289,9 @@ class RoomTekDockState extends State<RoomTekDock> with SingleTickerProviderState
     final size = MediaQuery.sizeOf(context);
     final top = MediaQuery.paddingOf(context).top;
     // Pencere ekranın üst kısmını kaplar; altta sohbet ve alt çubuk için en az 150 px kalır.
-    final h = math.max(300.0, math.min(math.max(size.height * 0.62, 470.0), size.height - top - 150));
+    final strip = widget.seatStrip;
+    const stripH = 62.0;
+    final h = math.max(300.0, math.min(math.max(size.height * 0.62, 470.0) + (strip != null ? stripH : 0), size.height - top - 150));
     final c = _wv;
     return Align(
       alignment: Alignment.topCenter,
@@ -302,6 +306,7 @@ class RoomTekDockState extends State<RoomTekDock> with SingleTickerProviderState
         ),
         child: Column(children: [
           SizedBox(height: top),
+          if (strip != null) SizedBox(height: stripH, child: strip(context)),
           Expanded(
             child: _failed || c == null
                 ? Center(

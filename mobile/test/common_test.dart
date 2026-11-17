@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tr_live/services/api.dart';
 import 'package:tr_live/services/presence_service.dart';
-import 'package:tr_live/screens/agency_screen.dart' show periodTitle;
 import 'package:tr_live/screens/ludo_screen.dart' show tokenCenter;
 import 'package:tr_live/widgets/common.dart';
 
@@ -19,11 +18,6 @@ void main() {
     expect(fmtMoney('5000'), '50,00 USD');
     expect(fmtMoney(123456, 'EUR'), '1.234,56 EUR');
     expect(fmtMoney(null), '0,00 USD');
-  });
-
-  test('periodTitle', () {
-    expect(periodTitle('2026-10'), '2026-10');
-    expect(periodTitle('W2026-09-28'), 'Hafta 2026-09-28');
   });
 
   test('Ludo taş konumları sunucu yoluyla uyumlu', () {

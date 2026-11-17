@@ -11,9 +11,7 @@ import '../widgets/app_theme.dart';
 import '../widgets/common.dart';
 import '../widgets/id_badge.dart';
 import '../widgets/cp_widgets.dart';
-import 'agency_screen.dart';
-import 'agency_center.dart';
-import 'dealer_screen.dart';
+import '../widgets/app_webview_modal.dart';
 import 'family_screen.dart';
 import 'social_screens.dart';
 import 'store_screens.dart';
@@ -323,16 +321,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Column(children: [
         row(Icons.storefront, Colors.orangeAccent, tx('Mağaza'), () => _open(const StoreScreen())),
         // Yayıncı Merkezi: yalnızca ajans davetini kabul etmiş (onaylı) yayıncılar. Başvuru yok; davet Mesajlar'a düşer.
-        if (isBroadcaster) row(Icons.podcasts, Pal.cyan, tx('Yayıncı Merkezi'), () => _open(const AgencyScreen(mode: 'broadcaster'))),
+        if (isBroadcaster) row(Icons.podcasts, Pal.cyan, tx('Yayıncı Merkezi'), () => _open(hostCenterPage())),
         // Ajans Merkezi: yalnızca ajans sahibi (ajansı yönetici açar). Ajans sahibi aynı zamanda yayıncı da olabilir.
         if (agencyOwned != null)
-          row(Icons.business, Pal.cyan, tx('Ajans Merkezi'), () => _open(const AgencyCenterScreen()),
+          row(Icons.business, Pal.cyan, tx('Ajans Merkezi'), () => _open(agencyCenterPage()),
               sub: '${agencyOwned['name']} · ${const {'pending': 'İnceleniyor', 'active': 'Aktif', 'suspended': 'Askıda', 'rejected': 'Reddedildi'}[agencyOwned['status']] ?? agencyOwned['status']}')
         else if (agencyAssistant != null)
-          row(Icons.support_agent, Pal.cyan, tx('Ajans Merkezi'), () => _open(const AgencyCenterScreen()), sub: '${agencyAssistant['agencyName']} · ${tx('Asistan')}'),
+          row(Icons.support_agent, Pal.cyan, tx('Ajans Merkezi'), () => _open(agencyCenterPage()), sub: '${agencyAssistant['agencyName']} · ${tx('Asistan')}'),
         row(Icons.shield_outlined, const Color(0xFFFF4FA8), tx('Koruyuculuğum'), () => _open(MyGuardianScreen(profileBuilder: (id) => UserProfileScreen(userId: id))), sub: tx('Koruyucuların ve koruduğun kişiler')),
         row(Icons.event_available, Pal.gold, tx('Günlük Giriş'), () => showCheckinDialog(context)),
-        if (isDealer) row(Icons.store_mall_directory, Pal.cyan, tx('Bayi paneli'), () => _open(const DealerScreen())),
       ]),
     );
   }

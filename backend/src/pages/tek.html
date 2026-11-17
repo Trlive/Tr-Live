@@ -1,134 +1,160 @@
-<!doctype html>
-<html lang="__LANG__"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<meta name="color-scheme" content="dark">
-<title>TEK</title>
 <style nonce="__NONCE__">
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none}
 html,body{margin:0;height:100%;overflow:hidden;background:#0b0906;color:#f6efdf;font:14px system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:pointer}
-:root{--gold:#f2b92a;--gold2:#ffd54f;--line:#4d3c1c;--surf:#17130c;--surf2:#221b10;--dim:#b3a584;--r:#e5483d;--y:#f2b92a;--g:#2fbf71;--b:#3d8bfd;--cw:52px}
-#app{position:absolute;inset:0;display:flex;flex-direction:column;background:radial-gradient(120% 80% at 50% 38%,#2a2010 0%,#15100a 55%,#0b0906 100%)}
+:root{--gold:#f2b92a;--gold2:#ffd54f;--line:#4d3c1c;--surf:#17130c;--surf2:#221b10;--dim:#b3a584}
+#app{position:absolute;inset:0;display:flex;flex-direction:column;overflow:hidden;background:radial-gradient(130% 70% at 50% 30%,#33260f 0%,#17110a 52%,#0b0906 100%)}
+#app::before{content:"";position:absolute;inset:0;pointer-events:none;background-image:radial-gradient(1.6px 1.6px at 12% 14%,#fff9 50%,#0000 52%),radial-gradient(1px 1px at 78% 9%,#fff7 50%,#0000 52%),radial-gradient(1.6px 1.6px at 40% 72%,#ffe9a899 50%,#0000 52%),radial-gradient(1px 1px at 90% 58%,#fff6 50%,#0000 52%),radial-gradient(1px 1px at 22% 90%,#fff6 50%,#0000 52%),radial-gradient(1.6px 1.6px at 64% 38%,#ffe9a877 50%,#0000 52%),radial-gradient(1px 1px at 52% 6%,#fff6 50%,#0000 52%);animation:tw 3.6s ease-in-out infinite alternate}
+@keyframes tw{from{opacity:.45}to{opacity:1}}
+#app>*{position:relative}
 .scr{display:none;flex:1;min-height:0;flex-direction:column}.scr.on{display:flex}
 /* ---------- üst çubuk ---------- */
-.bar{height:38px;flex:none;display:flex;align-items:center;gap:8px;padding:0 10px}
-.chip{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 9px;border-radius:12px;background:rgba(0,0,0,.35);border:1px solid var(--line);font-size:12px;color:var(--dim);font-variant-numeric:tabular-nums}
-.chip.hot{color:#1c1405;background:var(--gold);border-color:var(--gold)}
+.bar{height:36px;flex:none;display:flex;align-items:center;gap:8px;padding:0 10px}
+.chip{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 10px;border-radius:12px;background:linear-gradient(180deg,rgba(255,213,79,.16),rgba(0,0,0,.4));border:1px solid var(--line);font-size:12px;font-weight:700;color:var(--gold2)}
 .sp{flex:1}
-.ib{width:30px;height:30px;border-radius:50%;background:rgba(0,0,0,.4);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;color:var(--gold2)}
+.ib{width:30px;height:30px;border-radius:50%;background:rgba(0,0,0,.45);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;color:var(--gold2)}
 .ib svg{width:16px;height:16px}
 .ib:active{background:var(--surf2)}
 /* ---------- bekleme ---------- */
 #lobby{align-items:center;padding:0 16px 14px;text-align:center;overflow-y:auto}
-.logoimg{width:88px;height:88px;flex:none;margin-top:2px;filter:drop-shadow(0 4px 10px rgba(0,0,0,.5))}
-.logo{font-weight:900;font-size:30px;letter-spacing:5px;line-height:1;margin:6px 0 2px;background:linear-gradient(180deg,#fff0b3,#f2b92a 55%,#b9770a);-webkit-background-clip:text;background-clip:text;color:transparent;text-shadow:0 2px 10px rgba(242,185,42,.25)}
+.logoimg{width:84px;height:84px;flex:none;margin-top:0;filter:drop-shadow(0 4px 12px rgba(0,0,0,.6));animation:float 3.4s ease-in-out infinite}
+@keyframes float{50%{transform:translateY(-5px) rotate(-2deg)}}
+.logo{font-weight:900;font-size:30px;letter-spacing:6px;line-height:1;margin:6px 0 2px;background:linear-gradient(180deg,#fff0b3,#f2b92a 55%,#b9770a);-webkit-background-clip:text;background-clip:text;color:transparent}
 .logo small{display:block;font-size:10px;letter-spacing:3px;color:var(--dim);-webkit-text-fill-color:var(--dim);font-weight:600;margin-top:4px}
-#lmsg{font-size:15px;font-weight:700;margin:12px 0 2px}
+#lmsg{font-size:15px;font-weight:700;margin:10px 0 2px}
 #lcount{color:var(--gold2);font-size:13px;min-height:18px}
-#lplayers{display:flex;flex-wrap:wrap;justify-content:center;gap:10px 8px;margin:12px 0;min-height:66px;max-width:420px}
-.lp{width:58px;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;color:var(--dim)}
-.lp span{max-width:58px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.slots{display:flex;justify-content:center;gap:10px;margin:12px 0;max-width:420px}
+.slot{width:64px;display:flex;flex-direction:column;align-items:center;gap:4px;font-size:11px;color:var(--dim)}
+.slot .av{width:54px;height:54px;font-size:21px;border:3px solid var(--c);box-shadow:0 0 12px -2px var(--c)}
+.slot.empty .av{background:rgba(255,255,255,.04);border:2px dashed rgba(255,255,255,.25);box-shadow:none;color:rgba(255,255,255,.35);animation:blink 1.6s ease-in-out infinite}
+.slot span{max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@keyframes blink{50%{opacity:.45}}
 .btns{display:flex;gap:10px;width:100%;max-width:420px;margin-top:auto}
-.btn{flex:1;height:44px;border-radius:22px;font-weight:800;font-size:15px;background:linear-gradient(180deg,#ffd54f,#f2b92a);color:#1c1405;display:flex;align-items:center;justify-content:center;padding:0 12px}
-.btn.alt{background:var(--surf2);color:#f6efdf;border:1px solid var(--line)}
-.btn.red{background:#3a1512;color:#ff9b93;border:1px solid #6b2a24}
+.btn{flex:1;height:46px;border-radius:23px;font-weight:800;font-size:15px;background:linear-gradient(180deg,#ffe27a,#f2b92a 55%,#c98a08);color:#1c1405;display:flex;align-items:center;justify-content:center;padding:0 12px;box-shadow:0 3px 0 #8a5a05,0 6px 14px rgba(0,0,0,.45)}
+.btn.alt{background:var(--surf2);color:#f6efdf;border:1px solid var(--line);box-shadow:0 3px 0 #0b0906}
+.btn.red{background:#3a1512;color:#ff9b93;border:1px solid #6b2a24;box-shadow:none}
 .btn:disabled{opacity:.4}
-.btn:active:not(:disabled){transform:scale(.97)}
+.btn:active:not(:disabled){transform:translateY(2px);box-shadow:0 1px 0 #8a5a05}
 .link{margin-top:10px;color:var(--dim);font-size:12px;text-decoration:underline;padding:4px 8px}
 /* ---------- avatar ---------- */
 .av{position:relative;width:44px;height:44px;border-radius:50%;background:#3a2c12;border:2px solid var(--line);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:18px;color:var(--gold2);flex:none}
 .av img{position:absolute;inset:0;width:100%;height:100%;border-radius:50%;object-fit:cover}
-/* ---------- masa ---------- */
-#table{position:relative;flex:1;min-height:0}
-.seat{position:absolute;width:76px;margin-left:-38px;margin-top:-30px;display:flex;flex-direction:column;align-items:center;gap:2px;transition:opacity .2s}
-.seat .nm{max-width:76px;font-size:10.5px;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.seat.out{opacity:.35}
-.seat .ring{position:relative;padding:3px;border-radius:50%}
-.seat.turn .ring{background:conic-gradient(var(--gold2) calc(var(--p,1)*360deg),rgba(255,255,255,.12) 0)}
-.seat.turn .av{border-color:#0b0906}
-.seat.turn .nm{color:var(--gold2);font-weight:700}
-.cnt{position:absolute;right:-14px;top:-2px;min-width:22px;height:28px;padding:0 4px;border-radius:5px;background:linear-gradient(160deg,#2b2212,#120e07);border:1.5px solid var(--gold);color:var(--gold2);font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center;transform:rotate(10deg);box-shadow:-2px 1px 0 #0b0906,-4px 2px 0 rgba(242,185,42,.35)}
-.tag{position:absolute;left:-10px;top:-4px;width:18px;height:18px;border-radius:5px;background:var(--r);color:#fff;font-weight:900;font-size:11px;display:flex;align-items:center;justify-content:center;transform:rotate(-10deg)}
-.one{position:absolute;left:50%;bottom:3px;transform:translateX(-50%);padding:1px 6px;border-radius:8px;background:var(--gold);color:#1c1405;font-weight:900;font-size:10px;letter-spacing:1px;animation:pulse 1s infinite}
-.fly{position:absolute;left:50%;top:-6px;transform:translateX(-50%);color:var(--gold2);font-weight:900;font-size:15px;text-shadow:0 1px 3px #000;animation:fly 1.1s ease-out forwards;pointer-events:none}
-.s-sm .av{width:32px;height:32px;font-size:14px}.s-sm{width:56px;margin-left:-28px;margin-top:-24px;gap:1px}.s-sm .nm{max-width:56px;font-size:9.5px}.s-sm .cnt{right:-11px;min-width:19px;height:24px;font-size:11px}.s-sm .ring{padding:2px}.s-sm .tag{width:15px;height:15px;font-size:9.5px;left:-8px}
-@keyframes fly{0%{opacity:0;transform:translate(-50%,8px)}20%{opacity:1}100%{opacity:0;transform:translate(-50%,-22px)}}
-@keyframes pulse{50%{transform:translateX(-50%) scale(1.12)}}
-/* orta: atılan kartlar ve yön halkası */
-#mid{position:absolute;left:50%;top:50%;width:150px;height:150px;margin:-75px 0 0 -75px}
-#ringsvg{position:absolute;inset:0;width:100%;height:100%;animation:spin 9s linear infinite;color:var(--gold)}
-#ringsvg.rev{animation-direction:reverse}
-#ringsvg.rev g{transform:scaleX(-1);transform-origin:50% 50%}
-@keyframes spin{to{transform:rotate(360deg)}}
-#felt{position:absolute;inset:17px;border-radius:50%;background:radial-gradient(circle at 50% 40%,rgba(255,255,255,.10),rgba(0,0,0,.35));border:3px solid currentColor;transition:color .3s,box-shadow .3s;box-shadow:0 0 18px -2px currentColor,inset 0 0 22px rgba(0,0,0,.5)}
-#pile{position:absolute;left:50%;top:50%;width:var(--cw);height:calc(var(--cw)*1.45);margin:calc(var(--cw)*-.725) 0 0 calc(var(--cw)*-.5)}
-#pile .card{position:absolute;inset:0}
-#pile .card.new{animation:pop .28s ease-out}
-@keyframes pop{0%{transform:scale(1.5) rotate(var(--rot,0deg));opacity:.3}100%{transform:scale(1) rotate(var(--rot,0deg));opacity:1}}
-#deck{position:absolute;left:14%;top:84%;width:calc(var(--cw)*.86);height:calc(var(--cw)*1.25);margin:calc(var(--cw)*-.62) 0 0 calc(var(--cw)*-.43)}
-#deck .card{position:absolute;inset:0;transform:rotate(-8deg)}
-#deck .card:first-child{transform:rotate(-14deg) translate(-3px,2px)}
-#deck.can .card:last-child{box-shadow:0 0 0 2px var(--gold2),0 0 16px var(--gold);animation:bob 1s ease-in-out infinite}
-@keyframes bob{50%{transform:rotate(-8deg) translateY(-4px)}}
-#deckn{position:absolute;right:-12px;bottom:-8px;min-width:22px;height:18px;padding:0 5px;border-radius:9px;background:#0b0906;border:1px solid var(--line);color:var(--dim);font-size:10.5px;display:flex;align-items:center;justify-content:center}
-/* ---------- kartlar ---------- */
-.card{width:var(--cw);height:calc(var(--cw)*1.45);border-radius:calc(var(--cw)*.14);border:2px solid #0b0906;position:relative;overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,.55);color:#fff;font-weight:900;flex:none}
-.card::after{content:"";position:absolute;inset:2px;border-radius:calc(var(--cw)*.1);border:1px solid rgba(255,255,255,.28);pointer-events:none}
-.card.r{background:linear-gradient(155deg,#ff7a6e,#e5483d 45%,#9c241b)}
-.card.y{background:linear-gradient(155deg,#ffe082,#f2b92a 45%,#a8740a)}
-.card.g{background:linear-gradient(155deg,#6fe3a2,#2fbf71 45%,#157a43)}
-.card.b{background:linear-gradient(155deg,#84b6ff,#3d8bfd 45%,#1b4fb0)}
-.card.w{background:linear-gradient(155deg,#3a2f1b,#1a1610 50%,#0b0906);border-color:var(--gold)}
-.card.back{background:repeating-linear-gradient(45deg,#1f1810 0 6px,#17130c 6px 12px);border-color:var(--gold)}
-.card.back::before{content:"TEK";position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) rotate(-24deg);font-size:calc(var(--cw)*.26);letter-spacing:1px;color:var(--gold);text-shadow:0 1px 0 #000}
-.card .co{position:absolute;left:8%;top:4%;font-size:calc(var(--cw)*.24);line-height:1;text-shadow:0 1px 1px rgba(0,0,0,.45)}
-.card .co.b2{left:auto;top:auto;right:8%;bottom:4%;transform:rotate(180deg)}
-.card .md{position:absolute;left:50%;top:50%;width:68%;aspect-ratio:1;transform:translate(-50%,-50%);border-radius:28%;background:rgba(0,0,0,.26);border:1.5px solid rgba(255,255,255,.55);display:flex;align-items:center;justify-content:center;font-size:calc(var(--cw)*.46);line-height:1;text-shadow:0 2px 2px rgba(0,0,0,.45)}
-.card .md svg{width:66%;height:66%}
-.card .co svg{width:calc(var(--cw)*.24);height:calc(var(--cw)*.24);display:block}
-.card.w .md{border-radius:50%;border:0;background:conic-gradient(var(--r) 0 25%,var(--b) 0 50%,var(--g) 0 75%,var(--y) 0)}
-.card.w .md b{width:62%;aspect-ratio:1;border-radius:50%;background:#14100a;display:flex;align-items:center;justify-content:center;font-size:calc(var(--cw)*.3);color:var(--gold2)}
-.card.w.picked-r{box-shadow:0 0 0 3px var(--r)}.card.w.picked-y{box-shadow:0 0 0 3px var(--y)}.card.w.picked-g{box-shadow:0 0 0 3px var(--g)}.card.w.picked-b{box-shadow:0 0 0 3px var(--b)}
-/* ---------- alt: durum satırı ve el ---------- */
-#act{flex:none;min-height:34px;display:flex;align-items:center;justify-content:center;gap:8px;padding:2px 10px;font-size:12.5px;color:var(--dim);text-align:center}
-#act.me{color:var(--gold2);font-weight:700}
-#act .btn{flex:none;height:30px;font-size:12.5px;padding:0 14px;border-radius:15px}
-#handwrap{flex:none;height:calc(var(--cw)*1.45 + 40px);position:relative;overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
-#handwrap::-webkit-scrollbar{display:none}
-#hand{position:relative;height:100%;margin:0 auto;box-sizing:content-box;padding:0 18px}
-#hand .card{position:absolute;top:26px;transition:transform .15s,filter .15s,top .15s}
-#hand .card.ok{top:5px;box-shadow:0 0 0 2px var(--gold2),0 0 14px rgba(242,185,42,.75)}
-#hand.myturn .card:not(.ok){filter:brightness(.55)}
-#hand .card.fresh{animation:pop .3s ease-out}
-#watch{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--dim);font-size:13px}
 /* ---------- pencereler ---------- */
-#modal{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.62);padding:14px;z-index:20}
+#modal{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.66);padding:14px;z-index:20}
 #modal.on{display:flex}
-.box{width:100%;max-width:380px;max-height:100%;display:flex;flex-direction:column;background:var(--surf);border:1px solid var(--gold);border-radius:18px;padding:14px;box-shadow:0 10px 40px rgba(0,0,0,.6)}
-.box h3{margin:0 0 8px;font-size:16px;text-align:center;color:var(--gold2)}
+.box{width:100%;max-width:380px;max-height:100%;display:flex;flex-direction:column;background:linear-gradient(180deg,#221b10,#130f08);border:1px solid var(--gold);border-radius:20px;padding:14px;box-shadow:0 10px 40px rgba(0,0,0,.65),0 0 24px -6px var(--gold);animation:boxin .28s cubic-bezier(.2,1.4,.4,1)}
+@keyframes boxin{from{transform:scale(.8);opacity:0}}
+.box h3{margin:0 0 8px;font-size:17px;text-align:center;color:var(--gold2)}
 .box p{margin:0 0 10px;color:var(--dim);font-size:13px;text-align:center;line-height:1.4}
-.box .btns{margin-top:6px}
+.box .btns{margin-top:8px}
 .scroll{overflow-y:auto;min-height:0;-webkit-overflow-scrolling:touch}
 .rules{font-size:13px;line-height:1.5;color:#e6dcc3}
 .rules h4{margin:10px 0 4px;color:var(--gold2);font-size:13.5px}
 .rules ul{margin:0;padding:0 0 0 18px}.rules li{margin:2px 0}
 [dir=rtl] .rules ul{padding:0 18px 0 0}
-.colors{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:4px 0 2px}
-.colors button{height:58px;border-radius:14px;border:2px solid rgba(255,255,255,.3);font-weight:800;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.5)}
-.colors .r{background:var(--r)}.colors .y{background:var(--y)}.colors .g{background:var(--g)}.colors .b{background:var(--b)}
-.rank{display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:12px}
+.rank{display:flex;align-items:center;gap:10px;padding:7px 8px;border-radius:14px;animation:rin .4s both}
 .rank:nth-child(odd){background:rgba(255,255,255,.04)}
-.rank.first{background:linear-gradient(90deg,rgba(242,185,42,.28),rgba(242,185,42,.05))}
-.rank .no{width:18px;text-align:center;font-weight:900;color:var(--gold2)}
-.rank .av{width:36px;height:36px;font-size:15px}
+.rank.first{background:linear-gradient(90deg,rgba(242,185,42,.32),rgba(242,185,42,.05));border:1px solid rgba(242,185,42,.5)}
+.rank .no{width:22px;text-align:center;font-weight:900;color:var(--gold2);font-size:17px}
+.rank .av{width:38px;height:38px;font-size:15px;border-color:var(--c,var(--line))}
+.rank.first .av{box-shadow:0 0 14px var(--gold)}
 .rank .who{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700}
-.rank .pt{font-size:12px;color:var(--dim);white-space:nowrap}
-.rank.first .pt{color:var(--gold2);font-weight:800}
-#toast{position:absolute;left:50%;top:44px;transform:translateX(-50%);max-width:88%;padding:6px 14px;border-radius:14px;background:rgba(11,9,6,.92);border:1px solid var(--line);font-size:12.5px;text-align:center;opacity:0;transition:opacity .2s;pointer-events:none;z-index:30}
+.rank .pt2{font-size:12px;color:var(--dim);white-space:nowrap}
+.rank.first .pt2{color:var(--gold2);font-weight:800}
+@keyframes rin{from{transform:translateX(-18px);opacity:0}}
+.trophy{font-size:54px;text-align:center;line-height:1;margin:2px 0 6px;animation:trophy 1.2s ease-in-out infinite alternate;filter:drop-shadow(0 0 14px rgba(242,185,42,.8))}
+@keyframes trophy{from{transform:rotate(-6deg) scale(1)}to{transform:rotate(6deg) scale(1.1)}}
+#toast{position:absolute;left:50%;bottom:84px;transform:translateX(-50%);max-width:88%;padding:7px 15px;border-radius:15px;background:rgba(11,9,6,.94);border:1px solid var(--gold);font-size:12.5px;font-weight:600;text-align:center;opacity:0;transition:opacity .2s;pointer-events:none;z-index:30}
 #toast.on{opacity:1}#toast.bad{border-color:#6b2a24;color:#ff9b93}
 #load{position:absolute;inset:0;display:flex;flex-direction:column;gap:10px;align-items:center;justify-content:center;background:#0b0906;z-index:40;color:var(--dim);padding:20px;text-align:center}
 #load.off{display:none}
 .spin{width:26px;height:26px;border-radius:50%;border:3px solid var(--line);border-top-color:var(--gold);animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+/* ---------- TEK: masa ---------- */
+:root{--cw:52px;--r:#e5483d;--y:#f2b92a;--g:#2fbf71;--b:#3d8bfd}
+.slots{flex-wrap:wrap}
+#table{position:relative;flex:1;min-height:0;overflow:hidden}
+#table::before{content:"";position:absolute;left:-10%;right:-10%;top:-12%;height:75%;pointer-events:none;background:conic-gradient(from 155deg at 50% 0%,transparent 0 6%,rgba(255,213,79,.13) 9%,transparent 13%,transparent 20%,rgba(255,213,79,.09) 24%,transparent 28%,transparent 72%,rgba(255,213,79,.09) 76%,transparent 80%,transparent 87%,rgba(255,213,79,.13) 91%,transparent 94%);animation:beam 5s ease-in-out infinite alternate}
+@keyframes beam{from{opacity:.55}to{opacity:1}}
+#rug{position:absolute;left:4%;right:4%;top:6%;bottom:2%;border-radius:50%;pointer-events:none;background:radial-gradient(ellipse at 50% 46%,rgba(255,213,79,.14),rgba(0,0,0,0) 62%),repeating-radial-gradient(ellipse at 50% 46%,rgba(255,213,79,.075) 0 2px,transparent 2px 24px);border:1.5px solid rgba(242,185,42,.4);box-shadow:inset 0 0 46px rgba(242,185,42,.12),0 0 30px rgba(0,0,0,.55)}
+#rug::after{content:"";position:absolute;inset:9px;border-radius:50%;border:1.5px dashed rgba(255,213,79,.3);animation:spin 50s linear infinite}
+.seat{position:absolute;width:76px;margin-left:-38px;margin-top:-30px;display:flex;flex-direction:column;align-items:center;gap:2px;transition:opacity .2s;z-index:2}
+.seat .nm{max-width:76px;font-size:10.5px;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.seat.out{opacity:.35}
+.seat .ring{position:relative;padding:3px;border-radius:50%;background:rgba(255,255,255,.1)}
+.seat.turn .ring{background:conic-gradient(var(--gold2) calc(var(--p,1)*360deg),rgba(255,255,255,.12) 0);box-shadow:0 0 16px rgba(255,213,79,.55);animation:ringp 1s ease-in-out infinite alternate}
+@keyframes ringp{to{box-shadow:0 0 24px rgba(255,213,79,.9)}}
+.seat .av{border:0;background:#2b210f}
+.seat.turn .nm{color:var(--gold2);font-weight:800}
+.cnt{position:absolute;right:-15px;top:-3px;min-width:22px;height:30px;padding:0 4px;border-radius:5px;background:repeating-linear-gradient(45deg,#2b2212 0 3px,#1a1409 3px 6px);border:1.5px solid var(--gold);color:var(--gold2);font-weight:900;font-size:13px;display:flex;align-items:center;justify-content:center;transform:rotate(10deg);box-shadow:-2px 1px 0 #0b0906,-4px 2px 0 rgba(242,185,42,.35);text-shadow:0 1px 2px #000}
+.tag{position:absolute;left:-10px;top:-4px;width:18px;height:18px;border-radius:5px;background:var(--r);color:#fff;font-weight:900;font-size:11px;display:flex;align-items:center;justify-content:center;transform:rotate(-10deg)}
+.one{position:absolute;left:50%;bottom:3px;transform:translateX(-50%);padding:1px 7px;border-radius:8px;background:linear-gradient(180deg,#ffe27a,#f2b92a);color:#1c1405;font-weight:900;font-size:10px;letter-spacing:1px;animation:pulse 1s infinite;box-shadow:0 0 10px rgba(255,213,79,.9)}
+@keyframes pulse{50%{transform:translateX(-50%) scale(1.14)}}
+.s-sm .av{width:32px;height:32px;font-size:14px}.s-sm{width:56px;margin-left:-28px;margin-top:-24px;gap:1px}.s-sm .nm{max-width:56px;font-size:9.5px}.s-sm .cnt{right:-11px;min-width:19px;height:25px;font-size:11px}.s-sm .ring{padding:2px}.s-sm .tag{width:15px;height:15px;font-size:9.5px;left:-8px}
+/* orta: atılan kartlar ve yön halkası */
+#mid{position:absolute;left:50%;top:50%;width:150px;height:150px;margin:-75px 0 0 -75px;z-index:1}
+#ringsvg{position:absolute;inset:0;width:100%;height:100%;animation:spin 9s linear infinite;color:var(--gold)}
+#ringsvg.rev{animation-direction:reverse}
+#ringsvg.rev g{transform:scaleX(-1);transform-origin:50% 50%}
+#felt{position:absolute;inset:17px;border-radius:50%;background:radial-gradient(circle at 50% 38%,rgba(255,255,255,.16),rgba(0,0,0,.45));border:3px solid currentColor;transition:color .35s,box-shadow .35s;box-shadow:0 0 22px -2px currentColor,inset 0 0 24px rgba(0,0,0,.55)}
+.shock{position:absolute;inset:17px;border-radius:50%;border:4px solid currentColor;pointer-events:none}
+#pile{position:absolute;left:50%;top:50%;width:var(--cw);height:calc(var(--cw)*1.5);margin:calc(var(--cw)*-.75) 0 0 calc(var(--cw)*-.5)}
+#pile .card{position:absolute;inset:0}
+#pile .card.new{animation:land .3s ease-out}
+@keyframes land{0%{transform:scale(1.35) rotate(var(--rot,0deg))}60%{transform:scale(.94) rotate(var(--rot,0deg))}100%{transform:scale(1) rotate(var(--rot,0deg))}}
+#deck{position:absolute;left:13%;top:80%;width:calc(var(--cw)*.86);height:calc(var(--cw)*1.29);margin:calc(var(--cw)*-.645) 0 0 calc(var(--cw)*-.43);z-index:2}
+#deck .card{position:absolute;inset:0;width:100%;height:100%;transform:rotate(-8deg)}
+#deck .card:first-child{transform:rotate(-14deg) translate(-3px,2px)}
+#deck.can .card:last-child{box-shadow:0 0 0 2px var(--gold2),0 0 18px var(--gold);animation:bob 1s ease-in-out infinite}
+@keyframes bob{50%{transform:rotate(-8deg) translateY(-5px)}}
+#deckn{position:absolute;right:-12px;bottom:-8px;min-width:22px;height:18px;padding:0 5px;border-radius:9px;background:#0b0906;border:1px solid var(--line);color:var(--dim);font-size:10.5px;display:flex;align-items:center;justify-content:center}
+/* ---------- kartlar ---------- */
+.card{width:var(--cw);height:calc(var(--cw)*1.5);border-radius:calc(var(--cw)*.16);position:relative;overflow:hidden;color:#fff;font-weight:900;flex:none;background:linear-gradient(155deg,var(--c1),var(--c2) 52%,var(--c3));box-shadow:0 0 0 calc(var(--cw)*.04) #fff6dc,0 3px 9px rgba(0,0,0,.65)}
+.card::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;background:linear-gradient(118deg,rgba(255,255,255,.38) 0,rgba(255,255,255,.08) 34%,rgba(255,255,255,0) 35%),linear-gradient(0deg,rgba(0,0,0,.18),rgba(0,0,0,0) 40%)}
+.card.r{--c1:#ff8a7e;--c2:#e5483d;--c3:#a02219;--ink:#d63a2f}
+.card.y{--c1:#ffe58a;--c2:#f2b92a;--c3:#b57a08;--ink:#b8780a}
+.card.g{--c1:#84efb3;--c2:#2fbf71;--c3:#157a43;--ink:#1c8f55}
+.card.b{--c1:#9cc5ff;--c2:#3d8bfd;--c3:#1b4fb0;--ink:#2a6fdc}
+.card.w{--c1:#4a3f2a;--c2:#17130c;--c3:#050403;--ink:#ffd54f}
+.card .co{position:absolute;left:9%;top:5%;font-size:calc(var(--cw)*.23);line-height:1;text-shadow:0 1px 2px rgba(0,0,0,.55);z-index:1}
+.card .co.b2{left:auto;top:auto;right:9%;bottom:5%;transform:rotate(180deg)}
+.card .co svg{width:calc(var(--cw)*.23);height:calc(var(--cw)*.23);display:block}
+.card .md{position:absolute;left:50%;top:50%;width:80%;height:60%;border-radius:50%;background:radial-gradient(ellipse at 38% 28%,#fff,#f6eacb 70%);transform:translate(-50%,-50%) rotate(-26deg);display:flex;align-items:center;justify-content:center;box-shadow:inset 0 0 0 calc(var(--cw)*.03) rgba(0,0,0,.12),0 2px 4px rgba(0,0,0,.3)}
+.card .md .sy{display:flex;align-items:center;justify-content:center;transform:rotate(26deg);font-size:calc(var(--cw)*.52);line-height:1;color:var(--ink);text-shadow:0 1px 0 rgba(255,255,255,.7),calc(var(--cw)*.02) calc(var(--cw)*.03) 0 rgba(0,0,0,.2);letter-spacing:-1px}
+.card .md .sy svg{width:calc(var(--cw)*.44);height:calc(var(--cw)*.44);display:block}
+.card.w .md{background:conic-gradient(#e5483d 0 25%,#3d8bfd 0 50%,#2fbf71 0 75%,#f2b92a 0);box-shadow:0 0 0 calc(var(--cw)*.03) rgba(255,255,255,.6)}
+.card.w .md .sy{width:58%;aspect-ratio:1;border-radius:50%;background:radial-gradient(circle at 40% 30%,#3a2f1b,#0b0906);color:var(--gold2);font-size:calc(var(--cw)*.3);text-shadow:none;box-shadow:0 0 6px rgba(0,0,0,.6)}
+.card.w.picked-r{box-shadow:0 0 0 3px var(--r),0 3px 9px rgba(0,0,0,.65)}.card.w.picked-y{box-shadow:0 0 0 3px var(--y),0 3px 9px rgba(0,0,0,.65)}.card.w.picked-g{box-shadow:0 0 0 3px var(--g),0 3px 9px rgba(0,0,0,.65)}.card.w.picked-b{box-shadow:0 0 0 3px var(--b),0 3px 9px rgba(0,0,0,.65)}
+.card.back{background:radial-gradient(circle at 50% 38%,#33280f,#0e0a05 72%);box-shadow:0 0 0 calc(var(--cw)*.04) var(--gold),0 3px 9px rgba(0,0,0,.65)}
+.card.back::after{background:repeating-linear-gradient(45deg,rgba(255,213,79,.12) 0 2px,transparent 2px 9px),repeating-linear-gradient(-45deg,rgba(255,213,79,.12) 0 2px,transparent 2px 9px)}
+.card.back::before{content:"TEK";position:absolute;left:50%;top:50%;width:76%;height:56%;display:flex;align-items:center;justify-content:center;border-radius:50%;transform:translate(-50%,-50%) rotate(-24deg);font-size:calc(var(--cw)*.25);letter-spacing:1px;color:#3a2500;background:linear-gradient(160deg,#fff0b3,#f2b92a 55%,#b9770a);box-shadow:0 0 8px rgba(242,185,42,.6);z-index:2}
+#fly{position:fixed;inset:0;pointer-events:none;z-index:15}
+#fly .card.fl{position:absolute;margin:0}
+.big{position:fixed;z-index:16;pointer-events:none;transform:translate(-50%,-50%);font-weight:900;white-space:nowrap}
+.big.tek{padding:4px 14px;border-radius:16px;background:linear-gradient(180deg,#ffe27a,#f2b92a);color:#1c1405;font-size:18px;letter-spacing:2px;box-shadow:0 0 22px rgba(255,213,79,.95)}
+.big.ico{font-size:34px;filter:drop-shadow(0 0 8px rgba(0,0,0,.7))}
+.big.pen{font-size:20px;color:var(--gold2);text-shadow:0 2px 4px #000}
+/* ---------- alt: durum satırı ve el ---------- */
+#act{flex:none;min-height:34px;display:flex;align-items:center;justify-content:center;gap:8px;padding:2px 10px;font-size:12.5px;color:var(--dim);text-align:center;position:relative;z-index:3}
+#act.me{color:var(--gold2);font-weight:700}
+#act .btn{flex:none;height:30px;font-size:12.5px;padding:0 14px;border-radius:15px;box-shadow:0 2px 0 #8a5a05}
+#handwrap{flex:none;height:calc(var(--cw)*1.5 + 40px);position:relative;overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
+#handwrap::-webkit-scrollbar{display:none}
+#dockbg{position:absolute;left:-12%;right:-12%;bottom:0;height:64%;border-radius:50% 50% 0 0/26px;background:linear-gradient(180deg,#33260f,#120d06);border-top:2px solid rgba(255,213,79,.6);box-shadow:0 -8px 24px rgba(242,185,42,.2);pointer-events:none;z-index:0}
+#hand{position:relative;height:100%;margin:0 auto;box-sizing:content-box;padding:0 18px;z-index:1}
+#hand .card{position:absolute;top:26px;transition:transform .18s,filter .18s,top .18s,box-shadow .18s}
+#hand .card.ok{top:4px;box-shadow:0 0 0 calc(var(--cw)*.04) #ffe27a,0 0 16px rgba(255,213,79,.85),0 4px 10px rgba(0,0,0,.6);animation:okb 1.1s ease-in-out infinite alternate}
+@keyframes okb{to{top:0}}
+#hand.myturn .card:not(.ok){filter:brightness(.5) saturate(.8)}
+#hand .card.dealin{animation:dealin .42s cubic-bezier(.2,.9,.3,1.2) var(--dl,0s) backwards}
+@keyframes dealin{from{opacity:0;transform:translate(-90px,-120px) rotate(-40deg) scale(.5)}}
+#watch{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--dim);font-size:13px;z-index:2}
+.colors{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:4px 0 2px}
+.colors button{height:60px;border-radius:16px;border:2px solid rgba(255,255,255,.4);font-weight:800;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.5);box-shadow:inset 0 -10px 16px rgba(0,0,0,.2),0 3px 0 rgba(0,0,0,.4);transition:transform .12s}
+.colors button:active{transform:scale(.95)}
+.colors .r{background:linear-gradient(155deg,#ff8a7e,#e5483d 60%,#a02219)}.colors .y{background:linear-gradient(155deg,#ffe58a,#f2b92a 60%,#b57a08)}.colors .g{background:linear-gradient(155deg,#84efb3,#2fbf71 60%,#157a43)}.colors .b{background:linear-gradient(155deg,#9cc5ff,#3d8bfd 60%,#1b4fb0)}
+#turnb{position:absolute;left:50%;top:46%;z-index:12;transform:translate(-50%,-50%) scale(0);padding:10px 22px;border-radius:26px;background:linear-gradient(180deg,#ffe27a,#f2b92a);color:#1c1405;font-weight:900;font-size:20px;pointer-events:none;box-shadow:0 0 28px rgba(242,185,42,.9);white-space:nowrap}
+#toast{bottom:auto;top:44px}
 @media (max-height:430px){:root{--cw:44px}.bar{height:32px}}
 @media (min-width:480px) and (min-height:560px){:root{--cw:60px}}
 </style></head>
@@ -144,20 +170,24 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
     <svg class="logoimg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><defs><radialGradient id="tbg" cx="50%" cy="34%" r="75%"><stop offset="0" stop-color="#4a3814"/><stop offset=".55" stop-color="#1d1509"/><stop offset="1" stop-color="#0b0906"/></radialGradient><linearGradient id="tgold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff0b3"/><stop offset=".5" stop-color="#f2b92a"/><stop offset="1" stop-color="#a8740a"/></linearGradient><linearGradient id="tr" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff8a7e"/><stop offset=".5" stop-color="#e5483d"/><stop offset="1" stop-color="#9c241b"/></linearGradient><linearGradient id="tg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7cebad"/><stop offset=".5" stop-color="#2fbf71"/><stop offset="1" stop-color="#157a43"/></linearGradient><linearGradient id="ty" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffe89a"/><stop offset=".5" stop-color="#f2b92a"/><stop offset="1" stop-color="#a8740a"/></linearGradient><linearGradient id="tb" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#93bfff"/><stop offset=".5" stop-color="#3d8bfd"/><stop offset="1" stop-color="#1b4fb0"/></linearGradient><linearGradient id="tw" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#e3d6b4"/></linearGradient></defs><rect x="10" y="10" width="236" height="236" rx="56" fill="url(#tbg)" stroke="url(#tgold)" stroke-width="9"/><rect x="22" y="22" width="212" height="212" rx="45" fill="none" stroke="#f2b92a" stroke-opacity=".28" stroke-width="2"/><g transform="translate(0 4)"><g transform="rotate(-33 128 236)"><rect x="86" y="62" width="84" height="122" rx="15" fill="url(#tr)" stroke="#0b0906" stroke-width="4.5"/><rect x="92" y="68" width="72" height="110" rx="10" fill="none" stroke="#fff" stroke-opacity=".4" stroke-width="2"/><rect x="104" y="96" width="48" height="48" rx="14" fill="#000" fill-opacity=".28" stroke="#fff" stroke-opacity=".6" stroke-width="2"/><circle cx="128" cy="120" r="13" fill="none" stroke="#fff" stroke-width="5.5"/><path d="M119 129l18-18" stroke="#fff" stroke-width="5.5" stroke-linecap="round"/></g><g transform="rotate(-11 128 236)"><rect x="86" y="62" width="84" height="122" rx="15" fill="url(#tb)" stroke="#0b0906" stroke-width="4.5"/><rect x="92" y="68" width="72" height="110" rx="10" fill="none" stroke="#fff" stroke-opacity=".4" stroke-width="2"/><rect x="104" y="96" width="48" height="48" rx="14" fill="#000" fill-opacity=".28" stroke="#fff" stroke-opacity=".6" stroke-width="2"/><path d="M128 107v26M115 120h26" stroke="#fff" stroke-width="6.5" stroke-linecap="round"/></g><g transform="rotate(11 128 236)"><rect x="86" y="62" width="84" height="122" rx="15" fill="url(#tg)" stroke="#0b0906" stroke-width="4.5"/><rect x="92" y="68" width="72" height="110" rx="10" fill="none" stroke="#fff" stroke-opacity=".4" stroke-width="2"/><rect x="104" y="96" width="48" height="48" rx="14" fill="#000" fill-opacity=".28" stroke="#fff" stroke-opacity=".6" stroke-width="2"/><circle cx="128" cy="120" r="11" fill="#fff"/></g><g transform="rotate(33 128 236)"><rect x="86" y="62" width="84" height="122" rx="15" fill="url(#ty)" stroke="#0b0906" stroke-width="4.5"/><rect x="92" y="68" width="72" height="110" rx="10" fill="none" stroke="#fff" stroke-opacity=".4" stroke-width="2"/><rect x="104" y="96" width="48" height="48" rx="14" fill="#000" fill-opacity=".28" stroke="#fff" stroke-opacity=".6" stroke-width="2"/><path d="M128 104l5 10.5 11.5 1.6-8.3 8 2 11.4-10.2-5.4-10.2 5.4 2-11.4-8.3-8 11.5-1.6z" fill="#fff"/></g></g><g transform="translate(128 196)"><circle r="27" fill="#0b0906" stroke="url(#tgold)" stroke-width="5"/><path d="M0-15l4.6 9.6 10.6 1.5-7.7 7.4 1.9 10.5L0 9l-9.4 5 1.9-10.5-7.7-7.4 10.6-1.5z" fill="url(#tgold)"/></g><path d="M48 44l4 10 10 4-10 4-4 10-4-10-10-4 10-4z" fill="#fff0b3"/></svg>
     <div class="logo">TEK<small id="ltag"></small></div>
     <div id="lmsg"></div><div id="lcount"></div>
-    <div id="lplayers"></div>
+    <div class="slots" id="lplayers"></div>
     <div class="btns" id="lbtns"></div>
     <button class="link" id="lclose"></button>
   </div>
   <div class="scr" id="board">
     <div id="table">
+      <div id="rug"></div>
       <div id="mid"><svg id="ringsvg" viewBox="0 0 150 150"><g fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round" opacity=".85"><path d="M75 8a67 67 0 0 1 58 33.5"/><path d="M75 142a67 67 0 0 1-58-33.5"/><path d="M127 26l7 16-17 1" stroke-linejoin="round"/><path d="M23 124l-7-16 17-1" stroke-linejoin="round"/></g></svg><div id="felt"></div><div id="pile"></div></div>
       <button id="deck" aria-label="draw"><div class="card back"></div><div class="card back"></div><span id="deckn"></span></button>
       <div id="seats"></div>
     </div>
     <div id="act"></div>
-    <div id="handwrap"><div id="hand"></div><div id="watch"></div></div>
+    <div id="handwrap"><div id="dockbg"></div><div id="hand"></div><div id="watch"></div></div>
   </div>
+  <div id="turnb"></div>
 </div>
+<div id="fly"></div>
+<canvas id="cf"></canvas>
 <div id="modal"></div>
 <div id="toast" role="status"></div>
 <div id="load"><div class="spin"></div><div id="loadmsg"></div></div>
@@ -169,10 +199,10 @@ const app = $('app');
 const ROOM = app.dataset.room;
 const VER = app.dataset.ver || '';
 const LANGS = {
-tr: { tag: 'KART OYUNU', none: 'Açık oyun yok', noneHint: 'Oda yetkilisi oyun açınca burada görünecek.', other: 'Odada başka bir oyun açık: {g}', open: 'Oyun aç', waitHost: 'Oyun açıldı, oyuncuların katılması bekleniyor', waitJoined: 'Katıldın, oyunun başlaması bekleniyor', waitJoin: 'Oyun açıldı, katılmak için dokun!', count: '{n}/{m} kişi oyuna katıldı', join: 'Katıl', leave: 'Ayrıl', start: 'Başla', closeGame: 'Oyunu kapat', need2: 'Başlamak için en az 2 oyuncu gerekir', yourTurn: 'Sıra sende: kart at ya da desteden çek', turnOf: 'Sıra: {n}', drew: 'Çektiğin kart atılabilir', playIt: 'Oyna', keep: 'Elinde tut', drawBtn: 'Kart çek', watching: 'Oyunu izliyorsun', youOut: 'Oyundan ayrıldın, izliyorsun', pick: 'Renk seç', r: 'Kırmızı', y: 'Sarı', g: 'Yeşil', b: 'Mavi', cancel: 'Vazgeç', ch4: '{n} sana +4 attı', ch4hint: 'Kabul edersen 4 kart çekersin. İtiraz edersen: elinde o renkten kart varsa 4 kartı o çeker; yoksa sen 6 kart çekersin.', accept: 'Kabul et', object: 'İtiraz et', waitAns: '{n} +4 için karar veriyor', eSkip: '{n} sırasını kaybetti', eRev: 'Oyun yönü değişti', ePen: '{n} {k} kart çekti', eChOk: 'İtiraz haklı: {n} {k} kart çekti', eChNo: 'İtiraz haksız: {n} {k} kart çekti', eLeft: '{n} oyundan ayrıldı', eAuto: '{n} süresinde oynamadı', eLast: 'Süre doldu: son tur!', over: 'Oyun bitti', won: 'Kazandı', pts: '{k} puan', leftTag: 'Ayrıldı', close: 'Kapat', again: 'Tekrar oyna', cancelled: 'Oyun kapatıldı', rules: 'Oyun kuralları', ok: 'Anladım', leaveQ: 'Oyundan ayrılmak istiyor musun?', leaveHint: 'Ayrılırsan kartların desteye döner ve sıralamada sona yazılırsın.', closeQ: 'Oyun herkes için kapatılsın mı?', yes: 'Evet', lastRound: 'Son tur', one: 'TEK!', net: 'Bağlantı sorunu, yeniden deneniyor…', err: 'İşlem yapılamadı', appOnly: 'Bu sayfa yalnızca uygulama içinde açılır.', loading: 'Yükleniyor…', sec: 'sn' },
-en: { tag: 'CARD GAME', none: 'No open game', noneHint: 'It will appear here when a room manager opens a game.', other: 'Another game is open in this room: {g}', open: 'Open game', waitHost: 'Game opened, waiting for players to join', waitJoined: 'Joined, waiting for the game to start', waitJoin: 'Game opened, tap to join!', count: '{n}/{m} players joined', join: 'Join', leave: 'Leave', start: 'Start', closeGame: 'Close game', need2: 'At least 2 players are needed to start', yourTurn: 'Your turn: play a card or draw', turnOf: 'Turn: {n}', drew: 'The card you drew can be played', playIt: 'Play', keep: 'Keep', drawBtn: 'Draw', watching: 'You are watching', youOut: 'You left the game and are watching', pick: 'Pick a color', r: 'Red', y: 'Yellow', g: 'Green', b: 'Blue', cancel: 'Cancel', ch4: '{n} played +4 on you', ch4hint: 'Accept and you draw 4. Challenge: if they held a card of that color they draw 4; otherwise you draw 6.', accept: 'Accept', object: 'Challenge', waitAns: '{n} is deciding on the +4', eSkip: '{n} lost their turn', eRev: 'Direction reversed', ePen: '{n} drew {k} cards', eChOk: 'Challenge won: {n} drew {k} cards', eChNo: 'Challenge lost: {n} drew {k} cards', eLeft: '{n} left the game', eAuto: '{n} ran out of time', eLast: 'Time is up: last round!', over: 'Game over', won: 'Winner', pts: '{k} pts', leftTag: 'Left', close: 'Close', again: 'Play again', cancelled: 'The game was closed', rules: 'Game rules', ok: 'Got it', leaveQ: 'Leave the game?', leaveHint: 'Your cards go back to the deck and you are ranked last.', closeQ: 'Close the game for everyone?', yes: 'Yes', lastRound: 'Last round', one: 'ONE!', net: 'Connection problem, retrying…', err: 'Action failed', appOnly: 'This page only opens inside the app.', loading: 'Loading…', sec: 's' },
-ar: { tag: 'لعبة الورق', none: 'لا توجد لعبة مفتوحة', noneHint: 'ستظهر هنا عندما يفتح مشرف الغرفة لعبة.', other: 'توجد لعبة أخرى مفتوحة في الغرفة: {g}', open: 'افتح لعبة', waitHost: 'تم فتح اللعبة، بانتظار انضمام اللاعبين', waitJoined: 'انضممت، بانتظار بدء اللعبة', waitJoin: 'تم فتح اللعبة، اضغط للانضمام!', count: 'انضم {n}/{m} لاعبين', join: 'انضم', leave: 'غادر', start: 'ابدأ', closeGame: 'إغلاق اللعبة', need2: 'يلزم لاعبان على الأقل للبدء', yourTurn: 'دورك: العب ورقة أو اسحب', turnOf: 'الدور: {n}', drew: 'الورقة التي سحبتها يمكن لعبها', playIt: 'العب', keep: 'احتفظ', drawBtn: 'اسحب', watching: 'أنت تشاهد اللعبة', youOut: 'غادرت اللعبة وأنت تشاهد', pick: 'اختر لونًا', r: 'أحمر', y: 'أصفر', g: 'أخضر', b: 'أزرق', cancel: 'إلغاء', ch4: '{n} لعب +4 عليك', ch4hint: 'إن قبلت تسحب 4. إن اعترضت: إذا كان لديه ورقة من ذلك اللون يسحب هو 4، وإلا تسحب أنت 6.', accept: 'اقبل', object: 'اعترض', waitAns: '{n} يقرر بشأن +4', eSkip: '{n} خسر دوره', eRev: 'انعكس اتجاه اللعب', ePen: '{n} سحب {k} أوراق', eChOk: 'الاعتراض صحيح: {n} سحب {k} أوراق', eChNo: 'الاعتراض خاطئ: {n} سحب {k} أوراق', eLeft: '{n} غادر اللعبة', eAuto: '{n} لم يلعب في الوقت', eLast: 'انتهى الوقت: الجولة الأخيرة!', over: 'انتهت اللعبة', won: 'الفائز', pts: '{k} نقطة', leftTag: 'غادر', close: 'إغلاق', again: 'العب مجددًا', cancelled: 'تم إغلاق اللعبة', rules: 'قواعد اللعبة', ok: 'فهمت', leaveQ: 'هل تريد مغادرة اللعبة؟', leaveHint: 'تعود أوراقك إلى الرزمة وتُسجَّل في آخر الترتيب.', closeQ: 'إغلاق اللعبة للجميع؟', yes: 'نعم', lastRound: 'الجولة الأخيرة', one: 'واحدة!', net: 'مشكلة في الاتصال، جارٍ إعادة المحاولة…', err: 'تعذّر تنفيذ العملية', appOnly: 'هذه الصفحة تفتح داخل التطبيق فقط.', loading: 'جارٍ التحميل…', sec: 'ث' },
-hi: { tag: 'कार्ड गेम', none: 'कोई खुला गेम नहीं', noneHint: 'रूम मैनेजर गेम खोलेगा तो यहाँ दिखेगा।', other: 'रूम में दूसरा गेम खुला है: {g}', open: 'गेम खोलें', waitHost: 'गेम खुल गया, खिलाड़ियों के जुड़ने का इंतज़ार', waitJoined: 'आप जुड़ गए, गेम शुरू होने का इंतज़ार', waitJoin: 'गेम खुल गया, जुड़ने के लिए टैप करें!', count: '{n}/{m} खिलाड़ी जुड़े', join: 'जुड़ें', leave: 'छोड़ें', start: 'शुरू करें', closeGame: 'गेम बंद करें', need2: 'शुरू करने के लिए कम से कम 2 खिलाड़ी चाहिए', yourTurn: 'आपकी बारी: कार्ड चलें या उठाएँ', turnOf: 'बारी: {n}', drew: 'उठाया हुआ कार्ड चला जा सकता है', playIt: 'चलें', keep: 'रखें', drawBtn: 'कार्ड उठाएँ', watching: 'आप गेम देख रहे हैं', youOut: 'आपने गेम छोड़ दिया, अब देख रहे हैं', pick: 'रंग चुनें', r: 'लाल', y: 'पीला', g: 'हरा', b: 'नीला', cancel: 'रद्द करें', ch4: '{n} ने आप पर +4 चला', ch4hint: 'मानने पर आप 4 कार्ड उठाएँगे। चुनौती देने पर: अगर उनके पास उस रंग का कार्ड था तो वे 4 उठाएँगे, वरना आप 6 उठाएँगे।', accept: 'मानें', object: 'चुनौती दें', waitAns: '{n} +4 पर फ़ैसला कर रहे हैं', eSkip: '{n} की बारी गई', eRev: 'खेल की दिशा बदली', ePen: '{n} ने {k} कार्ड उठाए', eChOk: 'चुनौती सही: {n} ने {k} कार्ड उठाए', eChNo: 'चुनौती गलत: {n} ने {k} कार्ड उठाए', eLeft: '{n} ने गेम छोड़ा', eAuto: '{n} समय पर नहीं खेले', eLast: 'समय समाप्त: आख़िरी राउंड!', over: 'गेम समाप्त', won: 'विजेता', pts: '{k} अंक', leftTag: 'छोड़ा', close: 'बंद करें', again: 'फिर खेलें', cancelled: 'गेम बंद कर दिया गया', rules: 'गेम के नियम', ok: 'समझ गया', leaveQ: 'गेम छोड़ना चाहते हैं?', leaveHint: 'आपके कार्ड गड्डी में लौटेंगे और आप आख़िरी स्थान पर रहेंगे।', closeQ: 'सबके लिए गेम बंद करें?', yes: 'हाँ', lastRound: 'आख़िरी राउंड', one: 'एक!', net: 'कनेक्शन समस्या, दोबारा कोशिश…', err: 'कार्रवाई नहीं हो सकी', appOnly: 'यह पेज सिर्फ़ ऐप के अंदर खुलता है।', loading: 'लोड हो रहा है…', sec: 'से' },
+tr: { tag: 'KART OYUNU', none: 'Açık oyun yok', noneHint: 'Oda yetkilisi oyun açınca burada görünecek.', other: 'Odada başka bir oyun açık: {g}', open: 'Oyun aç', waitHost: 'Oyun açıldı, oyuncuların katılması bekleniyor', waitJoined: 'Katıldın, oyunun başlaması bekleniyor', waitJoin: 'Oyun açıldı, katılmak için dokun!', count: '{n}/{m} kişi oyuna katıldı', join: 'Katıl', leave: 'Ayrıl', start: 'Başla', closeGame: 'Oyunu kapat', need2: 'Başlamak için en az 2 oyuncu gerekir', yourTurn: 'Sıra sende: kart at ya da desteden çek', turnOf: 'Sıra: {n}', drew: 'Çektiğin kart atılabilir', playIt: 'Oyna', keep: 'Elinde tut', drawBtn: 'Kart çek', watching: 'Oyunu izliyorsun', youOut: 'Oyundan ayrıldın, izliyorsun', pick: 'Renk seç', r: 'Kırmızı', y: 'Sarı', g: 'Yeşil', b: 'Mavi', cancel: 'Vazgeç', ch4: '{n} sana +4 attı', ch4hint: 'Kabul edersen 4 kart çekersin. İtiraz edersen: elinde o renkten kart varsa 4 kartı o çeker; yoksa sen 6 kart çekersin.', accept: 'Kabul et', object: 'İtiraz et', waitAns: '{n} +4 için karar veriyor', eSkip: '{n} sırasını kaybetti', eRev: 'Oyun yönü değişti', ePen: '{n} {k} kart çekti', eChOk: 'İtiraz haklı: {n} {k} kart çekti', eChNo: 'İtiraz haksız: {n} {k} kart çekti', eLeft: '{n} oyundan ayrıldı', eAuto: '{n} süresinde oynamadı', eLast: 'Süre doldu: son tur!', yourTurnB: 'Sıra sende!', autoDraw: 'Oynayacak kartın yok, kart çekiliyor…', over: 'Oyun bitti', won: 'Kazandı', pts: '{k} puan', leftTag: 'Ayrıldı', close: 'Kapat', again: 'Tekrar oyna', cancelled: 'Oyun kapatıldı', rules: 'Oyun kuralları', ok: 'Anladım', leaveQ: 'Oyundan ayrılmak istiyor musun?', leaveHint: 'Ayrılırsan kartların desteye döner ve sıralamada sona yazılırsın.', closeQ: 'Oyun herkes için kapatılsın mı?', yes: 'Evet', lastRound: 'Son tur', one: 'TEK!', net: 'Bağlantı sorunu, yeniden deneniyor…', err: 'İşlem yapılamadı', appOnly: 'Bu sayfa yalnızca uygulama içinde açılır.', loading: 'Yükleniyor…', sec: 'sn' },
+en: { tag: 'CARD GAME', none: 'No open game', noneHint: 'It will appear here when a room manager opens a game.', other: 'Another game is open in this room: {g}', open: 'Open game', waitHost: 'Game opened, waiting for players to join', waitJoined: 'Joined, waiting for the game to start', waitJoin: 'Game opened, tap to join!', count: '{n}/{m} players joined', join: 'Join', leave: 'Leave', start: 'Start', closeGame: 'Close game', need2: 'At least 2 players are needed to start', yourTurn: 'Your turn: play a card or draw', turnOf: 'Turn: {n}', drew: 'The card you drew can be played', playIt: 'Play', keep: 'Keep', drawBtn: 'Draw', watching: 'You are watching', youOut: 'You left the game and are watching', pick: 'Pick a color', r: 'Red', y: 'Yellow', g: 'Green', b: 'Blue', cancel: 'Cancel', ch4: '{n} played +4 on you', ch4hint: 'Accept and you draw 4. Challenge: if they held a card of that color they draw 4; otherwise you draw 6.', accept: 'Accept', object: 'Challenge', waitAns: '{n} is deciding on the +4', eSkip: '{n} lost their turn', eRev: 'Direction reversed', ePen: '{n} drew {k} cards', eChOk: 'Challenge won: {n} drew {k} cards', eChNo: 'Challenge lost: {n} drew {k} cards', eLeft: '{n} left the game', eAuto: '{n} ran out of time', eLast: 'Time is up: last round!', yourTurnB: 'Your turn!', autoDraw: 'No playable card, drawing…', over: 'Game over', won: 'Winner', pts: '{k} pts', leftTag: 'Left', close: 'Close', again: 'Play again', cancelled: 'The game was closed', rules: 'Game rules', ok: 'Got it', leaveQ: 'Leave the game?', leaveHint: 'Your cards go back to the deck and you are ranked last.', closeQ: 'Close the game for everyone?', yes: 'Yes', lastRound: 'Last round', one: 'ONE!', net: 'Connection problem, retrying…', err: 'Action failed', appOnly: 'This page only opens inside the app.', loading: 'Loading…', sec: 's' },
+ar: { tag: 'لعبة الورق', none: 'لا توجد لعبة مفتوحة', noneHint: 'ستظهر هنا عندما يفتح مشرف الغرفة لعبة.', other: 'توجد لعبة أخرى مفتوحة في الغرفة: {g}', open: 'افتح لعبة', waitHost: 'تم فتح اللعبة، بانتظار انضمام اللاعبين', waitJoined: 'انضممت، بانتظار بدء اللعبة', waitJoin: 'تم فتح اللعبة، اضغط للانضمام!', count: 'انضم {n}/{m} لاعبين', join: 'انضم', leave: 'غادر', start: 'ابدأ', closeGame: 'إغلاق اللعبة', need2: 'يلزم لاعبان على الأقل للبدء', yourTurn: 'دورك: العب ورقة أو اسحب', turnOf: 'الدور: {n}', drew: 'الورقة التي سحبتها يمكن لعبها', playIt: 'العب', keep: 'احتفظ', drawBtn: 'اسحب', watching: 'أنت تشاهد اللعبة', youOut: 'غادرت اللعبة وأنت تشاهد', pick: 'اختر لونًا', r: 'أحمر', y: 'أصفر', g: 'أخضر', b: 'أزرق', cancel: 'إلغاء', ch4: '{n} لعب +4 عليك', ch4hint: 'إن قبلت تسحب 4. إن اعترضت: إذا كان لديه ورقة من ذلك اللون يسحب هو 4، وإلا تسحب أنت 6.', accept: 'اقبل', object: 'اعترض', waitAns: '{n} يقرر بشأن +4', eSkip: '{n} خسر دوره', eRev: 'انعكس اتجاه اللعب', ePen: '{n} سحب {k} أوراق', eChOk: 'الاعتراض صحيح: {n} سحب {k} أوراق', eChNo: 'الاعتراض خاطئ: {n} سحب {k} أوراق', eLeft: '{n} غادر اللعبة', eAuto: '{n} لم يلعب في الوقت', eLast: 'انتهى الوقت: الجولة الأخيرة!', yourTurnB: 'دورك!', autoDraw: 'لا توجد ورقة صالحة، جارٍ السحب…', over: 'انتهت اللعبة', won: 'الفائز', pts: '{k} نقطة', leftTag: 'غادر', close: 'إغلاق', again: 'العب مجددًا', cancelled: 'تم إغلاق اللعبة', rules: 'قواعد اللعبة', ok: 'فهمت', leaveQ: 'هل تريد مغادرة اللعبة؟', leaveHint: 'تعود أوراقك إلى الرزمة وتُسجَّل في آخر الترتيب.', closeQ: 'إغلاق اللعبة للجميع؟', yes: 'نعم', lastRound: 'الجولة الأخيرة', one: 'واحدة!', net: 'مشكلة في الاتصال، جارٍ إعادة المحاولة…', err: 'تعذّر تنفيذ العملية', appOnly: 'هذه الصفحة تفتح داخل التطبيق فقط.', loading: 'جارٍ التحميل…', sec: 'ث' },
+hi: { tag: 'कार्ड गेम', none: 'कोई खुला गेम नहीं', noneHint: 'रूम मैनेजर गेम खोलेगा तो यहाँ दिखेगा।', other: 'रूम में दूसरा गेम खुला है: {g}', open: 'गेम खोलें', waitHost: 'गेम खुल गया, खिलाड़ियों के जुड़ने का इंतज़ार', waitJoined: 'आप जुड़ गए, गेम शुरू होने का इंतज़ार', waitJoin: 'गेम खुल गया, जुड़ने के लिए टैप करें!', count: '{n}/{m} खिलाड़ी जुड़े', join: 'जुड़ें', leave: 'छोड़ें', start: 'शुरू करें', closeGame: 'गेम बंद करें', need2: 'शुरू करने के लिए कम से कम 2 खिलाड़ी चाहिए', yourTurn: 'आपकी बारी: कार्ड चलें या उठाएँ', turnOf: 'बारी: {n}', drew: 'उठाया हुआ कार्ड चला जा सकता है', playIt: 'चलें', keep: 'रखें', drawBtn: 'कार्ड उठाएँ', watching: 'आप गेम देख रहे हैं', youOut: 'आपने गेम छोड़ दिया, अब देख रहे हैं', pick: 'रंग चुनें', r: 'लाल', y: 'पीला', g: 'हरा', b: 'नीला', cancel: 'रद्द करें', ch4: '{n} ने आप पर +4 चला', ch4hint: 'मानने पर आप 4 कार्ड उठाएँगे। चुनौती देने पर: अगर उनके पास उस रंग का कार्ड था तो वे 4 उठाएँगे, वरना आप 6 उठाएँगे।', accept: 'मानें', object: 'चुनौती दें', waitAns: '{n} +4 पर फ़ैसला कर रहे हैं', eSkip: '{n} की बारी गई', eRev: 'खेल की दिशा बदली', ePen: '{n} ने {k} कार्ड उठाए', eChOk: 'चुनौती सही: {n} ने {k} कार्ड उठाए', eChNo: 'चुनौती गलत: {n} ने {k} कार्ड उठाए', eLeft: '{n} ने गेम छोड़ा', eAuto: '{n} समय पर नहीं खेले', eLast: 'समय समाप्त: आख़िरी राउंड!', yourTurnB: 'आपकी बारी!', autoDraw: 'खेलने लायक कार्ड नहीं, कार्ड उठाया जा रहा है…', over: 'गेम समाप्त', won: 'विजेता', pts: '{k} अंक', leftTag: 'छोड़ा', close: 'बंद करें', again: 'फिर खेलें', cancelled: 'गेम बंद कर दिया गया', rules: 'गेम के नियम', ok: 'समझ गया', leaveQ: 'गेम छोड़ना चाहते हैं?', leaveHint: 'आपके कार्ड गड्डी में लौटेंगे और आप आख़िरी स्थान पर रहेंगे।', closeQ: 'सबके लिए गेम बंद करें?', yes: 'हाँ', lastRound: 'आख़िरी राउंड', one: 'एक!', net: 'कनेक्शन समस्या, दोबारा कोशिश…', err: 'कार्रवाई नहीं हो सकी', appOnly: 'यह पेज सिर्फ़ ऐप के अंदर खुलता है।', loading: 'लोड हो रहा है…', sec: 'से' },
 };
 const RULES = {
 tr: [['Kartlar', ['108 kart: 76 sayı kartı, 24 aksiyon kartı, 8 joker.', 'Herkese 7 kart dağıtılır. Oyun 2–9 kişiyle oynanır.']], ['Oynanış', ['Sıran gelince ortadaki kartla aynı renkte, aynı sayıda ya da aynı aksiyonda bir kart at.', 'Atacak kartın yoksa desteden bir kart çek. Çektiğin kart uyuyorsa atabilir ya da elinde tutabilirsin.', 'Elinde en fazla 20 kart olabilir.', 'Her hamle için 20 saniyen var. Üst üste 3 kez oynamayan oyundan düşer.']], ['Aksiyon kartları', ['⊘ Atla: sıradaki oyuncu sırasını kaybeder.', '⇄ Yön değiştir: oyunun yönü döner (iki kişide Atla gibi çalışır).', '+2: sıradaki oyuncu 2 kart çeker ve sırasını kaybeder.']], ['Jokerler', ['Renk seç: her zaman atılır, sonraki rengi sen seçersin.', '+4: rengi sen seçersin; sıradaki oyuncu 4 kart çeker ve sırasını kaybeder.', '+4 yalnızca elinde o anki renkten kart yokken atılmalıdır. Sıradaki oyuncu itiraz edebilir: elinde o renkten kart varsa 4 kartı sen çekersin; yoksa itiraz eden 6 kart çeker.']], ['Kazanma', ['Elini ilk bitiren kazanır.', 'Sıralama puana göredir, az puan iyidir: sayı kartı üzerindeki sayı, aksiyon kartı 20, joker 50 puan.', 'Bir el en fazla 15 dakika sürer. Süre dolunca herkes birer kez daha oynar ve sıralama eldeki kartların puanına göre yapılır.']]],
@@ -180,10 +210,13 @@ en: [['Cards', ['108 cards: 76 number cards, 24 action cards, 8 wild cards.', 'E
 ar: [['الأوراق', ['108 أوراق: 76 ورقة أرقام، 24 ورقة حركة، 8 أوراق جوكر.', 'يحصل كل لاعب على 7 أوراق. من 2 إلى 9 لاعبين.']], ['طريقة اللعب', ['في دورك العب ورقة تطابق لون أو رقم أو حركة الورقة التي على الطاولة.', 'إن لم تستطع فاسحب ورقة. إن كانت مطابقة يمكنك لعبها أو الاحتفاظ بها.', 'الحد الأقصى في يدك 20 ورقة.', 'لديك 20 ثانية لكل حركة. من لا يلعب 3 مرات متتالية يخرج من اللعبة.']], ['أوراق الحركة', ['⊘ تخطٍّ: اللاعب التالي يخسر دوره.', '⇄ عكس: ينعكس اتجاه اللعب (مع لاعبين يعمل مثل التخطي).', '+2: اللاعب التالي يسحب ورقتين ويخسر دوره.']], ['الجوكر', ['اختيار اللون: يُلعب دائمًا وتختار اللون التالي.', '+4: تختار اللون؛ اللاعب التالي يسحب 4 ويخسر دوره.', 'يُلعب +4 فقط إن لم تكن لديك ورقة من اللون الحالي. يمكن للاعب التالي الاعتراض: إن كانت لديك ورقة من ذلك اللون تسحب أنت 4؛ وإلا يسحب المعترض 6.']], ['الفوز', ['أول من يُنهي أوراقه يفوز.', 'الترتيب بالنقاط والأقل أفضل: ورقة الرقم بقيمتها، ورقة الحركة 20، الجوكر 50.', 'الجولة 15 دقيقة كحد أقصى. عند انتهاء الوقت يلعب الجميع مرة أخرى ثم يُحسب الترتيب بنقاط الأوراق المتبقية.']]],
 hi: [['कार्ड', ['108 कार्ड: 76 नंबर कार्ड, 24 एक्शन कार्ड, 8 वाइल्ड कार्ड।', 'हर खिलाड़ी को 7 कार्ड मिलते हैं। 2–9 खिलाड़ी।']], ['खेल', ['अपनी बारी पर मेज़ के कार्ड के रंग, नंबर या एक्शन से मिलता कार्ड चलें।', 'चलने को कार्ड न हो तो एक कार्ड उठाएँ। मिलता हो तो चल सकते हैं या रख सकते हैं।', 'हाथ में ज़्यादा से ज़्यादा 20 कार्ड।', 'हर चाल के लिए 20 सेकंड। लगातार 3 बार न खेलने पर खिलाड़ी बाहर।']], ['एक्शन कार्ड', ['⊘ स्किप: अगला खिलाड़ी बारी खोता है।', '⇄ रिवर्स: खेल की दिशा बदलती है (दो खिलाड़ियों में स्किप जैसा)।', '+2: अगला खिलाड़ी 2 कार्ड उठाता है और बारी खोता है।']], ['वाइल्ड कार्ड', ['रंग चुनें: हमेशा चला जा सकता है; अगला रंग आप चुनते हैं।', '+4: रंग आप चुनते हैं; अगला खिलाड़ी 4 कार्ड उठाता है और बारी खोता है।', '+4 तभी चलें जब मौजूदा रंग का कार्ड न हो। अगला खिलाड़ी चुनौती दे सकता है: आपके पास वह रंग था तो आप 4 उठाएँगे; वरना चुनौती देने वाला 6 उठाएगा।']], ['जीत', ['जो सबसे पहले हाथ ख़ाली करे वह जीतता है।', 'रैंकिंग अंकों से, कम अंक बेहतर: नंबर कार्ड अपने नंबर जितना, एक्शन 20, वाइल्ड 50।', 'एक राउंड अधिकतम 15 मिनट। समय पूरा होने पर सब एक बार और खेलते हैं और हाथ के अंकों से रैंकिंग होती है।']]],
 };
+
 const LANG = LANGS[app.dataset.lang] ? app.dataset.lang : 'tr';
 const T = LANGS[LANG];
 const t = (k, v) => (T[k] ?? LANGS.tr[k] ?? k).replace(/\{(\w+)\}/g, (_, x) => (v && v[x] != null ? v[x] : ''));
 const RTL = LANG === 'ar';
+const rnd = (a, b) => a + Math.random() * (b - a);
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ---------- küçük yardımcılar ----------
 function el(tag, cls, text) {
@@ -194,13 +227,13 @@ function el(tag, cls, text) {
 }
 const SVG = {
   S: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"><circle cx="12" cy="12" r="8.4"/><path d="M6.4 17.6L17.6 6.4"/></svg>',
-  R: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h13"/><path d="M13.5 4.5L18 9l-4.5 4.5" transform="translate(0 0)"/><path d="M20 15H7"/><path d="M10.5 10.5L6 15l4.5 4.5"/></svg>',
+  R: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h13"/><path d="M13.5 4.5L18 9l-4.5 4.5"/><path d="M20 15H7"/><path d="M10.5 10.5L6 15l4.5 4.5"/></svg>',
 };
-function symbol(kind, big) {
+function symbol(kind) {
   if (kind === 'S' || kind === 'R') { const s = el('span'); s.innerHTML = SVG[kind]; return s.firstChild; }
   if (kind === 'D') return document.createTextNode('+2');
   if (kind === 'F') return document.createTextNode('+4');
-  if (kind === 'W') return document.createTextNode(big ? '★' : '★');
+  if (kind === 'W') return document.createTextNode('★');
   return document.createTextNode(kind);
 }
 function cardEl(code) {
@@ -208,11 +241,12 @@ function cardEl(code) {
   const k = code[1];
   const a = el('span', 'co'); a.appendChild(symbol(k));
   const b = el('span', 'co b2'); b.appendChild(symbol(k));
-  const m = el('div', 'md');
-  if (code[0] === 'w') { const i = el('b'); i.appendChild(symbol(k, true)); m.appendChild(i); } else m.appendChild(symbol(k, true));
+  const m = el('div', 'md'), sy = el('span', 'sy');
+  sy.appendChild(symbol(k)); m.appendChild(sy);
   c.append(a, m, b);
   return c;
 }
+const backEl = () => el('div', 'card back');
 function avatar(user) {
   const a = el('div', 'av');
   const name = (user && user.displayName) || '?';
@@ -234,9 +268,70 @@ function toast(msg, bad) {
   x.className = 'on' + (bad ? ' bad' : '');
   x.dir = RTL ? 'rtl' : 'ltr';
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { x.className = ''; }, bad ? 2600 : 1900);
+  toastTimer = setTimeout(() => { x.className = ''; }, bad ? 2600 : 2000);
 }
 function post(o) { try { if (window.TRLive) window.TRLive.postMessage(JSON.stringify(o)); } catch (_) { /* uygulama dışı */ } }
+
+// ---------- konfeti ----------
+const cf = $('cf'), cx = cf.getContext('2d');
+let parts = [], cfRun = false;
+function sizeCf() { cf.width = innerWidth; cf.height = innerHeight; }
+function confetti(n) {
+  sizeCf();
+  const cols = ['#ffd54f', '#f2b92a', '#e5483d', '#2fbf71', '#3d8bfd', '#fff'];
+  for (let i = 0; i < n; i++) parts.push({ x: rnd(0, cf.width), y: rnd(-40, 0), vx: rnd(-1.5, 1.5), vy: rnd(1, 4), s: rnd(5, 10), r: rnd(0, 6), vr: rnd(-.3, .3), c: cols[(Math.random() * cols.length) | 0], life: rnd(100, 180) });
+  if (!cfRun) { cfRun = true; requestAnimationFrame(cfTick); }
+}
+function cfTick() {
+  cx.clearRect(0, 0, cf.width, cf.height);
+  parts = parts.filter((p) => p.life > 0 && p.y < cf.height + 20);
+  for (const p of parts) {
+    p.x += p.vx; p.y += p.vy; p.vy += 0.1; p.r += p.vr; p.life -= 1;
+    cx.save(); cx.translate(p.x, p.y); cx.rotate(p.r); cx.globalAlpha = Math.min(1, p.life / 30); cx.fillStyle = p.c; cx.fillRect(-p.s / 2, -p.s / 3, p.s, p.s * 0.6); cx.restore();
+  }
+  if (parts.length) requestAnimationFrame(cfTick); else { cfRun = false; cx.clearRect(0, 0, cf.width, cf.height); }
+}
+
+// ---------- uçan kartlar ve etkiler ----------
+const cwNow = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--cw')) || 52;
+function rectOf(e) { if (!e) return null; const r = e.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width }; }
+function seatRect(seat) { return rectOf(document.querySelector('.seat[data-seat="' + seat + '"] .av')); }
+function handRect() { const r = $('handwrap').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height * 0.55, w: cwNow() * 0.9 }; }
+function deckRect() { const r = rectOf($('deck')); if (r) r.w = cwNow() * 0.86; return r; }
+function pileRect() { const r = rectOf($('pile')); return r; }
+// [node] kartı [a] noktasından [b] noktasına uçurur (a/b: merkez + genişlik). Bitince [done] çağrılır.
+function fly(node, a, b, o) {
+  o = o || {};
+  if (!a || !b) { if (o.done) o.done(); return; }
+  const w = cwNow();
+  node.classList.add('fl');
+  node.style.left = (a.x - w / 2) + 'px'; node.style.top = (a.y - w * 0.75) + 'px';
+  $('fly').appendChild(node);
+  const s0 = Math.max(0.3, a.w / w), s1 = Math.max(0.3, b.w / w);
+  const mx = (a.x + b.x) / 2 + (o.arc || 0), my = Math.min(a.y, b.y) - (o.lift == null ? 18 : o.lift);
+  const an = node.animate([
+    { transform: 'translate(0,0) rotate(' + (o.r0 || 0) + 'deg) scale(' + s0 + ')', opacity: 1 },
+    { transform: 'translate(' + (mx - a.x) + 'px,' + (my - a.y) + 'px) rotate(' + ((o.r0 || 0) + (o.r1 || 0)) / 2 + 'deg) scale(' + (s0 + s1) / 2 * 1.12 + ')', opacity: 1, offset: .5 },
+    { transform: 'translate(' + (b.x - a.x) + 'px,' + (b.y - a.y) + 'px) rotate(' + (o.r1 || 0) + 'deg) scale(' + s1 + ')', opacity: o.fade ? 0.2 : 1 },
+  ], { duration: o.d || 460, delay: o.delay || 0, easing: 'cubic-bezier(.25,.8,.3,1)', fill: 'both' });
+  an.onfinish = () => { node.remove(); if (o.done) o.done(); };
+}
+function bigAt(pt, cls, text, dy) {
+  if (!pt) return;
+  const b = el('div', 'big ' + cls, text);
+  b.style.left = pt.x + 'px'; b.style.top = pt.y + 'px';
+  document.body.appendChild(b);
+  b.animate([{ transform: 'translate(-50%,-50%) scale(.2)', opacity: 0 }, { transform: 'translate(-50%,-70%) scale(1.25)', opacity: 1, offset: .3 }, { transform: 'translate(-50%,' + (dy || -130) + '%) scale(1)', opacity: 0 }], { duration: 1100, easing: 'ease-out' }).onfinish = () => b.remove();
+}
+function shockwave(color) {
+  const s = el('div', 'shock'); s.style.color = color || '#ffd54f';
+  $('mid').appendChild(s);
+  s.animate([{ transform: 'scale(.7)', opacity: .95 }, { transform: 'scale(2.4)', opacity: 0 }], { duration: 650, easing: 'ease-out' }).onfinish = () => s.remove();
+}
+function turnBanner(text) {
+  const b = $('turnb'); b.textContent = text;
+  b.animate([{ transform: 'translate(-50%,-50%) scale(0)', opacity: 0 }, { transform: 'translate(-50%,-50%) scale(1.15)', opacity: 1, offset: .25 }, { transform: 'translate(-50%,-50%) scale(1)', opacity: 1, offset: .7 }, { transform: 'translate(-50%,-80%) scale(.9)', opacity: 0 }], { duration: 1200, easing: 'ease-out' });
+}
 
 // ---------- oturum bileti ve API ----------
 let token = null;
@@ -405,7 +500,7 @@ function pickColor(cardId) {
     const g = el('div', 'colors');
     for (const c of ['r', 'y', 'g', 'b']) {
       const b = el('button', c, t(c));
-      b.addEventListener('click', () => { closeModal(); act(() => api('POST', '/api/games/' + G.id + '/tek/play', { card: cardId, color: c })); });
+      b.addEventListener('click', () => { closeModal(); playCard(cardId, c); });
       g.appendChild(b);
     }
     box.appendChild(g);
@@ -428,13 +523,17 @@ function showChallenge() {
 let resultTimer = 0;
 function showResult() {
   const id = G.id;
+  confetti(150);
+  setTimeout(() => confetti(80), 800);
   openModal('result', (box) => {
+    box.appendChild(el('div', 'trophy', '🏆'));
     box.appendChild(el('h3', '', t('over')));
     const s = el('div', 'scroll');
-    (G.result || []).forEach((r) => {
+    (G.result || []).forEach((r, i) => {
       const row = el('div', 'rank' + (r.rank === 1 ? ' first' : ''));
-      row.append(el('span', 'no', String(r.rank)), avatar(r.user), el('span', 'who', (r.user && r.user.displayName) || '?'));
-      row.appendChild(el('span', 'pt', r.left ? t('leftTag') : r.rank === 1 && r.cards === 0 ? t('won') : t('pts', { k: r.score })));
+      row.style.animationDelay = i * 0.1 + 's';
+      row.append(el('span', 'no', r.rank === 1 ? '👑' : String(r.rank)), avatar(r.user), el('span', 'who', (r.user && r.user.displayName) || '?'));
+      row.appendChild(el('span', 'pt2', r.left ? t('leftTag') : r.rank === 1 && r.cards === 0 ? t('won') : t('pts', { k: r.score })));
       s.appendChild(row);
     });
     box.appendChild(s);
@@ -471,7 +570,8 @@ function renderLobby() {
   const creator = !!(G.me && G.me.isCreator);
   msg.textContent = joined ? (creator ? t('waitHost') : t('waitJoined')) : creator ? t('waitHost') : t('waitJoin');
   cnt.textContent = t('count', { n: G.players.length, m: G.maxPlayers });
-  G.players.forEach((p) => { const d = el('div', 'lp'); d.append(avatar(p.user), el('span', '', nameOf(p))); list.appendChild(d); });
+  G.players.forEach((p, i) => { const d = el('div', 'slot'); d.style.setProperty('--c', ['#ffd54f', '#e5483d', '#2fbf71', '#3d8bfd'][i % 4]); d.append(avatar(p.user), el('span', '', nameOf(p))); list.appendChild(d); });
+  if (G.players.length < G.maxPlayers) { const d = el('div', 'slot empty'); d.append(el('div', 'av', '+'), el('span', '', '…')); list.appendChild(d); }
   const gid = G.id;
   if (joined) btns.appendChild(btn(t('leave'), 'alt', () => act(() => api('POST', '/api/games/' + gid + '/leave'))));
   else { const j = btn(t('join'), '', () => act(() => api('POST', '/api/games/' + gid + '/join'))); j.disabled = G.players.length >= G.maxPlayers; btns.appendChild(j); }
@@ -512,21 +612,18 @@ function renderSeats(base) {
     if (!p.out) ring.appendChild(el('span', 'cnt', String(p.cards)));
     if (G.dealerSeat === p.seat) ring.appendChild(el('span', 'tag', 'D'));
     if (p.cards === 1 && !p.out) ring.appendChild(el('span', 'one', t('one')));
-    const was = prevCounts[p.seat];
-    if (was != null && p.cards > was) ring.appendChild(el('span', 'fly', '+' + (p.cards - was)));
     s.append(ring, el('span', 'nm', nameOf(p)));
     box.appendChild(s);
   }
-  prevCounts = {};
-  G.players.forEach((p) => { prevCounts[p.seat] = p.cards; });
 }
-function renderHand(isNewTop) {
+let handKnown = new Set(), myPlayRect = null, handDelay = 0, pileDelay = 0;
+function renderHand() {
   const me = G.me && G.me.joined && !G.me.out ? G.me : null;
   const hand = $('hand'), wrap = $('handwrap'), watch = $('watch');
   hand.textContent = '';
   if (!me) { watch.style.display = 'flex'; watch.textContent = G.me && G.me.out ? t('youOut') : t('watching'); hand.style.width = '0px'; return; }
   watch.style.display = 'none';
-  const cw = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--cw')) || 52;
+  const cw = cwNow();
   const n = me.hand.length;
   const avail = wrap.clientWidth - 36;
   // Kartlar üst üste biner; en az yarısı görünür kalır (sığmazsa el yana kaydırılır).
@@ -537,6 +634,7 @@ function renderHand(isNewTop) {
   const myTurn = G.turnSeat === me.seat;
   hand.className = myTurn ? 'myturn' : '';
   const can = new Set(me.playable);
+  let fresh = 0;
   me.hand.forEach((c, i) => {
     const e = cardEl(c.code);
     e.style.left = i * step + 'px';
@@ -548,14 +646,18 @@ function renderHand(isNewTop) {
       e.classList.add('ok');
       e.addEventListener('click', () => {
         if (busy) return;
+        myPlayRect = rectOf(e);
         if (c.code[0] === 'w') pickColor(c.id);
-        else act(() => api('POST', '/api/games/' + G.id + '/tek/play', { card: c.id }));
+        else playCard(c.id);
       });
     }
-    if (me.drawn === c.id) e.classList.add('fresh');
+    if (!handKnown.has(c.id)) { e.classList.add('dealin'); e.style.setProperty('--dl', (handDelay / 1000 + fresh * 0.07) + 's'); fresh += 1; }
+    handKnown.add(c.id);
     hand.appendChild(e);
   });
+  handDelay = 0;
 }
+function playCard(id, color) { act(() => api('POST', '/api/games/' + G.id + '/tek/play', color ? { card: id, color } : { card: id })); }
 function renderAct() {
   const a = $('act');
   a.textContent = ''; a.className = ''; a.dir = RTL ? 'rtl' : 'ltr';
@@ -567,10 +669,12 @@ function renderAct() {
     a.className = 'me';
     if (me.canPass) {
       a.appendChild(el('span', '', t('drew')));
-      a.appendChild(btn(t('playIt'), '', () => { const c = me.hand.find((x) => x.id === me.drawn); if (!c) return; if (c.code[0] === 'w') pickColor(c.id); else act(() => api('POST', '/api/games/' + gid + '/tek/play', { card: c.id })); }));
+      a.appendChild(btn(t('playIt'), '', () => { const c = me.hand.find((x) => x.id === me.drawn); if (!c) return; if (c.code[0] === 'w') pickColor(c.id); else playCard(c.id); }));
       a.appendChild(btn(t('keep'), 'alt', () => act(() => api('POST', '/api/games/' + gid + '/tek/pass'))));
     } else if (me.mustAnswer) {
       a.appendChild(el('span', '', t('ch4', { n: nameOf(G.players.find((p) => p.seat === G.challengeBy)) })));
+    } else if (me.canDraw && !me.playable.length) {
+      a.appendChild(el('span', '', t('autoDraw')));
     } else {
       a.appendChild(el('span', '', t('yourTurn')));
       a.appendChild(btn(t('drawBtn'), 'alt', drawCard));
@@ -579,6 +683,23 @@ function renderAct() {
   else a.textContent = t('turnOf', { n: nameOf(cur) });
 }
 function drawCard() { if (!G || !G.me || !G.me.canDraw) return; act(() => api('POST', '/api/games/' + G.id + '/tek/draw')); }
+
+// Oynayacak kartı olmayan oyuncu için kart kendiliğinden çekilir (kısa bir bekleyişle, ne olduğu görünsün diye).
+let autoKey = null;
+function maybeAutoDraw() {
+  const me = G.me && G.me.joined && !G.me.out ? G.me : null;
+  if (!me || G.status !== 'playing' || G.turnSeat !== me.seat || !me.canDraw || me.mustAnswer || me.playable.length) return;
+  const key = G.id + ':' + G.seq;
+  if (autoKey === key) return;
+  autoKey = key;
+  const gid = G.id, seq = G.seq;
+  const go = (tries) => {
+    if (!G || G.id !== gid || G.seq !== seq || !G.me || !G.me.canDraw || G.me.playable.length) return;
+    if (busy && tries < 6) { setTimeout(() => go(tries + 1), 400); return; }
+    drawCard();
+  };
+  setTimeout(() => go(0), 1100);
+}
 
 function events() {
   if (seenGame === G.id && G.seq <= seenSeq) return;
@@ -601,6 +722,70 @@ function events() {
 let lastRoundSaid = null;
 let lastTop = null;
 
+// ---------- animasyon düzenleyici: yeni olaylar kart uçuşlarına çevrilir ----------
+let animGame = null, animSeq = -1, dealtFor = null;
+function drawFlights(seat, n, delay0) {
+  const me = G.me && G.me.joined ? G.me : null;
+  const mine = me && me.seat === seat;
+  const from = deckRect();
+  const to = mine ? handRect() : seatRect(seat);
+  const cnt = Math.min(n, 5);
+  for (let i = 0; i < cnt; i++) fly(backEl(), from, to ? { x: to.x, y: to.y, w: mine ? to.w : Math.max(24, to.w * 0.85) } : null, { d: 420, delay: (delay0 || 0) + i * 110, r0: -8, r1: rnd(-12, 12), fade: !mine });
+  return mine ? (delay0 || 0) + 420 + (cnt - 1) * 110 : 0;
+}
+function animate(was) {
+  const me = G.me && G.me.joined ? G.me : null;
+  const myCol = getComputedStyle(document.documentElement).getPropertyValue('--' + (G.color || 'y')).trim() || '#ffd54f';
+  if (animGame !== G.id) {
+    animGame = G.id; animSeq = G.seq;
+    handKnown = new Set(); myPlayRect = null;
+    // Oyun az önce başladıysa: kartlar dağıtılır.
+    if (was && was.id === G.id && was.status === 'waiting' && dealtFor !== G.id) {
+      dealtFor = G.id;
+      const order = G.players.map((p) => p.seat);
+      const per = Math.min(7, 7);
+      let k = 0;
+      for (let r = 0; r < per; r++) for (const seat of order) {
+        const mine = me && me.seat === seat;
+        const to = mine ? handRect() : seatRect(seat);
+        if (to) fly(backEl(), deckRect(), { x: to.x, y: to.y, w: mine ? to.w : Math.max(22, to.w * 0.8) }, { d: 380, delay: k * 55, r0: -10, r1: rnd(-15, 15), fade: !mine });
+        k += 1;
+      }
+      handDelay = 350;
+      pileDelay = k * 55 + 300;
+    }
+    return;
+  }
+  if (G.seq <= animSeq) return;
+  animSeq = G.seq;
+  for (const e of G.last || []) {
+    if (e.t === 'play') {
+      const mine = me && me.seat === e.seat;
+      const from = mine && myPlayRect ? { x: myPlayRect.x, y: myPlayRect.y, w: myPlayRect.w } : mine ? handRect() : seatRect(e.seat);
+      const to = pileRect();
+      if (from && to) {
+        const rot = ((G.seq * 37) % 30) - 15;
+        fly(cardEl(e.code), mine ? from : { x: from.x, y: from.y, w: Math.max(24, from.w * 0.8) }, to, { d: 440, r0: mine ? 0 : -20, r1: rot, lift: 30, arc: mine ? 0 : rnd(-30, 30) });
+        pileDelay = 400;
+      }
+      myPlayRect = null;
+      const k = e.code[1];
+      if (e.code[0] === 'w' || k === 'D') setTimeout(() => shockwave(myCol), pileDelay);
+      if (k === 'S') bigAt(seatRect((G.last.find((x) => x.t === 'skip') || {}).seat), 'ico', '🚫', -140);
+      if (k === 'R') setTimeout(() => { const r = $('ringsvg'); if (r) r.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.35) rotate(40deg)' }, { transform: 'scale(1)' }], { duration: 600, easing: 'ease-out' }); }, pileDelay);
+    } else if (e.t === 'draw') {
+      const d = drawFlights(e.seat, e.n || 1, 0);
+      if (me && me.seat === e.seat) handDelay = Math.max(handDelay, d - 140);
+    } else if (e.t === 'penalty' && e.n > 0) {
+      const d = drawFlights(e.seat, e.n, 250);
+      bigAt(seatRect(e.seat), 'pen', '+' + e.n, -150);
+      if (me && me.seat === e.seat) handDelay = Math.max(handDelay, d - 140);
+    }
+  }
+  // Bir oyuncunun eli 1 karta indiyse "TEK!" çağrısı.
+  for (const p of G.players) { const was1 = prevCounts[p.seat]; if (p.cards === 1 && was1 != null && was1 > 1 && !p.out) { bigAt(seatRect(p.seat), 'tek', t('one'), -130); post({ type: 'haptic' }); } }
+}
+
 function renderBoard(was) {
   show('board');
   $('clock').style.display = ''; $('info').style.display = '';
@@ -609,6 +794,10 @@ function renderBoard(was) {
   const base = G.me && G.me.joined && G.me.seat != null ? G.me.seat : 0;
   events();
   renderSeats(base);
+  pileDelay = 0;
+  animate(was);
+  prevCounts = {};
+  G.players.forEach((p) => { prevCounts[p.seat] = p.cards; });
   // orta: renk, yön, üstteki kart
   const felt = $('felt'), ring = $('ringsvg');
   const col = getComputedStyle(document.documentElement).getPropertyValue('--' + G.color).trim() || '#f2b92a';
@@ -624,7 +813,11 @@ function renderBoard(was) {
     const rot = ((G.seq * 37) % 30) - 15;
     c.style.setProperty('--rot', rot + 'deg');
     c.style.transform = 'rotate(' + rot + 'deg)';
-    if (was && was.id === G.id && was.status === 'playing') c.classList.add('new');
+    const anim = was && was.id === G.id && was.status === 'playing';
+    if (pileDelay > 0) {
+      c.style.visibility = 'hidden';
+      setTimeout(() => { c.style.visibility = ''; if (anim) c.classList.add('new'); }, pileDelay);
+    } else if (anim) c.classList.add('new');
     pile.appendChild(c);
     while (pile.children.length > 3) pile.removeChild(pile.firstChild);
     lastTop = G.top;
@@ -638,8 +831,9 @@ function renderBoard(was) {
   $('info').className = 'chip' + (G.lastRound ? ' hot' : '');
   renderAct();
   renderHand();
+  maybeAutoDraw();
   const mine = !!(me && G.turnSeat === me.seat);
-  if (mine && !prevTurnMine) post({ type: 'haptic' });
+  if (mine && !prevTurnMine) { post({ type: 'haptic' }); turnBanner(t('yourTurnB')); }
   prevTurnMine = mine;
   if (me && me.mustAnswer) { if (modalKind !== 'challenge') showChallenge(); }
   else if (modalKind === 'challenge') closeModal();
@@ -660,7 +854,7 @@ function render(was) {
   if (G && G.status === 'cancelled') { if (was && was.id === G.id && was.status !== 'cancelled') toast(t('cancelled')); G = null; }
   if (G && G.status === 'finished') G = null;
   if (modalKind === 'result' && G) closeModal();
-  lastTop = null; prevCounts = {}; prevTurnMine = false;
+  lastTop = null; prevCounts = {}; prevTurnMine = false; animGame = null; autoKey = null;
   if (modalKind !== 'result') { $('pile').textContent = ''; }
   renderLobby();
 }
@@ -680,12 +874,13 @@ $('brules').addEventListener('click', showRules);
 $('bmin').addEventListener('click', () => post({ type: 'minimize' }));
 $('bleave').addEventListener('click', () => { if (!G) return; const gid = G.id; confirmBox(t('leaveQ'), t('leaveHint'), t('leave'), () => act(() => api('POST', '/api/games/' + gid + '/leave'))); });
 $('deck').addEventListener('click', drawCard);
-window.addEventListener('resize', () => { if (G && G.status === 'playing') renderBoard(G); });
+window.addEventListener('resize', () => { sizeCf(); if (G && G.status === 'playing') renderBoard(G); });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') refresh(); });
 setInterval(() => { if (document.visibilityState === 'visible' && !busy) refresh(); }, 4000);
 
 (async () => {
   $('loadmsg').textContent = t('loading');
+  sizeCf();
   if (!window.TRLive) { $('load').querySelector('.spin').remove(); $('loadmsg').textContent = t('appOnly'); return; }
   await refresh();
   $('load').className = 'off';

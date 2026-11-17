@@ -42,8 +42,9 @@ import { api, getSession, logout, type PanelSession, type PanelType } from "@/li
 type NavLink = { label: string; href: string; icon: LucideIcon; match?: string[]; adminOnly?: boolean; badge?: string };
 type NavGroup = { title: string; links: NavLink[] };
 
+type DesktopPanel = Exclude<PanelType, "host">;
 type PanelShellProps = {
-  panel: PanelType;
+  panel: DesktopPanel;
   children: React.ReactNode;
 };
 
@@ -102,7 +103,7 @@ const adminGroups: NavGroup[] = [
   },
 ];
 
-const panelConfig: Record<PanelType, { title: string; subtitle: string; groups: NavGroup[] }> = {
+const panelConfig: Record<DesktopPanel, { title: string; subtitle: string; groups: NavGroup[] }> = {
   admin: { title: "Yönetim Paneli", subtitle: "TR LIVE MANAGEMENT", groups: adminGroups },
   agency: {
     title: "Ajans Paneli",
@@ -114,8 +115,8 @@ const panelConfig: Record<PanelType, { title: string; subtitle: string; groups: 
           { label: "Genel Bakış", href: "/agency/dashboard", icon: LayoutDashboard },
           { label: "Yayıncılar", href: "/agency/broadcasters", icon: Users },
           { label: "Kazançlar", href: "/agency/earnings", icon: Coins },
-          { label: "Davet ve Transfer", href: "/agency/invite", icon: UserPlus },
-          { label: "Ayarlar", href: "/agency/settings", icon: Settings },
+          { label: "Transfer ve Davet Primi", href: "/agency/invite", icon: UserPlus },
+          { label: "Asistanlar", href: "/agency/settings", icon: Settings },
         ],
       },
     ],
@@ -149,7 +150,7 @@ export default function PanelShell({ panel, children }: PanelShellProps) {
   const [checked, setChecked] = useState(false);
   const [pending, setPending] = useState<Pending>({});
 
-  const active: PanelType = panel;
+  const active: DesktopPanel = panel;
 
   useEffect(() => {
     const s = getSession(active);

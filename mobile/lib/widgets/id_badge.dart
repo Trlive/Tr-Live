@@ -59,225 +59,53 @@ class HostBadgeChip extends StatelessWidget {
   }
 }
 
-/// Özel ID kapsülü (Yoho "güzel numara" gibi): kısa numara daha nadir → daha gösterişli renk
-/// (≤3 hane neon aurora, 4–5 hane mor-pembe, 6+ hane altın-ateş). Zemin rengi akar, çevresinde dönen altın çerçeve,
-/// solda taçlı altın madalyon, üzerinden parıltı geçer, iki yıldız sırayla parlar.
-class SpecialIdPill extends StatefulWidget {
-  final String id;
-  final double height;
-  const SpecialIdPill({super.key, required this.id, this.height = 20});
-
-  @override
-  State<SpecialIdPill> createState() => _SpecialIdPillState();
-}
-
-class _SpecialIdPillState extends State<SpecialIdPill> with SingleTickerProviderStateMixin {
-  late final AnimationController _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 3000))..repeat();
-
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
-
-  List<Color> get _colors {
-    final n = widget.id.length;
-    // Kısa (≤3 hane) en nadir: neon aurora — turkuaz → elektrik mavisi → mor → fuşya; düz gökkuşağı değil, serin ve parlak.
-    if (n <= 3) return const [Color(0xFF00F0FF), Color(0xFF2F7BFF), Color(0xFF7A3CFF), Color(0xFFFF2E9A), Color(0xFF7A3CFF), Color(0xFF2F7BFF), Color(0xFF00F0FF)];
-    if (n <= 5) return const [Color(0xFFFF6FD8), Color(0xFFB04BFF), Color(0xFF5B21B6), Color(0xFFB04BFF), Color(0xFFFF6FD8)];
-    return const [Color(0xFFFFE27A), Color(0xFFFF9F1C), Color(0xFFE5483D), Color(0xFFFF9F1C), Color(0xFFFFE27A)];
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final h = widget.height;
-    final colors = _colors;
-    return RepaintBoundary(
-      child: AnimatedBuilder(
-        animation: _c,
-        builder: (context, _) {
-          final t = _c.value;
-          final sweep = (t / 0.45).clamp(0.0, 1.0); // parıltı turun ilk %45'inde geçer
-          final pill = Container(
-            height: h,
-            padding: const EdgeInsets.all(1.3),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(h / 2),
-              // Dönen altın çerçeve
-              gradient: SweepGradient(
-                transform: GradientRotation(t * 6.283),
-                colors: const [Color(0xFFFFF6C2), Color(0xFFFFC300), Color(0xFF9A6A00), Color(0xFFFFE57F), Color(0xFFFFF6C2)],
-              ),
-              boxShadow: [BoxShadow(color: colors[1].withValues(alpha: 0.6), blurRadius: 9)],
-            ),
-            child: Container(
-              padding: EdgeInsets.only(right: h * 0.45),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(h / 2),
-                // Akan zemin rengi
-                gradient: LinearGradient(
-                  begin: Alignment(-1 - 2 * t, 0),
-                  end: Alignment(1 - 2 * t, 0),
-                  colors: colors,
-                  tileMode: TileMode.mirror,
-                ),
-              ),
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                // Taçlı altın madalyon
-                Container(
-                  width: h - 2.6,
-                  height: h - 2.6,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: const RadialGradient(colors: [Color(0xFFFFFBE6), Color(0xFFFFD54F), Color(0xFFC88A00)], stops: [0, 0.55, 1]),
-                    border: Border.all(color: Colors.white, width: 0.9),
-                    boxShadow: const [BoxShadow(color: Color(0x66000000), blurRadius: 2)],
-                  ),
-                  alignment: Alignment.center,
-                  child: Icon(Icons.workspace_premium_rounded, size: h * 0.62, color: const Color(0xFF7A4300)),
-                ),
-                SizedBox(width: h * 0.28),
-                Text(
-                  widget.id,
-                  style: TextStyle(
-                    fontSize: h * 0.62,
-                    height: 1.0,
-                    fontWeight: FontWeight.w900,
-                    fontStyle: FontStyle.italic,
-                    letterSpacing: h * 0.06,
-                    color: Colors.white,
-                    shadows: const [Shadow(color: Color(0xAA000000), blurRadius: 3, offset: Offset(0, 1))],
-                  ),
-                ),
-              ]),
-            ),
-          );
-          return Stack(clipBehavior: Clip.none, children: [
-            if (sweep < 1)
-              ShaderMask(
-                blendMode: BlendMode.srcATop,
-                shaderCallback: (r) => LinearGradient(
-                  begin: Alignment(-1.8 + 3.6 * sweep, -0.4),
-                  end: Alignment(-1.0 + 3.6 * sweep, 0.4),
-                  colors: const [Color(0x00FFFFFF), Color(0xB3FFFFFF), Color(0x00FFFFFF)],
-                ).createShader(r),
-                child: pill,
-              )
-            else
-              pill,
-            // Sırayla parlayan iki yıldız
-            for (final (i, fx, fy) in const [(0, 0.82, -0.18), (1, 0.42, 0.72)])
-              Positioned.fill(
-                child: IgnorePointer(
-                  child: Align(
-                    alignment: Alignment(fx * 2 - 1, fy * 2 - 1),
-                    child: Opacity(
-                      opacity: _twinkle(t, i),
-                      child: Icon(Icons.auto_awesome, size: h * 0.5, color: Colors.white, shadows: [Shadow(color: colors[1], blurRadius: 4)]),
-                    ),
-                  ),
-                ),
-              ),
-          ]);
-        },
-      ),
-    );
-  }
-
-  static double _twinkle(double t, int i) {
-    final p = (t * 2 + i * 0.5) % 1.0;
-    return p < 0.3 ? (p < 0.15 ? p / 0.15 : (0.3 - p) / 0.15) : 0.0;
-  }
-}
-
-/// Renkli ID (Görünüm'de takılır): bronz / gümüş / altın. Solda metalik "ID" etiketi, numara metalik akan renkte;
-/// ara ara üzerinden parlak ışık geçer.
+/// Renkli ID (Görünüm'de takılır): bronz / gümüş / altın. Solda parlak kapsül "ID" etiketi, yanında aynı renkte numara.
+/// Düz, sakin tasarım (animasyon yok).
 const Map<String, List<Color>> kIdColors = {
-  'bronz': [Color(0xFFFFE0C2), Color(0xFFE8955A), Color(0xFF9C5426), Color(0xFFF7B983)],
-  'gumus': [Color(0xFFFFFFFF), Color(0xFFD5DEE8), Color(0xFF8C9AAB), Color(0xFFEFF4F9)],
-  'altin': [Color(0xFFFFF8C9), Color(0xFFFFD54F), Color(0xFFDB9A00), Color(0xFFFFEE99)],
+  'bronz': [Color(0xFFF6C49C), Color(0xFFD9803F), Color(0xFF9C5426)],
+  'gumus': [Color(0xFFFFFFFF), Color(0xFFD3DBE5), Color(0xFF8C9AAB)],
+  'altin': [Color(0xFFFFE27A), Color(0xFFF7B516), Color(0xFFD97E06)],
 };
-const Map<String, Color> _idGlow = {'bronz': Color(0xFFC46A2E), 'gumus': Color(0xFF9FB3C8), 'altin': Color(0xFFFFB300)};
+const Map<String, Color> _idNumber = {'bronz': Color(0xFFD9803F), 'gumus': Color(0xFF9AA7B6), 'altin': Color(0xFFF59E0B)};
 const Map<String, Color> _idTagText = {'bronz': Color(0xFF4A2208), 'gumus': Color(0xFF26313D), 'altin': Color(0xFF5A3600)};
 const Map<String, String> kIdColorNames = {'bronz': 'Bronz Renkli ID', 'gumus': 'Gümüş Renkli ID', 'altin': 'Altın Renkli ID'};
 
-class ColoredIdText extends StatefulWidget {
+class ColoredIdText extends StatelessWidget {
   final String text;
   final String tier;
   final double fontSize;
   const ColoredIdText({super.key, required this.text, required this.tier, this.fontSize = 13});
 
   @override
-  State<ColoredIdText> createState() => _ColoredIdTextState();
-}
-
-class _ColoredIdTextState extends State<ColoredIdText> with SingleTickerProviderStateMixin {
-  late final AnimationController _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 2800))..repeat();
-
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final colors = kIdColors[widget.tier] ?? kIdColors['altin']!;
-    final glow = _idGlow[widget.tier] ?? const Color(0xFFFFB300);
-    final f = widget.fontSize;
-    final number = widget.text.replaceFirst(RegExp(r'^\s*ID\s*:\s*'), '');
-    return RepaintBoundary(
-      child: AnimatedBuilder(
-        animation: _c,
-        builder: (context, _) {
-          final t = _c.value;
-          final sweep = (t / 0.4).clamp(0.0, 1.0);
-          final tag = Container(
-            height: f * 1.35,
-            padding: EdgeInsets.symmetric(horizontal: f * 0.38),
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(f * 0.35),
-              gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: colors),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.75), width: 0.7),
-              boxShadow: [BoxShadow(color: glow.withValues(alpha: 0.55), blurRadius: 6)],
-            ),
-            child: Text('ID',
-                style: TextStyle(fontSize: f * 0.78, height: 1.0, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic, color: _idTagText[widget.tier] ?? const Color(0xFF5A3600))),
-          );
-          final numText = ShaderMask(
-            blendMode: BlendMode.srcIn,
-            shaderCallback: (r) => LinearGradient(
-              begin: Alignment(-1 - 2 * t, 0),
-              end: Alignment(1 - 2 * t, 0),
-              colors: colors,
-              tileMode: TileMode.mirror,
-            ).createShader(r),
-            child: Text(
-              number,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: f, fontWeight: FontWeight.w900, letterSpacing: f * 0.06, color: Colors.white, shadows: [Shadow(color: glow.withValues(alpha: 0.85), blurRadius: 7)]),
-            ),
-          );
-          final row = Row(mainAxisSize: MainAxisSize.min, children: [tag, SizedBox(width: f * 0.35), Flexible(child: numText)]);
-          if (sweep >= 1) return row;
-          return ShaderMask(
-            blendMode: BlendMode.srcATop,
-            shaderCallback: (r) => LinearGradient(
-              begin: Alignment(-1.8 + 3.6 * sweep, -0.5),
-              end: Alignment(-1.1 + 3.6 * sweep, 0.5),
-              colors: const [Color(0x00FFFFFF), Color(0xCCFFFFFF), Color(0x00FFFFFF)],
-            ).createShader(r),
-            child: row,
-          );
-        },
+    final colors = kIdColors[tier] ?? kIdColors['altin']!;
+    final f = fontSize;
+    final number = text.replaceFirst(RegExp(r'^\s*ID\s*:\s*'), '');
+    final tag = Container(
+      height: f * 1.5,
+      padding: EdgeInsets.symmetric(horizontal: f * 0.7),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(f * 0.75),
+        gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: colors),
+        border: Border.all(color: colors.last.withValues(alpha: 0.9), width: 1),
       ),
+      child: Text('ID', style: TextStyle(fontSize: f * 0.9, height: 1.0, fontWeight: FontWeight.w900, color: _idTagText[tier] ?? const Color(0xFF5A3600))),
     );
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      tag,
+      SizedBox(width: f * 0.4),
+      Flexible(
+        child: Text(number,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: f * 1.1, height: 1.1, fontWeight: FontWeight.w800, color: _idNumber[tier] ?? const Color(0xFFF59E0B))),
+      ),
+    ]);
   }
 }
 
-/// Normal ID: küçük "ID" etiketi + numara (sade).
+/// Normal ID: sade "ID:12345678" yazısı (kapsül yok).
 class PlainIdText extends StatelessWidget {
   final String id;
   final double fontSize;
@@ -286,24 +114,7 @@ class PlainIdText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final f = fontSize;
-    return Row(mainAxisSize: MainAxisSize.min, children: [
-      Container(
-        height: f * 1.3,
-        padding: EdgeInsets.symmetric(horizontal: f * 0.32),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(f * 0.3),
-          color: color.withValues(alpha: 0.16),
-          border: Border.all(color: color.withValues(alpha: 0.45), width: 0.7),
-        ),
-        child: Text('ID', style: TextStyle(fontSize: f * 0.74, height: 1.0, fontWeight: FontWeight.w800, color: color)),
-      ),
-      SizedBox(width: f * 0.32),
-      Flexible(
-        child: Text(id, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: f, height: 1.1, color: color, letterSpacing: f * 0.03)),
-      ),
-    ]);
+    return Text('ID:$id', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: fontSize, height: 1.1, color: color, letterSpacing: fontSize * 0.02));
   }
 }
 
@@ -413,7 +224,7 @@ class _HiddenIdPillState extends State<HiddenIdPill> with SingleTickerProviderSt
   }
 }
 
-/// Kullanıcı kimliği: gizli kullanıcıda gizli kimlik kapsülü; özel ID varsa süslü kapsül; takılı renkli ID (bronz/gümüş/altın) varsa metalik; yoksa WIP'li kişide
+/// Kullanıcı kimliği: gizli kullanıcıda gizli kimlik kapsülü; takılı renkli ID (bronz/gümüş/altın) varsa metalik; yoksa WIP'li kişide
 /// adı gibi renkli/parlayan "ID: …", değilse sade "ID" etiketi + numara. user: publicId, specialId, idColor, wipLevel,
 /// nameColor alanları okunur. Oda kimliği de oda sahibinin bu kimliğidir (Yoho gibi; kimlik değişince oda da değişir).
 class IdBadge extends StatelessWidget {
@@ -427,20 +238,17 @@ class IdBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     // Gizli kullanıcı: yalnızca gizli kimliği (kopyalanmaz, gerçek ID'ye ulaşılamaz).
     if (user?['isHidden'] == true) return HiddenIdPill(alias: user?['hiddenId']?.toString() ?? '', height: fontSize * 1.7);
-    final String special = user?['specialId']?.toString() ?? '';
-    final bool hasSpecial = special.isNotEmpty;
     final String id = displayIdOf(user);
     if (id.isEmpty) return const SizedBox.shrink();
     final level = (user?['wipLevel'] as num?)?.toInt();
     final nameColor = parseColor(user?['nameColor'] as String?);
     final String tier = user?['idColor']?.toString() ?? '';
-    final Widget label = hasSpecial
-        ? SpecialIdPill(id: special, height: fontSize * 1.7)
-        : kIdColors.containsKey(tier)
-            ? ColoredIdText(text: id, tier: tier, fontSize: fontSize + 0.5)
-            : (level != null && level > 0)
-                ? WipNameText('ID: $id', level: level, color: nameColor, style: TextStyle(fontSize: fontSize, color: nameColor ?? color))
-                : PlainIdText(id: id, fontSize: fontSize, color: color);
+    // Özel ID = rakamları kullanıcının seçtiği ID; ayrı bir görünümü yok. Görünüm yalnızca takılı renkli ID'ye (bronz/gümüş/altın) bağlıdır.
+    final Widget label = kIdColors.containsKey(tier)
+        ? ColoredIdText(text: id, tier: tier, fontSize: fontSize + 0.5)
+        : (level != null && level > 0)
+            ? WipNameText('ID: $id', level: level, color: nameColor, style: TextStyle(fontSize: fontSize, color: nameColor ?? color))
+            : PlainIdText(id: id, fontSize: fontSize, color: color);
     if (!copyable) return label;
     return InkWell(
       borderRadius: BorderRadius.circular(12),

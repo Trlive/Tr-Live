@@ -3,7 +3,7 @@ import '../services/api.dart';
 import '../services/session.dart';
 import '../widgets/app_theme.dart';
 import '../widgets/common.dart';
-import 'agency_screen.dart';
+import '../widgets/app_webview_modal.dart';
 import 'misc_screens.dart';
 
 String _two(int n) => n.toString().padLeft(2, '0');
@@ -400,7 +400,7 @@ class WithdrawScreen extends StatelessWidget {
               leading: const Icon(Icons.receipt_long, color: Pal.cyan),
               title: const Text('Maaş özetlerim'),
               trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const HostStatementsScreen())),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => hostCenterPage(tab: 'history'))),
             ),
             const SizedBox(height: 16),
             const Text('Maaşlar dönem kapanınca hesaplanır ve kimlik doğrulaman onaylıysa ödenir. Ödeme durumunu "Maaş özetlerim" sayfasından görebilirsin.', style: TextStyle(color: Pal.textDim, fontSize: 12, height: 1.4)),

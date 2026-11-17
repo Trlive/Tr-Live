@@ -2924,6 +2924,105 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     );
   }
 
+
+  /// Oyun penceresinin üstündeki şerit: odadaki mikrofon koltukları (oturan, konuşan, susturulmuş) ve mikrofon sırası.
+  /// Oyun açıkken koltuklar kapanmasın diye canlı olarak buradan izlenir; avatara dokununca profil açılır.
+  Widget _gameSeatStrip(BuildContext context) {
+    final bySeat = <int, Map<String, dynamic>>{
+      for (final m in _members)
+        if (m['seatIndex'] != null) (m['seatIndex'] as num).toInt(): m,
+    };
+    final muted = _mutedSeats;
+    final qn = _queue.length;
+    final myPos = _queue.indexOf(Session.id);
+    final canAsk = !_onSeat && !_isLive;
+    final showQueue = qn > 0 || canAsk;
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFF1D160B), Color(0xFF120E07)]),
+        border: Border(bottom: BorderSide(color: Color(0x55F2B92A))),
+      ),
+      child: Row(children: [
+        Expanded(
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            itemCount: _seatCount,
+            itemBuilder: (_, i) {
+              final m = bySeat[i];
+              if (m == null) {
+                return SizedBox(
+                  width: 44,
+                  child: Center(
+                    child: Container(
+                      width: 32,
+                      height: 32,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withValues(alpha: 0.06), border: Border.all(color: Colors.white.withValues(alpha: 0.2))),
+                      child: Text('${i + 1}', style: const TextStyle(fontSize: 11, color: Colors.white38, fontWeight: FontWeight.w700)),
+                    ),
+                  ),
+                );
+              }
+              final uid = m['userId'].toString();
+              final speaking = _isSpeaking(uid);
+              final isMuted = muted.contains(i);
+              final user = mapOf(m['user']);
+              return GestureDetector(
+                onTap: () => _memberSheet(m),
+                child: SizedBox(
+                  width: 44,
+                  child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    Stack(clipBehavior: Clip.none, alignment: Alignment.center, children: [
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 150),
+                        padding: const EdgeInsets.all(2),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(color: speaking ? Colors.greenAccent : Colors.transparent, width: 2),
+                          boxShadow: speaking ? const [BoxShadow(color: Color(0x8869F0AE), blurRadius: 8)] : null,
+                        ),
+                        child: UserAvatar(user: user, radius: 15),
+                      ),
+                      if (isMuted)
+                        const Positioned(right: -2, bottom: -2, child: CircleAvatar(radius: 7, backgroundColor: Colors.black87, child: Icon(Icons.mic_off, size: 9, color: Colors.redAccent))),
+                    ]),
+                    const SizedBox(height: 2),
+                    Text('${i + 1}', style: TextStyle(fontSize: 9, color: speaking ? Colors.greenAccent : Colors.white54, fontWeight: FontWeight.w700)),
+                  ]),
+                ),
+              );
+            },
+          ),
+        ),
+        if (showQueue)
+          GestureDetector(
+            onTap: () {
+              if (_canSeatManage && _micRequest) {
+                _micRequestsSheet();
+              } else if (canAsk) {
+                _toggleQueue();
+              }
+            },
+            child: Container(
+              margin: const EdgeInsets.only(right: 8, left: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                color: _inQueue ? const Color(0xFFF2B92A) : Colors.black45,
+                border: Border.all(color: const Color(0xFFF2B92A)),
+              ),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(_inQueue ? Icons.hourglass_bottom : Icons.front_hand, size: 15, color: _inQueue ? const Color(0xFF1C1405) : const Color(0xFFFFD54F)),
+                const SizedBox(width: 4),
+                Text(_inQueue && myPos >= 0 ? '${myPos + 1}/$qn' : '$qn', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: _inQueue ? const Color(0xFF1C1405) : const Color(0xFFFFD54F))),
+              ]),
+            ),
+          ),
+      ]),
+    );
+  }
+
   void _memberSheet(Map<String, dynamic> m) {
     final userId = m['userId'].toString();
     final user = mapOf(m['user']);
@@ -4951,7 +5050,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                     ),
                   ),
                 // Oda oyunları (Ludo, TEK): açık oyun varken sağda balon; dokununca üstte oyun penceresi. En üstte durur.
-                Positioned.fill(child: RoomTekDock(key: _tekDockKey, roomId: widget.roomId)),
+                Positioned.fill(child: RoomTekDock(key: _tekDockKey, roomId: widget.roomId, seatStrip: _gameSeatStrip)),
                 ]);
                 }))),
       ),

@@ -2,7 +2,7 @@
 // Giriş, uygulamadaki hesapla yapılır (kullanıcı adı / telefon + şifre). Sitede hiçbir şifre saklanmaz;
 // oturum anahtarları yalnızca bu tarayıcı sekmesinde (sessionStorage) tutulur ve sekme kapanınca silinir.
 
-export type PanelType = "admin" | "agency" | "dealer";
+export type PanelType = "admin" | "agency" | "dealer" | "host";
 
 export type PanelUser = {
   id: string;
@@ -100,7 +100,52 @@ async function parse(res: Response): Promise<Record<string, unknown>> {
 
 let refreshing: Promise<boolean> | null = null;
 
+// ---------- Uygulama içi (WebView) oturumu ----------
+// Uygulama sayfayı kendi penceresinde açar; oturum bileti adrese yazılmaz. Sayfa "TRLive" kanalından ister,
+// uygulama window.TRLiveAuth.set(token) ile verir (yalnızca aynı sunucudaki sayfaya).
+type Bridge = { postMessage: (m: string) => void };
+type AuthHook = { set: (token: string) => void };
+const w = () => (typeof window === "undefined" ? null : (window as unknown as { TRLive?: Bridge; TRLiveAuth?: AuthHook }));
+
+/** Sayfa uygulamanın içinde mi açıldı? */
+export function inApp(): boolean {
+  return Boolean(w()?.TRLive);
+}
+
+/** Uygulamaya mesaj gönderir (ör. {type:"close"}, {type:"open", screen:"usd_wallet"}). */
+export function appMessage(msg: Record<string, unknown>) {
+  try {
+    w()?.TRLive?.postMessage(JSON.stringify(msg));
+  } catch {
+    /* uygulama dışında */
+  }
+}
+
+/** Uygulamadan güncel oturum biletini ister (en çok 8 sn bekler). */
+export function bridgeToken(): Promise<string | null> {
+  const win = w();
+  if (!win?.TRLive) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (v: string | null) => {
+      if (done) return;
+      done = true;
+      resolve(v);
+    };
+    (win as { TRLiveAuth?: AuthHook }).TRLiveAuth = { set: (token: string) => finish(typeof token === "string" && token ? token : null) };
+    setTimeout(() => finish(null), 8000);
+    appMessage({ type: "getToken" });
+  });
+}
+
 async function refresh(): Promise<boolean> {
+  if (inApp()) {
+    const tok = await bridgeToken();
+    const cur = getSession();
+    if (!tok || !cur) return false;
+    saveSession({ ...cur, token: tok });
+    return true;
+  }
   const s = getSession();
   if (!s?.refreshToken) return false;
   try {
@@ -197,6 +242,31 @@ export async function apiBinary<T = Record<string, unknown>>(path: string, file:
     throw new ApiError("Sunucuya ulaşılamadı. İnternet bağlantınızı kontrol edin.", 0);
   }
   return (await parse(res)) as T;
+}
+
+/** Uygulama içi sayfa: köprüden alınan biletle oturum kurar. panel "agency" ise ajans bilgisi de eklenir. */
+export async function appSession(panel: PanelType): Promise<PanelSession> {
+  const tok = await bridgeToken();
+  if (!tok) throw new ApiError("Oturum alınamadı. Sayfayı kapatıp yeniden açın.", 401);
+  const res = await raw("/api/me", { token: tok });
+  const data = (await parse(res)) as { user?: PanelUser & { id: string } };
+  if (!data.user) throw new ApiError("Oturum alınamadı.", 401);
+  const session: PanelSession = { panel, token: tok, user: data.user };
+  saveSession(session);
+  if (panel === "agency") {
+    const me = await api<{
+      owned?: { id: string; name: string; status: string } | null;
+      assistant?: { agency: { id: string; name: string; status: string } } | null;
+    }>("/api/agency-center/me");
+    const own = me.owned && me.owned.status !== "pending" ? me.owned : null;
+    const a = own ?? me.assistant?.agency ?? null;
+    if (!a) throw new ApiError("Bu hesap bir ajansın sahibi ya da asistanı değil.", 403);
+    session.agencyId = a.id;
+    session.agencyName = a.name;
+    session.agencyRole = own ? "owner" : "assistant";
+    saveSession(session);
+  }
+  return session;
 }
 
 /** Uygulama hesabıyla giriş + panel yetkisi denetimi. */
