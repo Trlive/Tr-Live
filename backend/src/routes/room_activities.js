@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { Router } from 'express';
 import { authenticateToken } from '../auth.js';
+import { query } from '../database.js';
 import { isUuid } from '../http.js';
 import { ipLimit } from '../firewall.js';
 import { isRoomMember } from '../services/rooms.js';
@@ -23,15 +24,23 @@ router.get('/', ipLimit('room_activities', 600, 3600e3), async (req, res) => {
   });
   const page = (status, text) => res.status(status).type('html').send(renderErrorPage(text, nonce));
 
-  // Genel anahtar kapalıysa rota yoktur (herkes için aynı).
-  if ((await getConfig()).roomActivitiesEnabled === false) return page(404, 'Etkinlikler şu an kapalı.');
-
   const h = req.headers.authorization || '';
   const token = h.startsWith('Bearer ') ? h.slice(7) : '';
   let user;
   try { user = await authenticateToken(token); } catch (e) {
     if (e?.status === 401) return page(401, 'Oturum doğrulanamadı. Pencereyi kapatıp yeniden aç.');
     throw e; // veritabanı hatası vb.: ortak hata yöneticisine gider
+  }
+
+  // Genel anahtar kapalıysa yalnızca vip_activities = true olan kullanıcılara açılır.
+  const cfg = await getConfig();
+  if (cfg.roomActivitiesEnabled === false) {
+    let isVip = false;
+    try {
+      const r = await query('SELECT vip_activities FROM users WHERE id = $1', [user.id]);
+      isVip = r.rows.at(0)?.vip_activities === true;
+    } catch { /* sütun henüz yoksa false kalır */ }
+    if (!isVip) return page(404, 'Etkinlikler şu an kapalı.');
   }
 
   const roomId = String(req.query.roomId ?? '');
