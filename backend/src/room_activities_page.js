@@ -3,13 +3,13 @@
 
 // Etkinlik kartları. Yeni etkinlik eklemek için buraya satır ekleyin (soon: true → "Yakında" görünür).
 export const ACTIVITIES = [
-  { id: 'memory', icon: '🃏', title: 'Hafıza Kartları', desc: 'Eşleşen kartları bul. Ücretsiz, puansız.', game: true },
-  { id: 'daily', icon: '🎁', title: 'Günlük Katılım', desc: 'Her gün giriş yap, aktiflik puanını topla.', soon: true },
-  { id: 'wheel', icon: '✨', title: 'Günün Sürprizi', desc: 'Günlük sürpriz içerikleri keşfet.', soon: true },
-  { id: 'rank', icon: '🏆', title: 'Haftalık Sıralama', desc: 'Odanın en aktif katılımcıları.', soon: true },
+  { id: 'memory', icon: '🃏', title: 'Hafıza Kartları', desc: 'Eşleşen kartları bul. Ücretsiz, bahissiz.', game: true },
+  { id: 'daily', icon: '🎁', title: 'Günlük Ödül', desc: 'Her gün giriş yap, ödülünü al.', soon: true },
+  { id: 'wheel', icon: '🎡', title: 'Şans Çarkı', desc: 'Çarkı çevir, sürpriz ödüller kazan.', soon: true },
+  { id: 'rank', icon: '🏆', title: 'Haftalık Sıralama', desc: 'Odanın en cömert destekçileri.', soon: true },
 ];
 
-const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": ''' }[c]));
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 /** X-App-Version başlığı yalnızca "2.91.1" gibi bir sürüm olabilir; değilse boş döner (sayfaya ham metin yazılmaz). */
 export const safeVersion = (v) => (typeof v === 'string' && /^[0-9]{1,3}(\.[0-9]{1,4}){0,3}$/.test(v) ? v : '');
@@ -88,7 +88,7 @@ em{font-style:normal;font-size:11px;color:#1c1405;background:#f2b92a;border-radi
   }
   // Etkinlikler açıldığında coin harcayan bir işlem sonrası uygulamaya haber ver: toApp('refreshBalance')
   window.TRLiveRefresh = function () { toApp('refreshBalance'); loadBalance(); };
-  // Hafıza Kartları: tamamen istemcide, coin/puan harcaması yok. Yeni oyun eklerken aynı biçimde bir bölüm ve data-game kartı ekleyin.
+  // Hafıza Kartları: tamamen istemcide, coin/bahis yok. Yeni oyun eklerken aynı biçimde bir bölüm ve data-game kartı ekleyin.
   var EMOJI = ['🎵', '🎤', '🎧', '🎹', '🥁', '🎸', '🎺', '🎻'];
   var open = [], lock = false, moves = 0, found = 0;
   function startMemory() {
@@ -103,7 +103,7 @@ em{font-style:normal;font-size:11px;color:#1c1405;background:#f2b92a;border-radi
         b.classList.add('up'); b.textContent = c.e; open.push({ b: b, e: c.e });
         if (open.length < 2) return;
         moves++; document.getElementById('moves').textContent = 'Hamle: ' + moves; lock = true;
-        var x = open.at(0), y = open.at(1); open = [];
+        var x = open[0], y = open[1]; open = [];
         setTimeout(function () {
           if (x.e === y.e) { x.b.className = y.b.className = 'tile done'; found++; if (found === EMOJI.length) document.getElementById('win').textContent = 'Tebrikler! ' + moves + ' hamlede bitirdin.'; }
           else { x.b.className = y.b.className = 'tile'; x.b.textContent = y.b.textContent = '?'; }

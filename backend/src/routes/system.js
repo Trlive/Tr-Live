@@ -16,25 +16,12 @@ export { SERVER_VERSION };
 
 export const router = Router();
 
-// Uygulama açılışında okunur: zorunlu/isteğe bağlı güncelleme bilgisi. Giriş gerektirmez; giriş yapmışsa VIP yetkisi kontrol edilir.
-router.get('/app/config', optionalAuth, async (req, res) => {
+// Uygulama açılışında okunur: zorunlu/isteğe bağlı güncelleme bilgisi. Giriş gerektirmez.
+router.get('/app/config', async (_req, res) => {
   const c = await getConfig();
-  let roomActivitiesEnabled = c.roomActivitiesEnabled !== false;
-  let cardGameEnabled = c.cardGameEnabled !== false;
-
-  if ((!roomActivitiesEnabled || !cardGameEnabled) && req.user?.id) {
-    try {
-      const r = await query('SELECT vip_activities FROM users WHERE id = $1', [req.user.id]);
-      if (r.rows.at(0)?.vip_activities === true) {
-        roomActivitiesEnabled = true;
-        cardGameEnabled = true;
-      }
-    } catch { /* sütun henüz yoksa veya hata olursa genel ayarda kal */ }
-  }
-
   res.json({
     minAppVersion: c.minAppVersion, latestAppVersion: c.latestAppVersion, updateUrl: c.updateUrl || null, updateMessage: c.updateMessage,
-    roomNotice: c.roomNotice || '', flyTextCoins: c.flyTextCoins, roomActivitiesEnabled, cardGameEnabled, serverVersion: SERVER_VERSION,
+    roomNotice: c.roomNotice || '', flyTextCoins: c.flyTextCoins, roomActivitiesEnabled: c.roomActivitiesEnabled !== false, cardGameEnabled: c.cardGameEnabled !== false, serverVersion: SERVER_VERSION,
     termsVersion: TERMS_VERSION, legalSite: LEGAL_SITE,
     // Telefon doğrulaması (Firebase): uygulama bu değerlerle Firebase'i başlatır. Kapalıysa null.
     phoneVerify: phoneVerifyOn(c) && c.firebaseApiKey && c.firebaseAppId
@@ -53,8 +40,7 @@ router.get('/push/latest', ipLimit('push_poll', 2000, 3600e3), async (req, res) 
      WHERE id > $1 AND created_at > NOW() - INTERVAL '3 days' ORDER BY id DESC LIMIT 5`,
     [Number.isFinite(after) && after > 0 ? after : 0],
   );
-  const lastQuery = await query(`SELECT COALESCE(MAX(id), 0)::bigint AS id FROM push_messages`);
-  const last = lastQuery.rows.at(0).id;
+  const last = (await query(`SELECT COALESCE(MAX(id), 0)::bigint AS id FROM push_messages`)).rows[0].id;
   res.json({ lastId: String(last), messages: r.rows.reverse().map((x) => ({ id: String(x.id), title: x.title, body: x.body, createdAt: x.created_at })) });
 });
 
@@ -102,11 +88,11 @@ const emojiInflight = new Map();
 async function fetchNotoEmoji(code) {
   const dir = path.join(config.uploadDir, 'emoji');
   await fs.promises.mkdir(dir, { recursive: true });
-  const variants = [code, code.split('_').at(0)].filter((v, i, a) => a.indexOf(v) === i);
+  const variants = [code, code.split('_')[0]].filter((v, i, a) => a.indexOf(v) === i);
   for (const v of variants) {
     for (const ext of ['webp', 'gif']) {
       try {
-        const r = await fetch(`https://gstatic.com{v}/512.${ext}`, { signal: AbortSignal.timeout(20000) });
+        const r = await fetch(`https://fonts.gstatic.com/s/e/notoemoji/latest/${v}/512.${ext}`, { signal: AbortSignal.timeout(20000) });
         const type = r.headers.get('content-type') ?? '';
         if (!r.ok || !type.startsWith('image/')) continue;
         const buf = Buffer.from(await r.arrayBuffer());

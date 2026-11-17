@@ -1,5 +1,5 @@
-// Ajans kota talebi H5 sayfası (uygulamadaki WebView penceresinde açılır). Veritabanı gerektirmez: yalnızca HTML üretir.
-// Sabit sayfa, herkes için aynı kurallar: yalnızca aktif ajans hesabı sahibi açabilir (route'ta doğrulanır). Uygulama içinde tahsilat yoktur.
+// Bayi bakiye talebi H5 sayfası (uygulamadaki WebView penceresinde açılır). Veritabanı gerektirmez: yalnızca HTML üretir.
+// Sabit sayfa, herkes için aynı kurallar: yalnızca aktif bayi hesabı sahibi açabilir (route'ta doğrulanır). Uygulama içinde tahsilat yoktur.
 export { safeVersion, renderErrorPage } from './room_activities_page.js';
 
 export function renderDealerTopupPage({ appVersion, nonce }) {
@@ -7,7 +7,7 @@ export function renderDealerTopupPage({ appVersion, nonce }) {
 <html lang="tr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="color-scheme" content="dark">
-<title>Ajans Kota Talebi</title>
+<title>Bakiye Talep Et</title>
 <style nonce="${nonce}">
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 body{margin:0;background:#0b0906;color:#f6efdf;font:14px system-ui,-apple-system,sans-serif;padding:12px 14px calc(18px + env(safe-area-inset-bottom))}
@@ -28,15 +28,15 @@ textarea{width:100%;min-height:64px;background:#17130c;color:inherit;border:1px 
 .note{color:#b3a584;font-size:12px;line-height:1.4;margin:6px 2px}
 </style></head>
 <body>
-<div class="bal"><span id="dname">Ajans</span><b id="dbal">…</b></div>
-<p class="note">Uygulama içi tahsilat bulunmaz. Kota tanımlama talebin, operasyonel teyit tamamlandıktan sonra yönetici tarafından onaylanır.</p>
-<h2>Ajans Kotası Seç</h2>
+<div class="bal"><span id="dname">Bayi</span><b id="dbal">…</b></div>
+<p class="note">Ödeme uygulama içinde alınmaz. Talebin, bedelin tarafımıza ulaştığı teyit edildikten sonra yönetici tarafından onaylanır.</p>
+<h2>Toptan paket seç</h2>
 <div id="pks"></div>
-<h2>İşlem Referansı ve Not</h2>
+<h2>Not (havale referansı vb.)</h2>
 <textarea id="note" maxlength="500"></textarea>
-<button id="go" disabled>Kota Talebi Gönder</button>
+<button id="go" disabled>Talep gönder</button>
 <div id="msg" role="status"></div>
-<h2>Kota Taleplerim</h2>
+<h2>Taleplerim</h2>
 <div id="rqs"></div>
 <script nonce="${nonce}">
 (function () {
@@ -66,7 +66,7 @@ textarea{width:100%;min-height:64px;background:#17130c;color:inherit;border:1px 
     list.forEach(function (p) {
       var b = el('button', 'pk' + (selected === p.code ? ' sel' : ''));
       var l = el('div'); l.appendChild(el('b', null, p.label));
-      l.appendChild(el('small', null, 'Ajans Kotası: ' + fmt(p.priceTry) + ' ₺ · Standart: ' + fmt(p.listTry) + ' ₺'));
+      l.appendChild(el('small', null, 'Toptan bedel: ' + fmt(p.priceTry) + ' ₺ · Liste: ' + fmt(p.listTry) + ' ₺'));
       b.appendChild(l); if (p.discountPct > 0) b.appendChild(el('em', null, '%' + p.discountPct));
       b.onclick = function () { selected = p.code; $('go').disabled = busy; renderPackages(list); };
       box.appendChild(b);
@@ -74,7 +74,7 @@ textarea{width:100%;min-height:64px;background:#17130c;color:inherit;border:1px 
   }
   function renderRequests(list) {
     var box = $('rqs'); box.textContent = '';
-    if (!list.length) { box.appendChild(el('p', 'note', 'Henüz kota talebin yok.')); return; }
+    if (!list.length) { box.appendChild(el('p', 'note', 'Henüz talebin yok.')); return; }
     list.forEach(function (r) {
       var row = el('div', 'rq'); var l = el('div');
       l.appendChild(el('b', null, fmt(r.requestedCoins) + ' Coin'));
@@ -86,9 +86,9 @@ textarea{width:100%;min-height:64px;background:#17130c;color:inherit;border:1px 
   function load() {
     if (!token) return;
     Promise.all([api('/api/dealer/me'), api('/api/dealer/topup-requests')]).then(function (a) {
-      var d = a.at(0).dealer || {};
-      $('dname').textContent = d.name || 'Ajans'; $('dbal').textContent = fmt(d.coinBalance || 0) + ' Coin';
-      renderPackages(a.at(1).packages || []); renderRequests(a.at(1).requests || []);
+      var d = a[0].dealer || {};
+      $('dname').textContent = d.name || 'Bayi'; $('dbal').textContent = fmt(d.coinBalance || 0) + ' Coin';
+      renderPackages(a[1].packages || []); renderRequests(a[1].requests || []);
       toApp('refreshBalance');
     }).catch(function (e) { say(e.message); });
   }
@@ -97,7 +97,7 @@ textarea{width:100%;min-height:64px;background:#17130c;color:inherit;border:1px 
     busy = true; $('go').disabled = true; say('');
     var key = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now()) + Math.random();
     api('/api/dealer/topup-requests', { body: JSON.stringify({ packageCode: selected, referenceNote: $('note').value }), key: key })
-      .then(function () { say('Kota talebin alındı.', true); $('note').value = ''; selected = null; })
+      .then(function () { say('Talebin alındı.', true); $('note').value = ''; selected = null; })
       .catch(function (e) { say(e.message); })
       .then(function () { busy = false; load(); });
   };
