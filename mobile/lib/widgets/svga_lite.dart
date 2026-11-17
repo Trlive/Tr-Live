@@ -1,7 +1,10 @@
+import 'dart:async';
 import 'dart:io' show File, ZLibCodec;
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import '../services/api.dart';
+import '../services/fx_load.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -96,6 +99,10 @@ class _SvgaSprite {
   _SvgaSprite(this.key, this.frames);
 }
 
+/// Açılmış (görselleri çözülmüş) SVGA. Aynı dosyayı kullanan bütün oynatıcılar TEK kopyayı paylaşır: on beş koltukta
+/// aynı çerçeve ya da art arda on kez oynayan aynı hediye görselleri bir kez çözer (eskiden her biri kendi kopyasını
+/// çözüyordu; hediye yağmurunda bellek tükenip uygulama kapanabiliyordu). Kullanım: [acquire] ile alınır, iş bitince
+/// [release] ile bırakılır; son kullanıcı bırakınca kısa süre bekletilir, sonra bellekten atılır.
 class SvgaMovie {
   final double vw;
   final double vh;
@@ -103,14 +110,118 @@ class SvgaMovie {
   final int frames;
   final List<_SvgaSprite> sprites;
   final Map<String, ui.Image> images;
-  SvgaMovie(this.vw, this.vh, this.fps, this.frames, this.sprites, this.images);
+  final String _key;
+  SvgaMovie(this.vw, this.vh, this.fps, this.frames, this.sprites, this.images, [this._key = ''])
+      : bytes = images.values.fold<int>(0, (a, i) => a + i.width * i.height * 4);
 
   Duration get duration => Duration(milliseconds: (frames * 1000 / (fps <= 0 ? 20 : fps)).round().clamp(100, 600000));
 
-  void dispose() {
+  int _refs = 0;
+  bool _disposed = false;
+
+  /// Açılmış görsellerin kapladığı bellek (bayt, yaklaşık: genişlik × yükseklik × 4).
+  final int bytes;
+
+  void _destroy() {
+    if (_disposed) return;
+    _disposed = true;
     for (final i in images.values) {
       i.dispose();
     }
+  }
+
+  // Kullanımdaki ve az önce bırakılmış (bekletilen) açılmış animasyonlar.
+  static final Map<String, SvgaMovie> _live = {};
+  static final Map<String, Future<SvgaMovie>> _decoding = {};
+  static final Map<String, SvgaMovie> _idle = {};
+  static final Map<String, DateTime> _idleAt = {};
+  static Timer? _sweepTimer;
+  static bool _purgerAdded = false;
+
+  /// Açılmış animasyonu verir (yoksa açar). Her [acquire] için bir kez [release] çağrılmalıdır.
+  static Future<SvgaMovie> acquire({File? file, String? url}) async {
+    final key = file?.path ?? url!;
+    if (!_purgerAdded) {
+      _purgerAdded = true;
+      FxLoad.addPurger(purgeIdle);
+    }
+    for (var attempt = 0; attempt < 3; attempt++) {
+      var m = _live[key] ?? _idle[key];
+      m ??= await _decodeOnce(key, file: file, url: url);
+      // Beklerken başka bir kullanıcı alıp bırakmış ve bellekten atılmış olabilir: yeniden aç.
+      if (m._disposed) continue;
+      if (identical(_idle[key], m)) {
+        _idle.remove(key);
+        _idleAt.remove(key);
+      }
+      _live[key] = m;
+      m._refs++;
+      return m;
+    }
+    throw Exception('svga açılamadı');
+  }
+
+  /// Kullanım bitti. Son kullanıcıysa animasyon kısa süre bekletilir (hemen yeniden oynarsa tekrar çözülmesin).
+  void release() {
+    if (_disposed || _refs <= 0) return;
+    _refs--;
+    if (_refs > 0) return;
+    if (identical(_live[_key], this)) _live.remove(_key);
+    if (_key.isEmpty || bytes > FxLoad.svgaIdleBytes || FxLoad.cooling) {
+      _destroy();
+      return;
+    }
+    final old = _idle.remove(_key);
+    if (old != null && !identical(old, this)) old._destroy();
+    _idle[_key] = this; // en son bırakılan sona
+    _idleAt[_key] = DateTime.now();
+    _trimIdle();
+    _sweepTimer ??= Timer.periodic(const Duration(seconds: 15), (_) => _sweep());
+  }
+
+  static void _trimIdle() {
+    var total = _idle.values.fold<int>(0, (a, m) => a + m.bytes);
+    while (total > FxLoad.svgaIdleBytes && _idle.isNotEmpty) {
+      final first = _idle.keys.first;
+      final m = _idle.remove(first)!;
+      _idleAt.remove(first);
+      total -= m.bytes;
+      m._destroy();
+    }
+  }
+
+  /// 30 sn'dir kullanılmayan bekletilenler atılır.
+  static void _sweep() {
+    final now = DateTime.now();
+    for (final k in _idleAt.keys.toList()) {
+      if (now.difference(_idleAt[k]!) > const Duration(seconds: 30)) {
+        _idle.remove(k)?._destroy();
+        _idleAt.remove(k);
+      }
+    }
+    if (_idle.isEmpty) {
+      _sweepTimer?.cancel();
+      _sweepTimer = null;
+    }
+  }
+
+  /// Bekletilen bütün animasyonları ve ayrıştırılmış dosya önbelleğini boşaltır (bellek azaldığında).
+  static void purgeIdle() {
+    for (final m in _idle.values) {
+      m._destroy();
+    }
+    _idle.clear();
+    _idleAt.clear();
+    _memo.clear();
+  }
+
+  static Future<SvgaMovie> _decodeOnce(String key, {File? file, String? url}) {
+    final running = _decoding[key];
+    if (running != null) return running;
+    final f = _decode(key, file: file, url: url);
+    _decoding[key] = f;
+    f.whenComplete(() => _decoding.remove(key)).ignore();
+    return f;
   }
 
   // Son açılan birkaç SVGA'nın ayrıştırılmış hali: aynı çerçeve birden çok koltukta ya da aynı hediye art arda
@@ -153,18 +264,55 @@ class SvgaMovie {
     return d;
   }
 
-  static Future<SvgaMovie> load({File? file, String? url}) async {
+  /// Görselleri çözer. Toplam bellek [FxLoad.svgaBudgetBytes] bütçesini aşacaksa (kare kare çizilmiş büyük
+  /// animasyonlar yüzlerce MB tutabilir) bütün görseller aynı oranda küçültülerek çözülür: animasyon biraz daha
+  /// düşük çözünürlükte ama çökmeden oynar. Çizim hedef boyuta göre yapıldığı için yerleşim değişmez.
+  static Future<SvgaMovie> _decode(String key, {File? file, String? url}) async {
     final d = await _data(file: file, url: url);
-    final images = <String, ui.Image>{};
+    final descs = <String, ui.ImageDescriptor>{};
+    final bufs = <String, ui.ImmutableBuffer>{};
+    var pixels = 0;
     for (final e in d.rawImages.entries) {
+      ui.ImmutableBuffer? buf;
       try {
-        final codec = await ui.instantiateImageCodec(e.value);
+        buf = await ui.ImmutableBuffer.fromUint8List(e.value);
+        final desc = await ui.ImageDescriptor.encoded(buf);
+        descs[e.key] = desc;
+        bufs[e.key] = buf;
+        pixels += desc.width * desc.height;
+      } catch (_) {
+        buf?.dispose(); // görsel okunamazsa o katman çizilmez
+      }
+    }
+    final total = pixels * 4;
+    final budget = FxLoad.svgaBudgetBytes;
+    final scale = total > budget ? math.sqrt(budget / total) : 1.0;
+    final maxSide = FxLoad.svgaMaxSide;
+    final images = <String, ui.Image>{};
+    for (final e in descs.entries) {
+      final desc = e.value;
+      try {
+        var s = scale;
+        final longest = math.max(desc.width, desc.height);
+        if (longest * s > maxSide) s = maxSide / longest;
+        final ui.Codec codec;
+        if (s < 0.999) {
+          codec = await desc.instantiateCodec(
+            targetWidth: math.max(1, (desc.width * s).round()),
+            targetHeight: math.max(1, (desc.height * s).round()),
+          );
+        } else {
+          codec = await desc.instantiateCodec();
+        }
         final fr = await codec.getNextFrame();
         images[e.key] = fr.image;
         codec.dispose();
-      } catch (_) {/* görsel çözülemezse o katman çizilmez */}
+      } catch (_) {/* görsel çözülemezse o katman çizilmez */} finally {
+        desc.dispose();
+        bufs.remove(e.key)?.dispose();
+      }
     }
-    return SvgaMovie(d.vw, d.vh, d.fps, d.frames, d.sprites, images);
+    return SvgaMovie(d.vw, d.vh, d.fps, d.frames, d.sprites, images, key);
   }
 
   static _SvgaData _parseData(Uint8List data) {
@@ -342,9 +490,9 @@ class _SvgaLiteState extends State<SvgaLite> with SingleTickerProviderStateMixin
 
   Future<void> _load() async {
     try {
-      final m = await SvgaMovie.load(file: widget.file, url: widget.url);
+      final m = await SvgaMovie.acquire(file: widget.file, url: widget.url);
       if (!mounted) {
-        m.dispose();
+        m.release();
         return;
       }
       _c.duration = m.duration;
@@ -367,7 +515,8 @@ class _SvgaLiteState extends State<SvgaLite> with SingleTickerProviderStateMixin
   @override
   void dispose() {
     _c.dispose();
-    _movie?.dispose();
+    _movie?.release();
+    _movie = null;
     super.dispose();
   }
 

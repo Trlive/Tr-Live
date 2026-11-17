@@ -56,17 +56,39 @@ function safeSend(ws, payload) {
   try { ws.send(JSON.stringify(payload)); } catch (_) { /* yoksay */ }
 }
 
+// Yalnızca görsel olan (kaybolması durumu bozmayan) olaylar: bağlantısı çok geride kalmış istemciye gönderilmez.
+const DECORATIVE = new Set(['room_gift', 'room_scoreboard', 'room_mic_emoji', 'global_gift_ribbon', 'lucky_gift_win', 'lucky_bag_global']);
+const BACKLOG_LIMIT = 1024 * 1024; // 1 MB: istemci bu kadar veriyi henüz alamadıysa görsel olaylar atlanır
+
+/** Aynı olayı çok kişiye gönderir: JSON bir kez üretilir (kalabalık odada kişi başına yeniden üretilmez). */
+function sendMany(targets, payload) {
+  let text = null;
+  const decorative = DECORATIVE.has(payload?.type);
+  for (const ws of targets) {
+    if (ws.readyState !== OPEN) continue;
+    if (decorative && ws.bufferedAmount > BACKLOG_LIMIT) continue;
+    try {
+      text ??= JSON.stringify(payload);
+      ws.send(text);
+    } catch (_) { /* yoksay */ }
+  }
+}
+
 const clients = () => (wss ? wss.clients : []);
 
 // Tek sunucu örneği için bellek içi hub. Birden fazla örnek çalıştırılacaksa Redis pub/sub gerekir.
 export const hub = {
   broadcastRoom(roomId, payload) {
-    for (const ws of clients()) if (ws.userId && ws.roomId === roomId) safeSend(ws, payload);
+    const targets = [];
+    for (const ws of clients()) if (ws.userId && ws.roomId === roomId) targets.push(ws);
+    sendMany(targets, payload);
   },
   broadcastGlobal(payload) {
     // Her duyuruya kimlik: aynı kullanıcıya birden çok bağlantıdan ulaşsa da uygulama bir kez gösterir.
     const p = payload.eventId ? payload : { ...payload, eventId: randomUUID() };
-    for (const ws of clients()) if (ws.userId) safeSend(ws, p);
+    const targets = [];
+    for (const ws of clients()) if (ws.userId) targets.push(ws);
+    sendMany(targets, p);
   },
   sendToUser(userId, payload) {
     for (const ws of clients()) if (ws.userId === userId) safeSend(ws, payload);

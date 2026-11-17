@@ -172,9 +172,14 @@ Widget appFrame(BuildContext context, Widget? child) {
     valueListenable: EffectPrefs.powerSave,
     builder: (context, save, _) => MediaQuery(
       data: mq.copyWith(textScaler: scale, disableAnimations: mq.disableAnimations || save),
-      child: ColoredBox(
-        color: Pal.bg,
-        child: SafeArea(top: false, left: false, right: false, child: Align(alignment: Alignment.topCenter, child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: Resp.maxContent), child: child))),
+      // Görünmez kök Material: sayfa dışında (üst katman, yüzen pencere) kalan dokunma efektleri de çizileceği bir yüzey
+      // bulur. Bulamayınca her dokunuşta "Null check operator used on a null value (Material.of)" hatası oluşuyordu.
+      child: Material(
+        type: MaterialType.transparency,
+        child: ColoredBox(
+          color: Pal.bg,
+          child: SafeArea(top: false, left: false, right: false, child: Align(alignment: Alignment.topCenter, child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: Resp.maxContent), child: child))),
+        ),
       ),
     ),
   );

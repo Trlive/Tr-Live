@@ -95,6 +95,7 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        CrashWatch.install(applicationContext)
         super.onCreate(savedInstanceState)
         // Ekran artık her zaman açık tutulmaz (pil): yalnızca oda ekranı açıkken Flutter "keepScreenOn" ile açar.
     }
@@ -174,6 +175,35 @@ class MainActivity : FlutterActivity() {
                     result.success(null)
                 }
                 "headsetConnected" -> result.success(headsetConnected())
+                "lastExits" -> {
+                    // Uygulamanın önceki kapanışları (çökme, bellek yetersizliği, donma) ve yakalanan Java hatası.
+                    // Bir kez okunur; Flutter bunları Yönetim > Hata kayıtları'na gönderir.
+                    Thread {
+                        val out = try {
+                            CrashWatch.collect(applicationContext)
+                        } catch (e: Throwable) {
+                            emptyList<Map<String, Any?>>()
+                        }
+                        main.post { result.success(out) }
+                    }.start()
+                }
+                "memory" -> {
+                    // Telefonun bellek durumu (MB): toplam, boş, düşük bellek eşiği ve sistem "az" diyor mu.
+                    val info = HashMap<String, Any?>()
+                    try {
+                        val am = getSystemService(Context.ACTIVITY_SERVICE) as? android.app.ActivityManager
+                        val mi = android.app.ActivityManager.MemoryInfo()
+                        am?.getMemoryInfo(mi)
+                        info["totalMb"] = mi.totalMem / (1024 * 1024)
+                        info["availMb"] = mi.availMem / (1024 * 1024)
+                        info["thresholdMb"] = mi.threshold / (1024 * 1024)
+                        info["low"] = mi.lowMemory
+                        info["largeHeapMb"] = am?.largeMemoryClass ?: 0
+                        info["heapMb"] = am?.memoryClass ?: 0
+                    } catch (e: Exception) {
+                    }
+                    result.success(info)
+                }
                 "isMetered" -> {
                     // Mobil veri / kotalı bağlantı mı (Wi-Fi değilse true). Hediye dosyaları yalnızca kotasız ağda önceden iner.
                     val metered = try {
@@ -875,5 +905,122 @@ object BeautyFilter : InvocationHandler {
                 dst[row + x] = (v + ((d * wgt) shr 8)).toByte()
             }
         }
+    }
+}
+
+
+// ------------------------------------------------------------------ Çökme kaydı
+
+/**
+ * Uygulama kapandığında nedenini saklar; bir sonraki açılışta Flutter okuyup Yönetim > Hata kayıtları'na gönderir.
+ *  * Java tarafında yakalanmayan hata (eklentilerin kendi iş parçacıklarında, ör. video çözücü): yığın dökümü dosyaya
+ *    yazılır, sonra sistemin olağan çökme işlemi sürer.
+ *  * Android 11+: sistemin tuttuğu kapanış nedenleri (bellek yetersizliği, yerel çökme, donma / ANR) okunur.
+ * Kişisel veri yazılmaz; yalnızca hata türü, iletisi ve yığın dökümü.
+ */
+object CrashWatch {
+    private const val FILE = "trlive_last_crash.txt"
+    private const val PREFS = "trlive_crash_watch"
+    private const val KEY_LAST = "last_exit_ts"
+    @Volatile private var installed = false
+
+    fun install(ctx: Context) {
+        if (installed) return
+        installed = true
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, error ->
+            try {
+                val sw = java.io.StringWriter()
+                error.printStackTrace(java.io.PrintWriter(sw))
+                val text = "thread=" + thread.name + "\n" + sw.toString().take(6000)
+                java.io.File(ctx.filesDir, FILE).writeText(System.currentTimeMillis().toString() + "\n" + text)
+            } catch (e: Throwable) {
+            }
+            if (previous != null) {
+                previous.uncaughtException(thread, error)
+            } else {
+                android.os.Process.killProcess(android.os.Process.myPid())
+                System.exit(10)
+            }
+        }
+    }
+
+    fun collect(ctx: Context): List<Map<String, Any?>> {
+        val out = ArrayList<Map<String, Any?>>()
+        try {
+            val f = java.io.File(ctx.filesDir, FILE)
+            if (f.exists()) {
+                val raw = f.readText()
+                f.delete()
+                val nl = raw.indexOf('\n')
+                val at = if (nl > 0) raw.substring(0, nl).toLongOrNull() ?: 0L else 0L
+                out.add(mapOf("kind" to "java", "at" to at, "reason" to "Java hatası", "detail" to (if (nl > 0) raw.substring(nl + 1) else raw)))
+            }
+        } catch (e: Throwable) {
+        }
+        if (Build.VERSION.SDK_INT >= 30) {
+            try {
+                out.addAll(ExitReasons.read(ctx, PREFS, KEY_LAST))
+            } catch (e: Throwable) {
+            }
+        }
+        return out
+    }
+}
+
+@TargetApi(30)
+private object ExitReasons {
+    private fun reasonText(r: Int): String = when (r) {
+        3 -> "Bellek yetersizliği (sistem kapattı)"
+        4 -> "Java çökmesi"
+        5 -> "Yerel (native) çökme"
+        6 -> "Uygulama yanıt vermiyor (ANR)"
+        7 -> "Başlatma hatası"
+        9 -> "Aşırı kaynak kullanımı"
+        2 -> "Sistem sinyaliyle kapandı"
+        13 -> "Diğer"
+        else -> "Kod $r"
+    }
+
+    /** Son okumadan sonraki önemli kapanışlar (kullanıcının kendi kapattıkları ve güncellemeler hariç). */
+    fun read(ctx: Context, prefsName: String, key: String): List<Map<String, Any?>> {
+        val am = ctx.getSystemService(Context.ACTIVITY_SERVICE) as? android.app.ActivityManager ?: return emptyList()
+        val prefs = ctx.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
+        val since = prefs.getLong(key, 0L)
+        val list = am.getHistoricalProcessExitReasons(ctx.packageName, 0, 12)
+        var newest = since
+        val out = ArrayList<Map<String, Any?>>()
+        for (info in list) {
+            val ts = info.timestamp
+            if (ts > newest) newest = ts
+            if (ts <= since) continue
+            val r = info.reason
+            // 1: kendi çıkışı, 10/11: kullanıcı kapattı / durdurdu, 8/15/16: izin / paket değişti, 14: dondurucu.
+            if (r != 3 && r != 4 && r != 5 && r != 6 && r != 7 && r != 9 && r != 2 && r != 13) continue
+            if (r == 2 && info.importance > 200) continue // arka planda sistemce sonlandırma: olağan
+            var trace: String? = null
+            if (r == 6) {
+                try {
+                    info.traceInputStream?.use { s ->
+                        val buf = ByteArray(6000)
+                        val n = s.read(buf)
+                        if (n > 0) trace = String(buf, 0, n)
+                    }
+                } catch (e: Throwable) {
+                }
+            }
+            out.add(
+                mapOf(
+                    "kind" to "exit",
+                    "at" to ts,
+                    "reason" to reasonText(r),
+                    "detail" to ((info.description ?: "") + " · ön planda=" + (info.importance <= 200) +
+                        " · pss=" + (info.pss / 1024) + "MB · rss=" + (info.rss / 1024) + "MB · durum=" + info.status +
+                        (if (trace != null) "\n" + trace else "")),
+                ),
+            )
+        }
+        if (newest > since) prefs.edit().putLong(key, newest).apply()
+        return out
     }
 }

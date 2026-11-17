@@ -1,3 +1,5 @@
+import 'services/crash_report.dart';
+import 'services/fx_load.dart';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -55,6 +57,10 @@ Future<void> _boot() async {
   unawaited(SystemChrome.setPreferredOrientations(const [DeviceOrientation.portraitUp]).catchError((_) {}));
   // Google/Facebook girişinden dönüş bağlantısı (sayfa yönlendirmesinden önce yakalansın diye en başta).
   LoginLink.instance.init();
+  // Efekt yük koruması: telefonun belleği okunur, "bellek azaldı" bildirimi dinlenir (hediye yağmurunda çökmesin).
+  FxLoad.install();
+  // Önceki kapanış çökme / bellek yetersizliği ise nedeni hata kayıtlarına gönderilir.
+  unawaited(CrashReport.collect());
   // Yayın sürümünde bozulan bir parça gri kutu yerine sade bir simgeyle görünsün (ekranın geri kalanı çalışır).
   if (kReleaseMode) {
     ErrorWidget.builder = (details) => const Center(child: Icon(Icons.broken_image_outlined, color: Colors.white24, size: 28));

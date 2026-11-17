@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/api.dart';
 import '../services/effect_prefs.dart';
+import '../services/fx_load.dart';
 import '../services/error_log.dart';
 import '../services/room_dock.dart';
 import '../services/session.dart';
@@ -50,6 +51,21 @@ class _GiftRibbonOverlayState extends State<GiftRibbonOverlay> {
     super.initState();
     _sub = SocketService.instance.events.listen(_onEvent);
     EffectPrefs.version.addListener(_onPrefs);
+    FxLoad.pressure.addListener(_onMemoryPressure);
+  }
+
+  /// Bellek azaldı: sırada bekleyen tam ekran animasyonlar atılır, oynayan kaldırılır (şeritler sürer).
+  void _onMemoryPressure() {
+    if (!mounted) return;
+    for (final t in _animTimers.values) {
+      t.cancel();
+    }
+    _animTimers.clear();
+    _pumpTimer?.cancel();
+    setState(() {
+      _anims.clear();
+      _active.clear();
+    });
   }
 
   /// "Ses ve efektler"de bir görsel kapatılınca o an oynayan da hemen kalkar.
@@ -79,6 +95,7 @@ class _GiftRibbonOverlayState extends State<GiftRibbonOverlay> {
   @override
   void dispose() {
     EffectPrefs.version.removeListener(_onPrefs);
+    FxLoad.pressure.removeListener(_onMemoryPressure);
     _sub?.cancel();
     _timer?.cancel();
     _entranceTimer?.cancel();
@@ -140,8 +157,9 @@ class _GiftRibbonOverlayState extends State<GiftRibbonOverlay> {
   }
 
   void _enqueueAnim(Map<String, dynamic>? gift, {int times = 1}) {
-    // Oda küçültülmüşken tam ekran hediye animasyonları birikmesin.
+    // Oda küçültülmüşken ya da bellek sıkışıkken tam ekran hediye animasyonları birikmesin.
     if (widget.roomId != null && RoomDock.minimized.value) return;
+    if (!FxLoad.canDecorate) return;
     final url = Api.absoluteUrl(gift?['animationUrl'] as String?);
     if (gift == null) return;
     if (url == null) {
@@ -151,8 +169,9 @@ class _GiftRibbonOverlayState extends State<GiftRibbonOverlay> {
       if (mounted && Session.isStaff) toast(context, '"${gift['name']}" hediyesinde animasyon dosyası yok (Yönetim → Katalog).', error: true);
       return;
     }
-    // Sıra çok uzamasın (art arda yüzlerce hediye): en fazla 30 tekrar bekler.
-    for (var i = 0; i < times && _anims.length < 30; i++) {
+    // Sıra çok uzamasın (art arda yüzlerce hediye): en fazla 30 tekrar bekler (düşük bellekli telefonda 12).
+    final cap = FxLoad.tier == 0 ? 12 : 30;
+    for (var i = 0; i < times && _anims.length < cap; i++) {
       _anims.add({'url': url, 'format': (gift['animationFormat'] ?? '').toString(), 'sound': true});
     }
     _pump();
@@ -166,6 +185,13 @@ class _GiftRibbonOverlayState extends State<GiftRibbonOverlay> {
     final wait = _repeatGap - DateTime.now().difference(_lastStart);
     if (wait > Duration.zero) {
       _pumpTimer = Timer(wait, _pump);
+      return;
+    }
+    // MP4 hediye video çözücü ister: çözücüler (giriş aracı vb.) doluysa sıra bekler, boşalınca oynar.
+    final head = _anims.first;
+    final isMp4 = AnimAsset.extOf(head['url'] as String) == 'mp4' || head['format'] == 'mp4';
+    if (isMp4 && !FxLoad.mp4Available()) {
+      _pumpTimer = Timer(const Duration(milliseconds: 400), _pump);
       return;
     }
     final a = {..._anims.removeAt(0), 'seq': ++_animSeq};

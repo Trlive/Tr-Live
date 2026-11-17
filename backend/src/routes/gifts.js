@@ -15,6 +15,12 @@ import { scoreboardOf } from '../services/scoreboard.js';
 import { loadPublicRows } from '../services/users.js';
 import { idempotent } from '../idempotency.js';
 import { COMBO_WINDOW_MS, LUCKY_COMBO_WINDOW_MS, nextCombo } from '../combo.js';
+import { createGiftCoalescer, createKeyedThrottle } from '../gift_burst.js';
+
+// Hediye yağmuru koruması: aynı serinin art arda olayları odaya birleştirilerek gider; skor tablosu ve PK puanı
+// yayınları seyreltilir (ayrıntı: gift_burst.js). Para işlemleri etkilenmez.
+const giftEvents = createGiftCoalescer({ send: (roomId, event) => hub.broadcastRoom(roomId, event) });
+const lastState = createKeyedThrottle();
 import { drawLuckyPool, LUCKY_BASE, luckyTables, poolView, JACKPOT_OPEN } from '../lucky.js';
 import { getConfig } from '../services/app_config.js';
 import { featuresFor, minLevelFor, wipLabel } from '../services/wip.js';
@@ -316,11 +322,10 @@ router.post('/rooms/:roomId/gifts/send', userLimit('gift', 180, 60e3), idempoten
 
   // Combo (Yoho): aynı kişiye aynı hediye birkaç saniye içinde tekrar gönderilirse sayaç artar (x2, x3 ...).
   // Şanslı hediyede combo penceresi daha uzundur (art arda dokunarak şans denenir).
-  const combo = nextCombo(
-    `${roomId}|${senderId}|${giftId}|${distribution}|${result.allocation.map((a) => a.userId).sort().join(',')}`,
-    Date.now(), result.gift.category === 'lucky' ? LUCKY_COMBO_WINDOW_MS : COMBO_WINDOW_MS,
-  );
-  hub.broadcastRoom(roomId, {
+  const seriesKey = `${roomId}|${senderId}|${giftId}|${distribution}|${result.allocation.map((a) => a.userId).sort().join(',')}`;
+  const combo = nextCombo(seriesKey, Date.now(), result.gift.category === 'lucky' ? LUCKY_COMBO_WINDOW_MS : COMBO_WINDOW_MS);
+  // Serinin ilk olayı hemen gider; hızlı combo'da sonrakiler ~1 sn'lik pencerede tek olayda birleşir.
+  giftEvents.push(seriesKey, roomId, {
     type: 'room_gift', roomId, gift: giftInfo, quantity: result.quantity, totalCoins: result.totalCoins.toString(), sender, receivers, combo,
     lucky: result.lucky, roomTotal: result.roomTotal,
   });
@@ -331,14 +336,18 @@ router.post('/rooms/:roomId/gifts/send', userLimit('gift', 180, 60e3), idempoten
     });
   }
 
-  scoreboardOf(roomId).then((scoreboard) => hub.broadcastRoom(roomId, { type: 'room_scoreboard', roomId, scoreboard })).catch(() => {});
-  if (result.roomPkId) broadcastRoomPk(result.roomPkId).catch(() => {});
+  // "Son durum" yayınları: her hediyede değil, oda / PK başına en çok ~saniyede bir (son değer mutlaka gider).
+  lastState(`sb|${roomId}`, 900, () => scoreboardOf(roomId).then((scoreboard) => hub.broadcastRoom(roomId, { type: 'room_scoreboard', roomId, scoreboard })));
+  if (result.roomPkId) {
+    const roomPkId = result.roomPkId;
+    lastState(`rpk|${roomPkId}`, 600, () => broadcastRoomPk(roomPkId));
+  }
   for (const id of result.pkIds) {
-    pkView(id).then((pk) => {
+    lastState(`pk|${id}`, 600, () => pkView(id).then((pk) => {
       if (!pk) return;
       hub.broadcastRoom(pk.a.roomId, { type: 'pk_state', pk });
       hub.broadcastRoom(pk.b.roomId, { type: 'pk_state', pk });
-    }).catch(() => {});
+    }));
   }
 
   let ribbon = null;

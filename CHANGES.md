@@ -1,3 +1,53 @@
+## v2.111.0 — Hediye yağmurunda çökme ve donma düzeltmesi
+Çok hediye atılınca uygulamanın "TR Live durdu" diye kapanması. Bu kapanma bir Dart hatası değil, telefonun
+belleği / video çözücüleri tükenince Android'in uygulamayı kapatmasıydı; bu yüzden hata kayıtlarına düşmüyordu.
+
+**Nedenleri (koddan)**
+- Her hediye olayı odadaki telefonlarda uçan ikonlar, koltuk animasyonu, şerit ve BÜTÜN oda ekranının yeniden
+  çizimini başlatıyordu; hızlı combo'da saniyede onlarca olay geliyordu.
+- MP4 hediye / koltuk efekti / çerçeve başına ayrı bir donanım video çözücü açılıyordu (koltuk efekti 20'ye, çerçeve
+  sınırsız). Telefonların çözücü sayısı sınırlıdır; aşılınca uygulama kapanabiliyordu.
+- SVGA animasyonlarının görselleri her oynatıcı için ayrı ayrı ve tam boyutta çözülüyordu (büyük bir hediye tek
+  başına yüzlerce MB tutabiliyor, on kez art arda oynayınca on kopya).
+- Büyük hediye videoları indirilirken tamamı belleğe alınıyordu.
+
+**Sunucu (eski APK'lara da hemen etki eder)**
+- Hediye olayları birleştirilir: bir serinin ilk hediyesi hemen gider, aynı gönderen + hediye + alıcıların
+  ~0,9 sn içindeki sonraki hediyeleri TEK olayda gider (oda çok yoğunsa pencere 1,8 sn). Adet, Coin, şanslı kazanç
+  toplanır; combo sayacı ve oda toplamı en güncel değeri taşır. Para işlemleri değişmedi: her hediye veritabanına tek
+  tek işlenir, gönderen yanıtını hemen alır.
+- Skor tablosu ve PK puanı yayını her hediyede değil, oda / PK başına en çok saniyede bir (son değer mutlaka gider).
+- Oda yayınında olay bir kez JSON'a çevrilir (kalabalık odada kişi başına değil); bağlantısı çok geride kalan
+  telefona yalnızca görsel olaylar gönderilmez (koltuk, sohbet gibi durum olayları her zaman gider).
+
+**Uygulama**
+- Efekt yük koruması (`FxLoad`): sınırlar telefonun belleğine göre (≤3 GB / ≤6 GB / üstü):
+  aynı anda tek seferlik MP4 2/3/4 (biri her zaman tam ekran hediyeye ayrılır), döngülü MP4 (çerçeve) 3/5/8,
+  koltuk efekti 3/5/8, uçan ikon 8/14/22, hediye sesi 2. Sınırı aşan efekt oynatılmaz ya da sıra bekler.
+- Bellek baskısı: sistem "bellek azaldı" derse ya da uygulamanın belleği sınırı aşarsa süslemeler birkaç saniye durur,
+  görsel önbellekler boşaltılır, bekleyen tam ekran animasyonlar atılır. Ses, sohbet, koltuklar etkilenmez.
+- SVGA: aynı dosyayı kullanan bütün oynatıcılar tek açılmış kopyayı paylaşır; görseller bellek bütçesini aşarsa
+  küçültülerek açılır; az önce oynamış olanlar kısa süre bekletilip sonra bellekten atılır.
+- Efekt katmanı (uçan ikonlar, koltuk efektleri, şanslı kazanç) ayrı çizilir: hediye gelince oda ekranının geri kalanı
+  yeniden kurulmaz. Oda toplamı ve skor tablosu en çok ~3 kez/sn ekrana yansır.
+- Kalabalıkta uçan ikonlar sadeleşir (parıltısız, en çok 3 kopya).
+- Hediye videoları belleğe toplanmadan doğrudan diske indirilir.
+- Görünmez kök Material: sayfa dışında kalan dokunma efektlerindeki "Null check operator used on a null value
+  (Material.of)" hatası bütün uygulamada önlendi.
+
+**Çökme kaydı (artık nedeni görünür)**
+- Android'in tuttuğu kapanış nedenleri (bellek yetersizliği, yerel çökme, donma / ANR; Android 11+) ve Java
+  tarafında yakalanmayan hata, bir sonraki açılışta Yönetim > Hata kayıtları'na "Uygulama kapandı" olarak düşer
+  (bellek miktarı ve yığın dökümüyle).
+
+Doğrulama
+- Birleştirici ve seyreltici sahte saatle test edildi: tek hediye gecikmez, 20 hızlı dokunuş en çok 6 olaya iner,
+  hiçbir adet / Coin kaybolmaz, son durum mutlaka gider, gönderim hatası düzeni bozmaz.
+- Gerçek PostgreSQL ile gerçek hediye rotasından 30 hediye: odaya giden olaylarda adet ve Coin tam; bakiye ve hediye
+  kayıtları 30 ayrı işlem; farklı alıcıya giden hediye beklemeden gider.
+- Yeni Android (Kotlin) kodu yerel Kotlin derleyicisiyle Android arayüz taslaklarına karşı derlendi.
+- Flutter kodu yerelde derlenemedi; ilk gerçek denetim GitHub'daki `flutter analyze` ve APK derlemesidir.
+
 ## v2.110.0 — Sesli / görüntülü ayrı maaş hesabı ve Fasulye sistemi
 Ajans / yayıncı sisteminin 2. aşaması ve cüzdanın Yoho benzeri "Fasulye" düzenine geçişi.
 

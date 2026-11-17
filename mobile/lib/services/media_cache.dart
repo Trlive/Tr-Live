@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
 import 'api.dart';
 
 /// Hediye/çerçeve dosyalarını kullanıcının telefonuna (uygulama önbelleği) bir kez indirir; sonra internetsiz oynatır.
@@ -34,10 +35,29 @@ class MediaCache {
           f.setLastModified(DateTime.now()).catchError((_) => null);
           return f;
         }
-        final r = await Api.client.get(Uri.parse(url)).timeout(const Duration(minutes: 2));
-        if (r.statusCode != 200 || r.bodyBytes.isEmpty) throw Exception('indirilemedi (${r.statusCode})');
+        // Dosya belleğe toplanmadan doğrudan diske akıtılır: hediye yağmurunda aynı anda inen büyük videolar
+        // (her biri 5–20 MB) belleği doldurup uygulamayı kapatmasın.
         final tmp = File('${f.path}.part');
-        await tmp.writeAsBytes(r.bodyBytes, flush: true);
+        final r = await Api.client.send(http.Request('GET', Uri.parse(url))).timeout(const Duration(seconds: 30));
+        if (r.statusCode != 200) {
+          r.stream.listen((_) {}).cancel();
+          throw Exception('indirilemedi (${r.statusCode})');
+        }
+        final sink = tmp.openWrite();
+        var written = 0;
+        try {
+          await r.stream.timeout(const Duration(seconds: 45)).forEach((chunk) {
+            written += chunk.length;
+            sink.add(chunk);
+          }).timeout(const Duration(minutes: 3));
+          await sink.flush();
+        } finally {
+          await sink.close();
+        }
+        if (written == 0) {
+          await tmp.delete().catchError((_) => tmp);
+          throw Exception('indirilemedi (boş dosya)');
+        }
         await tmp.rename(f.path);
         _trim(dir);
         return f;

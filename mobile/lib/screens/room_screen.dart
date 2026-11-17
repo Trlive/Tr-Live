@@ -50,6 +50,7 @@ import '../widgets/room_theme.dart';
 import '../widgets/seat_picker.dart';
 import '../widgets/chat_merge.dart';
 import '../widgets/lucky_win_fx.dart';
+import '../services/fx_load.dart';
 import '../widgets/video_grid.dart';
 import 'gift_sheet.dart';
 import 'pk_sheet.dart';
@@ -87,6 +88,28 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   int _flightSeq = 0;
   // Mikte oynayan hediyeler (yumurta, domates): alıcının koltuk dairesinin içinde oynar.
   final List<_SeatFx> _seatFx = [];
+  // Efekt katmanı (uçan ikonlar, koltuk efektleri, şanslı kazanç) kendi başına yeniden çizilir: hediye yağmurunda her
+  // olay bütün oda ekranını (koltuklar, sohbet, üst bilgi) yeniden kurmasın.
+  final ValueNotifier<int> _fxTick = ValueNotifier(0);
+  void _fxChanged() => _fxTick.value++;
+  // Oda toplamı ve skor tablosu gibi sık değişen bilgiler en çok ~3 kez/sn ekrana yansır (her hediyede değil).
+  Timer? _softTimer;
+  void _softRefresh() {
+    if (_softTimer != null) return;
+    _softTimer = Timer(const Duration(milliseconds: 350), () {
+      _softTimer = null;
+      if (mounted) setState(() {});
+    });
+  }
+
+  /// Bellek azaldı: ekrandaki süslemeler kaldırılır (ses, sohbet ve koltuklar etkilenmez).
+  void _onMemoryPressure() {
+    if (!mounted) return;
+    _flights.clear();
+    _seatFx.clear();
+    _luckyFx.clear();
+    _fxChanged();
+  }
   Map<String, dynamic> _me = {};
   List<Map<String, dynamic>> _members = [];
   bool _loading = true;
@@ -185,6 +208,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     CallGuard.instance.inCall.addListener(_onPhoneCall);
     CallGuard.instance.start();
     WidgetsBinding.instance.addObserver(this);
+    FxLoad.pressure.addListener(_onMemoryPressure);
     MediaCache.warmGifts();
     _enter();
   }
@@ -313,6 +337,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   @override
   void dispose() {
     _queueTick.dispose();
+    FxLoad.pressure.removeListener(_onMemoryPressure);
+    _softTimer?.cancel();
+    _fxTick.dispose();
     _headsTimer?.cancel();
     CallGuard.instance.inCall.removeListener(_onPhoneCall);
     CallGuard.instance.stop();
@@ -899,12 +926,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     if (e['roomId'] != widget.roomId) return;
     switch (type) {
       case 'room_scoreboard':
-        setState(() {
-          _scores.clear();
-          for (final x in listOf(e['scoreboard'])) {
-            _scores[x['userId'].toString()] = x['coins'].toString();
-          }
-        });
+        _scores.clear();
+        for (final x in listOf(e['scoreboard'])) {
+          _scores[x['userId'].toString()] = x['coins'].toString();
+        }
+        _softRefresh();
         break;
       case 'room_chat_cleared':
         _applyChatClear(e['clearedAt']);
@@ -1038,7 +1064,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         if (emUser != null && emNo != null && emNo >= 1 && emNo <= kMicEmojiCount && emUser != Session.id) _showMicEmoji(emUser, emNo);
         break;
       case 'room_gift':
-        if (e['roomTotal'] != null) setState(() => _room = {...?_room, 'totalDiamonds': e['roomTotal']});
+        if (e['roomTotal'] != null) {
+          _room = {...?_room, 'totalDiamonds': e['roomTotal']};
+          _softRefresh();
+        }
         _flyGift(e);
         _luckyWin(e);
         break;
@@ -1725,7 +1754,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   void _flyGift(Map<String, dynamic> e) {
     // Oda küçültülmüşken / uygulama arka plandayken animasyonlar donar; birikip açılışta yüzlercesi birden oynamasın.
     final ls = WidgetsBinding.instance.lifecycleState;
-    if (RoomDock.minimized.value || (ls != null && ls != AppLifecycleState.resumed) || _flights.length > 40) return;
+    if (RoomDock.minimized.value || (ls != null && ls != AppLifecycleState.resumed)) return;
+    // Yük koruması: ekranda yeterince uçan ikon varsa ya da bellek sıkışıksa yeni süsleme eklenmez.
+    final room = FxLoad.maxFlights - _flights.length;
+    if (room <= 0 || !FxLoad.canDecorate) return;
     final gift = mapOf(e['gift']);
     final icon = Api.absoluteUrl(gift?['iconUrl'] as String?);
     final stage = _stageKey.currentContext?.findRenderObject();
@@ -1752,32 +1784,38 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final anim = Api.absoluteUrl(gift?['animationUrl'] as String?);
     final animFormat = (gift?['animationFormat'] ?? '').toString();
     final onSeat = gift?['playMode'] == 'seat' && EffectPrefs.giftAnim;
-    for (final r in receivers.take(20)) {
+    // Kalabalıkta ikonlar sadeleşir (parıltısız, daha az kopya).
+    final lite = _flights.length >= 4 || receivers.length > 4;
+    for (final r in receivers.take(math.min(20, room))) {
       final rid = mapOf(r is Map ? r['user'] : null)?['id']?.toString();
       // Mikrofonda değilse (odadaysa) seyirci sayısı rozetine uçar.
       final to = centerOf(rid) ?? (rid == null ? null : centerOfBox(_viewersKey));
       final qty = _asInt(r is Map ? r['quantity'] : null) ?? _asInt(e['quantity']) ?? 1;
-      if (to != null) fresh.add(_GiftFlightData(++_flightSeq, icon, from, to, qty < 1 ? 1 : qty));
+      if (to != null) fresh.add(_GiftFlightData(++_flightSeq, icon, from, to, qty < 1 ? 1 : qty, lite));
       // Yalnızca mikteki alıcının dairesinde oynar (seyirci rozetinde oynamaz).
       final seatAt = centerOf(rid);
-      if (onSeat && anim != null && seatAt != null) {
+      if (onSeat && anim != null && seatAt != null && _seatFx.length + seatFx.length < FxLoad.maxSeatFx) {
         seatFx.add(_SeatFx(++_flightSeq, anim, animFormat, seatAt, seatDiameter(rid) ?? 56, sound: seatFx.isEmpty));
       }
     }
     if (fresh.isEmpty) return;
-    setState(() => _flights.addAll(fresh));
+    _flights.addAll(fresh);
+    _fxChanged();
     if (seatFx.isNotEmpty) {
       // İkon koltuğa varınca hediye o dairenin içinde oynar.
       Future.delayed(const Duration(milliseconds: 1300), () {
-        if (!mounted || !EffectPrefs.giftAnim) return;
-        setState(() {
-          _seatFx.addAll(seatFx);
-          if (_seatFx.length > 20) _seatFx.removeRange(0, _seatFx.length - 20);
-        });
+        if (!mounted || !EffectPrefs.giftAnim || !FxLoad.canDecorate) return;
+        _seatFx.addAll(seatFx);
+        final max = FxLoad.maxSeatFx;
+        if (_seatFx.length > max) _seatFx.removeRange(0, _seatFx.length - max);
+        _fxChanged();
         // Oynatıcı bitişi bildirmese de daire boş kalsın.
         final ids = {for (final f in seatFx) f.id};
         Future.delayed(const Duration(seconds: 15), () {
-          if (mounted) setState(() => _seatFx.removeWhere((x) => ids.contains(x.id)));
+          if (!mounted) return;
+          final before = _seatFx.length;
+          _seatFx.removeWhere((x) => ids.contains(x.id));
+          if (_seatFx.length != before) _fxChanged();
         });
       });
     }
@@ -1802,20 +1840,20 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       );
     }
     final ls = WidgetsBinding.instance.lifecycleState;
-    if (RoomDock.minimized.value || (ls != null && ls != AppLifecycleState.resumed) || !EffectPrefs.giftAnim) return;
+    if (RoomDock.minimized.value || (ls != null && ls != AppLifecycleState.resumed) || !EffectPrefs.giftAnim || !FxLoad.canDecorate) return;
     final stage = _stageKey.currentContext?.findRenderObject();
     if (stage is! RenderBox || !stage.attached) return;
     final box = _seatKeys[sender?['id']?.toString()]?.currentContext?.findRenderObject();
     final at = (box is RenderBox && box.attached)
         ? stage.globalToLocal(box.localToGlobal(box.size.center(Offset.zero)))
         : Offset(stage.size.width / 2, stage.size.height * 0.62);
-    setState(() {
-      // Aynı anda en fazla 6 efekt; büyük patlamalardan yalnızca biri (üst üste binmesin).
-      final fx = LuckyWinFxData(++_flightSeq, at, best, win.toString(), name, emoji);
-      if (fx.big) _luckyFx.removeWhere((x) => x.big);
-      _luckyFx.add(fx);
-      if (_luckyFx.length > 6) _luckyFx.removeAt(0);
-    });
+    // Aynı anda en fazla 6 efekt (düşük bellekli telefonda 3); büyük patlamalardan yalnızca biri (üst üste binmesin).
+    final fx = LuckyWinFxData(++_flightSeq, at, best, win.toString(), name, emoji);
+    if (fx.big) _luckyFx.removeWhere((x) => x.big);
+    _luckyFx.add(fx);
+    final maxLucky = FxLoad.tier == 0 ? 3 : 6;
+    if (_luckyFx.length > maxLucky) _luckyFx.removeRange(0, _luckyFx.length - maxLucky);
+    _fxChanged();
   }
 
   /// Mikrofon modu (Yoho): pencere açık kalır; seçim anında uygulanır, istek modu alttaki seçenekle açılıp kapanır.
@@ -4845,35 +4883,50 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                     },
                   ),
                 ),
-                for (final fx in _seatFx)
-                  Positioned(
-                    key: ValueKey('seatfx-${fx.id}'),
-                    left: fx.center.dx - fx.diameter / 2,
-                    top: fx.center.dy - fx.diameter / 2,
-                    width: fx.diameter,
-                    height: fx.diameter,
-                    child: IgnorePointer(
-                      child: ClipOval(
-                        child: AnimAsset(
-                          url: fx.url,
-                          format: fx.format,
-                          fit: BoxFit.cover,
-                          sound: fx.sound,
-                          onDone: () {
-                            if (mounted) setState(() => _seatFx.removeWhere((x) => x.id == fx.id));
-                          },
-                        ),
-                      ),
+                // Efekt katmanı: yalnızca kendisi yeniden çizilir (oda ekranının geri kalanı değil).
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: ValueListenableBuilder<int>(
+                      valueListenable: _fxTick,
+                      builder: (context, _, __) => Stack(clipBehavior: Clip.none, children: [
+                        for (final fx in _seatFx)
+                          Positioned(
+                            key: ValueKey('seatfx-${fx.id}'),
+                            left: fx.center.dx - fx.diameter / 2,
+                            top: fx.center.dy - fx.diameter / 2,
+                            width: fx.diameter,
+                            height: fx.diameter,
+                            child: ClipOval(
+                              child: AnimAsset(
+                                url: fx.url,
+                                format: fx.format,
+                                fit: BoxFit.cover,
+                                sound: fx.sound,
+                                lowPriority: true,
+                                onDone: () {
+                                  if (!mounted) return;
+                                  _seatFx.removeWhere((x) => x.id == fx.id);
+                                  _fxChanged();
+                                },
+                              ),
+                            ),
+                          ),
+                        for (final f in _flights)
+                          _GiftFlight(key: ValueKey(f.id), data: f, onDone: () {
+                            if (!mounted) return;
+                            _flights.removeWhere((x) => x.id == f.id);
+                            _fxChanged();
+                          }),
+                        for (final fx in _luckyFx)
+                          LuckyWinFx(key: ValueKey('lucky-${fx.id}'), data: fx, onDone: () {
+                            if (!mounted) return;
+                            _luckyFx.removeWhere((x) => x.id == fx.id);
+                            _fxChanged();
+                          }),
+                      ]),
                     ),
                   ),
-                for (final f in _flights)
-                  _GiftFlight(key: ValueKey(f.id), data: f, onDone: () {
-                    if (mounted) setState(() => _flights.removeWhere((x) => x.id == f.id));
-                  }),
-                for (final fx in _luckyFx)
-                  LuckyWinFx(key: ValueKey('lucky-${fx.id}'), data: fx, onDone: () {
-                    if (mounted) setState(() => _luckyFx.removeWhere((x) => x.id == fx.id));
-                  }),
+                ),
                 // Şanslı çanta: en üstte, oda elmasının hemen altında. Açtığım çanta bana görünmez;
                 // birden çok çanta varsa sayısı yazar ve sıradaki açılır.
                 if (_openBags.isNotEmpty && !_inputOpen)
@@ -4928,7 +4981,9 @@ class _GiftFlightData {
   final Offset from;
   final Offset to;
   final int quantity;
-  _GiftFlightData(this.id, this.icon, this.from, this.to, [this.quantity = 1]);
+  /// true: kalabalıkta sade çizim (parıltısız, en çok 3 kopya).
+  final bool lite;
+  _GiftFlightData(this.id, this.icon, this.from, this.to, [this.quantity = 1, this.lite = false]);
 }
 
 /// Hediye ikonunun gönderenden alıcının mikrofonuna uçuşu (Yoho): çoklu gönderimde ikonlar art arda bir kuyruk
@@ -4943,7 +4998,7 @@ class _GiftFlight extends StatefulWidget {
 }
 
 class _GiftFlightState extends State<_GiftFlight> with SingleTickerProviderStateMixin {
-  late final int _copies = widget.data.quantity <= 1 ? 1 : math.min(widget.data.quantity, 7);
+  late final int _copies = widget.data.quantity <= 1 ? 1 : math.min(widget.data.quantity, widget.data.lite ? 3 : 7);
   late final AnimationController _c = AnimationController(
     vsync: this,
     duration: Duration(milliseconds: 1300 + (_copies - 1) * 120),
@@ -4998,7 +5053,7 @@ class _GiftFlightState extends State<_GiftFlight> with SingleTickerProviderState
                   size *= 1 + 0.5 * p;
                   opacity = 1 - p;
                 }
-                if (k == 0 && local < 1) {
+                if (k == 0 && local < 1 && !d.lite) {
                   // Öndeki ikonun çevresinde altın parıltılar.
                   for (var j = 0; j < 6; j++) {
                     final ang = j * math.pi / 3 + v * 6;
