@@ -20,12 +20,18 @@ const msgJson = (m) => ({ id: m.id, senderId: m.sender_id, receiverId: m.receive
 // Sohbet listesinde fotoğraf mesajının önizlemesi.
 const PREVIEW = `CASE WHEN body = '' AND image_url IS NOT NULL THEN '📷 Fotoğraf' ELSE body END`;
 // Konuşmayı silen kişide, silme anına kadarki mesajlar gizlenir (dm_cleared). me: kişi, peer: karşı taraf (SQL ifadesi).
+/** Rozette sayılacak gönderen: hesabı açık ve engel yok. Sohbet listesi bunları göstermediği için eskiden bu kişilerin
+ *  mesajları rozette sonsuza dek "okunmamış" kalıyordu (açıp okumanın yolu yoktu). */
+const countableSender = (me, sender) =>
+  `EXISTS (SELECT 1 FROM users su WHERE su.id = ${sender} AND su.account_status = 'active')
+   AND NOT EXISTS (SELECT 1 FROM user_blocks b WHERE (b.blocker_id = ${me} AND b.blocked_id = ${sender}) OR (b.blocker_id = ${sender} AND b.blocked_id = ${me}))`;
 const visibleTo = (me, peer, at = 'created_at') =>
   `${at} > COALESCE((SELECT dc.cleared_at FROM dm_cleared dc WHERE dc.user_id = ${me} AND dc.peer_id = ${peer}), '-infinity'::timestamptz)`;
 
 router.get('/unread-count', async (req, res) => {
   const r = await query(
-    `SELECT COUNT(*)::int AS n FROM direct_messages dm WHERE dm.receiver_id = $1 AND dm.read_at IS NULL AND ${visibleTo('$1', 'dm.sender_id', 'dm.created_at')}`,
+    `SELECT COUNT(*)::int AS n FROM direct_messages dm WHERE dm.receiver_id = $1 AND dm.read_at IS NULL AND ${visibleTo('$1', 'dm.sender_id', 'dm.created_at')}
+       AND ${countableSender('$1', 'dm.sender_id')}`,
     [req.user.id],
   );
   res.json({ unread: r.rows[0].n });
@@ -35,11 +41,12 @@ router.get('/unread-count', async (req, res) => {
 // aile sohbeti) tek sorguda: sekme rozeti normal mesajdaki gibi hepsinde uyarı verir.
 export const INBOX_ALERTS_SQL = `SELECT
     (SELECT COUNT(*)::int FROM direct_messages dm WHERE dm.receiver_id = u.id AND dm.read_at IS NULL
-        AND ${visibleTo('u.id', 'dm.sender_id', 'dm.created_at')}) AS dm,
+        AND ${visibleTo('u.id', 'dm.sender_id', 'dm.created_at')} AND ${countableSender('u.id', 'dm.sender_id')}) AS dm,
     (SELECT COUNT(*)::int FROM user_notifications n WHERE n.user_id = u.id AND n.id > u.notify_seen_id
         AND n.created_at > NOW() - INTERVAL '7 days'
         AND n.kind NOT IN ('friend_request', 'relation_request')) AS notify, -- istekler aşağıda zaten sayılır
-    ((SELECT COUNT(*)::int FROM friend_requests WHERE target_id = u.id AND status = 'pending' AND created_at > NOW() - INTERVAL '7 days')
+    ((SELECT COUNT(*)::int FROM friend_requests fr WHERE fr.target_id = u.id AND fr.status = 'pending' AND fr.created_at > NOW() - INTERVAL '7 days'
+        AND ${countableSender('u.id', 'fr.requester_id')})
       + (SELECT COUNT(*)::int FROM cp_pairs WHERE (user_a = u.id OR user_b = u.id) AND request_kind IS NOT NULL
            AND request_from <> u.id AND request_at > NOW() - INTERVAL '24 hours'
            AND EXISTS (SELECT 1 FROM users ru WHERE ru.id = request_from AND ru.account_status = 'active'))) AS friends,
@@ -93,16 +100,27 @@ router.get('/conversations', async (req, res) => {
 router.get('/with/:userId', async (req, res) => {
   const peerId = uuid(req.params.userId, 'Kullanıcı');
   const limit = req.query.limit ? positiveInt(req.query.limit, 'Limit', 100) : 50;
+  // Eski mesajlar (yukarı kaydırınca): ?before=<en eski mesajın zamanı>. Bu durumda okundu işareti yapılmaz.
+  const before = typeof req.query.before === 'string' && !Number.isNaN(Date.parse(req.query.before)) ? req.query.before : null;
   const r = await query(
     `SELECT * FROM direct_messages WHERE ((sender_id = $1 AND receiver_id = $2) OR (sender_id = $2 AND receiver_id = $1))
-       AND ${visibleTo('$1', '$2')}
+       AND ${visibleTo('$1', '$2')} AND ($4::timestamptz IS NULL OR created_at < $4::timestamptz)
      ORDER BY created_at DESC LIMIT $3`,
-    [req.user.id, peerId, limit],
+    [req.user.id, peerId, limit, before],
   );
+  if (before) return res.json({ messages: r.rows.reverse().map(msgJson), more: r.rows.length === limit });
   const read = await query(`UPDATE direct_messages SET read_at = NOW() WHERE receiver_id = $1 AND sender_id = $2 AND read_at IS NULL`, [req.user.id, peerId]);
   // Gönderen sohbet ekranındaysa mesajlarının altında "Görüldü" görünür.
   if (read.rowCount) hub.sendToUser(peerId, { type: 'dm_read', userId: req.user.id, at: new Date().toISOString() });
-  res.json({ messages: r.rows.reverse().map(msgJson) });
+  res.json({ messages: r.rows.reverse().map(msgJson), more: r.rows.length === limit });
+});
+
+// Sohbet açıkken gelen mesajlar: yalnızca okundu işareti (geçmiş yeniden indirilmez).
+router.post('/with/:userId/read', async (req, res) => {
+  const peerId = uuid(req.params.userId, 'Kullanıcı');
+  const read = await query(`UPDATE direct_messages SET read_at = NOW() WHERE receiver_id = $1 AND sender_id = $2 AND read_at IS NULL`, [req.user.id, peerId]);
+  if (read.rowCount) hub.sendToUser(peerId, { type: 'dm_read', userId: req.user.id, at: new Date().toISOString() });
+  res.json({ ok: true, read: read.rowCount });
 });
 
 // Konuşmayı sil: yalnızca benim tarafımda; o ana kadarki mesajlar bana görünmez (karşı taraf görmeye devam eder).

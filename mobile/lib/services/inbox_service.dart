@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'api.dart';
 import 'app_visibility.dart';
+import 'session.dart';
 import 'socket_service.dart';
 
 /// Okunmamış özel mesaj sayısı (sekme rozeti için).
@@ -18,6 +19,8 @@ class Inbox {
     _sub?.cancel();
     _sub = SocketService.instance.events.listen((e) {
       final t = e['type'];
+      // Bakiye sunucuda değişti (ör. bayi Coin yükledi): ekrandaki bakiye hemen güncellenir.
+      if (t == 'wallet' && e['coins'] != null) Session.setCoins('${e['coins']}');
       // Mesajlar sekmesindeki her şey (bildirim, arkadaşlık/CP isteği, destek, ekip duyurusu, ajans daveti, aile sohbeti)
       // normal mesaj gibi sekme rozetini artırır.
       if (t == 'inbox_update') {
@@ -78,23 +81,32 @@ class Inbox {
   }
 
   /// Sekme rozeti: okunmamış mesaj + yeni bildirim + bekleyen istekler + diğer Mesajlar kartları.
+  static int _seq = 0, _bseq = 0;
+
   static Future<void> refresh() async {
+    // Aynı anda birden çok yenileme olabilir (soket olayı + sayfa kapanışı). Geç dönen ESKİ yanıt yeni sayıyı ezmesin
+    // (eskiden okundu işaretinden önce başlayan istek sonra dönüp rozeti geri getiriyordu).
+    final my = ++_seq;
     try {
       final r = await Api.get('/api/messages/alerts');
+      if (my != _seq) return;
       unread.value = (r['total'] as num?)?.toInt() ?? 0;
     } on ApiException catch (e) {
       if (e.statusCode != 404) return;
       try {
         // Eski sunucu: yalnızca özel mesajlar.
         final r = await Api.get('/api/messages/unread-count');
+        if (my != _seq) return;
         unread.value = (r['unread'] as num?)?.toInt() ?? 0;
       } catch (_) {/* oturum yoksa yoksay */}
     } catch (_) {/* bağlantı yok: sonraki olayda yeniden denenir */}
   }
 
   static Future<void> refreshBadges() async {
+    final my = ++_bseq;
     try {
       final r = await Api.get('/api/me/badges');
+      if (my != _bseq) return;
       int n(String k) => (r[k] as num?)?.toInt() ?? 0;
       badges.value = {'visitors': n('visitors'), 'followers': n('followers'), 'friends': n('friends'), 'family': n('family'), 'total': n('total')};
     } catch (_) {/* oturum yoksa yoksay */}

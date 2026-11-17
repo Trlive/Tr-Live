@@ -75,6 +75,20 @@ class PushService with WidgetsBindingObserver {
     );
   }
 
+  /// Bildirimler sayfası açılınca telefondaki bildirim çubuğunda kalan kişiye özel bildirimler silinir
+  /// (diğer uygulamalardaki gibi: uygulamada okunan bildirim telefonda da kaybolur).
+  static Future<void> clearSocial() async {
+    try {
+      await _init();
+      final android = _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+      if (android == null) return;
+      final active = await android.getActiveNotifications();
+      for (final n in active) {
+        if (n.channelId == 'trlive_social' && n.id != null) await _plugin.cancel(n.id!);
+      }
+    } catch (_) {/* eski Android: yoksay */}
+  }
+
   /// Uygulama kapalıyken gelen kişiye özel bildirimler (açılınca / öne gelince). İlk çalışmada yalnızca son numara
   /// kaydedilir (eski bildirimler yığılmasın).
   static Future<void> pollPersonal() async {

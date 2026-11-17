@@ -37,6 +37,7 @@ import '../services/session.dart';
 import '../services/socket_service.dart';
 import '../widgets/app_theme.dart';
 import '../widgets/common.dart';
+import '../widgets/scoreboard_ui.dart';
 import '../widgets/drag_bubble.dart';
 import '../widgets/birthday_stage.dart';
 import '../widgets/mic_skin_sheet.dart';
@@ -401,6 +402,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       _room = mapOf(r['room']);
       _me = mapOf(r['me']) ?? {};
       SocketService.instance.subscribeRoom(widget.roomId);
+      // Ses bağlantısı (en yavaş adım: token + WebRTC el sıkışması) üye listesini BEKLEMEDEN başlar; sohbet geçmişi de
+      // aynı anda gelir. Koltuktaysam yayın, üye listesi gelince (_loadMembers → _syncPublish) açılır.
+      _connectLivekit();
+      _loadMessages(initial: true);
       await _loadMembers();
       if (!mounted) return;
       setState(() => _loading = false);
@@ -420,8 +425,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           if (mounted) SocketService.instance.emitLocal({'type': 'local_entrance', 'roomId': widget.roomId, 'user': myEntrance?['user'], 'entranceEffect': myEffect});
         });
       }
-      _connectLivekit();
-      _loadMessages(initial: true);
       _loadExtras();
       MusicService.instance.bind(widget.roomId);
       RoomPlaylist.instance.bind(widget.roomId);
@@ -459,54 +462,54 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _loadExtras() async {
-    try {
-      final s = await Api.get('/api/rooms/${widget.roomId}/scoreboard');
-      final pk = await Api.get('/api/rooms/${widget.roomId}/pk');
-      final roomPk = _isVideo ? null : await Api.get('/api/rooms/${widget.roomId}/room-pk');
-      if (!mounted) return;
-      setState(() {
-        _roomPk = mapOf(roomPk?['pk']);
+    // 7 bağımsız istek AYNI ANDA (eskiden sırayla: odaya girişten sonra 1–2 sn ek bekleme). Biri hata verirse
+    // diğerleri etkilenmez.
+    Future<Map<String, dynamic>?> get(String path) => Api.get(path).then<Map<String, dynamic>?>((r) => r).catchError((_) => null);
+    final ownerId = _room?['ownerId']?.toString();
+    final res = await Future.wait<Map<String, dynamic>?>([
+      get('/api/rooms/${widget.roomId}/scoreboard'),
+      get('/api/rooms/${widget.roomId}/pk'),
+      _isVideo ? Future.value(null) : get('/api/rooms/${widget.roomId}/room-pk'),
+      get('/api/rooms/${widget.roomId}/lucky-bags'),
+      get('/api/rooms/${widget.roomId}/mic/queue'),
+      ownerId != null && ownerId != Session.id ? get('/api/rooms/hosts/$ownerId/favorite') : Future.value(null),
+      get('/api/app/config'),
+    ]);
+    if (!mounted) return;
+    final s = res[0], pk = res[1], roomPk = res[2], lb = res[3], q = res[4], f = res[5], c = res[6];
+    setState(() {
+      if (s != null) {
+        _sbKnown = s.containsKey('session');
+        _sbSession = mapOf(s['session']);
         _scores
           ..clear()
           ..addEntries(listOf(s['scoreboard']).map((x) => MapEntry(x['userId'].toString(), x['coins'].toString())));
-        _pk = mapOf(pk['pk']);
-      });
-    } catch (_) {/* ek özellikler yüklenemese de oda çalışır */}
-    try {
-      final lb = await Api.get('/api/rooms/${widget.roomId}/lucky-bags');
-      if (mounted) setState(() => _bags..clear()..addAll(listOf(lb['bags'])));
-    } catch (_) {}
-    try {
-      final q = await Api.get('/api/rooms/${widget.roomId}/mic/queue');
-      final ownerId = _room?['ownerId']?.toString();
-      final f = ownerId != null && ownerId != Session.id ? await Api.get('/api/rooms/hosts/$ownerId/favorite') : null;
-      if (!mounted) return;
-      setState(() {
-        _queue = ((q['queue'] as List?) ?? const []).map((x) => x.toString()).toList();
-        _fav = f?['favorite'] == true;
-      });
-      _queueLoaded = true;
-      _queueTick.value++;
-      // Yayıncıyı takip etmeyenlere bir dakika sonra sohbette "takip edin" kartı.
-      if (ownerId != null && ownerId != Session.id && !_fav) {
-        _followTimer?.cancel();
-        _followTimer = Timer(const Duration(seconds: 60), () {
-          if (!mounted || _fav || _messages.any((m) => m['follow'] == true)) return;
-          setState(() => _messages.add({'id': 'follow-card', 'follow': true}));
-          _scrollChatToEnd();
-        });
       }
-    } catch (_) {}
-    try {
-      final c = await Api.get('/api/app/config');
-      if (!mounted) return;
-      setState(() {
+      if (pk != null) _pk = mapOf(pk['pk']);
+      if (roomPk != null || _isVideo) _roomPk = mapOf(roomPk?['pk']);
+      if (lb != null) _bags..clear()..addAll(listOf(lb['bags']));
+      if (q != null) _queue = ((q['queue'] as List?) ?? const []).map((x) => x.toString()).toList();
+      if (f != null) _fav = f['favorite'] == true;
+      if (c != null) {
         _appNotice = (c['roomNotice'] ?? '').toString().trim();
         _flyCost = (c['flyTextCoins'] as num?)?.toInt() ?? _flyCost;
         _activitiesOn = c['roomActivitiesEnabled'] != false;
         _cardGameOn = c['cardGameEnabled'] != false;
+      }
+    });
+    if (q != null) {
+      _queueLoaded = true;
+      _queueTick.value++;
+    }
+    // Yayıncıyı takip etmeyenlere bir dakika sonra sohbette "takip edin" kartı.
+    if (ownerId != null && ownerId != Session.id && f != null && !_fav) {
+      _followTimer?.cancel();
+      _followTimer = Timer(const Duration(seconds: 60), () {
+        if (!mounted || _fav || _messages.any((m) => m['follow'] == true)) return;
+        setState(() => _messages.add({'id': 'follow-card', 'follow': true}));
+        _scrollChatToEnd();
       });
-    } catch (_) {}
+    }
   }
 
   /// Yeni gelen kişiye "Hoş geldin" (sohbete yazılır ve odada uçan yazı olarak geçer).
@@ -662,14 +665,19 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   Future<void> _sendChat() async {
     final text = _capFirst(_chatCtl.text.trim());
     if (text.isEmpty || _sending) return;
+    // Diğer uygulamalardaki gibi yazı kutusu HEMEN boşalır (sunucu yanıtı beklenmez); mesaj odaya soketten düşer.
+    // Gönderilemezse yazı geri konur (kutuya bu arada yeni bir şey yazılmadıysa), hata gösterilir.
     setState(() => _sending = true);
     final fly = _flyMode;
+    _chatCtl.clear();
     final r = await guard(context, () => Api.post('/api/rooms/${widget.roomId}/messages', {'text': text, if (fly) 'fly': true}));
     if (!mounted) return;
     setState(() => _sending = false);
     if (r != null) {
-      _chatCtl.clear();
       if (r['balance'] != null) Session.setCoins(r['balance'].toString());
+    } else if (_chatCtl.text.isEmpty) {
+      _chatCtl.text = text;
+      _chatCtl.selection = TextSelection.collapsed(offset: text.length);
     }
   }
 
@@ -752,7 +760,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 
   bool _micInviteOpen = false;
-  bool _chatHidden = false; // görüntülü odada sohbeti gizle: yalnızca görüntü izlenir
+  bool _chatHidden = false;
+  // Sayı tahtası oturumu (Yoho): süren sayım; _sbKnown: sunucu oturumları destekliyor (eski sunucuda eski davranış).
+  Map<String, dynamic>? _sbSession;
+  bool _sbKnown = false;
+ // görüntülü odada sohbeti gizle: yalnızca görüntü izlenir
 
   List<int> get _lockedSeats => ((_room?['lockedSeats'] as List?) ?? const []).map((x) => (x as num).toInt()).toList();
   bool get _canSeatManage => ['owner', 'cohost', 'moderator'].contains(_myRole);
@@ -927,6 +939,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
     if (e['roomId'] != widget.roomId) return;
     switch (type) {
+      case 'scoreboard_session':
+        _onScoreboardSession(e);
+        break;
       case 'room_scoreboard':
         _scores.clear();
         for (final x in listOf(e['scoreboard'])) {
@@ -1247,7 +1262,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       final token = t['token'] as String?;
       if (url == null || url.isEmpty || token == null) throw ApiException(tx('Ses sunucusu yapılandırılmamış.'));
       await _loadNoisePref();
-      await HeadsetAudio.instance.start(); // kulaklık takılıysa yüksek kaliteli ses modu (bağlanmadan önce)
+      await HeadsetAudio.instance.start(); // kulaklık izlenir; ses her zaman görüşme modunda, kulaklığa otomatik yönlenir
       final saver = EffectPrefs.powerSave.value;
       room = lk.Room(roomOptions: lk.RoomOptions(
         adaptiveStream: true,
@@ -1498,9 +1513,13 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _leaveMic() async {
-    final r = await guard(context, () => Api.post('/api/rooms/${widget.roomId}/mic/leave'));
-    if (r == null || !mounted) return;
+    // Koltuktan iniş anında görünür ve mikrofon hemen kapanır (sunucu yanıtı beklenmez); olmazsa koltuğa geri dönülür.
+    final prev = _mySeatIndex;
+    final prevMic = _me['microphone'] == true;
     setState(() => _applySeat(Session.id, null, false));
+    final r = await guard(context, () => Api.post('/api/rooms/${widget.roomId}/mic/leave'));
+    if (!mounted) return;
+    if (r == null && prev != null && _mySeatIndex == null) setState(() => _applySeat(Session.id, prev, prevMic));
   }
 
   /// Yetkili: mikrofon isteklerini onayla (davet gönder) veya reddet.
@@ -2210,6 +2229,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                 : run(() => _isVideo ? showPkChallengeSheet(context, roomId: widget.roomId) : showRoomPkSetup(context, roomId: widget.roomId, seatCount: _seatCount)),
                         colors: const [Color(0xFF1A237E), Color(0xFF0D0D1A), Color(0xFFB71C1C)],
                       ),
+                    // Sayı tahtası (Yoho): süreli / elle sayım, sıfırlama kuralları, sonuç ve geçmiş.
+                    if (_canSeatManage)
+                      tile(const Icon(Icons.leaderboard_rounded, size: 32, color: Color(0xFFFFD54F)), tx('Sayı tahtası'),
+                          () => run(() => showScoreboardSetup(context, roomId: widget.roomId, session: _sbSession)),
+                          colors: const [Color(0xFF5A3B00), Color(0xFF0B0906)]),
                     tile(const LudoLogo(size: 56), 'Ludo', () => run(() => _tekDockKey.currentState?.openPanel(type: 'ludo')), colors: kGoldDeep),
                     // TEK kart oyunu: odanın üstünde açılan oyun penceresi (herkes açabilir; oyunu oda yetkilisi kurar).
                     if (_cardGameOn) tile(const TekLogo(size: 56), 'TEK', () => run(() => _tekDockKey.currentState?.openPanel(type: 'tek')), colors: const [Color(0xFF2A2010), Color(0xFF0B0906)]),
@@ -2365,6 +2389,37 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     if (lvl >= 20) return const Color(0x331D4ED8);
     if (lvl >= 10) return const Color(0x330F766E);
     return const Color(0x30000000);
+  }
+
+  // ---------- Sayı tahtası (Yoho) ----------
+  void _onScoreboardSession(Map<String, dynamic> e) {
+    final sess = mapOf(e['session']);
+    if (sess == null || !mounted) return;
+    _sbKnown = true;
+    if (e['action'] == 'start') {
+      final by = mapOf(sess['startedBy']);
+      final minutes = (e['minutes'] as num?)?.toInt() ?? 0;
+      final rules = [
+        if (sess['resetOnSeatLeave'] == true) tx('Kullanıcı Koltuktan Ayrıldığında'),
+        if (sess['resetOnRoomLeave'] == true) tx('Kullanıcı Odadan Ayrıldığında'),
+      ];
+      setState(() {
+        _sbSession = sess;
+        _scores.clear();
+      });
+      _addSystemMessage(tx('{name}, {mode} için puan tablosunu etkinleştirdi.', {'name': by?['displayName'] ?? '', 'mode': scoreboardModeText(minutes)}) +
+          (rules.isEmpty ? '' : ' ${tx('Sıfırlama kuralı')}: ${rules.join(', ')}.'));
+    } else {
+      final by = mapOf(e['by']);
+      setState(() => _sbSession = null);
+      _addSystemMessage(by == null ? tx('Sayım süresi doldu, puan tablosu kapandı.') : tx('{name} puan tablosunu kapattı!', {'name': by['displayName'] ?? ''}));
+      showScoreboardResult(context, sess);
+    }
+  }
+
+  Future<void> _stopScoreboard() async {
+    if (!await confirmScoreboardStop(context) || !mounted) return;
+    await guard(context, () => Api.post('/api/rooms/${widget.roomId}/scoreboard/stop'));
   }
 
   void _addSystemMessage(String text, {Color color = const Color(0xFFFFE27A)}) {
@@ -3544,7 +3599,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   bool get _seatCompact => _seatCount >= 12; // 12+ modda koltuklar küçük (Yoho: genişliğin ~%10'u)
   double get _seatNameH => _seatCompact ? 14 : 16;
   double get _seatScoreH => 16;
-  bool get _scoreOn => _room?['scoreboardEnabled'] != false && _showScoreRow;
+  bool get _scoreOn => (_sbKnown ? _sbSession != null : _room?['scoreboardEnabled'] != false) && _showScoreRow;
   // Bir koltuğun avatar alanı (slot) boyutu satıra göre değişir: üst (oda sahibi) satırı daha büyüktür.
   double _cellH(double slot) => slot + 2 + _seatNameH + (_scoreOn ? _seatScoreH + 2 : 0);
 
@@ -3856,6 +3911,22 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           ),
         ),
         if (!_inputOpen && !(_isVideo && _chatHidden)) Positioned(left: 0, right: 0, top: chatTop, bottom: 0, child: _chatPanel(w)),
+        // Süren sayım çubuğu (herkes görür; yönetici ✕ ile durdurur, dokununca pencere açılır).
+        if (_sbSession != null && !_inputOpen)
+          Positioned(
+            left: 0,
+            right: 0,
+            top: chatTop + 4,
+            child: Center(
+              child: ScoreboardPill(
+                key: ValueKey('sb-${_sbSession!['id']}'),
+                session: _sbSession!,
+                canStop: _canSeatManage,
+                onStop: _stopScoreboard,
+                onTap: _canSeatManage ? () => showScoreboardSetup(context, roomId: widget.roomId, session: _sbSession) : null,
+              ),
+            ),
+          ),
         if (!_inputOpen && _isVideo) Positioned(left: 8, bottom: _chatHidden ? 8 : null, top: _chatHidden ? null : chatTop - 30, child: _chatToggle()),
         if (_inputOpen) ...[
           Positioned.fill(child: GestureDetector(onTap: _closeInput, child: const ColoredBox(color: Color(0xB8000000)))),

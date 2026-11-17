@@ -27,10 +27,24 @@ class Api {
   /// Tüm uygulamanın paylaştığı HTTP istemcisi. Bağlantı açık tutulur (keep-alive): her istekte yeniden TLS el sıkışması
   /// yapılmaz — daha az internet, daha az pil, daha hızlı yanıt. Boşta 25 sn kalan bağlantı kapanır (sunucu tarafı
   /// kapatmadan ve operatör NAT'ı sessizce düşürmeden önce). Yanıtlar sıkıştırılmış (gzip) gelir, otomatik açılır.
-  static final http.Client client = IOClient(HttpClient()
+  static HttpClient _inner = _newInner();
+  static http.Client client = IOClient(_inner);
+
+  static HttpClient _newInner() => HttpClient()
     ..idleTimeout = const Duration(seconds: 25)
     ..connectionTimeout = const Duration(seconds: 15)
-    ..autoUncompress = true);
+    ..autoUncompress = true;
+
+  /// Ağ değişince (Wi-Fi ↔ mobil veri) açık tutulan bağlantılar ölüdür: havuz yenilenir, böylece ilk istek (ör. hediye)
+  /// "Sunucuya ulaşılamadı" ile boşa düşmez. Süren istekler bitene kadar eski havuz açık kalır.
+  static void resetConnections() {
+    final old = _inner;
+    _inner = _newInner();
+    client = IOClient(_inner);
+    try {
+      old.close();
+    } catch (_) {}
+  }
 
   /// Kısa ömürlü erişim token'ı (1 saat). Eski sürümden kalma oturumlarda 30 günlük tek token olabilir.
   static String? token;

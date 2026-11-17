@@ -4,12 +4,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:livekit_client/livekit_client.dart' as lk;
 
-/// Kulaklıkla konuşma kalitesi (kablolu ve Bluetooth).
-/// Telefon "görüşme" modunda Bluetooth kulaklık düşük kaliteli arama hattına (SCO, 8-16 kHz) geçer ve karşı taraf
-/// sesi uğultulu / kesik duyar; kablolu kulaklıkta da görüşme modunun sert işlemesi sesi boğar.
-/// Kulaklık bağlıyken ses "medya" modunda çalışır: dinleme yüksek kaliteli hattan (A2DP) gelir, konuşma kablolu
-/// kulaklığın ya da (Bluetooth'ta) telefonun kendi mikrofonundan temiz alınır. Kulaklık yokken hoparlörde yankı
-/// olmasın diye "görüşme" modu kullanılır.
+/// Kulaklık (kablolu ve Bluetooth) takılı mı: yalnızca izlenir.
+/// v2.118.1: Kulaklıkta ses artık "medya" moduna ALINMAZ. Oda açıkken medya moduna geçmek WebRTC'nin görüşme için kurulmuş
+/// ses hattını bozuyordu: bazı telefonlarda kulaklıklı kullanıcının mikrofonu gitmiyor, odanın sesi de ona gelmiyordu.
+/// Diğer sesli oda uygulamaları gibi her zaman "görüşme" modu kullanılır; ses LiveKit tarafından otomatik olarak
+/// kulaklığa (Bluetooth / kablolu) yönlendirilir.
 class HeadsetAudio {
   HeadsetAudio._();
   static final HeadsetAudio instance = HeadsetAudio._();
@@ -49,13 +48,12 @@ class HeadsetAudio {
     connected.value = headset;
     if (_applied == headset) return;
     _applied = headset;
-    // Kulaklık yokken LiveKit'in kendi (görüşme) ayarına dokunulmaz; yalnız kulaklık takılınca devralınır.
-    if (!headset && !_manual) return;
+    // Eski sürümde medya moduna alınmışsa görüşme moduna ve LiveKit'in otomatik yönetimine geri döner.
+    if (!_manual) return;
+    _manual = false;
     try {
-      // LiveKit sesi kendisi yönettiği için ayar onun üzerinden verilir (bağlanınca da korunur).
-      _manual = true;
-      await lk.AudioManager.instance.setAudioSessionOptions(
-          headset ? const lk.AudioSessionOptions.mediaPlayback() : const lk.AudioSessionOptions.communication());
+      await lk.AudioManager.instance.setAudioSessionOptions(const lk.AudioSessionOptions.communication());
+      await lk.AudioManager.instance.setAudioSessionManagementMode(lk.AudioSessionManagementMode.automatic);
     } catch (_) {/* desteklenmeyen cihaz */}
   }
 }

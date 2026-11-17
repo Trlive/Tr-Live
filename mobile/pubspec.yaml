@@ -1,7 +1,7 @@
 name: tr_live
 description: TR Live - canlı sesli/görüntülü odalar, aile, WIP, ajans/yayıncı, hediyeler ve yönetim
 publish_to: none
-version: 2.118.0+22
+version: 2.123.0+34
 environment:
   sdk: '>=3.8.0 <4.0.0'
   flutter: '>=3.32.0'
@@ -14,7 +14,9 @@ dependencies:
   livekit_client: ^2.13.2
   web_socket_channel: ^3.0.3
   lottie: ^3.3.1
-  flutter_vap_kit: ^0.1.2
+  # Yerel kopya (0.1.2): VAP kendi sesini çalmasın diye sessize alındı (yerel/flutter_vap_kit).
+  flutter_vap_kit:
+    path: yerel/flutter_vap_kit
   flutter_foreground_task: ^11.0.1
   just_audio: ^0.10.4
   file_picker: ^8.1.2

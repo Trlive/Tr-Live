@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'api.dart';
+import 'error_log.dart';
 
 /// Telefon (Firebase SMS) ve e-posta doğrulamasının sunucudaki ayarları ve Firebase ile SMS doğrulaması.
 /// Firebase ayarları sunucudan gelir (yönetim > uygulama ayarları); APK'ya gömülü değildir.
@@ -103,6 +104,15 @@ class Verify {
   /// Firebase hata kodlarını anlaşılır Türkçe anahtarlara çevirir (ekranda tx ile çevrilir).
   static String _message(Object e) {
     final code = e is FirebaseAuthException ? e.code : '';
+    final raw = e is FirebaseAuthException ? '${e.message ?? ''}' : '$e';
+    // Asıl neden kayda yazılır (Hata kayıtları) — SMS gelmediğinde nedeni buradan görülür.
+    ErrorLog.add('SMS doğrulaması', '$code $raw');
+    // Firebase'in en sık kurulum hataları: plan, SHA parmak izi, telefon girişi kapalı.
+    if (raw.contains('BILLING_NOT_ENABLED')) return 'SMS gönderilemedi: Firebase projesi Blaze planında değil.';
+    if (raw.contains('SHA') || raw.contains('play_integrity') || code == 'app-not-authorized') {
+      return 'SMS gönderilemedi: uygulamanın SHA parmak izi Firebase\'e eklenmemiş.';
+    }
+    if (code == 'operation-not-allowed') return 'SMS gönderilemedi: Firebase\'te telefon girişi kapalı.';
     return switch (code) {
       'invalid-verification-code' => 'Kod hatalı. Tekrar dene.',
       'session-expired' || 'code-expired' => 'Kodun süresi doldu. Yeni kod iste.',

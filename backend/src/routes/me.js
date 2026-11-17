@@ -199,7 +199,8 @@ router.get('/notifications', async (req, res) => {
 router.get('/notifications/unread', async (req, res) => {
   const r = await query(
     `SELECT COUNT(*)::int AS n FROM user_notifications n JOIN users u ON u.id = n.user_id
-     WHERE n.user_id = $1 AND n.id > u.notify_seen_id AND n.created_at > NOW() - INTERVAL '7 days'`,
+     WHERE n.user_id = $1 AND n.id > u.notify_seen_id AND n.created_at > NOW() - INTERVAL '7 days'
+       AND n.kind NOT IN ('friend_request', 'relation_request')`, // sekme rozetiyle aynı sayım (istekler kendi kartında)
     [req.user.id],
   );
   res.json({ unread: r.rows[0].n });
@@ -503,8 +504,11 @@ router.get('/badges', async (req, res) => {
   const r = await query(
     `SELECT (SELECT COUNT(*)::int FROM profile_visitors WHERE profile_user_id = $1 AND last_visited_at > u.visitors_seen_at
                AND last_visited_at > NOW() - INTERVAL '7 days') AS visitors,
-            (SELECT COUNT(*)::int FROM follows WHERE followed_id = $1 AND created_at > u.followers_seen_at) AS followers,
-            ((SELECT COUNT(*)::int FROM friend_requests WHERE target_id = $1 AND status = 'pending' AND created_at > NOW() - INTERVAL '7 days')
+            (SELECT COUNT(*)::int FROM follows f JOIN users fu ON fu.id = f.follower_id AND fu.account_status = 'active'
+               WHERE f.followed_id = $1 AND f.created_at > u.followers_seen_at) AS followers,
+            -- Liste (/friends/requests) ile aynı kural: kapalı hesaplardan gelen istekler sayılmaz (yoksa rozet hiç sönmüyordu).
+            ((SELECT COUNT(*)::int FROM friend_requests fr JOIN users ru ON ru.id = fr.requester_id AND ru.account_status = 'active'
+                WHERE fr.target_id = $1 AND fr.status = 'pending' AND fr.created_at > NOW() - INTERVAL '7 days')
              + (SELECT COUNT(*)::int FROM cp_pairs WHERE (user_a = $1 OR user_b = $1) AND request_kind IS NOT NULL
                   AND request_from <> $1 AND request_at > NOW() - INTERVAL '24 hours'
                   AND EXISTS (SELECT 1 FROM users ru WHERE ru.id = request_from AND ru.account_status = 'active'))) AS friends,

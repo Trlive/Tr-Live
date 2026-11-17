@@ -67,21 +67,28 @@ Future<void> _boot() async {
   }
   // Açılış hiçbir koşulda takılmasın: hazırlık adımları hata verse / gecikse de uygulama ekranı açılır.
   // Efekt ayarları (hediye animasyonu, araç, şerit, global bildirim) telefondan okunur.
-  await EffectPrefs.load().timeout(const Duration(seconds: 2), onTimeout: () {});
-  await L10n.init().timeout(const Duration(seconds: 2), onTimeout: () {}); // dil: kayıtlı seçim ya da telefonun dili
-  // Mikrofon ses işleme (yankı / gürültü): LiveKit kullanılmadan önce bir kez (bkz. AudioProcessing).
-  await AudioProcessing.init().timeout(const Duration(seconds: 4), onTimeout: () {});
+  // Birbirinden bağımsız hazırlıklar AYNI ANDA yapılır (eskiden sırayla: en kötü durumda logoda 13 sn bekleniyordu).
+  // Dil: kayıtlı seçim ya da telefonun dili. Mikrofon ses işleme: LiveKit kullanılmadan önce bir kez (AudioProcessing).
+  Future<void> restore() async {
+    try {
+      await AuthService.restore().timeout(const Duration(seconds: 5));
+    } catch (e, s) {
+      ErrorLog.add('Oturum okunamadı', e, s);
+    }
+  }
+
+  await Future.wait<void>([
+    EffectPrefs.load().timeout(const Duration(seconds: 2), onTimeout: () {}).catchError((_) {}),
+    L10n.init().timeout(const Duration(seconds: 2), onTimeout: () {}).catchError((_) {}),
+    AudioProcessing.init().timeout(const Duration(seconds: 4), onTimeout: () {}).catchError((_) {}),
+    restore(),
+  ]);
   // Uygulama ekranda mı: arka plandayken periyodik sorgular durur (pil/internet).
   AppVisibility.instance.init();
   try {
     BackgroundService.instance.init();
   } catch (e, s) {
     ErrorLog.add('Arka plan servisi', e, s);
-  }
-  try {
-    await AuthService.restore().timeout(const Duration(seconds: 5));
-  } catch (e, s) {
-    ErrorLog.add('Oturum okunamadı', e, s);
   }
   // Oturum sona erdiğinde (401, yasaklı hesap, şifre değişimi) giriş ekranına dön.
   Api.onUnauthorized = () async {

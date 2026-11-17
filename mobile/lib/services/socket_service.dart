@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'api.dart';
@@ -75,8 +76,33 @@ class SocketService {
     if (!_visHooked) {
       _visHooked = true;
       AppVisibility.foreground.addListener(_onVisibility);
+      _watchNetwork();
     }
     _connect();
+  }
+
+  StreamSubscription? _netSub;
+  String? _net;
+
+  /// Telefonun ağı değişince (Wi-Fi ↔ mobil veri) eski bağlantı ölüdür: sessizliği beklemeden hemen yeniden kurulur.
+  void _watchNetwork() {
+    if (defaultTargetPlatform != TargetPlatform.android || _netSub != null) return;
+    try {
+      _netSub = const EventChannel('trlive/network').receiveBroadcastStream().listen((v) {
+        final now = '$v';
+        final before = _net;
+        _net = now;
+        if (before == null || now == 'none') return; // ilk değer / ağ yok: yeniden deneme zaten sürüyor
+        Api.resetConnections();
+        if (!_wanted || _suspended) return;
+        lastCloseReason = 'network';
+        if (_channel != null) _teardown();
+        _controller.add({'type': 'socket_closed', 'reason': 'network'});
+        _retry?.cancel();
+        _attempt = 0;
+        _connect();
+      }, onError: (_) {});
+    } catch (_) {/* eski derleme: sessizlik denetimi yeterli */}
   }
 
   void _onVisibility() {

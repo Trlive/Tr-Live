@@ -13,6 +13,7 @@ import { presenceSnapshot, recordPresence, canSignalTyping, isGhost } from './se
 import { pruneIdempotencyKeys } from './idempotency.js';
 import { pruneRoomBans } from './services/room_bans.js';
 import { promoteBootstrapAdmins } from './services/bootstrap.js';
+import { startScoreboardTicker } from './services/scoreboard.js';
 import { nonOverlapping } from './ticker.js';
 import { router as authRouter } from './routes/auth.js';
 import { router as authSocialRouter } from './routes/auth_social.js';
@@ -266,6 +267,7 @@ const skinSweeper = startSkinSweeper();
 const themeSweeper = startThemeSweeper();
 const screenshotPruner = setInterval(() => pruneScreenshots().catch((e) => console.error('Ekran görüntüsü kayıt temizliği:', e.message)), 6 * 3600e3);
 const pkTicker = startPkTicker();
+const scoreboardTicker = startScoreboardTicker();
 const gameTicker = startGameTicker();
 const eventsTicker = startWeeklyEventsTicker();
 const notifyJanitor = startNotificationJanitor();
@@ -303,6 +305,7 @@ async function shutdown(signal) {
   clearInterval(themeSweeper);
   clearInterval(screenshotPruner);
   clearInterval(pkTicker);
+  clearInterval(scoreboardTicker);
   clearInterval(gameTicker);
   clearInterval(eventsTicker);
   clearInterval(notifyJanitor);

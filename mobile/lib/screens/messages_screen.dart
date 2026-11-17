@@ -2,6 +2,7 @@ import 'dart:async';
 import '../services/screen_guard.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../l10n/l10n.dart';
 import '../services/api.dart';
 import '../services/inbox_service.dart';
 import '../services/presence_service.dart';
@@ -67,6 +68,7 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
+    _scroll.addListener(_onScroll);
     _load();
     PresenceService.watch([_peerId]);
     _sub = SocketService.instance.events.listen((e) {
@@ -103,7 +105,10 @@ class _ChatScreenState extends State<ChatScreen> {
       if (!mounted || _messages.any((x) => x['id'] == m['id'])) return; // aynı mesaj iki kez eklenmesin
       setState(() => _messages.add(m));
       _toEnd();
-      Api.get('/api/messages/with/$_peerId').then((_) => Inbox.refresh()).catchError((_) => <String, dynamic>{}); // okundu işaretle
+      // Sohbet açıkken gelen mesaj hemen okundu sayılır (tüm geçmiş yeniden indirilmez), sonra rozet yenilenir.
+      Api.post('/api/messages/with/$_peerId/read').then((_) => Inbox.refresh()).catchError((_) {
+        return Api.get('/api/messages/with/$_peerId').then((_) => Inbox.refresh()); // eski sunucu
+      });
     });
   }
 
@@ -127,12 +132,14 @@ class _ChatScreenState extends State<ChatScreen> {
       final r = await Api.get('/api/messages/with/$_peerId');
       if (!mounted) return;
       setState(() {
-        _messages = listOf(r['messages']);
+        // Gönderilmeyi bekleyen / gönderilemeyen yerel mesajlar yenilemede kaybolmaz.
+        _messages = [...listOf(r['messages']), ..._messages.where((m) => m['pending'] == true || m['failed'] == true)];
+        _more = r['more'] == true;
         _loading = false;
         _error = null;
       });
       _toEnd();
-      Inbox.refresh();
+      await Inbox.refresh();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -151,17 +158,94 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  /// Yazı mesajı: WhatsApp gibi ANINDA listede görünür ("gönderiliyor" saati), kutu hemen boşalır, art arda yazılabilir.
+  /// Gönderilemezse balonun altında "Gönderilemedi · tekrar dene" çıkar (eskiden yazı hata olsa da siliniyordu).
+  int _localSeq = 0;
+
   Future<void> _send() async {
     final text = _ctl.text.trim();
-    if (text.isEmpty || _sending) return;
-    setState(() => _sending = true);
-    await _post({'text': text});
-    if (!mounted) return;
+    if (text.isEmpty) return;
+    final local = <String, dynamic>{
+      'id': 'local-${++_localSeq}',
+      'senderId': Session.id,
+      'text': text,
+      'createdAt': DateTime.now().toUtc().toIso8601String(),
+      'pending': true,
+    };
     _ctl.clear();
     setState(() {
-      _sending = false;
       _hasText = false;
+      _messages.add(local);
     });
+    _toEnd();
+    await _deliver(local);
+  }
+
+  Future<void> _deliver(Map<String, dynamic> local) async {
+    try {
+      final r = await Api.post('/api/messages/with/$_peerId', {'text': local['text']});
+      final m = mapOf(r['message']);
+      if (!mounted) return;
+      setState(() {
+        final i = _messages.indexWhere((x) => identical(x, local));
+        if (i >= 0) {
+          if (m != null) {
+            _messages[i] = m;
+          } else {
+            local.remove('pending');
+          }
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        local.remove('pending');
+        local['failed'] = true;
+      });
+      toast(context, errorText(e), error: true);
+    }
+  }
+
+  void _retry(Map<String, dynamic> m) {
+    if (m['failed'] != true) return;
+    setState(() {
+      m.remove('failed');
+      m['pending'] = true;
+    });
+    _deliver(m);
+  }
+
+  // ---------- Eski mesajlar (yukarı kaydırınca) ----------
+  bool _more = false;
+  bool _loadingOlder = false;
+
+  void _onScroll() {
+    if (!_more || _loadingOlder || !_scroll.hasClients) return;
+    if (_scroll.position.pixels < 120) _loadOlder();
+  }
+
+  Future<void> _loadOlder() async {
+    final oldest = _messages.where((m) => m['pending'] != true && m['failed'] != true).firstOrNull;
+    final at = oldest?['createdAt']?.toString();
+    if (at == null) return;
+    _loadingOlder = true;
+    try {
+      final r = await Api.get('/api/messages/with/$_peerId', query: {'before': at});
+      final older = listOf(r['messages']).where((m) => !_messages.any((x) => x['id'] == m['id'])).toList();
+      if (!mounted) return;
+      // Ekrandaki mesaj yerinde kalsın: eklenen yükseklik kadar kaydırma korunur.
+      final before = _scroll.hasClients ? _scroll.position.maxScrollExtent : 0.0;
+      setState(() {
+        _messages.insertAll(0, older);
+        _more = r['more'] == true;
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!_scroll.hasClients) return;
+        _scroll.jumpTo(_scroll.position.pixels + (_scroll.position.maxScrollExtent - before));
+      });
+    } catch (_) {/* sonraki kaydırmada yeniden denenir */} finally {
+      _loadingOlder = false;
+    }
   }
 
   /// Galeriden fotoğraf: önce yüklenir, sonra mesaj olarak gönderilir.
@@ -297,8 +381,26 @@ class _ChatScreenState extends State<ChatScreen> {
             ],
             Flexible(
               child: Column(crossAxisAlignment: mine ? CrossAxisAlignment.end : CrossAxisAlignment.start, children: [
-                GestureDetector(onLongPress: () => _messageMenu(m), child: _bubble(m, mine, w)),
-                if (seen) const Padding(padding: EdgeInsets.only(top: 3), child: Text('Görüldü', style: TextStyle(fontSize: 11, color: Pal.textDim))),
+                GestureDetector(
+                  onTap: m['failed'] == true ? () => _retry(m) : null,
+                  onLongPress: m['pending'] == true || m['failed'] == true ? null : () => _messageMenu(m),
+                  child: Opacity(opacity: m['pending'] == true ? 0.6 : 1, child: _bubble(m, mine, w)),
+                ),
+                if (m['pending'] == true)
+                  const Padding(padding: EdgeInsets.only(top: 3), child: Icon(Icons.schedule, size: 12, color: Pal.textDim)),
+                if (m['failed'] == true)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 3),
+                    child: GestureDetector(
+                      onTap: () => _retry(m),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        const Icon(Icons.error_outline, size: 13, color: Colors.redAccent),
+                        const SizedBox(width: 3),
+                        Text(tx('Gönderilemedi · tekrar dene'), style: const TextStyle(fontSize: 11, color: Colors.redAccent)),
+                      ]),
+                    ),
+                  ),
+                if (seen) Padding(padding: const EdgeInsets.only(top: 3), child: Text(tx('Görüldü'), style: const TextStyle(fontSize: 11, color: Pal.textDim))),
               ]),
             ),
             if (mine) ...[const SizedBox(width: 8), avatar],

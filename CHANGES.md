@@ -1,3 +1,110 @@
+## v2.123.0 — Sayı tahtası (Yoho gibi) ve yeni gizli kullanıcı görünümü
+- **Sayı tahtası oturumları:** Araçlar > İnteraktif Özellikler > "Sayı tahtası" (oda yöneticileri).
+  - Süre: Manuel Kontrollü ya da 5 / 10 / 15 / 30 / 60 dk. Kuralları Sıfırla: koltuktan ayrılınca / odadan ayrılınca.
+  - Başlayınca sayaçlar sıfırlanır, koltuklarda puan rozeti görünür, sohbete "X, … için puan tablosunu etkinleştirdi.
+    Sıfırlama kuralı: …" düşer.
+  - Sohbetin üstünde altın "devam ediyor: 00:14" (süreli sayımda "kalan") çubuğu; yönetici ✕ → "Sayımı durdurmayı
+    onaylıyor musunuz?" → sonuç: birincinin taçlı fotoğrafı ve puanı + sıralama, sohbete "X puan tablosunu kapattı!".
+  - Süre dolunca sunucu kendisi kapatır (15 sn'de bir). Pencerede ? (kurallar) ve geçmiş (önceki sayımlar ve sonuçları).
+  - Sıfırlama kuralları veritabanı tetikleyicisiyle uygulanır (inme, atılma, çıkma, oda kapanması — hangi yoldan olursa).
+  - Sunucu: migration 079 (room_scoreboard_sessions + tetikleyici), `POST /api/rooms/:id/scoreboard/start|stop`,
+    `GET /api/rooms/:id/scoreboard/history`; `GET …/scoreboard` yanıtında `session`. Olay: `scoreboard_session`.
+  - Eski sunucuyla eski davranış (sürekli sayaç) korunur.
+- **Gizli kullanıcı yeniden tasarlandı (uygulama renkleri):** mor soru işareti yerine siyah-altın küre üzerinde altın
+  maskeli balo maskesi ve altın halka (Yoho / Bigo "Gizemli Kişi" gibi). Adı altın yazıyla, yanında küçük maske rozetiyle.
+
+## v2.122.1 — "Tüm Oda" hediyesi sunucuda toplu yazılır
+- Çok alıcılı gönderimde ("Tüm Oda", "Tüm Koltuk", çoklu seçim) her alıcı için ~12 sorgu sırayla çalışıyordu
+  (50 kişide ~600 sorgu, işlem boyunca hesaplar kilitli). Artık her adım tüm alıcılar için TEK sorguda:
+  Elmas + hediye seviyesi, hediye kayıtları, sayı tahtası, CP yakınlığı, koruyucu puanı, cüzdan kayıtları, global şerit.
+  Odada süren PK yoksa alıcı başına PK sorgusu hiç yapılmaz. 50 kişide ~600 → ~12 sorgu.
+- Tek alıcılı gönderim eski yoldan devam eder; kayıtlar ve sonuç birebir aynıdır. Yeni SQL'ler yerel PostgreSQL 16'da
+  şema üzerinde denendi; uçtan uca hediye testleri (Tüm Koltuk / Tüm Oda, muhasebe doğruluğu) GitHub'da çalışır.
+
+## v2.122.0 — Bölüm 6: bayi, yayıncı, ajans
+- **Bayi paneli · Coin satışı yenilendi:**
+  - Alıcı uygulamadaki **ID'si** ya da kullanıcı adıyla aranır; satıştan ÖNCE fotoğrafı, adı, ID'si ve seviyesi gösterilir
+    (yanlış kişiye geri alınamaz Coin gitmez). Sunucu: `GET /api/dealer/lookup?q=`; satış ucu ID'yi de kabul eder.
+  - **Son müşteriler**: sık alanlar tek dokunuşla seçilir.
+  - **Gerçek satış özeti** (son 50 hareket değil, sunucu toplamı): bugün / 7 gün / 30 gün, işlem ve alıcı sayısı
+    (`GET /api/dealer/stats`).
+  - Hızlı tutarlara 1.000.000 eklendi; gönder düğmesi tutarı yazar.
+- **Alıcı Coin'in geldiğini anında görür:** bakiyesi canlı güncellenir (soket `wallet`) ve "💰 Coin yüklendi" bildirimi alır.
+- **Yayıncı Merkezi:** sonraki seviye için günlük tempo ("günde ortalama N elmas") ve bugünkü geçerli gün çubuğu
+  (kalan süre / tamamlandı).
+- İncelenip sağlam bulunanlar: bayi satışı (satır kilidi, eksiye düşemez bakiye, tek seferlik anahtar, cüzdan + mali
+  denetim kaydı), bakiye talebi (yalnızca sabit paket, onay/ret kilitli), ajans maaş hesabı (geçerli gün, sesli/görüntülü
+  ayrımı, yöntem 1/2, asistan payı, transfer bekleme süresi).
+
+## v2.121.1 — Bölüm 5: mağaza, cüzdan, WIP
+- Görünüm: Etkinleştir / Kaldır anında değişir, liste arkada sessizce tazelenir; hata olursa geri döner; art arda
+  dokunuş tek istek.
+- Mağaza: satın alınca bakiye yanıttan güncellenir (tüm profil yeniden okunmaz).
+- İncelenip sağlam bulunanlar: tüm Coin harcamalarında satır kilidi + yeterlilik denetimi, veritabanında bakiye
+  eksiye düşemez kuralı (users_balances_nonneg), mağaza / hediye için tek seferlik anahtar, her harcamada cüzdan kaydı
+  ve mali denetim kaydı (önceki / sonraki bakiye).
+
+## v2.121.0 — Bölüm 4: mesajlar ve sosyal
+- **Özel mesaj anında görünür** (WhatsApp gibi): yazı listeye hemen düşer (saat simgesi = gönderiliyor), kutu boşalır,
+  art arda yazılabilir. Gönderilemezse balonun altında "Gönderilemedi · tekrar dene". Eskiden hata olsa da yazı siliniyordu.
+- **Eski mesajlar:** yukarı kaydırınca 50'şer yüklenir (sunucu: GET /api/messages/with/:id?before=…; yanıtta "more").
+  Eskiden yalnızca son 50 mesaj görülebiliyordu.
+- **Takip et / bırak anında** değişir (Fan sayısı dahil), hata olursa geri döner; tüm profil yeniden yüklenmez.
+- Profil ve profil kartı aynı anda istenir (açılış daha hızlı).
+
+## v2.120.1 — Bölüm 3: hediye akışı
+- Hediye gönderirken bakiye dokunur dokunmaz düşer; kesin değer sunucu yanıtıyla gelir, hata olursa bakiye sunucudan okunur.
+- İncelenip sağlam bulunanlar: tek seferlik anahtarla çift ödeme koruması, combo kuyruğu (sunucu yanıtı beklenirken
+  dokunuşlar birikir, sırayla gider), animasyon kuyruğu sınırı (30 / zayıf telefonda 12), mp4 çözücü sırası.
+- Tespit (ayrı adımda, testle yapılacak): "Odadaki herkese" hediyede sunucu her alıcı için ~12 sorguyu sırayla çalıştırıyor
+  (50 kişide ~600 sorgu, tek işlem). Toplu (tek sorguda çok satır) yazıma geçirilecek.
+
+## v2.120.0 — Bölüm 2: oda içi (giriş hızı, sohbet, mikrofon)
+- **Odaya giriş hızlandı:** ses bağlantısı (en yavaş adım) üye listesini beklemeden başlar; sohbet geçmişi de aynı anda
+  gelir. Odanın ek bilgileri (puanlar, PK, şans çantaları, mikrofon sırası, takip, ayarlar) 7 ayrı istek sırayla değil
+  aynı anda alınır; biri hata verirse diğerleri yine gelir.
+- Sunucu: giriş yanıtındaki 4 bağımsız okuma (üyelik, oda elması, sahibin ailesi, sahibin kimliği) aynı anda yapılır.
+- **Sohbet:** yazı kutusu gönderince hemen boşalır (sunucu yanıtı beklenmez); gönderilemezse yazı geri gelir.
+- **Mikrofondan inme** anında görünür ve mikrofon hemen kapanır; sunucu reddederse koltuğa (önceki mikrofon durumuyla) dönülür.
+- İncelenip sağlam bulunanlar: mikten mike geçiş (anında, hata olursa geri döner), oda sinyali + yeniden katılma,
+  arka planda görüntü tasarrufu, ses bağlantısı kopunca artan aralıklarla yeniden kurma.
+
+## v2.119.0 — Bölüm 1: açılış ve bağlantı altyapısı
+- **Ağ değişimi anında algılanır** (Android ağ dinleyicisi, MainActivity `trlive/network`): Wi-Fi ↔ mobil veri geçişinde
+  soket beklemeden yeniden kurulur. Eskiden kopukluk sessizlikten anlaşılıyordu (odada 25 sn, dışarıda 75 sn donma).
+- **HTTP bağlantı havuzu ağ değişince yenilenir:** eski ağdaki ölü bağlantı yüzünden ilk istek (hediye, mesaj)
+  "Sunucuya ulaşılamadı" ile düşmez.
+- **Açılış hızlandı:** ayarlar, dil, ses işleme ve oturum hazırlığı sırayla değil aynı anda yapılır (en kötü durum 13 sn → 5 sn).
+- İncelenip sağlam bulunanlar (değişmedi): soket canlılık denetimi / üstel bekleme / oda aboneliği onayı ve yeniden
+  bağlanınca durum eşitleme; token yenilemenin tekilleştirilmesi; para işlemlerinde tek seferlik anahtar (idempotency).
+
+## v2.118.4 — SMS doğrulaması: gerçek hata nedeni gösterilir
+- SMS gönderilemezse Firebase'in asıl nedeni ekranda yazar (Blaze planı yok / SHA parmak izi eklenmemiş / telefon girişi
+  kapalı) ve Hata kayıtlarına düşer. Uygulama tarafı (kalıcı imza, ayarlar) zaten hazır; kalan adımlar Firebase konsolunda.
+
+## v2.118.3 — Bildirim ve mesaj rozetleri: okunan artık kalmaz
+- Bildirimler / aile sohbeti / resmî kanallar: önce "okundu" işareti beklenir, sonra rozet yenilenir (eskiden rozet önce
+  yenilendiği için okunan bildirim sayıda kalıyordu).
+- Geç dönen eski sayım yeni sayımı ezmez (aynı anda birden çok yenileme olduğunda rozet geri geliyordu).
+- Kapalı hesaplardan ya da engellenen kişilerden gelen mesajlar / istekler rozette sayılmaz (listede görünmedikleri için
+  rozet hiç sönmüyordu). Arkadaşlık isteği ve yeni takipçi rozeti de aynı kurala uyar.
+- Bildirim kartı sayısı sekme rozetiyle aynı kuralla sayılır.
+- Sohbet açıkken gelen mesaj hafif bir istekle okundu işaretlenir (POST /api/messages/with/:id/read).
+- Mesajlar sekmesi, başka yerden okunan mesajlarda kendiliğinden yenilenir.
+- Bildirimler sayfası açılınca telefonun bildirim çubuğundaki TR Live bildirimleri de silinir.
+
+## v2.118.2 — Oda sesi kapalıyken hiçbir ses gelmez; hediye/giriş sesi tek ve senkron
+- **Asıl neden bulundu:** şeffaf MP4 oynatıcısı (Tencent VAP), videonun ses izini kendi içinde çalıyordu; hiçbir ayara
+  (oda sesi kapalı, hediye sesi kapalı, telefon araması) uymuyordu. Uygulama da aynı sesi ayrıca çaldığı için ses iki kez,
+  biri geriden geliyordu. Oynatıcı yerel kopyaya alındı (mobile/yerel/flutter_vap_kit) ve kendi sesi Android + iOS'ta kapatıldı.
+- Artık hediye / giriş / araç sesi yalnızca uygulamanın oynatıcısından, görüntüyle aynı anda ve ayarlara bağlı çalar.
+- Oda sesi kapalıyken: konuşmacılar, oda müziği, hediye / giriş / araç sesleri, PK videosu — hepsi susar.
+- Mağaza / çerçeve önizlemelerindeki MP4'ler de artık ses çıkarmaz.
+
+## v2.118.1 — Kulaklıkla ses gitmiyor / gelmiyor düzeltmesi
+- Kulaklık (kablolu / Bluetooth) takılınca ses artık "medya" moduna alınmıyor; bu geçiş bazı telefonlarda mikrofonu ve
+  odanın sesini kesiyordu. Her zaman görüşme modu kullanılır, ses otomatik olarak kulaklığa yönlenir.
+
 ## v2.118.0 — Müzik, ses, SWIP, profil kartı, şanslı hediye ve diğer düzeltmeler
 - **Müzik:** çalan müziği yalnızca başlatan kişi (DJ) yönetir; başkası açınca/kapatınca artık devralmaz, eski şarkı onda görünmez.
   Şarkı değiştirme hızlandı: DJ yüklemeyi beklemez, şarkı telefondan hemen başlar; yükleme sürerken başka şarkı seçilebilir.

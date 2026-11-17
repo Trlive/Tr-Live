@@ -264,6 +264,11 @@ class _GiftSheetState extends State<_GiftSheet> with SingleTickerProviderStateMi
     final key = (_pendingKey != null && _pendingSig == sig) ? _pendingKey! : Api.newIdempotencyKey();
     _pendingKey = key;
     _pendingSig = sig;
+    // Bakiye dokunur dokunmaz düşer (diğer uygulamalardaki gibi); kesin değer sunucu yanıtıyla gelir, hata olursa
+    // sunucudan yeniden okunur.
+    final have = BigInt.tryParse(Session.coins) ?? BigInt.zero;
+    final cost = _total;
+    if (have >= cost) Session.setCoins((have - cost).toString());
     Map<String, dynamic>? r;
     try {
       r = await Api.postOnce('/api/rooms/${widget.roomId}/gifts/send', body, key: key);
@@ -277,6 +282,7 @@ class _GiftSheetState extends State<_GiftSheet> with SingleTickerProviderStateMi
     setState(() => _sending = false);
     if (r == null) {
       setState(() => _queued = 0);
+      unawaited(Session.refresh().catchError((_) {}));
       return;
     }
     Session.setCoins((r['balance'] ?? Session.coins).toString());

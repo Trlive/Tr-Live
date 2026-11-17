@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/api.dart';
+import '../services/inbox_service.dart';
+import '../services/push_service.dart';
 import '../services/room_dock.dart';
 import 'home_screen.dart' show openRoom;
 import '../services/session.dart';
@@ -51,10 +53,20 @@ class _NotificationsPageState extends State<NotificationsPage> {
         _items = list;
         _error = null;
       });
-      Api.post('/api/me/notifications/seen').catchError((_) => <String, dynamic>{});
+      // Okundu işareti BEKLENİR, sonra rozet yenilenir (eskiden sayfa kapanınca rozet okundu işaretinden önce
+      // yenilendiği için okunan bildirim rozette kalıyordu).
+      await _markSeen();
     } catch (e) {
       if (mounted) setState(() => _error = errorText(e));
     }
+  }
+
+  Future<void> _markSeen() async {
+    try {
+      await Api.post('/api/me/notifications/seen');
+    } catch (_) {}
+    unawaited(PushService.clearSocial());
+    await Inbox.refresh();
   }
 
   IconData _icon(String kind) => switch (kind) {
@@ -70,6 +82,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
         'agency_transfer' => Icons.swap_horiz_rounded,
         'agency_assistant' => Icons.support_agent,
         'agency_salary' => Icons.payments_rounded,
+        'dealer_credit' => Icons.monetization_on_rounded,
         _ => Icons.notifications_rounded,
       };
 
@@ -179,6 +192,14 @@ class _FamilyChatPageState extends State<FamilyChatPage> {
 
   String get _base => '/api/families/${widget.familyId}/chat';
 
+  /// Okundu işaretlenir, ardından sekme rozeti yenilenir (sıra önemli: önce işaret, sonra sayım).
+  Future<void> _seen() async {
+    try {
+      await Api.post('$_base/seen');
+    } catch (_) {}
+    await Inbox.refresh();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -189,7 +210,7 @@ class _FamilyChatPageState extends State<FamilyChatPage> {
       if (m == null || _msgs.any((x) => x['id'] == m['id'])) return;
       setState(() => _msgs.add(m));
       _toEnd();
-      Api.post('$_base/seen').catchError((_) => <String, dynamic>{});
+      _seen();
     });
   }
 
@@ -213,7 +234,7 @@ class _FamilyChatPageState extends State<FamilyChatPage> {
         _error = null;
       });
       _toEnd();
-      Api.post('$_base/seen').catchError((_) => <String, dynamic>{});
+      await _seen();
     } catch (e) {
       if (mounted) {
         setState(() {

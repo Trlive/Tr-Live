@@ -24,7 +24,7 @@ const lastState = createKeyedThrottle();
 import { drawLuckyPool, LUCKY_BASE, luckyTables, poolView, JACKPOT_OPEN } from '../lucky.js';
 import { getConfig } from '../services/app_config.js';
 import { featuresFor, minLevelFor, wipLabel } from '../services/wip.js';
-import { addGiftExp } from '../services/cp.js';
+import { addGiftExp, CP_GIFT_MULTIPLIER_BPS } from '../services/cp.js';
 import { addGuardianPoints } from '../services/guardian.js';
 import { addFamilyContribBatch } from '../services/family.js';
 
@@ -183,66 +183,176 @@ router.post('/rooms/:roomId/gifts/send', userLimit('gift', 180, 60e3), idempoten
     const qualifying = [];
     const familyContrib = [];
     let selfValue = 0n;
-    for (const item of allocation) {
-      const coinAmount = BigInt(gift.coin_price) * BigInt(item.quantity);
-      const credit = creditOf(coinAmount); // alıcıya geçen Elmas (normal hediyede = coinAmount)
+    // Çok alıcılı gönderim ("Tüm Oda" / "Tüm Koltuk" / çoklu seçim): her alıcı için ~12 sorgu SIRAYLA yerine her adım
+    // TEK sorguda tüm alıcılar için yapılır (50 kişide ~600 sorgu → ~12). Tek alıcıda eski (aşağıdaki) yol kullanılır.
+    // Sonuç ve kayıtlar birebir aynıdır; alıcılar benzersiz olmalıdır (değilse eski yol).
+    const uniqueRecipients = new Set(allocation.map((a) => a.userId)).size === allocation.length;
+    if (allocation.length > 1 && uniqueRecipients) {
+      const price = BigInt(gift.coin_price);
+      const items = allocation.map((item) => {
+        const coinAmount = price * BigInt(item.quantity);
+        return { ...item, coinAmount, credit: creditOf(coinAmount) };
+      });
+      const ids = items.map((x) => x.userId);
       const recv = (await c.query(
-        `UPDATE users SET diamonds = diamonds + $1, total_received_diamonds = total_received_diamonds + $1, updated_at = NOW()
-         WHERE id = $2 RETURNING total_received_diamonds, host_level_exp_bonus`,
-        [credit.toString(), item.userId],
-      )).rows[0];
-      await c.query(`UPDATE users SET gift_level = $1 WHERE id = $2`, [levelFromExp(levelExp(recv.total_received_diamonds, recv.host_level_exp_bonus)), item.userId]);
-
-      const gt = (await c.query(
-        `INSERT INTO gift_transactions(room_id, sender_id, receiver_id, gift_id, quantity, coin_amount, diamond_amount, receiver_agency_id)
-         VALUES($1,$2,$3,$4,$5,$6,$7,(SELECT b.agency_id FROM broadcasters b JOIN agencies a ON a.id = b.agency_id
-                                   WHERE b.user_id = $3 AND b.status = 'approved' AND a.status = 'active')) RETURNING id`,
-        [roomId, senderId, item.userId, gift.id, item.quantity, coinAmount.toString(), lucky ? credit.toString() : null],
-      )).rows[0];
-      // Oda içi sayı tahtası (mikrofon koltuğu başına toplam). Kendine hediye de tahtada görünür.
+        `UPDATE users u SET diamonds = u.diamonds + v.credit, total_received_diamonds = u.total_received_diamonds + v.credit, updated_at = NOW()
+         FROM unnest($1::uuid[], $2::bigint[]) AS v(id, credit) WHERE u.id = v.id
+         RETURNING u.id, u.total_received_diamonds, u.host_level_exp_bonus`,
+        [ids, items.map((x) => x.credit.toString())],
+      )).rows;
       await c.query(
-        `INSERT INTO room_gift_totals(room_id, user_id, total_coins, total_count) VALUES($1,$2,$3,$4)
+        `UPDATE users u SET gift_level = v.lvl FROM unnest($1::uuid[], $2::int[]) AS v(id, lvl) WHERE u.id = v.id`,
+        [recv.map((r) => r.id), recv.map((r) => levelFromExp(levelExp(r.total_received_diamonds, r.host_level_exp_bonus)))],
+      );
+      const gts = (await c.query(
+        `INSERT INTO gift_transactions(room_id, sender_id, receiver_id, gift_id, quantity, coin_amount, diamond_amount, receiver_agency_id)
+         SELECT $1, $2, v.rid, $3, v.qty, v.coin, v.dia,
+                (SELECT b.agency_id FROM broadcasters b JOIN agencies a ON a.id = b.agency_id
+                 WHERE b.user_id = v.rid AND b.status = 'approved' AND a.status = 'active')
+         FROM unnest($4::uuid[], $5::bigint[], $6::bigint[], $7::bigint[]) WITH ORDINALITY AS v(rid, qty, coin, dia, ord)
+         ORDER BY v.ord
+         RETURNING id, receiver_id`,
+        [roomId, senderId, gift.id, ids, items.map((x) => String(x.quantity)), items.map((x) => x.coinAmount.toString()),
+          items.map((x) => (lucky ? x.credit.toString() : null))],
+      )).rows;
+      const gtOf = new Map(gts.map((g) => [g.receiver_id, g.id]));
+      // Oda içi sayı tahtası.
+      await c.query(
+        `INSERT INTO room_gift_totals(room_id, user_id, total_coins, total_count)
+         SELECT $1, v.uid, v.coins, v.n FROM unnest($2::uuid[], $3::bigint[], $4::bigint[]) AS v(uid, coins, n)
          ON CONFLICT (room_id, user_id) DO UPDATE SET total_coins = room_gift_totals.total_coins + EXCLUDED.total_coins,
            total_count = room_gift_totals.total_count + EXCLUDED.total_count, updated_at = NOW()`,
-        [roomId, item.userId, credit.toString(), item.quantity],
+        [roomId, ids, items.map((x) => x.credit.toString()), items.map((x) => String(x.quantity))],
       );
-      // CP yakınlığı: iki kişi arasındaki hediye Coin değeri kadar exp (CP hediyesi 1,5 kat).
-      await addGiftExp((t, p) => c.query(t, p), senderId, item.userId, credit, gift.category === 'cp');
-      // Koruyucu puanı: gönderen alıcının koruyucusuysa 1 Coin = 1 puan.
-      await addGuardianPoints((t, p) => c.query(t, p), senderId, item.userId, credit);
-      const pkId = await scorePk(c, roomId, item.userId, senderId, credit, credit);
-      if (pkId) pkIds.add(pkId);
-      // Oda içi PK: alıcı Kırmızı / Mavi takım koltuğundaysa takım puanı.
-      roomPkId = (await scoreRoomPk(c, roomId, item.userId, senderId, credit, credit)) ?? roomPkId;
-      await c.query(
-        `INSERT INTO wallet_transactions(user_id, transaction_type, coin_amount, reference_id, description) VALUES($1,'gift_sent',$2,$3,$4)`,
-        [senderId, (-coinAmount).toString(), gt.id, `Hediye: ${gift.name} x${item.quantity}`],
-      );
-      if (credit > 0n) {
+      // CP yakınlığı ve koruyucu puanı (kendine hediye hariç; tek sorguda).
+      const others = items.filter((x) => x.userId !== senderId && x.credit > 0n);
+      if (others.length) {
+        const pairs = others.map((x) => {
+          let exp = x.credit;
+          if (gift.category === 'cp') exp = (exp * BigInt(CP_GIFT_MULTIPLIER_BPS)) / 10000n;
+          const [pa, pb] = senderId < x.userId ? [senderId, x.userId] : [x.userId, senderId];
+          return { pa, pb, exp };
+        }).filter((x) => x.exp > 0n);
+        if (pairs.length) {
+          await c.query(
+            `INSERT INTO cp_pairs(user_a, user_b, exp) SELECT v.a, v.b, v.e FROM unnest($1::uuid[], $2::uuid[], $3::bigint[]) AS v(a, b, e)
+             ON CONFLICT (user_a, user_b) DO UPDATE SET exp = cp_pairs.exp + EXCLUDED.exp, updated_at = NOW()`,
+            [pairs.map((x) => x.pa), pairs.map((x) => x.pb), pairs.map((x) => x.exp.toString())],
+          );
+        }
         await c.query(
-          `INSERT INTO wallet_transactions(user_id, transaction_type, diamond_amount, reference_id, description) VALUES($1,'gift_received',$2,$3,$4)`,
-          [item.userId, credit.toString(), gt.id, `Hediye: ${gift.name} x${item.quantity}`],
+          `UPDATE guardians g SET points = g.points + v.amt, last_gift_at = NOW(), updated_at = NOW()
+           FROM unnest($1::uuid[], $2::bigint[]) AS v(owner, amt) WHERE g.owner_id = v.owner AND g.guardian_id = $3`,
+          [others.map((x) => x.userId), others.map((x) => x.credit.toString()), senderId],
         );
       }
-
-      // Aile katkısı: alıcının ailesine alınan Elmas, gönderenin ailesine harcanan Coin (işlem sonunda toplu).
-      // Kendine hediye aileye ve başkan indirimine sayılmaz.
-      if (item.userId !== senderId) familyContrib.push({ userId: item.userId, points: credit }, { userId: senderId, points: credit });
-      else selfValue += credit;
-
-      // Gizli odanın kimliği tüm kullanıcılara yayılmasın: global şerit/kayıt yalnızca açık odalarda.
-      // Şanslı hediye hediye şeridine girmez; büyük kazancı ayrı "şanslı kazanç" şeridiyle duyurulur.
-      if (!lucky && coinAmount >= config.globalGiftMinCoins && !room.is_hidden) {
+      // PK'lar: odada süren PK yoksa alıcı başına sorgu hiç yapılmaz (çoğu durum).
+      const pkLive = (await c.query(
+        `SELECT EXISTS (SELECT 1 FROM pk_battles WHERE status = 'active' AND ends_at > NOW() AND (room_a = $1 OR room_b = $1)) AS pk,
+                EXISTS (SELECT 1 FROM room_pk WHERE room_id = $1 AND status = 'active' AND ends_at > NOW()) AS rpk`,
+        [roomId],
+      )).rows[0];
+      for (const x of items) {
+        if (pkLive.pk) {
+          const pkId = await scorePk(c, roomId, x.userId, senderId, x.credit, x.credit);
+          if (pkId) pkIds.add(pkId);
+        }
+        if (pkLive.rpk) roomPkId = (await scoreRoomPk(c, roomId, x.userId, senderId, x.credit, x.credit)) ?? roomPkId;
+      }
+      // Cüzdan kayıtları (gönderen: alıcı başına bir satır, alıcılar: Elmas).
+      await c.query(
+        `INSERT INTO wallet_transactions(user_id, transaction_type, coin_amount, reference_id, description)
+         SELECT $1, 'gift_sent', v.amt, v.ref, v.descr FROM unnest($2::bigint[], $3::text[], $4::text[]) WITH ORDINALITY AS v(amt, ref, descr, ord) ORDER BY v.ord`,
+        [senderId, items.map((x) => (-x.coinAmount).toString()), items.map((x) => String(gtOf.get(x.userId))), items.map((x) => `Hediye: ${gift.name} x${x.quantity}`)],
+      );
+      const credited = items.filter((x) => x.credit > 0n);
+      if (credited.length) {
+        await c.query(
+          `INSERT INTO wallet_transactions(user_id, transaction_type, diamond_amount, reference_id, description)
+           SELECT v.uid, 'gift_received', v.amt, v.ref, v.descr FROM unnest($1::uuid[], $2::bigint[], $3::text[], $4::text[]) AS v(uid, amt, ref, descr)`,
+          [credited.map((x) => x.userId), credited.map((x) => x.credit.toString()), credited.map((x) => String(gtOf.get(x.userId))), credited.map((x) => `Hediye: ${gift.name} x${x.quantity}`)],
+        );
+      }
+      // Global şerit (açık odalarda, eşiği geçen normal hediyeler).
+      const global = !lucky && !room.is_hidden ? items.filter((x) => x.coinAmount >= config.globalGiftMinCoins) : [];
+      if (global.length) {
         await c.query(
           `INSERT INTO global_gift_events(gift_transaction_id, room_id, sender_id, receiver_id, coin_amount, display_level)
-           VALUES($1,$2,$3,$4,$5,$6)`,
-          [gt.id, roomId, senderId, item.userId, coinAmount.toString(), giftDisplayLevel(coinAmount)],
+           SELECT v.gt, $1, $2, v.rid, v.coin, v.lvl FROM unnest($3::uuid[], $4::uuid[], $5::bigint[], $6::int[]) AS v(gt, rid, coin, lvl)`,
+          [roomId, senderId, global.map((x) => gtOf.get(x.userId)), global.map((x) => x.userId), global.map((x) => x.coinAmount.toString()),
+            global.map((x) => giftDisplayLevel(x.coinAmount))],
         );
-        qualifying.push({ userId: item.userId, coinAmount, quantity: item.quantity });
       }
-      transactions.push({
-        id: gt.id, receiverId: item.userId, quantity: item.quantity, coinAmount: coinAmount.toString(), diamondAmount: credit.toString(),
-      });
+      for (const x of items) {
+        if (x.userId !== senderId) familyContrib.push({ userId: x.userId, points: x.credit }, { userId: senderId, points: x.credit });
+        else selfValue += x.credit;
+        if (global.includes(x)) qualifying.push({ userId: x.userId, coinAmount: x.coinAmount, quantity: x.quantity });
+        transactions.push({
+          id: gtOf.get(x.userId), receiverId: x.userId, quantity: x.quantity, coinAmount: x.coinAmount.toString(), diamondAmount: x.credit.toString(),
+        });
+      }
+    } else {
+      for (const item of allocation) {
+        const coinAmount = BigInt(gift.coin_price) * BigInt(item.quantity);
+        const credit = creditOf(coinAmount); // alıcıya geçen Elmas (normal hediyede = coinAmount)
+        const recv = (await c.query(
+          `UPDATE users SET diamonds = diamonds + $1, total_received_diamonds = total_received_diamonds + $1, updated_at = NOW()
+           WHERE id = $2 RETURNING total_received_diamonds, host_level_exp_bonus`,
+          [credit.toString(), item.userId],
+        )).rows[0];
+        await c.query(`UPDATE users SET gift_level = $1 WHERE id = $2`, [levelFromExp(levelExp(recv.total_received_diamonds, recv.host_level_exp_bonus)), item.userId]);
+
+        const gt = (await c.query(
+          `INSERT INTO gift_transactions(room_id, sender_id, receiver_id, gift_id, quantity, coin_amount, diamond_amount, receiver_agency_id)
+           VALUES($1,$2,$3,$4,$5,$6,$7,(SELECT b.agency_id FROM broadcasters b JOIN agencies a ON a.id = b.agency_id
+                                     WHERE b.user_id = $3 AND b.status = 'approved' AND a.status = 'active')) RETURNING id`,
+          [roomId, senderId, item.userId, gift.id, item.quantity, coinAmount.toString(), lucky ? credit.toString() : null],
+        )).rows[0];
+        // Oda içi sayı tahtası (mikrofon koltuğu başına toplam). Kendine hediye de tahtada görünür.
+        await c.query(
+          `INSERT INTO room_gift_totals(room_id, user_id, total_coins, total_count) VALUES($1,$2,$3,$4)
+           ON CONFLICT (room_id, user_id) DO UPDATE SET total_coins = room_gift_totals.total_coins + EXCLUDED.total_coins,
+             total_count = room_gift_totals.total_count + EXCLUDED.total_count, updated_at = NOW()`,
+          [roomId, item.userId, credit.toString(), item.quantity],
+        );
+        // CP yakınlığı: iki kişi arasındaki hediye Coin değeri kadar exp (CP hediyesi 1,5 kat).
+        await addGiftExp((t, p) => c.query(t, p), senderId, item.userId, credit, gift.category === 'cp');
+        // Koruyucu puanı: gönderen alıcının koruyucusuysa 1 Coin = 1 puan.
+        await addGuardianPoints((t, p) => c.query(t, p), senderId, item.userId, credit);
+        const pkId = await scorePk(c, roomId, item.userId, senderId, credit, credit);
+        if (pkId) pkIds.add(pkId);
+        // Oda içi PK: alıcı Kırmızı / Mavi takım koltuğundaysa takım puanı.
+        roomPkId = (await scoreRoomPk(c, roomId, item.userId, senderId, credit, credit)) ?? roomPkId;
+        await c.query(
+          `INSERT INTO wallet_transactions(user_id, transaction_type, coin_amount, reference_id, description) VALUES($1,'gift_sent',$2,$3,$4)`,
+          [senderId, (-coinAmount).toString(), gt.id, `Hediye: ${gift.name} x${item.quantity}`],
+        );
+        if (credit > 0n) {
+          await c.query(
+            `INSERT INTO wallet_transactions(user_id, transaction_type, diamond_amount, reference_id, description) VALUES($1,'gift_received',$2,$3,$4)`,
+            [item.userId, credit.toString(), gt.id, `Hediye: ${gift.name} x${item.quantity}`],
+          );
+        }
+
+        // Aile katkısı: alıcının ailesine alınan Elmas, gönderenin ailesine harcanan Coin (işlem sonunda toplu).
+        // Kendine hediye aileye ve başkan indirimine sayılmaz.
+        if (item.userId !== senderId) familyContrib.push({ userId: item.userId, points: credit }, { userId: senderId, points: credit });
+        else selfValue += credit;
+
+        // Gizli odanın kimliği tüm kullanıcılara yayılmasın: global şerit/kayıt yalnızca açık odalarda.
+        // Şanslı hediye hediye şeridine girmez; büyük kazancı ayrı "şanslı kazanç" şeridiyle duyurulur.
+        if (!lucky && coinAmount >= config.globalGiftMinCoins && !room.is_hidden) {
+          await c.query(
+            `INSERT INTO global_gift_events(gift_transaction_id, room_id, sender_id, receiver_id, coin_amount, display_level)
+             VALUES($1,$2,$3,$4,$5,$6)`,
+            [gt.id, roomId, senderId, item.userId, coinAmount.toString(), giftDisplayLevel(coinAmount)],
+          );
+          qualifying.push({ userId: item.userId, coinAmount, quantity: item.quantity });
+        }
+        transactions.push({
+          id: gt.id, receiverId: item.userId, quantity: item.quantity, coinAmount: coinAmount.toString(), diamondAmount: credit.toString(),
+        });
+      }
     }
     // Aile katkısı ve başkan indirimi (aile satırları sıralı güncellenir).
     await addFamilyContribBatch((t, p) => c.query(t, p), familyContrib, { userId: senderId, coins: totalValue - selfValue });

@@ -76,10 +76,20 @@ class _MessagesHomeState extends State<MessagesHome> {
   final Set<String> _typing = {}; // şu an yazan kişiler (listede "yazıyor..." görünür)
   final Map<String, Timer> _typingTimers = {};
 
+  /// Sekme rozeti (tek doğru kaynak) değişince liste ve kartlar da yenilenir: başka yerden (profil → sohbet, bildirim)
+  /// okunan mesajın sayısı burada eskiden kalıyordu.
+  void _onTotal() {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 300), () {
+      if (mounted) _load();
+    });
+  }
+
   @override
   void initState() {
     super.initState();
     _load();
+    Inbox.unread.addListener(_onTotal);
     _sub = SocketService.instance.events.listen((e) {
       if (!mounted) return;
       if (e['type'] == 'typing') {
@@ -110,6 +120,7 @@ class _MessagesHomeState extends State<MessagesHome> {
 
   @override
   void dispose() {
+    Inbox.unread.removeListener(_onTotal);
     _sub?.cancel();
     _debounce?.cancel();
     for (final t in _typingTimers.values) {
@@ -752,7 +763,7 @@ class _OfficialChannelScreenState extends State<OfficialChannelScreen> {
   void initState() {
     super.initState();
     // Kart açıldı: yalnızca bu türün rozeti sıfırlanır.
-    Api.post('/api/inbox-summary/seen', {'kind': widget.kind}).catchError((_) => <String, dynamic>{});
+    Api.post('/api/inbox-summary/seen', {'kind': widget.kind}).then((_) => Inbox.refresh()).catchError((_) {});
   }
 
   @override

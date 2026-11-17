@@ -35,11 +35,10 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   static const _dim = Pal.textDim;
 
   Future<Map<String, dynamic>> _load() async {
+    // Profil ve kart (hediyeler, madalyalar) aynı anda istenir; kart yüklenemezse boş gösterilir.
+    final cardF = Api.get('/api/users/${widget.userId}/card').catchError((_) => <String, dynamic>{});
     final p = mapOf((await Api.get('/api/users/${widget.userId}'))['profile']) ?? {};
-    Map<String, dynamic> card = {};
-    try {
-      card = await Api.get('/api/users/${widget.userId}/card');
-    } catch (_) {/* kart yüklenemezse boş göster */}
+    final card = await cardF;
     return {'p': p, 'card': card};
   }
 
@@ -56,8 +55,19 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
 
   Widget _profileOf(String id) => UserProfileScreen(userId: id);
 
+  bool _followBusy = false;
+
+  /// Takip et / bırak ANINDA değişir (düğme ve Fan sayısı); sunucu reddederse eski haline döner. Eskiden her dokunuşta
+  /// tüm profil yeniden yükleniyordu (bekleme + ekran titremesi).
   Future<void> _toggleFollow(Map<String, dynamic> p) async {
+    if (_followBusy) return;
+    _followBusy = true;
     final following = p['isFollowing'] == true;
+    final fans = int.tryParse('${p['followers'] ?? ''}');
+    setState(() {
+      p['isFollowing'] = !following;
+      if (fans != null) p['followers'] = fans + (following ? -1 : 1);
+    });
     final r = await guard<bool>(context, () async {
       if (following) {
         await Api.delete('/api/users/${widget.userId}/follow');
@@ -66,7 +76,13 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       }
       return true;
     });
-    if (r == true && mounted) setState(() => _version++);
+    _followBusy = false;
+    if (r != true && mounted) {
+      setState(() {
+        p['isFollowing'] = following;
+        if (fans != null) p['followers'] = fans;
+      });
+    }
   }
 
   Future<void> _friendAction(Map<String, dynamic> p) async {
@@ -509,7 +525,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             version: _version,
             load: _load,
             builder: (context, data, reload) {
-              final p = mapOf(data['p']) ?? {};
+              final p = data['p'] is Map<String, dynamic> ? data['p'] as Map<String, dynamic> : (mapOf(data['p']) ?? {}); // aynı nesne: takip anında değişsin
               final card = mapOf(data['card']) ?? {};
               final isSelf = widget.userId == Session.id;
               final hidden = p['isHidden'] == true && p['username'] == 'Gizli Kullanıcı';

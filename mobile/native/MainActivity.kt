@@ -10,6 +10,8 @@ import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -48,6 +50,9 @@ class MainActivity : FlutterActivity() {
     private var lastSent: Boolean? = null
     private var polling = false
     private var headsetSink: EventChannel.EventSink? = null
+    private var netSink: EventChannel.EventSink? = null
+    private var netCallback: ConnectivityManager.NetworkCallback? = null
+    private var lastNetwork: String? = null
     private var deviceCallback: AudioDeviceCallback? = null
     private var shotSink: EventChannel.EventSink? = null
     private var shotCallback: Any? = null
@@ -264,6 +269,51 @@ class MainActivity : FlutterActivity() {
                 result.error("beauty", e.toString(), null)
             }
         }
+        // Ağ değişimi (Wi-Fi ↔ mobil veri, bağlantı geldi / gitti): WhatsApp / Bigo gibi bağlantı ANINDA yenilensin.
+        // Eskiden yalnızca sessizlikten (odada 25 sn, dışarıda 75 sn) anlaşılıyordu. "wifi" / "cell" / "other" / "none".
+        EventChannel(messenger, "trlive/network").setStreamHandler(object : EventChannel.StreamHandler {
+            override fun onListen(arguments: Any?, sink: EventChannel.EventSink?) {
+                netSink = sink
+                val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return
+                if (Build.VERSION.SDK_INT < 24) return
+                val cb = object : ConnectivityManager.NetworkCallback() {
+                    private fun kind(caps: NetworkCapabilities?): String = when {
+                        caps == null -> "none"
+                        caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "wifi"
+                        caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "cell"
+                        else -> "other"
+                    }
+                    private fun send(v: String) {
+                        main.post {
+                            if (v == lastNetwork) return@post
+                            lastNetwork = v
+                            netSink?.success(v)
+                        }
+                    }
+                    override fun onAvailable(network: Network) {
+                        send(kind(cm.getNetworkCapabilities(network)) + ":" + network.toString())
+                    }
+                    override fun onLost(network: Network) {
+                        send("none")
+                    }
+                }
+                try {
+                    cm.registerDefaultNetworkCallback(cb)
+                    netCallback = cb
+                } catch (e: Exception) {
+                }
+            }
+
+            override fun onCancel(arguments: Any?) {
+                netSink = null
+                val cb = netCallback ?: return
+                try {
+                    (getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager)?.unregisterNetworkCallback(cb)
+                } catch (e: Exception) {
+                }
+                netCallback = null
+            }
+        })
         // Kulaklık (kablolu / Bluetooth) takılınca / çıkarılınca true / false gönderilir.
         EventChannel(messenger, "trlive/headset").setStreamHandler(object : EventChannel.StreamHandler {
             override fun onListen(arguments: Any?, sink: EventChannel.EventSink?) {
@@ -456,6 +506,12 @@ class MainActivity : FlutterActivity() {
         }
         deviceCallback = null
         headsetSink = null
+        try {
+            netCallback?.let { (getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager)?.unregisterNetworkCallback(it) }
+        } catch (e: Exception) {
+        }
+        netCallback = null
+        netSink = null
         super.onDestroy()
     }
 

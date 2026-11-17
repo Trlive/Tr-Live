@@ -241,7 +241,8 @@ class UserAvatar extends StatelessWidget {
   }
 }
 
-/// Gizli kullanıcının görseli (gizemli kişi): koyu mor küre, silik siluet ve ortada parlayan soru işareti.
+/// Gizli kullanıcının görseli (v2.123, uygulama renkleri): siyah-altın küre, altın halka ve ortada parlayan altın
+/// maskeli balo maskesi (Yoho / Bigo "Gizemli Kişi" gibi; mor soru işareti yerine). Boyuta göre ölçeklenir.
 class HiddenAvatar extends StatelessWidget {
   final double radius;
   const HiddenAvatar({super.key, this.radius = 22});
@@ -256,28 +257,72 @@ class HiddenAvatar extends StatelessWidget {
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         gradient: const RadialGradient(
-          center: Alignment(0, -0.35),
-          radius: 0.95,
-          colors: [Color(0xFF5B3FA8), Color(0xFF2A1C5C), Color(0xFF120C2A)],
+          center: Alignment(0, -0.4),
+          radius: 1.0,
+          colors: [Color(0xFF3A2A0C), Color(0xFF17110A), Color(0xFF0B0906)],
           stops: [0, 0.55, 1],
         ),
-        border: Border.all(color: const Color(0xAAC4B5FD), width: r * 0.05 < 1 ? 1 : r * 0.05),
+        border: Border.all(color: const Color(0xFFF2B92A), width: r * 0.06 < 1 ? 1 : r * 0.06),
+        boxShadow: [BoxShadow(color: const Color(0xFFF2B92A).withValues(alpha: 0.25), blurRadius: r * 0.3)],
       ),
-      child: Stack(alignment: Alignment.center, children: [
-        Positioned(bottom: -r * 0.3, child: Icon(Icons.person_rounded, size: r * 1.9, color: const Color(0x38E9D8FD))),
-        Text(
-          '?',
-          style: TextStyle(
-            fontSize: r * 0.95,
-            height: 1.0,
-            fontWeight: FontWeight.w900,
-            color: const Color(0xFFE9D8FD),
-            shadows: [Shadow(color: const Color(0xFF8B5CF6), blurRadius: r * 0.3)],
-          ),
-        ),
-      ]),
+      child: CustomPaint(painter: _MaskPainter()),
     );
   }
+}
+
+/// Altın maske: iki göz boşluklu, uçları kıvrık maske + üstte küçük parıltı.
+class _MaskPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width, h = size.height;
+    final cx = w / 2, cy = h * 0.5;
+    final mw = w * 0.74, mh = h * 0.30;
+    final l = cx - mw / 2, t = cy - mh / 2;
+    final mask = Path()
+      ..moveTo(l, t + mh * 0.15)
+      ..cubicTo(l + mw * 0.18, t - mh * 0.05, l + mw * 0.38, t + mh * 0.05, cx, t + mh * 0.32)
+      ..cubicTo(l + mw * 0.62, t + mh * 0.05, l + mw * 0.82, t - mh * 0.05, l + mw, t + mh * 0.15)
+      ..cubicTo(l + mw * 0.98, t + mh * 0.75, l + mw * 0.78, t + mh * 1.05, l + mw * 0.6, t + mh * 0.95)
+      ..cubicTo(l + mw * 0.54, t + mh * 0.9, l + mw * 0.53, t + mh * 0.72, cx, t + mh * 0.72)
+      ..cubicTo(l + mw * 0.47, t + mh * 0.72, l + mw * 0.46, t + mh * 0.9, l + mw * 0.4, t + mh * 0.95)
+      ..cubicTo(l + mw * 0.22, t + mh * 1.05, l + mw * 0.02, t + mh * 0.75, l, t + mh * 0.15)
+      ..close();
+    // Göz boşlukları (çift yönlü doldurma ile delik).
+    final eyes = Path()
+      ..addOval(Rect.fromCenter(center: Offset(cx - mw * 0.2, t + mh * 0.5), width: mw * 0.2, height: mh * 0.34))
+      ..addOval(Rect.fromCenter(center: Offset(cx + mw * 0.2, t + mh * 0.5), width: mw * 0.2, height: mh * 0.34));
+    final shape = Path.combine(PathOperation.difference, mask, eyes);
+    final bounds = Rect.fromLTWH(l, t, mw, mh);
+    canvas.drawShadow(shape, Colors.black, h * 0.04, false);
+    canvas.drawPath(
+      shape,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFFFFF1B8), Color(0xFFFFD54F), Color(0xFFF2B92A), Color(0xFF9A6A0A)],
+          stops: [0, 0.3, 0.65, 1],
+        ).createShader(bounds),
+    );
+    canvas.drawPath(shape, Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = (w * 0.02).clamp(0.6, 2.0)
+      ..color = const Color(0xFF6B4A06));
+    // Alnındaki küçük yıldız parıltısı.
+    final sp = Offset(cx, t - mh * 0.28);
+    final r = w * 0.06;
+    final star = Path()
+      ..moveTo(sp.dx, sp.dy - r)
+      ..quadraticBezierTo(sp.dx, sp.dy, sp.dx + r, sp.dy)
+      ..quadraticBezierTo(sp.dx, sp.dy, sp.dx, sp.dy + r)
+      ..quadraticBezierTo(sp.dx, sp.dy, sp.dx - r, sp.dy)
+      ..quadraticBezierTo(sp.dx, sp.dy, sp.dx, sp.dy - r)
+      ..close();
+    canvas.drawPath(star, Paint()..color = const Color(0xFFFFE9A0));
+  }
+
+  @override
+  bool shouldRepaint(_MaskPainter old) => false;
 }
 
 /// WIP rozeti (Yoho VIP3 görünümü): koyu parlak hap, ince altın çerçeve, eğik altın "WIP3" yazısı.
@@ -497,6 +542,26 @@ class UserName extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Gizli kullanıcı: altın yazı + küçük maske rozeti (uygulama renkleri; kim olduğu belli olmaz ama özel görünür).
+    if (user?['isHidden'] == true) {
+      final fs = style?.fontSize ?? 14;
+      return Row(mainAxisSize: MainAxisSize.min, children: [
+        HiddenAvatar(radius: fs * 0.55),
+        const SizedBox(width: 4),
+        Flexible(
+          child: ShaderMask(
+            blendMode: BlendMode.srcIn,
+            shaderCallback: (r) => const LinearGradient(colors: [Color(0xFFFFE9A0), Color(0xFFF2B92A), Color(0xFFFFD54F)]).createShader(r),
+            child: Text(
+              (user?['displayName'] ?? '').toString(),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: (style ?? const TextStyle()).copyWith(fontWeight: FontWeight.w800, color: Colors.white),
+            ),
+          ),
+        ),
+      ]);
+    }
     final color = parseColor(user?['nameColor'] as String?);
     return Row(
       mainAxisSize: MainAxisSize.min,

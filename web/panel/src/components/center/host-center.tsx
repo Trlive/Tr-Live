@@ -143,10 +143,35 @@ export function HostHome() {
               )}
               <Section title={t("Hedef")}>
                 {p.next ? (
-                  <p className="text-sm text-gray-300">{t("Seviye {l} için {n} elmas daha gerekiyor (maaş {s}).", { l: p.next.level, n: fmtNumber(p.next.remaining), s: fmtMoney(p.next.salaryCents, cur) })}</p>
+                  <>
+                    <p className="text-sm text-gray-300">{t("Seviye {l} için {n} elmas daha gerekiyor (maaş {s}).", { l: p.next.level, n: fmtNumber(p.next.remaining), s: fmtMoney(p.next.salaryCents, cur) })}</p>
+                    {/* Günlük tempo: dönem sonuna kadar kalan günlere bölünmüş hedef (Bigo / Yoho günlük görev gibi). */}
+                    {p.daysLeft > 0 && (
+                      <p className="mt-1 text-sm font-semibold text-[#f2b92a]">
+                        {t("Günde ortalama {n} elmas ile dönem sonunda bu seviyeye ulaşırsın.", { n: fmtNumber(((BigInt(p.next.remaining) + BigInt(p.daysLeft) - BigInt(1)) / BigInt(p.daysLeft)).toString()) })}
+                      </p>
+                    )}
+                  </>
                 ) : (
                   <p className="text-sm text-gray-300">{t("En üst seviyedesin.")}</p>
                 )}
+                {/* Bugünün geçerli gün ilerlemesi: süre çubuğu. */}
+                {(() => {
+                  const need = p.requirements.validDayMinutes * 60;
+                  const pct = need > 0 ? Math.min(100, Math.round((p.todaySeconds / need) * 100)) : 100;
+                  const left = Math.max(0, need - p.todaySeconds);
+                  return (
+                    <div className="mt-3">
+                      <div className="flex justify-between text-xs text-gray-400">
+                        <span>{t("Bugünkü geçerli gün")}</span>
+                        <span className={left === 0 ? "text-emerald-300" : ""}>{left === 0 ? t("Tamamlandı") : t("{d} kaldı", { d: durationText(left) })}</span>
+                      </div>
+                      <div className="mt-1 h-2 overflow-hidden rounded-full bg-[#2a2418]">
+                        <div className={`h-full rounded-full ${left === 0 ? "bg-emerald-400" : "bg-[#f2b92a]"}`} style={{ width: `${pct}%` }} />
+                      </div>
+                    </div>
+                  );
+                })()}
                 {!p.hoursMet && <p className="mt-2 text-sm text-red-300">{t("Yayın süresi / geçerli gün şartı henüz tamamlanmadı.")}</p>}
                 {p.requireOfficialEvents && (
                   <p className={`mt-2 text-sm ${p.eventsMet ? "text-emerald-300" : "text-red-300"}`}>

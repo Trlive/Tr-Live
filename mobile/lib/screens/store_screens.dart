@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/api.dart';
 import '../services/session.dart';
@@ -154,9 +155,12 @@ class _StoreScreenState extends State<StoreScreen> {
     final r = await guard(context, () => Api.postOnce('/api/store/buy', {'itemId': item['id'], if (toUserId != null) 'toUserId': toUserId}));
     if (r == null || !mounted) return;
     toast(context, toUserId == null ? 'Satın alındı. Görünüm sayfasından etkinleştirebilirsin.' : 'Hediye gönderildi.');
-    try {
-      await Session.refresh();
-    } catch (_) {}
+    // Yeni bakiye yanıtta gelir (tüm profili yeniden okumaya gerek yok).
+    if (r['balance'] != null) {
+      Session.setCoins(r['balance'].toString());
+    } else {
+      unawaited(Session.refresh().catchError((_) {}));
+    }
     if (mounted) setState(() => _version++);
   }
 
@@ -273,13 +277,22 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
   String _cat = 'frame';
   int _version = 0;
 
+  final Set<Object?> _busy = {};
+
+  /// Etkinleştir / Kaldır düğmesi anında değişir; liste arkada sessizce tazelenir (aynı türdeki diğer ürünün
+  /// kalkması dahil). Hata olursa eski haline döner. Art arda dokunuş tek istek gönderir.
   Future<void> _toggle(Map<String, dynamic> item) async {
+    if (!_busy.add(item['id'])) return;
     final equipped = item['equipped'] == true;
+    setState(() => item['equipped'] = !equipped);
     final r = await guard<bool>(context, () async {
       await Api.post(equipped ? '/api/inventory/unequip' : '/api/inventory/equip', {'itemId': item['id']});
       return true;
     });
-    if (r == true && mounted) setState(() => _version++);
+    _busy.remove(item['id']);
+    if (!mounted) return;
+    if (r != true) setState(() => item['equipped'] = equipped);
+    setState(() => _version++);
   }
 
   @override

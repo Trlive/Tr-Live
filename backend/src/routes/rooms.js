@@ -15,7 +15,7 @@ import { refreshGhost } from '../services/ghost.js';
 import { loadPublicRow, loadPublicRows, activeEntranceEffect } from '../services/users.js';
 import { leaveRoom, leaveOtherRooms, leaveStaleRooms, closeRoom, noteKick, recentlyKicked, SUPPORTED_SEATS } from '../services/rooms.js';
 import { openMicSession, closeMicSessions } from '../services/mic.js';
-import { scoreboardOf } from '../services/scoreboard.js';
+import { scoreboardOf, activeSession, startSession, endSession, sessionHistory, sessionView, SCOREBOARD_DURATIONS } from '../services/scoreboard.js';
 import { queueOf, broadcastQueue, removeFromQueue, notifyNext, grantMicInvite, hasMicInvite, consumeMicInvite, isQueued } from '../services/micqueue.js';
 import { cleanPublic } from '../safe_text.js';
 import crypto from 'node:crypto';
@@ -493,14 +493,17 @@ router.post('/:roomId/join', requireAuth, userLimit('room_join', 40, 60e3), asyn
       [userId],
     );
   }
-  const me = await memberOf(roomId, userId);
+  // Birbirinden bağımsız 4 okuma aynı anda (odaya giriş yanıtı daha çabuk döner).
+  const [me, totalDiamonds, family, owner] = await Promise.all([
+    memberOf(roomId, userId), roomDiamonds(room), ownerFamily(room.owner_id), ownerPublic(room.owner_id, userId),
+  ]);
   noteTask(userId, 'join_room');
   res.json({
     room: {
-      ...roomJson(room, { showCode: ['owner', 'cohost'].includes(me.role) }), totalDiamonds: await roomDiamonds(room),
-      ownerFamily: await ownerFamily(room.owner_id),
+      ...roomJson(room, { showCode: ['owner', 'cohost'].includes(me.role) }), totalDiamonds,
+      ownerFamily: family,
       // Oda kimliği = sahibin güncel kimliği (Yoho): sahip odada olmasa da başlıkta onun ID'si görünsün.
-      owner: await ownerPublic(room.owner_id, userId),
+      owner,
     },
     me: { role: me.role, microphone: me.microphone, seatIndex: me.seat_index },
     joined: ins.rowCount > 0,
@@ -1118,7 +1121,48 @@ router.get('/:roomId/scoreboard', requireAuth, async (req, res) => {
   const roomId = uuid(req.params.roomId, 'Oda');
   await activeRoom(roomId);
   if (!(await memberOf(roomId, req.user.id))) throw fail('Önce odaya girin.', 403);
-  res.json({ scoreboard: await scoreboardOf(roomId) });
+  const s = await activeSession(roomId);
+  let starter = null;
+  if (s?.started_by) {
+    const u = (await loadPublicRows([s.started_by]))[0];
+    starter = u ? roomUser(u) : null;
+  }
+  res.json({ scoreboard: await scoreboardOf(roomId), session: s ? sessionView(s, starter) : null });
+});
+
+// Sayı tahtası oturumu (Yoho): başlat / durdur / geçmiş. Oda sahibi, yardımcı sahip ve moderatör yönetir.
+async function scoreboardManager(roomId, userId) {
+  await activeRoom(roomId);
+  const me = await memberOf(roomId, userId);
+  if (!me || !SEAT_MANAGERS.includes(me.role)) throw fail('Sayı tahtasını yalnızca oda yöneticileri yönetebilir.', 403);
+}
+
+router.post('/:roomId/scoreboard/start', requireAuth, userLimit('scoreboard_start', 10, 60e3), async (req, res) => {
+  const roomId = uuid(req.params.roomId, 'Oda');
+  await scoreboardManager(roomId, req.user.id);
+  const minutes = Number(req.body?.minutes ?? 0);
+  if (!SCOREBOARD_DURATIONS.includes(minutes)) throw fail('Geçersiz süre.');
+  const session = await startSession(roomId, req.user.id, {
+    minutes,
+    resetOnSeatLeave: req.body?.resetOnSeatLeave !== false,
+    resetOnRoomLeave: req.body?.resetOnRoomLeave === true,
+  });
+  res.json({ session });
+});
+
+router.post('/:roomId/scoreboard/stop', requireAuth, userLimit('scoreboard_stop', 10, 60e3), async (req, res) => {
+  const roomId = uuid(req.params.roomId, 'Oda');
+  await scoreboardManager(roomId, req.user.id);
+  const session = await endSession(roomId, req.user.id);
+  if (!session) throw fail('Süren bir sayım yok.', 409);
+  res.json({ session });
+});
+
+router.get('/:roomId/scoreboard/history', requireAuth, async (req, res) => {
+  const roomId = uuid(req.params.roomId, 'Oda');
+  await activeRoom(roomId);
+  if (!(await memberOf(roomId, req.user.id))) throw fail('Önce odaya girin.', 403);
+  res.json({ sessions: await sessionHistory(roomId) });
 });
 
 router.post('/:roomId/scoreboard/reset', requireAuth, userLimit('scoreboard_reset', 10, 60e3), async (req, res) => {
