@@ -31,6 +31,16 @@ async function managerContext(roomId, userId) {
   return m;
 }
 
+/** Çalan müziği yalnızca onu başlatan kişi (DJ) yönetir. Başka bir yetkili duraklat / ileri sar / sonraki / ses düzeyi ile
+ *  müziği DEVRALAMAZ (eskiden controlled_by değişip müzik kutusu ona geçiyordu). Müzik yoksa ya da çalan DJ odada değilse serbest.
+ *  [ownerMayStop]: sahip / yardımcı sahip durdurabilir (denetim). */
+async function djGuard(roomId, userId, role, { ownerMayStop = false } = {}) {
+  const st = (await query(`SELECT controlled_by, track_id FROM room_music WHERE room_id = $1`, [roomId])).rows[0];
+  if (!st || !st.track_id || !st.controlled_by || st.controlled_by === userId) return;
+  if (ownerMayStop && ['owner', 'cohost'].includes(role)) return;
+  throw fail('Müziği şu an başka bir yetkili çalıyor; yalnızca o yönetebilir.', 403);
+}
+
 // Müzik kütüphanesi (yalnızca yönetici tarafından eklenen, lisansı kayıtlı parçalar).
 router.get('/music/tracks', async (req, res) => {
   const q = String(req.query.q ?? '').trim().toLowerCase();
@@ -209,8 +219,9 @@ router.delete('/rooms/:roomId/music/queue/:itemId', async (req, res) => {
 
 router.post('/rooms/:roomId/music/play', userLimit('music_ctl', 40, 60e3), async (req, res) => {
   const roomId = uuid(req.params.roomId, 'Oda');
-  await managerContext(roomId, req.user.id);
+  const mctx = await managerContext(roomId, req.user.id);
   const trackId = req.body?.trackId ? uuid(req.body.trackId, 'Şarkı') : null;
+  if (!trackId) await djGuard(roomId, req.user.id, mctx.role); // devam ettirme: yalnızca çalan kişi
 
   if (trackId) {
     const t = (await query(`SELECT id, duration_ms FROM music_tracks WHERE id = $1 AND is_active = TRUE AND (owner_room_id IS NULL OR owner_room_id = $2)`, [trackId, roomId])).rows[0];
@@ -253,7 +264,8 @@ async function withLockedState(roomId, fn) {
 
 router.post('/rooms/:roomId/music/pause', userLimit('music_ctl', 40, 60e3), async (req, res) => {
   const roomId = uuid(req.params.roomId, 'Oda');
-  await managerContext(roomId, req.user.id);
+  const mctx = await managerContext(roomId, req.user.id);
+  await djGuard(roomId, req.user.id, mctx.role);
   await withLockedState(roomId, async (c, st) => {
     if (st.status !== 'playing') throw fail('Müzik zaten duraklatılmış.', 409);
     const pos = clampPosition(positionAt('playing', st.position_ms, st.elapsed_ms), st.duration_ms);
@@ -265,7 +277,8 @@ router.post('/rooms/:roomId/music/pause', userLimit('music_ctl', 40, 60e3), asyn
 
 router.post('/rooms/:roomId/music/seek', userLimit('music_ctl', 40, 60e3), async (req, res) => {
   const roomId = uuid(req.params.roomId, 'Oda');
-  await managerContext(roomId, req.user.id);
+  const mctx = await managerContext(roomId, req.user.id);
+  await djGuard(roomId, req.user.id, mctx.role);
   const requested = Number(req.body?.positionMs);
   if (!Number.isFinite(requested) || requested < 0) throw fail('Konum geçersiz.');
   await withLockedState(roomId, async (c, st) => {
@@ -277,7 +290,8 @@ router.post('/rooms/:roomId/music/seek', userLimit('music_ctl', 40, 60e3), async
 
 router.post('/rooms/:roomId/music/next', userLimit('music_ctl', 40, 60e3), async (req, res) => {
   const roomId = uuid(req.params.roomId, 'Oda');
-  await managerContext(roomId, req.user.id);
+  const mctx = await managerContext(roomId, req.user.id);
+  await djGuard(roomId, req.user.id, mctx.role);
   await advanceQueue(roomId);
   res.json({ state: await musicState(roomId) });
 });
@@ -285,7 +299,8 @@ router.post('/rooms/:roomId/music/next', userLimit('music_ctl', 40, 60e3), async
 // Ses düzeyi: müziği çalan (yetkili) ayarlar; herkesin cihazında bu düzeyde çalar.
 router.post('/rooms/:roomId/music/volume', userLimit('music_volume', 120, 60e3), async (req, res) => {
   const roomId = uuid(req.params.roomId, 'Oda');
-  await managerContext(roomId, req.user.id);
+  const mctx = await managerContext(roomId, req.user.id);
+  await djGuard(roomId, req.user.id, mctx.role);
   const v = Number(req.body?.volume);
   if (!Number.isFinite(v) || v < 0 || v > 1) throw fail('Ses düzeyi 0 ile 1 arasında olmalı.');
   const r = await query(`UPDATE room_music SET volume = $2 WHERE room_id = $1 RETURNING room_id`, [roomId, Math.round(v * 100) / 100]);
@@ -296,7 +311,8 @@ router.post('/rooms/:roomId/music/volume', userLimit('music_volume', 120, 60e3),
 
 router.post('/rooms/:roomId/music/stop', userLimit('music_ctl', 40, 60e3), async (req, res) => {
   const roomId = uuid(req.params.roomId, 'Oda');
-  await managerContext(roomId, req.user.id);
+  const mctx = await managerContext(roomId, req.user.id);
+  await djGuard(roomId, req.user.id, mctx.role, { ownerMayStop: true });
   await query(`UPDATE room_music SET track_id = NULL, status = 'stopped', position_ms = 0, updated_at = NOW(), controlled_by = $2 WHERE room_id = $1`, [roomId, req.user.id]);
   await broadcastMusic(roomId);
   res.json({ state: await musicState(roomId) });

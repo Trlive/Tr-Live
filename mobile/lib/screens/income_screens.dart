@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'usd_wallet_screen.dart' show UsdSendCard;
 import '../services/api.dart';
 import '../services/session.dart';
 import '../widgets/app_theme.dart';
@@ -109,11 +110,9 @@ class _IncomeCenterScreenState extends State<IncomeCenterScreen> {
                     await WalletScreen.exchange(context, diamonds, () async => setState(() => _version++));
                   }),
                 ),
-                // Para Çekme yalnızca yayıncı kotayı doldurup maaş hak ettiğinde görünür.
-                if (data['withdraw'] == true) ...[
-                  const SizedBox(width: 12),
-                  Expanded(child: _bigBtn('Para Çekme', const [Color(0xFF05C150), Color(0xFF22E85F)], () => Navigator.push(context, MaterialPageRoute(builder: (_) => const WithdrawScreen())))),
-                ],
+                // Para Çekme: maaş bilgileri + dolar gönderme (bayi / admin) burada.
+                const SizedBox(width: 12),
+                Expanded(child: _bigBtn('Para Çekme', const [Color(0xFF05C150), Color(0xFF22E85F)], () => Navigator.push(context, MaterialPageRoute(builder: (_) => const WithdrawScreen())))),
               ]),
               const SizedBox(height: 20),
               Row(children: [
@@ -354,11 +353,13 @@ class WithdrawScreen extends StatelessWidget {
         load: () async => await Api.get('/api/broadcaster/me'),
         builder: (context, d, reload) {
           final b = mapOf(d['broadcaster']);
+          // Dolar gönderme (bayi / admin) herkese açık; yayıncı maaşı bilgileri yalnızca hak eden yayıncıya.
+          Widget withSend(Widget w) => ListView(padding: const EdgeInsets.all(16), children: [const UsdSendCard(), w]);
           if (b == null || b['status'] != 'approved') {
-            return const Center(child: Padding(padding: EdgeInsets.all(24), child: Text('Para çekme yalnızca onaylı yayıncılar içindir. Yayıncı olmak için bir ajansın seni davet etmesi gerekir.\n\nElmaslarını Gelir Merkezi\'ndeki "Elmas Bozdurma" ile coin\'e çevirebilirsin.', textAlign: TextAlign.center, style: TextStyle(color: Pal.textDim, height: 1.4))));
+            return withSend(const Center(child: Padding(padding: EdgeInsets.all(24), child: Text('Para çekme yalnızca onaylı yayıncılar içindir. Yayıncı olmak için bir ajansın seni davet etmesi gerekir.\n\nElmaslarını Gelir Merkezi\'ndeki "Elmas Bozdurma" ile coin\'e çevirebilirsin.', textAlign: TextAlign.center, style: TextStyle(color: Pal.textDim, height: 1.4)))));
           }
           if (!withdrawEligible(b)) {
-            return const Center(child: Padding(padding: EdgeInsets.all(24), child: Text('Para çekme, maaş kotasını doldurup maaş hak ettiğinde açılır.\n\nKotanı ve kalan elmasını Yayıncı Merkezi\'nden görebilirsin.', textAlign: TextAlign.center, style: TextStyle(color: Pal.textDim, height: 1.4))));
+            return withSend(const Center(child: Padding(padding: EdgeInsets.all(24), child: Text('Para çekme, maaş kotasını doldurup maaş hak ettiğinde açılır.\n\nKotanı ve kalan elmasını Yayıncı Merkezi\'nden görebilirsin.', textAlign: TextAlign.center, style: TextStyle(color: Pal.textDim, height: 1.4)))));
           }
           final p = mapOf(b['progress']) ?? {};
           final cur = (p['currency'] ?? 'USD').toString();
@@ -366,6 +367,7 @@ class WithdrawScreen extends StatelessWidget {
           const kycText = {'none': 'Doğrulanmadı', 'pending': 'İnceleniyor', 'approved': 'Onaylı', 'rejected': 'Reddedildi'};
           final unpaid = BigInt.tryParse('${b['unpaidSalaryCents'] ?? 0}') ?? BigInt.zero;
           return ListView(padding: const EdgeInsets.all(16), children: [
+            const UsdSendCard(),
             Row(children: [
               Expanded(child: _card('Bu dönem tahmini maaş', fmtMoney(p['estimatedCents'] ?? 0, cur), kGoldDeep)),
               const SizedBox(width: 12),

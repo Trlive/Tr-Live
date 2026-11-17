@@ -4,6 +4,7 @@ import '../l10n/l10n.dart';
 import '../services/api.dart';
 import '../widgets/app_theme.dart';
 import '../widgets/common.dart';
+import 'income_screens.dart' show WithdrawScreen;
 
 /// Sent tutarını "12.50 $" biçiminde yazar (tutarlar sunucudan metin olarak gelir).
 String usdText(dynamic cents) {
@@ -91,6 +92,86 @@ String _dateText(dynamic iso) {
 /// Fasulye cüzdanı: yayıncı ve ajans sahiplerinin maaş / prim bakiyesi (1 Fasulye = 1 dolar).
 /// Fasulye Coin'e çevrilir (kendine ya da başka bir kullanıcıya Coin olarak gönderilir) ya da dolar olarak
 /// bir bayiye (anında, geri alınamaz) veya admin'e (çekim talebi) gönderilir.
+/// "Dolar olarak gönder": bakiyeni bayiye ya da admine gönder. Para çekme sayfasında gösterilir.
+class UsdSendCard extends StatefulWidget {
+  const UsdSendCard({super.key});
+
+  @override
+  State<UsdSendCard> createState() => _UsdSendCardState();
+}
+
+class _UsdSendCardState extends State<UsdSendCard> {
+  Map<String, dynamic>? _data;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final r = await Api.get('/api/usd/me');
+      if (mounted) setState(() => _data = r);
+    } catch (_) {/* kart gizli kalır */}
+  }
+
+  int _cents(String key) => int.tryParse('${mapOf(_data?['settings'])?[key] ?? 0}') ?? 0;
+
+  Future<void> _openForm(Widget form) async {
+    final done = await Navigator.push<bool>(context, MaterialPageRoute(builder: (_) => form));
+    if (done == true) await _load();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final d = _data;
+    if (d == null) return const SizedBox.shrink();
+    final balance = int.tryParse('${d['balanceCents'] ?? 0}') ?? 0;
+    final enabled = mapOf(d['settings'])?['enabled'] != false;
+    final minW = _cents('withdrawMinCents');
+    final minD = _cents('dealerMinCents');
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFF2A2010), Pal.bg]),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Pal.gold),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const BeanIcon(size: 26),
+          const SizedBox(width: 8),
+          Expanded(child: FittedBox(fit: BoxFit.scaleDown, alignment: AlignmentDirectional.centerStart, child: Text(beanText(balance), style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: Pal.gold)))),
+        ]),
+        const SizedBox(height: 10),
+        Text(tx('Dolar olarak gönder'), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
+        const SizedBox(height: 6),
+        Row(children: [
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: enabled && balance >= minD ? () => _openForm(_UsdDealerForm(balance: balance, min: minD, coinsPerUsd: _cents('coinsPerUsd'))) : null,
+              icon: const Icon(Icons.storefront_outlined, size: 18),
+              label: Text(tx('Bayiye gönder')),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: enabled && balance >= minW ? () => _openForm(_UsdAdminForm(balance: balance, min: minW)) : null,
+              icon: const Icon(Icons.account_balance_outlined, size: 18),
+              label: Text(tx('Admine gönder')),
+            ),
+          ),
+        ]),
+        const SizedBox(height: 6),
+        Text(tx('En az: bayiye {b}, admine {a}. Kesinti yok.', {'a': usdText(minW), 'b': usdText(minD)}), style: const TextStyle(color: Pal.textDim, fontSize: 12)),
+      ]),
+    );
+  }
+}
+
 class UsdWalletScreen extends StatefulWidget {
   const UsdWalletScreen({super.key});
 
@@ -250,28 +331,12 @@ class _UsdWalletScreenState extends State<UsdWalletScreen> {
           ),
         ]),
         const SizedBox(height: 14),
-        // 2) Dolar olarak gönder: bayi ya da admin.
-        Text(tx('Dolar olarak gönder'), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
-        const SizedBox(height: 6),
-        Row(children: [
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: _enabled && _balance >= minD
-                  ? () => _openForm(_UsdDealerForm(balance: _balance, min: minD, coinsPerUsd: _cents('coinsPerUsd')))
-                  : null,
-              icon: const Icon(Icons.storefront_outlined, size: 18),
-              label: Text(tx('Bayiye gönder')),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: _enabled && _balance >= minW ? () => _openForm(_UsdAdminForm(balance: _balance, min: minW)) : null,
-              icon: const Icon(Icons.account_balance_outlined, size: 18),
-              label: Text(tx('Admine gönder')),
-            ),
-          ),
-        ]),
+        // Dolar olarak gönderme artık "Para çekme" sayfasında.
+        OutlinedButton.icon(
+          onPressed: _enabled ? () async { await Navigator.push(context, MaterialPageRoute(builder: (_) => const WithdrawScreen())); if (mounted) _load(); } : null,
+          icon: const Icon(Icons.payments_outlined, size: 18),
+          label: Text(tx('Para çek / Dolar gönder')),
+        ),
         const SizedBox(height: 8),
         Text(
           tx('En az: Coin\'e çevirme {x} Fasulye, bayiye {b}, admine {a}. Kesinti yok.', {'x': beanText(minX), 'a': usdText(minW), 'b': usdText(minD)}),

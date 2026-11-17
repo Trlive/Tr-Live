@@ -65,3 +65,44 @@ DecorationImage? cardBackground(String? url) => url == null
         colorFilter: ColorFilter.mode(Colors.black.withValues(alpha: 0.35), BlendMode.darken),
         onError: (_, __) {},
       );
+
+
+/// Profil kartı arka planı: görsel kartın üstüne GENİŞLİĞİNCE oturur (yan yana kanatlı / geniş kartlar kırpılıp küçülmez, istatistiklerin
+/// üstüne taşmaz); altı kart rengine yumuşakça geçer, yazılar okunsun diye hafif karartılır. Boy uzunsa üstten kırpılır.
+class CardBackdrop extends StatelessWidget {
+  final String? url;
+  final Color base;
+  const CardBackdrop({super.key, required this.url, this.base = const Color(0xFF26262B)});
+
+  @override
+  Widget build(BuildContext context) {
+    final u = url;
+    if (u == null) return const SizedBox.shrink();
+    return IgnorePointer(
+      child: ClipRect(
+        child: Stack(fit: StackFit.expand, children: [
+          Align(
+            alignment: Alignment.topCenter,
+            child: Image.network(
+              u,
+              width: double.infinity,
+              fit: BoxFit.fitWidth,
+              alignment: Alignment.topCenter,
+              errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+            ),
+          ),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Colors.black.withValues(alpha: 0.10), base.withValues(alpha: 0.55), base],
+                stops: const [0.0, 0.45, 0.8],
+              ),
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
+}

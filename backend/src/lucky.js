@@ -25,6 +25,10 @@ export const JACKPOT_TIER = Object.freeze([
   [500, 0.00006],
   [100, 0.0004],
 ]);
+/** Yoho kuralı: değeri 5.000 Coin altındaki hediyeler en fazla x500, 5.000 ve üstü x1000 kazandırır. */
+export const BIG_PRICE = 5000n;
+export const maxMultiplierFor = (price) => (BigInt(price) >= BIG_PRICE ? 1000 : 500);
+
 /** Gösterim için tüm çarpanlar (büyükten küçüğe). */
 export const LUCKY_BASE = Object.freeze([...JACKPOT_TIER, ...BASE_TIER]);
 /** Büyük ödül havuzu bu kadar "hediye fiyatı" biriktirince açılır. */
@@ -95,6 +99,7 @@ export function drawLuckyPool({ units, price, pool, rtpBps, jackpotShareBps, max
   const tables = luckyTables(rtpBps, jackpotShareBps);
   const openAt = p * BigInt(JACKPOT_OPEN) * UNIT;
   const cap = BigInt(maxWin ?? 0) > 0n ? BigInt(maxWin) * UNIT : null;
+  const maxMult = maxMultiplierFor(p);
   const hits = {};
   let paid = 0n; // 1/10000 Coin
   let multiplier = 0; let best = 0; let wins = 0; let jackpotHits = 0;
@@ -116,7 +121,7 @@ export function drawLuckyPool({ units, price, pool, rtpBps, jackpotShareBps, max
     if (jackpot >= openAt) {
       const j = pick(tables.jackpot, x);
       if (j.m) {
-        const m = JACKPOT_TIER.map(([v]) => v).find((v) => v <= j.m && fits(v, jackpot));
+        const m = JACKPOT_TIER.map(([v]) => v).find((v) => v <= j.m && v <= maxMult && fits(v, jackpot));
         if (m) {
           jackpot -= BigInt(m) * p * UNIT;
           jackpotHits += 1;

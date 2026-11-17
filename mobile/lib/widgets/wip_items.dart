@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../services/api.dart';
 import 'common.dart';
@@ -121,7 +122,8 @@ class _WipVehicleDriveState extends State<WipVehicleDrive> with SingleTickerProv
     final w = MediaQuery.sizeOf(context).width;
     final size = w * 0.34;
     final colors = s.gradient;
-    return RepaintBoundary(
+    final swip = s.isSwip;
+    final drive = RepaintBoundary(
       child: AnimatedBuilder(
         animation: _c,
         builder: (context, child) {
@@ -180,5 +182,61 @@ class _WipVehicleDriveState extends State<WipVehicleDrive> with SingleTickerProv
         ]),
       ),
     );
+    if (!swip) return drive;
+    // SWIP: araçla birlikte tam ekran kırmızı/yeşil ışık çizgileri, halka dalgaları ve parıltı.
+    return Stack(alignment: Alignment.center, children: [
+      Positioned.fill(child: IgnorePointer(child: CustomPaint(painter: _SwipBurstPainter(_c)))),
+      drive,
+    ]);
   }
+}
+
+/// SWIP giriş ışıması: iki yana yayılan kırmızı/yeşil şeritler, merkezden çıkan halka dalgaları ve yıldız parıltıları.
+class _SwipBurstPainter extends CustomPainter {
+  final Animation<double> a;
+  _SwipBurstPainter(this.a) : super(repaint: a);
+  static const _red = Color(0xFFFF1744), _green = Color(0xFF00E676);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final t = a.value;
+    final fade = t < 0.1 ? t / 0.1 : (t > 0.85 ? (1 - t) / 0.15 : 1.0);
+    final c = size.center(Offset.zero);
+    // Yatay ışık şeritleri (kırmızı üstte, yeşil altta) merkezden dışa açılır.
+    final reach = Curves.easeOut.transform((t / 0.35).clamp(0.0, 1.0)) * size.width;
+    for (final e in [(-1.0, _red), (1.0, _green)]) {
+      final y = c.dy + e.$1 * size.width * 0.06;
+      final r = Rect.fromCenter(center: Offset(c.dx, y), width: reach, height: 6);
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(r, const Radius.circular(3)),
+        Paint()
+          ..shader = LinearGradient(colors: [Colors.transparent, e.$2.withValues(alpha: 0.9 * fade), Colors.white.withValues(alpha: 0.9 * fade), e.$2.withValues(alpha: 0.9 * fade), Colors.transparent]).createShader(r)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
+      );
+    }
+    // Halka dalgaları: kırmızı ve yeşil dönüşümlü.
+    for (var i = 0; i < 3; i++) {
+      final p = ((t * 1.6) - i * 0.28) % 1.0;
+      if (t * 1.6 - i * 0.28 < 0) continue;
+      canvas.drawCircle(
+        c,
+        size.width * (0.1 + 0.5 * p),
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3
+          ..color = (i.isEven ? _red : _green).withValues(alpha: (1 - p) * 0.8 * fade),
+      );
+    }
+    // Yıldız parıltıları.
+    for (var i = 0; i < 14; i++) {
+      final ang = i * 2 * math.pi / 14 + t * 1.5;
+      final dist = size.width * (0.18 + 0.32 * ((t * 1.2 + i * 0.13) % 1.0));
+      final p = c + Offset(math.cos(ang), math.sin(ang)) * dist;
+      final tw = (math.sin((t * 5 + i) * math.pi) + 1) / 2;
+      canvas.drawCircle(p, 1.5 + 2.5 * tw, Paint()..color = (i.isEven ? _red : _green).withValues(alpha: (0.4 + 0.5 * tw) * fade));
+    }
+  }
+
+  @override
+  bool shouldRepaint(_SwipBurstPainter old) => false;
 }

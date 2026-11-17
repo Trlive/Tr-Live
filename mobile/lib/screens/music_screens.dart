@@ -120,7 +120,7 @@ class _MusicLibraryPageState extends State<MusicLibraryPage> {
   /// Çalan şarkıya dokununca duraklat / devam; başka şarkıya dokununca o çalar.
   Future<void> _tap(LocalTrack t, bool active) async {
     // Şarkı odaya gönderilirken dokunmalar beklesin.
-    if (RoomPlaylist.instance.busy.value) return;
+    if (RoomPlaylist.instance.busy.value || RoomPlaylist.instance.loadingPath.value == t.path) return;
     if (active) {
       final playing = MusicService.instance.state.value?['status'] == 'playing';
       await guard(context, () => Api.post('/api/rooms/${widget.roomId}/music/${playing ? 'pause' : 'play'}'));

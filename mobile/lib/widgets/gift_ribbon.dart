@@ -633,7 +633,7 @@ class _GiftRibbonOverlayState extends State<GiftRibbonOverlay> {
             AnimAsset(
               key: ValueKey('ent-${_entrance!['seq']}'),
               url: url,
-              cache: wipVehicle,
+              cache: true, // ses de dosyadan, görüntüyle aynı anda başlar (ağdan akışta geriden geliyordu)
               sound: true,
               onDone: wipVehicle ? () => _endEntrance(seq) : null,
             ),

@@ -431,7 +431,9 @@ class _GiftSheetState extends State<_GiftSheet> with SingleTickerProviderStateMi
   /// Şanslı hediye olasılık tablosu: her adet için çarpanların çıkma ihtimali. Büyük çarpanlar yalnızca o hediyenin
   /// büyük ödül havuzu doluyken çıkar; ödüller havuzdan ödenir (havuz yetmezse daha küçük çarpan verilir).
   Future<void> _showLuckyOdds() async {
-    final odds = [..._luckyOdds]..sort((a, b) => b.$1.compareTo(a.$1));
+    final gp = BigInt.tryParse((_gift?['coinPrice'] ?? '0').toString()) ?? BigInt.zero;
+    final maxMult = gp >= BigInt.from(5000) ? 1000 : 500; // 5.000 Coin altı hediyeler en fazla x500
+    final odds = [for (final o in _luckyOdds) if (o.$1 <= maxMult) o]..sort((a, b) => b.$1.compareTo(a.$1));
     final big = odds.where((o) => o.$3).toList();
     final small = odds.where((o) => !o.$3).toList();
     final none = 1 - small.fold<double>(0, (t, o) => t + o.$2);
@@ -450,9 +452,23 @@ class _GiftSheetState extends State<_GiftSheet> with SingleTickerProviderStateMi
       context: context,
       builder: (c) => AlertDialog(
         backgroundColor: Pal.surface,
-        title: Text(tx('Şanslı hediye olasılıkları')),
+        title: Text(tx('Kurallar')),
         content: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            for (final t in [
+              tx('Şanslı hediye göndererek Coin kazanma şansı yakala; alıcı Elmas kazanır.'),
+              tx('1000 kata kadar ödül: değeri 5.000 Coin altındaki hediyeler değerinin en fazla 500 katını, 5.000 Coin ve üstü hediyeler en fazla 1.000 katını kazandırır.'),
+              tx('Büyük ödül havuzu dolunca x100 ve üstü çarpanlar açılır; ödüller havuzdan ödenir.'),
+              tx('Ödüller rastgeledir; hediye göndermek kazanmayı garanti etmez. Ne kadar çok hediye, o kadar çok şans.'),
+            ])
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Padding(padding: EdgeInsets.only(top: 6, right: 8), child: Icon(Icons.circle, size: 6, color: Color(0xFFFFD54F))),
+                  Expanded(child: Text(t, style: const TextStyle(fontSize: 13, height: 1.35))),
+                ]),
+              ),
+            const Divider(),
             Text(tx('Gönderdiğin her şanslı hediye adedi için ayrı bir çekiliş yapılır. Çıkan çarpan × hediye fiyatı kadar Coin hesabına eklenir.'),
                 style: const TextStyle(fontSize: 13, height: 1.35)),
             const SizedBox(height: 6),
@@ -595,7 +611,7 @@ class _GiftSheetState extends State<_GiftSheet> with SingleTickerProviderStateMi
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
                   Icon(Icons.info_outline, size: 15, color: Color(0xFFFFD54F)),
                   SizedBox(width: 3),
-                  Text(tx('Olasılıklar'), style: TextStyle(fontSize: 11, color: Color(0xFFFFD54F), fontWeight: FontWeight.w700)),
+                  Text(tx('Kurallar'), style: TextStyle(fontSize: 11, color: Color(0xFFFFD54F), fontWeight: FontWeight.w700)),
                 ]),
               ),
             ),

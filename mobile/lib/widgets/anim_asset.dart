@@ -112,7 +112,7 @@ class _AnimAssetState extends State<AnimAsset> {
 
   /// Arama başlayınca çalan hediye / araç sesi hemen susar.
   void _onCall() {
-    if (CallGuard.instance.inCall.value || EffectPrefs.roomMuted.value || !EffectPrefs.giftSound) _audio?.pause().catchError((_) {});
+    if (!_soundAllowed) _audio?.pause().catchError((_) {});
   }
 
   @override
@@ -179,8 +179,16 @@ class _AnimAssetState extends State<AnimAsset> {
   /// MP4 animasyon oynatıcısı (VAP) yalnızca görüntüyü çizer; dosyadaki ses ayrıca çalınır (aynı anda başlar).
   /// Sessiz dosyada bir şey duyulmaz. Arama sürerken ya da ayar kapalıysa çalınmaz.
   Future<void> _startSound(String? path) async {
+    await _prepareSound(path);
+    _playSound();
+  }
+
+  bool get _soundAllowed => !(EffectPrefs.giftSound == false || EffectPrefs.roomMuted.value || CallGuard.instance.inCall.value);
+
+  /// Sesi önceden yükler (dosya açılır); görüntü ile birlikte [_playSound] ile başlatılır → ses geriden gelmez.
+  Future<void> _prepareSound(String? path) async {
     if (!widget.sound || !_isMp4 || _audio != null || widget.repeat) return;
-    if (!EffectPrefs.giftSound || EffectPrefs.roomMuted.value || CallGuard.instance.inCall.value) return;
+    if (!_soundAllowed) return;
     // Aynı anda en çok birkaç hediye sesi (her ses ayrı bir oynatıcıdır; hediye yağmurunda üst üste yığılmasın).
     if (!FxLoad.acquireSound()) return;
     _soundSlot = true;
@@ -191,11 +199,20 @@ class _AnimAssetState extends State<AnimAsset> {
       } else {
         await p.setUrl(widget.url);
       }
-      if (!mounted || _audio != p) return;
-      p.play().catchError((_) {});
     } catch (_) {
       // Ses izi yok ya da açılamadı: animasyon sessiz oynar.
     }
+  }
+
+  void _playSound() {
+    final p = _audio;
+    if (p == null || !mounted) return;
+    // Yükleme sürerken ayar kapatıldıysa (eskiden bu durumda ses yine de başlıyordu) hiç başlamaz.
+    if (!_soundAllowed) {
+      p.pause().catchError((_) {});
+      return;
+    }
+    p.play().catchError((_) {});
   }
 
   /// Oynatma bitti: yalnızca bir kez ve bu parça hâlâ ekrandayken bildirilir
@@ -220,8 +237,10 @@ class _AnimAssetState extends State<AnimAsset> {
     try {
       final f = await MediaCache.get(url);
       if (mounted && widget.url == url) {
+        await _prepareSound(f.path); // ses hazır olunca görüntüyle aynı anda başlar
+        if (!mounted || widget.url != url) return;
         setState(() => _file = f);
-        _startSound(f.path);
+        _playSound();
       }
     } catch (e) {
       if (mounted && widget.url == url) {

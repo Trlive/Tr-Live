@@ -1,3 +1,16 @@
+## v2.118.0 — Müzik, ses, SWIP, profil kartı, şanslı hediye ve diğer düzeltmeler
+- **Müzik:** çalan müziği yalnızca başlatan kişi (DJ) yönetir; başkası açınca/kapatınca artık devralmaz, eski şarkı onda görünmez.
+  Şarkı değiştirme hızlandı: DJ yüklemeyi beklemez, şarkı telefondan hemen başlar; yükleme sürerken başka şarkı seçilebilir.
+- **Gürültü:** 3 ayrı anahtar tek "Gürültü engelleme" anahtarında birleşti.
+- **Hediye / araç / giriş sesi:** ses görüntüyle aynı anda başlar (önce hazırlanır); kapatma, yükleme sırasında bile geçerli.
+- **Mikrofona davet:** boş koltuğa dokununca "Mikrofona davet et" (odadakilerden seç).
+- **Görüntülü oda:** sohbeti gizle / göster düğmesi.
+- **Şanslı hediye:** "Kurallar" penceresi; 5.000 Coin altı hediyeler en fazla x500, üstü x1000 (sunucuda da uygulanır).
+- **Dolar gönderme** Para Çekme sayfasına taşındı (bayiye / admine); Para Çekme düğmesi her zaman görünür.
+- **SWIP:** kırmızı-yeşil renkler, çift halkalı çerçeve, ışık şeritleri / halka dalgalı gösterişli giriş.
+- **Profil kartı:** kart görseli kartın üstüne tam genişlikte oturur, yazılara taşmaz.
+- **Sohbet balonları** şeffaf.
+
 ## v2.117.0 — Ludo ve TEK baştan tasarlandı; oyun penceresinde mikrofon koltukları ve sırası
 - Oyun sayfaları sunucudan gelir (APK gerekmez); yalnızca mikrofon şeridi uygulama tarafındadır.
 - **Ludo:** cilalı altın çerçeveli tahta, parlak yuvalar ve kaleler, taç işlemeli taşlar (zıplayarak yürür), gidilecek karenin gölgesi,

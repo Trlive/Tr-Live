@@ -46,18 +46,26 @@ class RoomPlaylist {
     _plannedPath = null;
   }
 
+  int _playGen = 0; // her şarkı seçimi artırır: eski (geç biten) yükleme sonucu yeni seçimi ezmesin
+  bool get _starting => loadingPath.value != null;
+
   /// Şarkıyı odada çalar. DJ yükleme beklemez: şarkı telefondaki dosyadan hemen başlar; yükleme bitince odadakiler
   /// DJ'nin o anki konumundan dinlemeye başlar. Daha önce yüklenen şarkı yeniden yüklenmez.
+  /// Yükleme sürerken başka şarkıya dokunulabilir (eskiden "yükleniyor" bitene kadar düğmeler kilitliydi → ağır hissediliyordu):
+  /// yeni seçim eskisini geçersiz kılar, eski yükleme bitince sonucu yok sayılır.
   Future<void> playTrack(LocalTrack t) async {
     final room = _roomId;
     if (room == null || busy.value) return;
-    busy.value = true;
+    final gen = ++_playGen;
+    bool stale() => gen != _playGen || _roomId != room;
+    busy.value = true; // yalnızca yerel başlatma sırasında (kısa)
     loadingPath.value = t.path;
     final prevPath = currentPath.value;
     final prevRemote = _remoteId;
     final ms = MusicService.instance;
     final cached = LocalMusic.instance.isUploaded(room, t);
     final previewing = !cached && await ms.startLocalPreview(t.path);
+    busy.value = false;
     // Odadakiler DJ'nin o anki yerinden başlar; yükleme çok uzun sürdüyse (25 sn+) herkes şarkının başından başlar.
     int startPos() {
       final p = previewing ? ms.localPositionMs : 0;
@@ -66,6 +74,7 @@ class RoomPlaylist {
 
     try {
       var id = await LocalMusic.instance.uploadToRoom(room, t);
+      if (stale()) return; // bu arada başka şarkı seçildi: bu yüklemenin sonucu odaya yansıtılmaz
       var pos = startPos();
       ms.registerLocalFile(id, t.path);
       // Sunucu yanıtından önce soketten gelen yeni durum "başkası başka şarkı açtı" sanılmasın.
@@ -78,16 +87,19 @@ class RoomPlaylist {
         // Sunucudaki kayıt silinmiş: bir kez yeniden yüklenir.
         LocalMusic.instance.forgetUpload(room, t);
         id = await LocalMusic.instance.uploadToRoom(room, t);
+        if (stale()) return;
         pos = startPos();
         ms.registerLocalFile(id, t.path);
         _remoteId = id;
         currentPath.value = t.path;
         await Api.post('/api/rooms/$room/music/play', {'trackId': id, if (pos > 0) 'positionMs': pos});
       }
+      if (stale()) return;
       ms.finishLocalPreview(t.path, id, restart: previewing && pos == 0);
       _remoteId = id;
       currentPath.value = t.path;
     } catch (e) {
+      if (stale()) return;
       // Oda şarkıya geçmedi: önceki durum geri gelir, DJ telefonundaki önizleme durur.
       _remoteId = prevRemote;
       currentPath.value = prevPath;
@@ -95,8 +107,10 @@ class RoomPlaylist {
       rethrow;
     } finally {
       busy.value = false;
-      loadingPath.value = null;
-      _prefetchNext();
+      if (gen == _playGen) {
+        loadingPath.value = null;
+        _prefetchNext();
+      }
     }
   }
 
@@ -112,7 +126,7 @@ class RoomPlaylist {
     final next = list[_nextIndex()];
     _plannedPath = next.path;
     // Önce bu şarkının çalmaya başlaması beklenir (iki yükleme aynı anda bant genişliğini bölmesin).
-    Future<void>.delayed(const Duration(seconds: 4), () {
+    Future<void>.delayed(const Duration(seconds: 1), () {
       if (_roomId == room && _plannedPath == next.path && currentPath.value != null) {
         unawaited(LocalMusic.instance.uploadToRoom(room, next).then((_) {}, onError: (_) {}));
       }
@@ -187,7 +201,7 @@ class RoomPlaylist {
     }
     _lastTrackId = track?['id']?.toString();
     _lastStatus = status;
-    if (!ended || currentPath.value == null || busy.value) return;
+    if (!ended || currentPath.value == null || busy.value || _starting) return;
     final list = _list;
     if (list.isEmpty) return;
     if (mode.value == PlayMode.one) {

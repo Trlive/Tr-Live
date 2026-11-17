@@ -70,7 +70,8 @@ const _jade = [Color(0xFFB9F6CA), Color(0xFF00E5A0), Color(0xFF00897B), Color(0x
 const _ice = [Color(0xFF80D8FF), Color(0xFFFFFFFF), Color(0xFF2979FF), Color(0xFFFFFFFF), Color(0xFF80D8FF)];
 const _rainbow = [Color(0xFFFF5252), Color(0xFFFFD740), Color(0xFF69F0AE), Color(0xFF40C4FF), Color(0xFFE040FB), Color(0xFFFF5252)];
 const _fire = [Color(0xFFFFF176), Color(0xFFFF9800), Color(0xFFFF1744), Color(0xFFFF9800), Color(0xFFFFF176)];
-const _ghost = [Color(0xFFFFFFFF), Color(0xFFC9B8FF), Color(0xFF7C4DFF), Color(0xFFC9B8FF), Color(0xFFFFFFFF)];
+// SWIP: kırmızı - yeşil (parlak, birbirine geçen).
+const _ghost = [Color(0xFFFFFFFF), Color(0xFF00FF85), Color(0xFFFF1744), Color(0xFF00FF85), Color(0xFFFFFFFF)];
 
 const Map<int, WipStyle> _styles = {
   1: WipStyle(1, 'Bronz', Color(0xFFCD7F32), [Color(0xFF8D5524), Color(0xFFCD7F32)], [Color(0xFF5D3A1A), Color(0xFF8D5524)], '',
@@ -93,8 +94,8 @@ const Map<int, WipStyle> _styles = {
       [Color(0xFFB71C1C), Color(0xFFEF6C00), Color(0xFF2E7D32), Color(0xFF1565C0), Color(0xFF6A1B9A)], '🌈', '🏎️', 'Turuncu Spor Araba', WipNameFx.shimmer, _rainbow, 3000),
   10: WipStyle(10, 'Ateş', Color(0xFFFF2B2B), [Color(0xFF8A0F1B), Color(0xFFFF2B2B), Color(0xFFFFB13B)],
       [Color(0xFF5A0A12), Color(0xFFB71C1C), Color(0xFFE65100)], '🔥', '🏎️', 'Altın Boğa Araba', WipNameFx.fire, _fire, 3300),
-  11: WipStyle(11, 'Hayalet', Color(0xFFC9B8FF), [Color(0xFF1A1033), Color(0xFF5E35B1), Color(0xFFC9B8FF)],
-      [Color(0xFF140B2E), Color(0xFF3A2470), Color(0xFF140B2E)], '👻', '🏎️', 'Siyah Spor Araba', WipNameFx.ghost, _ghost, 3600),
+  11: WipStyle(11, 'Hayalet', Color(0xFFFF1744), [Color(0xFF00E676), Color(0xFFFF1744), Color(0xFF00E676), Color(0xFFFF1744)],
+      [Color(0xFF0A5A2A), Color(0xFF9B0F26), Color(0xFF0A5A2A)], '👻', '🏎️', 'Siyah Spor Araba', WipNameFx.ghost, _ghost, 3600),
 };
 
 /// WIP sohbet balonu süslemesi. Seviye yoksa [fallback] düz renk.
@@ -103,7 +104,7 @@ BoxDecoration wipBubbleDecoration(int? level, {required Color fallback, double r
   if (s == null) return BoxDecoration(color: fallback, borderRadius: BorderRadius.circular(radius));
   final high = s.level >= 6;
   return BoxDecoration(
-    gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [for (final c in s.bubble) c.withValues(alpha: 0.82)]),
+    gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [for (final c in s.bubble) c.withValues(alpha: 0.38)]),
     borderRadius: BorderRadius.circular(radius),
     border: Border.all(color: (high ? s.gradient.last : s.color).withValues(alpha: high ? 0.85 : 0.6), width: high ? 1.3 : 0.9),
     boxShadow: high ? [BoxShadow(color: s.color.withValues(alpha: 0.45), blurRadius: 8)] : null,
@@ -227,6 +228,30 @@ class _WipFramePainter extends CustomPainter {
         ? SweepGradient(colors: [...colors, colors.first], transform: GradientRotation(t * 2 * math.pi)).createShader(rect)
         : LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: colors).createShader(rect);
     canvas.drawCircle(c, ringR, ring);
+    if (s.isSwip) {
+      // SWIP: yeşil dış ışıma (kırmızıyla dönüşümlü) + ikinci ince halka + ters dönen kırmızı/yeşil yay.
+      canvas.drawCircle(
+        c,
+        ringR + w * 0.9,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = w * 1.4
+          ..color = const Color(0xFF00E676).withValues(alpha: 0.55 - 0.35 * wave)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5),
+      );
+      final outer = Rect.fromCircle(center: c, radius: ringR + w * 1.35);
+      canvas.drawCircle(
+        c,
+        ringR + w * 1.35,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = w * 0.45
+          ..shader = SweepGradient(
+            colors: const [Color(0xFFFF1744), Color(0x00FF1744), Color(0xFF00E676), Color(0x0000E676), Color(0xFFFF1744)],
+            transform: GradientRotation(-t * 2 * math.pi),
+          ).createShader(outer),
+      );
+    }
     canvas.drawCircle(
       c,
       ringR - w / 2,
@@ -244,7 +269,7 @@ class _WipFramePainter extends CustomPainter {
     }
     // Parıltılar: 8+ çerçevenin üzerinde döner.
     if (s.sparkles) {
-      final n = s.level >= 10 ? 6 : 4;
+      final n = s.isSwip ? 8 : (s.level >= 10 ? 6 : 4);
       for (var i = 0; i < n; i++) {
         final ang = (i.isEven ? 1 : -1) * t * 2 * math.pi + i * 2 * math.pi / n;
         final p = c + Offset(math.cos(ang), math.sin(ang)) * ringR;
