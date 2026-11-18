@@ -190,8 +190,9 @@ const MAX_SOCKETS_PER_USER = 5;
 const MSG_LIMIT = { count: 40, windowMs: 10000 };
 
 const wsRoutes = new Map();
-/** Gömülü oyun gibi ek WebSocket yolları (ör. '/ws/kedi'); WebSocketServer'ı { noServer: true } ile kurun. */
+/** Gömülü oyun gibi ek WebSocket yolları (oyun paketleri: '/ws/g/<id>'); WebSocketServer'ı { noServer: true } ile kurun. */
 export function registerWsRoute(pathname, wsServer) { wsRoutes.set(pathname, wsServer); }
+export function unregisterWsRoute(pathname, wsServer) { if (!wsServer || wsRoutes.get(pathname) === wsServer) wsRoutes.delete(pathname); }
 
 export function attachRealtime(server, {
   authenticate, isRoomMember, ipOf = () => 'unknown', isBanned = () => false, onViolation = () => {}, maxSocketsPerIp = MAX_SOCKETS_PER_IP,

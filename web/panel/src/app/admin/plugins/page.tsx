@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 import PanelShell from "@/components/panel-shell";
-import AdminWildKing from "@/components/admin/wildking";
+import AdminPlugins from "@/components/admin/plugins";
 
-export const metadata: Metadata = { title: "Wild King" };
+export const metadata: Metadata = { title: "Oyun Paketleri" };
 
 export default function Page() {
   return (
     <PanelShell panel="admin">
-      <AdminWildKing />
+      <AdminPlugins />
     </PanelShell>
   );
 }

@@ -1,4 +1,4 @@
--- Gömülü oyunlar (Kedi Çarkı…): Coin işlemleri idempotent (txId) yazılır; oyun durumu/ayarları kv tablosunda tutulur.
+-- Oyun paketleri: Coin işlemleri idempotent (txId) yazılır; oyun durumu/ayarları kv tablosunda tutulur.
 CREATE TABLE IF NOT EXISTS game_wallet_tx(
   tx_id TEXT PRIMARY KEY,
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -12,8 +12,3 @@ CREATE TABLE IF NOT EXISTS game_kv(
   value JSONB NOT NULL,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
--- Kedi Çarkı etkinlik kartı (bir kez eklenir; başlık, simge ve sırayı panelden değiştirebilirsiniz).
-INSERT INTO activity_items(title, subtitle, icon, link_url, open_mode, sort_order)
-SELECT 'Kedi Çarkı', 'Yiyeceğe bahis yap, çark dönsün.', '🐱', '{base}/g/kedi/?token={token}&roomId={roomId}&lang={lang}', 'full', 40
-WHERE NOT EXISTS (SELECT 1 FROM activity_items WHERE link_url LIKE '%/g/kedi/%');
