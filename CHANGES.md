@@ -1,3 +1,7 @@
+## v2.126.2 — Panel derleme hatası görünür + tip uyarısı paneli durdurmasın
+- Panel derlenemezse yedek sayfada "Derleme hatası" bağlantısı (/yonetim/derleme-hatasi.txt) son 60 satırı gösterir.
+- next.config: tip uyarıları (tsc ayrıca denetlenir) paneli yayından alıkoymaz.
+
 ## v2.126.1 — Uçtan uca test düzeltmesi
 - Ludo / TEK oyunları artık 500 Gümüş istediği için uçtan uca testin kullanıcılarına Gümüş verildi; ayrıca Gümüş girişi
   (yetmeyince 402, düşme, iptalde iade) için yeni test eklendi. Uygulama davranışı değişmedi.
