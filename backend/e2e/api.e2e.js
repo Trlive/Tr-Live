@@ -90,7 +90,7 @@ test('sağlık ve kayıt/giriş', { skip, timeout: 60000 }, async () => {
   assert.equal(me.body.user.id, U.a.id);
   status(await api('GET', '/api/me'), 401, 'token yok');
   status(await api('GET', '/api/rooms/abc/members', { token: U.a.token }), 400, 'geçersiz UUID 500 değil 400 olmalı');
-  await sql(`UPDATE users SET coins = 100000 WHERE id = ANY($1::uuid[])`, [Object.values(U).map((u) => u.id)]);
+  await sql(`UPDATE users SET coins = 100000, silver = 100000 WHERE id = ANY($1::uuid[])`, [Object.values(U).map((u) => u.id)]);
   await sql(`UPDATE users SET system_role = 'admin' WHERE id = $1`, [U.d.id]);
   const gifts = await api('GET', '/api/gifts', { token: U.a.token });
   ok(gifts);
@@ -686,6 +686,19 @@ test('Ludo: kurma, katılma, başlatma, zar/hamle yetkisi, ayrılma', { skip, ti
   const done = await sql(`SELECT status, winner_id FROM room_games WHERE id = $1`, [gid]);
   assert.equal(done.rows[0].status, 'finished');
   assert.equal(done.rows[0].winner_id, U.a.id);
+});
+
+test('Gümüş girişi: yetmezse 402, yeterse düşer, iptalde iade edilir', { skip, timeout: 60000 }, async () => {
+  const silverOf = async () => BigInt((await sql(`SELECT silver FROM users WHERE id = $1`, [U.a.id])).rows[0].silver);
+  await sql(`UPDATE users SET silver = 0 WHERE id = $1`, [U.a.id]);
+  status(await api('POST', `/api/rooms/${roomId}/games`, { token: U.a.token, body: { type: 'ludo' } }), 402, 'Gümüşü yoksa oyun kurulamaz');
+  await sql(`UPDATE users SET silver = 1000 WHERE id = $1`, [U.a.id]);
+  const g = await api('POST', `/api/rooms/${roomId}/games`, { token: U.a.token, body: { type: 'ludo' } });
+  status(g, 201);
+  assert.equal(await silverOf(), 500n, 'giriş 500 Gümüş düşer');
+  ok(await api('POST', `/api/games/${g.body.game.id}/cancel`, { token: U.a.token }));
+  assert.equal(await silverOf(), 1000n, 'başlamadan iptal edilince Gümüş iade edilir');
+  await sql(`UPDATE users SET silver = 100000 WHERE id = $1`, [U.a.id]);
 });
 
 test('Ludo modları: seri ve eşyalı oyun kurma, görünüm, oyun sayfası', { skip, timeout: 60000 }, async () => {

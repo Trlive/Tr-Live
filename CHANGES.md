@@ -1,3 +1,7 @@
+## v2.126.1 — Uçtan uca test düzeltmesi
+- Ludo / TEK oyunları artık 500 Gümüş istediği için uçtan uca testin kullanıcılarına Gümüş verildi; ayrıca Gümüş girişi
+  (yetmeyince 402, düşme, iptalde iade) için yeni test eklendi. Uygulama davranışı değişmedi.
+
 ## v2.126.0 — Oyun zip yükle: sunucu barındırır, bağlantı ve API otomatik
 - Panel > Oda Etkinlikleri > etkinlik > "Oyun dosyası (zip)": HTML oyunun zip'i yüklenir; sunucu güvenle açar (../, gizli ve
   izinsiz dosyalar atlanır, 60 MB / 800 dosya sınırı), veritabanına yazar ve /games/<etkinlik>/v<N>/ altında yayınlar.
