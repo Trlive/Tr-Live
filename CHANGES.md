@@ -1,3 +1,7 @@
+## v2.126.3 — Panel derlemesi: glibc tabanlı Node + hata bağlantısı düzeltmesi
+- Panel derlemesi node:20-alpine yerine node:20-bookworm-slim ile yapılır (Next/Tailwind yerel paketleri için daha sağlam).
+- "Derleme hatası" bağlantısı mutlak yola alındı (/yonetim/derleme-hatasi.txt); dosyaya npm install çıktısı da eklendi.
+
 ## v2.126.2 — Panel derleme hatası görünür + tip uyarısı paneli durdurmasın
 - Panel derlenemezse yedek sayfada "Derleme hatası" bağlantısı (/yonetim/derleme-hatasi.txt) son 60 satırı gösterir.
 - next.config: tip uyarıları (tsc ayrıca denetlenir) paneli yayından alıkoymaz.
