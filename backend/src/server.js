@@ -55,6 +55,7 @@ import { router as pkRouter } from './routes/pk.js';
 import { router as gamesRouter } from './routes/games.js';
 import { router as feedRouter } from './routes/feed.js';
 import { router as systemRouter } from './routes/system.js';
+import { startKedi, kediClientRouter, kediAdminRouter } from './games/kedi.js';
 import { router as roomActivitiesRouter } from './routes/room_activities.js';
 import { router as usdRouter, adminRouter as usdAdminRouter } from './routes/usd.js';
 import { router as roomGamePageRouter } from './routes/room_game_page.js';
@@ -120,6 +121,7 @@ app.get('/media/:file', async (req, res) => {
   res.send(hit.data);
 });
 
+app.use('/g/kedi', kediClientRouter); // gömülü Kedi Çarkı istemcisi (WebSocket: /ws/kedi)
 app.use('/games', hostedGamesRouter); // zip ile yüklenen HTML oyunlar + TRGame SDK
 app.use('/uploads', express.static(config.uploadDir, {
   maxAge: '7d', index: false, dotfiles: 'deny',
@@ -178,6 +180,7 @@ app.use('/api/activities', activitiesRouter);
 app.use('/api/activity-play', activityPlayRouter); // oyun sayfası → sunucu (oyun bileti ile Coin bahis/sonuç)
 app.use('/api/activity-provider', activityProviderRouter); // oyun sağlayıcısı (sunucu → sunucu, imzalı)
 app.use('/api/admin/activities', activitiesAdminRouter);
+app.use('/api/admin/kedi', kediAdminRouter);
 app.use('/api/admin/dealer-shop', dealerShopAdminRouter);
 app.use('/api/admin/usd', usdAdminRouter); // dolar cüzdanı yönetimi (çekim talepleri); genel admin yönlendiricisinden önce
 app.use('/api/admin', adminRouter);
@@ -268,6 +271,7 @@ attachRealtime(server, {
   // Gizli kullanıcı, "durumumu gizle" ve hayalet (SWIP) kullanıcılar çevrimiçi görünmez.
   isPresenceVisible: async (u) => u.show_presence !== false && !u.is_hidden && !(await isGhost(u.id)),
 });
+const kedi = startKedi().catch((e) => { console.error('Kedi Çarkı başlatılamadı:', e.message); return null; });
 const sweeper = startRoomSweeper();
 const musicTicker = startMusicTicker();
 const bagTicker = startBagTicker();
@@ -307,6 +311,7 @@ async function shutdown(signal) {
   if (closing) return;
   closing = true;
   console.log(`${signal} alındı, kapatılıyor...`);
+  (await kedi)?.stop().catch(() => {}); // Kedi Çarkı durumu son kez kaydedilir
   clearInterval(sweeper);
   clearInterval(musicTicker);
   clearInterval(bagTicker);

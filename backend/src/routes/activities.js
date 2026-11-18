@@ -38,6 +38,19 @@ export function issueGameToken(userId, activityId, now = Math.floor(Date.now() /
   return `${body}.${b64u(hmac(jwtSecret(), `game|${body}`))}`;
 }
 
+/** Bileti doğrular; etkinliği bilmeden {userId, activityId} döner (gömülü oyunların WebSocket girişi için). */
+export function readGameTokenAny(token, now = Math.floor(Date.now() / 1000)) {
+  if (typeof token !== 'string' || token.length > 600) return null;
+  const [body, sig] = token.split('.');
+  if (!body || !sig) return null;
+  const want = b64u(hmac(jwtSecret(), `game|${body}`));
+  if (want.length !== sig.length || !crypto.timingSafeEqual(Buffer.from(want), Buffer.from(sig))) return null;
+  let p;
+  try { p = JSON.parse(Buffer.from(body, 'base64url').toString()); } catch { return null; }
+  if (!p || typeof p.a !== 'string' || typeof p.u !== 'string' || !(p.e > now)) return null;
+  return { userId: p.u, activityId: p.a };
+}
+
 export function readGameToken(token, activityId, now = Math.floor(Date.now() / 1000)) {
   if (typeof token !== 'string' || token.length > 600) return null;
   const [body, sig] = token.split('.');

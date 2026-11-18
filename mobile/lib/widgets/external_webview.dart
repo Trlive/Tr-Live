@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
@@ -73,6 +74,13 @@ class _ExternalWebViewState extends State<ExternalWebView> {
     _c = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(Pal.bg)
+      // Oyun sayfasının "kapat" düğmesi (yalnızca close; başka hiçbir uygulama komutu dışarıdaki sayfaya açılmaz).
+      ..addJavaScriptChannel('TrLiveBridge', onMessageReceived: (m) {
+        try {
+          final j = jsonDecode(m.message);
+          if (j is Map && j['type'] == 'close' && mounted) Navigator.of(context).maybePop();
+        } catch (_) {}
+      })
       ..setNavigationDelegate(NavigationDelegate(
         onNavigationRequest: (r) {
           final u = Uri.tryParse(r.url);

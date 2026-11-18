@@ -189,6 +189,10 @@ const MAX_SOCKETS_PER_IP = 300;
 const MAX_SOCKETS_PER_USER = 5;
 const MSG_LIMIT = { count: 40, windowMs: 10000 };
 
+const wsRoutes = new Map();
+/** Gömülü oyun gibi ek WebSocket yolları (ör. '/ws/kedi'); WebSocketServer'ı { noServer: true } ile kurun. */
+export function registerWsRoute(pathname, wsServer) { wsRoutes.set(pathname, wsServer); }
+
 export function attachRealtime(server, {
   authenticate, isRoomMember, ipOf = () => 'unknown', isBanned = () => false, onViolation = () => {}, maxSocketsPerIp = MAX_SOCKETS_PER_IP,
   onPresence = () => {}, presenceSnapshot = async () => [], canTyping = async () => false,
@@ -197,8 +201,7 @@ export function attachRealtime(server, {
   // perMessageDeflate: 1 KB'tan büyük mesajlar sıkıştırılır (üye listesi, skor tablosu…) → telefonda daha az internet.
   // Küçük mesajlar (çoğunluk) sıkıştırılmaz; bağlam saklanmaz (bağlantı başına bellek az kalır).
   wss = new WebSocketServer({
-    server,
-    path: '/ws',
+    noServer: true,
     maxPayload: 8 * 1024,
     perMessageDeflate: {
       threshold: 1024,
@@ -210,6 +213,14 @@ export function attachRealtime(server, {
       zlibDeflateOptions: { level: 5, memLevel: 4 },
       concurrencyLimit: 8,
     },
+  });
+  // Tek 'upgrade' dinleyicisi: /ws ana kanal; registerWsRoute ile kayıtlı yollar (gömülü oyunlar) kendi sunucusuna gider.
+  server.on('upgrade', (req, socket, head) => {
+    let pathname = '';
+    try { pathname = new URL(req.url, 'http://x').pathname; } catch { /* geçersiz */ }
+    const target = pathname === '/ws' ? wss : wsRoutes.get(pathname);
+    if (!target) { socket.write('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n'); socket.destroy(); return; }
+    target.handleUpgrade(req, socket, head, (ws) => target.emit('connection', ws, req));
   });
   presenceHook = (userId, online) => { Promise.resolve().then(() => onPresence(userId, online)).catch(() => {}); };
 

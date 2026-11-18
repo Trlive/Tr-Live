@@ -101,6 +101,7 @@ const adminGroups: NavGroup[] = [
       { label: "Duyurular", href: "/admin/announcements", icon: Megaphone, adminOnly: true },
       { label: "Etkinlikler", href: "/admin/events", icon: CalendarDays, adminOnly: true },
       { label: "Oda Etkinlikleri", href: "/admin/activities", icon: PartyPopper, adminOnly: true },
+      { label: "Kedi Çarkı", href: "/admin/kedi", icon: PartyPopper, adminOnly: true },
       { label: "Ayarlar", href: "/admin/settings", icon: Settings, adminOnly: true },
       { label: "Sunucu", href: "/admin/server", icon: Server, adminOnly: true },
     ],

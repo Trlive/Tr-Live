@@ -1,3 +1,10 @@
+## v2.127.0 — Kedi Çarkı oyuna gömüldü (sunucuda, Coin ile)
+- Kedi Çarkı artık bu sunucuda çalışır: çok oyunculu tur motoru, sonuç ve ödeme sunucuda; WebSocket /ws/kedi, istemci /g/kedi/. Oyuncuya özel oyun bileti + etkinlik izni olmayan giremez.
+- Bahis/kazanç Coin cüzdanından (idempotent txId, cüzdan kaydı + denetim kaydı). Kasa payı varsayılan %80 (panelden değişir).
+- Panel: Sistem → Kedi Çarkı (kasa payı, kol sınırı, bahis/ödeme sınırı, canlı özet, ödenmemiş kazançları yeniden dene).
+- Etkinlikler listesine "Kedi Çarkı" kartı kendiliğinden eklenir (086). Oyunun kapat düğmesi uygulamada çalışır (TrLiveBridge: yalnızca close).
+- realtime: tek upgrade dinleyicisi (/ws ana kanal, ek yollar kayıtlı).
+
 ## v2.126.4 — Zip oyun "Yakında" kalıyordu
 - Panelde oyun yükledikten sonra "Kaydet"e basınca eski (boş) bağlantı oyunun bağlantısını siliyordu; artık yüklü oyunun bağlantısı korunur, form yüklemeden sonra yenilenir.
 - 085: bağlantısı boşalmış yüklü oyunlar kendiliğinden düzeltilir.
