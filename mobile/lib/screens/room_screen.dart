@@ -4261,7 +4261,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     if (bodyH <= 0) return 1.0;
     final g = RoomGeom(w);
     final avail = bodyH - MediaQuery.paddingOf(context).top - g.headerH - g.barH - 110 - (_pkStage ? RoomPkPanel.height : 0);
-    final spec = seatLayoutFor(_seatCount, skin: _micSkin);
     final need = _seatAreaHeight(w, 1, score: false);
     if (need <= avail) return 1.0;
     if (avail <= 0) return 0.72;

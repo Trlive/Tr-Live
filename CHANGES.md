@@ -1,3 +1,6 @@
+## v2.123.3 — Derleme düzeltmesi
+- flutter analyze uyarısı (room_screen.dart: kullanılmayan `spec` değişkeni) giderildi; APK yeniden derlenir.
+
 ## v2.123.2 — Sayı tahtası tüm mikrofon modlarında sayar
 - Puan ayrı bir satır yerine avatarın alt kenarına binen siyah-altın rozetle gösterilir (💎 + puan; 10.000 üstü "12K",
   "3,4M"). Eskiden 12 / 15 / 20 / 25 / 30'lu sık modlarda satır sığmadığı için puan hiç görünmüyordu; artık her modda ve
