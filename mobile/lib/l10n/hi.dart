@@ -911,4 +911,6 @@ const kHi = <String, String>{
   'Sıfırlama kuralı': 'रीसेट नियम',
   'Sayım süresi doldu, puan tablosu kapandı.': 'समय खत्म, स्कोरबोर्ड बंद हो गया।',
   '{name} puan tablosunu kapattı!': '{name} ने स्कोरबोर्ड बंद किया!',
+  'Boş': 'खाली',
+  'İLK 3': 'टॉप 3',
 };

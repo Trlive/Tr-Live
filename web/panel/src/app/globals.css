@@ -100,8 +100,10 @@ body {
     transform: translateY(-1px);
   }
 
+  /* Telefonda tek başına duran düğme tam genişlik olur; bir giriş kutusunun yanındaki (shrink-0) düğme olmaz —
+     eskiden "Ara" düğmesi satırı kaplıyor, arama kutusu küçücük kalıyordu. */
   @media (max-width: 640px) {
-    .gold-button {
+    .gold-button:not(.shrink-0) {
       width: 100%;
     }
   }

@@ -169,25 +169,17 @@ class _HiddenIdPillState extends State<HiddenIdPill> with SingleTickerProviderSt
               gradient: LinearGradient(
                 begin: Alignment(-1 - 2 * t, 0),
                 end: Alignment(1 - 2 * t, 0),
-                colors: const [Color(0xFF1B1036), Color(0xFF4C1D95), Color(0xFF2A1659), Color(0xFF1B1036)],
+                colors: const [Color(0xFF0B0906), Color(0xFF3A2A0C), Color(0xFF1A130A), Color(0xFF0B0906)], // siyah-altın (uygulama renkleri)
                 tileMode: TileMode.mirror,
               ),
-              border: Border.all(color: const Color(0xB3C4B5FD), width: 0.9),
-              boxShadow: const [BoxShadow(color: Color(0x668B5CF6), blurRadius: 8)],
+              border: Border.all(color: const Color(0xFFF2B92A), width: 0.9),
+              boxShadow: const [BoxShadow(color: Color(0x55F2B92A), blurRadius: 8)],
             ),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
-              Container(
-                width: h - 3,
-                height: h - 3,
-                decoration: const BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(colors: [Color(0xFF6D4BC4), Color(0xFF241445)]),
-                ),
-                alignment: Alignment.center,
-                child: Icon(Icons.visibility_off_rounded, size: h * 0.56, color: const Color(0xFFE9D8FD)),
-              ),
+              // Gizli kullanıcının altın maskesi (avatarıyla aynı).
+              HiddenAvatar(radius: (h - 3) / 2),
               SizedBox(width: h * 0.25),
-              Text('Gizli', style: TextStyle(fontSize: h * 0.48, height: 1.0, fontWeight: FontWeight.w800, color: const Color(0xFFC4B5FD))),
+              Text('Gizli', style: TextStyle(fontSize: h * 0.48, height: 1.0, fontWeight: FontWeight.w800, color: const Color(0xFFF2B92A))),
               if (alias.isNotEmpty) ...[
                 SizedBox(width: h * 0.22),
                 Text(
@@ -198,8 +190,8 @@ class _HiddenIdPillState extends State<HiddenIdPill> with SingleTickerProviderSt
                     fontWeight: FontWeight.w900,
                     fontStyle: FontStyle.italic,
                     letterSpacing: h * 0.05,
-                    color: Colors.white,
-                    shadows: const [Shadow(color: Color(0xFF8B5CF6), blurRadius: 5)],
+                    color: const Color(0xFFFFE9A0),
+                    shadows: const [Shadow(color: Color(0xFFF2B92A), blurRadius: 5)],
                   ),
                 ),
               ] else ...[
@@ -214,7 +206,7 @@ class _HiddenIdPillState extends State<HiddenIdPill> with SingleTickerProviderSt
             shaderCallback: (r) => LinearGradient(
               begin: Alignment(-1.8 + 3.6 * sweep, -0.4),
               end: Alignment(-1.0 + 3.6 * sweep, 0.4),
-              colors: const [Color(0x00FFFFFF), Color(0x66E9D8FD), Color(0x00FFFFFF)],
+              colors: const [Color(0x00FFFFFF), Color(0x66FFE9A0), Color(0x00FFFFFF)],
             ).createShader(r),
             child: pill,
           );

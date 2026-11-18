@@ -88,7 +88,7 @@ router.get('/requests', async (req, res) => {
     [me],
   );
   res.json({
-    requests: r.rows.map((x) => ({ user: publicUser(x, me), kind: x.request_kind, createdAt: x.request_at, level: cpLevelFor(x.pair_exp) })),
+    requests: r.rows.map((x) => ({ user: publicUser(x, me, { reveal: true }), kind: x.request_kind, createdAt: x.request_at, level: cpLevelFor(x.pair_exp) })),
   });
 });
 
@@ -141,7 +141,7 @@ router.post('/with/:userId/request', userLimit('cpreq', 20, 3600e3), async (req,
   });
   if (result.acceptNow) return res.json(await accept(me, other, kind));
   const fromRow = await loadPublicRow(me);
-  const from = publicUser(fromRow);
+  const from = publicUser(fromRow, null, { reveal: true });
   const p = await pairRow(me, other);
   hub.sendToUser(other, { type: 'cp_request', kind, from, level: cpLevelFor(p?.exp ?? 0) });
   const name = fromRow?.is_hidden ? 'Bir kullanıcı' : (fromRow?.display_name || fromRow?.username || 'Bir kullanıcı');
@@ -247,7 +247,7 @@ async function relationList(userId, viewerId, kind, limit) {
     [userId, kind, limit],
   );
   return r.rows.map((x) => ({
-    user: publicUser(x, viewerId),
+    user: publicUser(x, viewerId, { reveal: true }),
     level: cpLevelFor(x.pair_exp),
     exp: String(x.pair_exp),
     since: x.relation_since,
@@ -282,7 +282,7 @@ router.get('/wall/:userId', async (req, res) => {
     relationCount(owner, 'kanka'),
   ]);
   res.json({
-    owner: publicUser(ownerRow, me),
+    owner: publicUser(ownerRow, me, { reveal: true }),
     cp: cp[0] ?? null,
     friend: { count: nf, items: friend },
     kanka: { count: nk, items: kanka },

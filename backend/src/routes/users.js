@@ -114,7 +114,10 @@ async function followList(req, res, column, otherColumn) {
      WHERE f.${column} = $1 AND u.account_status = 'active' ORDER BY f.created_at DESC LIMIT $2 OFFSET $3`,
     [targetId, limit, offset],
   );
-  res.json({ users: await attachCurrentRooms(r.rows.map((x) => publicUser(x, req.user.id))).catch(() => r.rows.map((x) => publicUser(x, req.user.id))) });
+  // Kendi takip / fan listemde gizli kullanıcılar gerçek adıyla görünür.
+  const reveal = targetId === req.user.id;
+  const list = () => r.rows.map((x) => publicUser(x, req.user.id, { reveal }));
+  res.json({ users: await attachCurrentRooms(list()).catch(list) });
 }
 router.get('/:userId/followers', (req, res) => followList(req, res, 'followed_id', 'follower_id'));
 router.get('/:userId/following', (req, res) => followList(req, res, 'follower_id', 'followed_id'));

@@ -90,7 +90,7 @@ router.get('/conversations', async (req, res) => {
   );
   res.json({
     conversations: r.rows.map((x) => ({
-      peer: publicUser(x, req.user.id), lastMessage: x.body, lastMessageAt: x.message_at, lastFromMe: x.sender_id === req.user.id, unread: x.unread,
+      peer: publicUser(x, req.user.id, { reveal: true }), lastMessage: x.body, lastMessageAt: x.message_at, lastFromMe: x.sender_id === req.user.id, unread: x.unread,
       presence: presenceView(x),
     })),
   });

@@ -911,4 +911,6 @@ const kEn = <String, String>{
   'Sıfırlama kuralı': 'Reset rule',
   'Sayım süresi doldu, puan tablosu kapandı.': 'Time is up, the scoreboard has closed.',
   '{name} puan tablosunu kapattı!': '{name} closed the scoreboard!',
+  'Boş': 'Empty',
+  'İLK 3': 'TOP 3',
 };

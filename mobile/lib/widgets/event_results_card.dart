@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/l10n.dart';
 
 import '../screens/event_screen.dart';
 import '../screens/user_screens.dart';
@@ -133,7 +134,7 @@ class EventResultsCard extends StatelessWidget {
     ]);
   }
 
-  /// Bir etkinlik bölümü: başlık (yıldızda hediye simgesiyle) ve kürsü.
+  /// Bir etkinlik bölümü: başlık şeridi (hediye simgesi / emoji + ad + "İLK 3") ve kürsü.
   Widget _section(BuildContext context, EventTheme theme, Map<String, dynamic> s) {
     final entries = [for (final e in (s['entries'] is List ? s['entries'] as List : const [])) if (e is Map) Map<String, dynamic>.from(e)];
     Map<String, dynamic>? at(int rank) {
@@ -150,90 +151,148 @@ class EventResultsCard extends StatelessWidget {
       onTap: () => _openEvent(context, kind),
       child: Container(
         margin: const EdgeInsets.fromLTRB(12, 10, 12, 4),
-        padding: const EdgeInsets.fromLTRB(8, 10, 8, 12),
+        clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.28),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: theme.accent.withValues(alpha: 0.35)),
+          borderRadius: BorderRadius.circular(18),
+          gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.black.withValues(alpha: 0.18), Colors.black.withValues(alpha: 0.45)]),
+          border: Border.all(color: theme.accent.withValues(alpha: 0.45)),
         ),
         child: Column(children: [
-          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            if (icon != null)
-              Padding(padding: const EdgeInsets.only(right: 6), child: NetImg(icon, width: 24, height: 24, fit: BoxFit.contain))
-            else
-              Padding(padding: const EdgeInsets.only(right: 6), child: Text(emoji, style: const TextStyle(fontSize: 16))),
-            Flexible(
-              child: Text('${s['title'] ?? ''}',
-                  maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: theme.accent, fontWeight: FontWeight.w900, fontSize: 15)),
+          // Başlık şeridi.
+          Container(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(colors: [theme.accent.withValues(alpha: 0.0), theme.accent.withValues(alpha: 0.22), theme.accent.withValues(alpha: 0.0)]),
+              border: Border(bottom: BorderSide(color: theme.accent.withValues(alpha: 0.25))),
             ),
-          ]),
-          const SizedBox(height: 10),
-          Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-            Expanded(child: _podium(context, at(2), 2)),
-            Expanded(child: _podium(context, at(1), 1)),
-            Expanded(child: _podium(context, at(3), 3)),
-          ]),
+            child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              if (icon != null)
+                Padding(padding: const EdgeInsets.only(right: 6), child: NetImg(icon, width: 22, height: 22, fit: BoxFit.contain))
+              else
+                Padding(padding: const EdgeInsets.only(right: 6), child: Text(emoji, style: const TextStyle(fontSize: 15))),
+              Flexible(
+                child: Text('${s['title'] ?? ''}',
+                    maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: theme.accent, fontWeight: FontWeight.w900, fontSize: 15)),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(borderRadius: BorderRadius.circular(6), border: Border.all(color: theme.accent.withValues(alpha: 0.6))),
+                child: Text(tx('İLK 3'), style: TextStyle(color: theme.accent, fontSize: 9.5, fontWeight: FontWeight.w900, letterSpacing: 0.8)),
+              ),
+            ]),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(6, 10, 6, 0),
+            // Üç sütun alttan hizalı: basamakların tabanı aynı çizgide, adlar tek satır (uzun / süslü adlar kürsüyü bozmaz).
+            child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+              Expanded(child: _podium(context, at(2), 2)),
+              Expanded(child: _podium(context, at(1), 1)),
+              Expanded(child: _podium(context, at(3), 3)),
+            ]),
+          ),
         ]),
       ),
     );
   }
 
-  /// Kürsü basamağı: madalya halkalı fotoğraf (1. daha büyük ve taçlı), ad, basamak.
+  /// Kürsü: madalya halkalı fotoğraf (1. büyük ve taçlı), tek satır ad, metalik basamak (1. en yüksek).
   Widget _podium(BuildContext context, Map<String, dynamic>? e, int rank) {
     final medal = _medal[rank]!;
     final first = rank == 1;
-    final r = first ? 30.0 : 23.0;
+    final r = first ? 30.0 : 24.0;
     final user = e == null ? null : mapOf(e['user']);
     final partner = e == null ? null : mapOf(e['partner']);
     Widget ring(Map<String, dynamic>? u, double radius) => GestureDetector(
           onTap: () => _openUser(context, u),
           child: Container(
-            padding: const EdgeInsets.all(2.2),
+            padding: const EdgeInsets.all(2.4),
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              gradient: LinearGradient(colors: [medal, Color.lerp(medal, Colors.black, 0.35)!]),
-              boxShadow: [BoxShadow(color: medal.withValues(alpha: first ? 0.7 : 0.4), blurRadius: first ? 14 : 8)],
+              gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Colors.white, medal, Color.lerp(medal, Colors.black, 0.4)!]),
+              boxShadow: [BoxShadow(color: medal.withValues(alpha: first ? 0.75 : 0.45), blurRadius: first ? 16 : 9)],
             ),
             child: UserAvatar(user: u, radius: radius),
           ),
         );
-    final photo = user == null
-        ? CircleAvatar(radius: r + 2, backgroundColor: Colors.white10, child: const Icon(Icons.person_outline, color: Colors.white30))
-        : partner == null
-            ? ring(user, r)
-            : SizedBox(
-                width: r * 3.1,
-                height: r * 2 + 4.4,
-                child: Stack(children: [
-                  Positioned(left: 0, child: ring(user, r * 0.92)),
-                  Positioned(right: 0, child: ring(partner, r * 0.92)),
-                  Positioned.fill(child: Center(child: Text('💞', style: TextStyle(fontSize: r * 0.6)))),
-                ]),
-              );
+    final Widget photo;
+    if (user == null) {
+      // Boş basamak: soluk halka ve soru işareti.
+      photo = Container(
+        width: r * 2 + 4.8,
+        height: r * 2 + 4.8,
+        decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withValues(alpha: 0.05), border: Border.all(color: medal.withValues(alpha: 0.35), width: 1.5)),
+        child: Icon(Icons.question_mark_rounded, color: medal.withValues(alpha: 0.45), size: r * 0.9),
+      );
+    } else if (partner == null) {
+      photo = ring(user, r);
+    } else {
+      final rr = r * 0.86;
+      photo = SizedBox(
+        width: rr * 3.3,
+        height: rr * 2 + 4.8,
+        child: Stack(alignment: Alignment.center, children: [
+          Positioned(left: 0, child: ring(user, rr)),
+          Positioned(right: 0, child: ring(partner, rr)),
+          Container(
+            padding: const EdgeInsets.all(3),
+            decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFF0B0906)),
+            child: Text('💞', style: TextStyle(fontSize: rr * 0.55)),
+          ),
+        ]),
+      );
+    }
     final name = user == null
-        ? '—'
+        ? tx('Boş')
         : partner == null
             ? '${user['displayName'] ?? ''}'
             : '${user['displayName'] ?? ''} & ${partner['displayName'] ?? ''}';
+    final barH = first ? 46.0 : (rank == 2 ? 34.0 : 26.0);
     return Column(mainAxisSize: MainAxisSize.min, children: [
-      if (first) const Text('👑', style: TextStyle(fontSize: 20)) else const SizedBox(height: 4),
+      SizedBox(height: 24, child: first ? const Text('👑', style: TextStyle(fontSize: 21)) : null),
       photo,
       const SizedBox(height: 6),
-      Text(name,
-          maxLines: 2,
-          textAlign: TextAlign.center,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(color: Colors.white, fontWeight: first ? FontWeight.w900 : FontWeight.w700, fontSize: first ? 13.5 : 12.5)),
+      SizedBox(
+        height: 18,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 2),
+          child: Text(
+            name,
+            maxLines: 1,
+            textAlign: TextAlign.center,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: user == null ? Colors.white38 : Colors.white,
+              fontWeight: first ? FontWeight.w900 : FontWeight.w700,
+              fontSize: first ? 13.5 : 12.5,
+              shadows: const [Shadow(color: Colors.black87, blurRadius: 3)],
+            ),
+          ),
+        ),
+      ),
       const SizedBox(height: 6),
+      // Metalik basamak: üst kenarda parlak çizgi, ortada büyük sıra numarası.
       Container(
-        height: first ? 30 : (rank == 2 ? 22 : 16),
-        margin: const EdgeInsets.symmetric(horizontal: 6),
+        height: barH,
+        margin: const EdgeInsets.symmetric(horizontal: 3),
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
-          gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [medal, Color.lerp(medal, Colors.black, 0.45)!]),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(10)),
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color.lerp(medal, Colors.white, 0.35)!, medal, Color.lerp(medal, Colors.black, 0.5)!],
+            stops: const [0, 0.35, 1],
+          ),
+          border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.7), width: 1.2)),
         ),
-        child: Text('$rank', style: const TextStyle(color: Pal.onBright, fontWeight: FontWeight.w900, fontSize: 14)),
+        child: Text('$rank',
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w900,
+              fontSize: first ? 22 : 18,
+              shadows: [Shadow(color: Color.lerp(medal, Colors.black, 0.6)!, blurRadius: 4, offset: const Offset(0, 1))],
+            )),
       ),
     ]);
   }

@@ -1,3 +1,20 @@
+## v2.123.2 — Sayı tahtası tüm mikrofon modlarında sayar
+- Puan ayrı bir satır yerine avatarın alt kenarına binen siyah-altın rozetle gösterilir (💎 + puan; 10.000 üstü "12K",
+  "3,4M"). Eskiden 12 / 15 / 20 / 25 / 30'lu sık modlarda satır sığmadığı için puan hiç görünmüyordu; artık her modda ve
+  görüntülü ızgarada, yalnızca sayı tahtası açıkken görünür. Koltuk ölçüleri değişmez.
+
+## v2.123.1 — Ajans Merkezi arama satırı, gizli kullanıcı, etkinlik sonuç kartları
+- **Ajans / Yayıncı / Bayi panelleri:** telefonda "Ara" düğmesi satırı kaplıyor, arama kutusu küçücük kalıyordu. Giriş kutusu
+  yanındaki düğmeler artık yalnızca kendi genişliğinde; kutu kalan yeri kaplar (globals.css).
+- **Gizli kullanıcının oda girişi** siyah-altın şerit; "Gizli 772501" kimlik kapsülü mor yerine siyah-altın, içinde altın
+  maske; adı altın yazı.
+- **Gizli kullanıcı tanıdık listelerinde gerçek adıyla görünür:** arkadaşlar ve arkadaşlık istekleri, kendi takip / fan
+  listem, özel mesaj listesi, CP / ilişki duvarı (publicUser `reveal`). Odalarda, herkese açık listelerde ve başkasının
+  takip listesinde gizli kalır; gizli kişinin kendi ilişki duvarı başkalarına yine kapalı.
+- **Etkinlik sonuç kartları yeniden tasarlandı:** başlık şeridi + "İLK 3"; basamakların tabanı aynı çizgide, adlar tek satır
+  (uzun / süslü adlar kürsüyü bozmaz), metalik basamaklar ve büyük sıra numarası, boş basamakta soluk halka + "Boş",
+  çiftlerde ortada kalpli iki fotoğraf.
+
 ## v2.123.0 — Sayı tahtası (Yoho gibi) ve yeni gizli kullanıcı görünümü
 - **Sayı tahtası oturumları:** Araçlar > İnteraktif Özellikler > "Sayı tahtası" (oda yöneticileri).
   - Süre: Manuel Kontrollü ya da 5 / 10 / 15 / 30 / 60 dk. Kuralları Sıfırla: koltuktan ayrılınca / odadan ayrılınca.

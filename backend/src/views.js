@@ -39,8 +39,11 @@ const wipItem = (row, type) => row.wip_items?.[type] ?? (row.wip_hidden?.[type] 
  * opts.alias: gizli kullanıcının gizli ID'si (hiddenId) yalnızca oda içi verilerde (üyeler, sohbet, hediye, çanta…) gönderilir;
  * takip / arkadaş / ziyaretçi / paylaşım / mesaj gibi listelerde gönderilmez (gizli kimlik tanıdıklarıyla eşleştirilemesin).
  */
-export function publicUser(row, viewerId = null, { alias = false } = {}) {
+export function publicUser(row, viewerId = null, { alias = false, reveal = false } = {}) {
   if (!row) return null;
+  // reveal: tanıdık listeleri (arkadaşlar, kendi takip / fan listem, özel mesajlar, CP / ilişki duvarı) — gizli kullanıcı
+  // burada GERÇEK adıyla görünür (zaten tanınan kişi; gizlilik odalar ve herkese açık listeler içindir).
+  if (reveal && row.is_hidden) row = { ...row, is_hidden: false };
   // Gizli kullanıcı herkese — kendisine de — "Gizli Kullanıcı" görünür (odada, sohbette, listelerde tutarlı olsun;
   // kişi gizli modda olduğunu kendi koltuğundan da görür). Profil düzenleme kendi profil sayfasından yapılır.
   void viewerId;

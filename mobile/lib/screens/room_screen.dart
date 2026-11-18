@@ -2463,7 +2463,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     return Wrap(spacing: 4, runSpacing: 3, crossAxisAlignment: WrapCrossAlignment.center, children: items);
   }
 
-  Widget _nameText(Map<String, dynamic>? u, {double size = 13.5, Color? fallback}) => WipNameText(
+  Widget _nameText(Map<String, dynamic>? u, {double size = 13.5, Color? fallback}) => u?['isHidden'] == true
+      // Gizli kullanıcı: altın yazı (uygulama renkleri).
+      ? ShaderMask(
+          blendMode: BlendMode.srcIn,
+          shaderCallback: (r) => const LinearGradient(colors: [Color(0xFFFFE9A0), Color(0xFFF2B92A), Color(0xFFFFD54F)]).createShader(r),
+          child: Text('${u?['displayName'] ?? ''}', style: TextStyle(fontSize: size, fontWeight: FontWeight.w900, color: Colors.white)),
+        )
+      : WipNameText(
         '${u?['displayName'] ?? ''}',
         level: (u?['wipLevel'] as num?)?.toInt(),
         color: parseColor(u?['nameColor'] as String?) ?? fallback ?? const Color(0xFF7DD3FC),
@@ -2553,6 +2560,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       _nameText(ju),
       Text(tx('odaya girdi'), style: TextStyle(fontSize: 13, color: Colors.white70)),
     ]);
+    final hiddenJoin = ju?['isHidden'] == true;
     if (!isNew) {
       return Align(
         alignment: Alignment.centerLeft,
@@ -2560,7 +2568,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           constraints: BoxConstraints(maxWidth: maxW),
           margin: const EdgeInsets.symmetric(vertical: 3),
           padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-          decoration: BoxDecoration(color: const Color(0x6613285A), borderRadius: BorderRadius.circular(14)),
+          // Gizli kullanıcının girişi siyah-altın şeritle (mor değil).
+          decoration: hiddenJoin
+              ? BoxDecoration(
+                  gradient: const LinearGradient(colors: [Color(0xE60B0906), Color(0xCC2A1F08)]),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: const Color(0x99F2B92A)),
+                )
+              : BoxDecoration(color: const Color(0x6613285A), borderRadius: BorderRadius.circular(14)),
           child: head,
         ),
       );
@@ -3593,13 +3608,16 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   // ---------- Arayüz ----------
   // Koltuk ölçüleri sahne alanına göre _seatGrid içinde hesaplanır (kaydırma yok; her koltuk modu ekrana sığar).
-  bool _showScoreRow = true;
   double _bodyH = 0; // oda gövdesinin yüksekliği (Scaffold klavyeyle küçülmez); koltuk ölçeği yalnızca buna bağlı
   bool _kbSeen = false; // klavye geri tuşuyla kapanınca yazı alanı da kapansın
   bool get _seatCompact => _seatCount >= 12; // 12+ modda koltuklar küçük (Yoho: genişliğin ~%10'u)
   double get _seatNameH => _seatCompact ? 14 : 16;
   double get _seatScoreH => 16;
-  bool get _scoreOn => (_sbKnown ? _sbSession != null : _room?['scoreboardEnabled'] != false) && _showScoreRow;
+  /// Sayı tahtası açık mı (oturum sürüyor; eski sunucuda koltuk sayacı ayarı).
+  bool get _sbActive => _sbKnown ? _sbSession != null : _room?['scoreboardEnabled'] != false;
+  // Puan artık her modda avatarın altına BİNEN rozetle gösterilir (Yoho); ayrı satır yok → koltuk ölçüsü hiç değişmez,
+  // 12 / 15 / 20 / 25 / 30'lu sık modlarda da sayar (eskiden satır sığmayınca puan hiç görünmüyordu).
+  bool get _scoreOn => false;
   // Bir koltuğun avatar alanı (slot) boyutu satıra göre değişir: üst (oda sahibi) satırı daha büyüktür.
   double _cellH(double slot) => slot + 2 + _seatNameH + (_scoreOn ? _seatScoreH + 2 : 0);
 
@@ -3613,10 +3631,13 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           SizedBox(
             width: slotSize,
             height: slotSize,
-            child: muted
+            child: muted || (_sbActive && score != null)
                 ? Stack(clipBehavior: Clip.none, children: [
                     Positioned.fill(child: slot),
-                    Positioned(right: slotSize * 0.04, bottom: slotSize * 0.04, child: IgnorePointer(child: _mutedBadge(slotSize * 0.36))),
+                    if (muted) Positioned(right: slotSize * 0.04, bottom: slotSize * 0.04, child: IgnorePointer(child: _mutedBadge(slotSize * 0.36))),
+                    // Sayı tahtası puanı: avatarın alt kenarına binen altın rozet (her mikrofon modunda).
+                    if (_sbActive && score != null)
+                      Positioned(left: 0, right: 0, bottom: 0, child: IgnorePointer(child: Center(child: score))),
                   ])
                 : slot,
           ),
@@ -3625,6 +3646,36 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           if (_scoreOn) ...[const SizedBox(height: 2), SizedBox(height: _seatScoreH, child: Center(child: score ?? const SizedBox.shrink()))],
         ]),
       ),
+    );
+  }
+
+  /// 1.250 → 1,2K · 3.400.000 → 3,4M (dar koltukta sığsın).
+  static String _short(String v) {
+    final n = BigInt.tryParse(v) ?? BigInt.zero;
+    String f(BigInt x, int d, String u) {
+      final whole = x ~/ BigInt.from(d);
+      final frac = (x % BigInt.from(d)) * BigInt.from(10) ~/ BigInt.from(d);
+      return whole >= BigInt.from(100) || frac == BigInt.zero ? '$whole$u' : '$whole,$frac$u';
+    }
+    if (n >= BigInt.from(1000000000)) return f(n, 1000000000, 'B');
+    if (n >= BigInt.from(1000000)) return f(n, 1000000, 'M');
+    if (n >= BigInt.from(10000)) return f(n, 1000, 'K');
+    return fmtNumber(n.toString());
+  }
+
+  /// Sayı tahtası rozeti: siyah-altın kapsül, Elmas simgesi + puan; büyüklüğü koltuğa göre (sık modlarda küçülür).
+  Widget _scoreBadge(String userId, double slotSize) {
+    final v = _scores[userId] ?? '0';
+    final fs = (slotSize * 0.17).clamp(8.5, 12.5);
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: fs * 0.55, vertical: fs * 0.12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(fs),
+        gradient: const LinearGradient(colors: [Color(0xFF2A1F08), Color(0xFF0B0906)]),
+        border: Border.all(color: const Color(0xFFF2B92A), width: 1),
+        boxShadow: const [BoxShadow(color: Color(0x66F2B92A), blurRadius: 5)],
+      ),
+      child: Text('💎${_short(v)}', maxLines: 1, style: TextStyle(fontSize: fs, height: 1.1, fontWeight: FontWeight.w900, color: const Color(0xFFFFD54F))),
     );
   }
 
@@ -3832,11 +3883,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           ),
         ),
       ]),
-      score: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-        decoration: BoxDecoration(color: Colors.black45, borderRadius: BorderRadius.circular(8)),
-        child: Text('💎 ${fmtNumber(_scores[userId] ?? 0)}', style: TextStyle(fontSize: _seatCompact ? 10 : 11, color: Colors.amberAccent)),
-      ),
+      score: _scoreBadge(userId, slotSize),
     );
   }
 
@@ -3867,8 +3914,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       } else {
         // Ölçek yalnızca cihaz ölçüsüne bağlı (oturmak, izleyici, klavye, PK şeridi değiştirmez).
         final sc = _seatScaleFor(w);
-        final scoreRow = _scoreFits(seatLayoutFor(_seatCount, skin: _micSkin), w * sc);
-        _showScoreRow = scoreRow;
+        const scoreRow = false;
         seatH = _seatAreaHeight(w, sc, score: scoreRow);
         seats = _seatGrid(w, sc);
       }
@@ -4040,7 +4086,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                   ),
                 ),
               ]),
-              if (_room?['scoreboardEnabled'] != false)
+              if (_sbActive)
                 Text('💎 ${fmtNumber(_scores[userId] ?? 0)}', maxLines: 1, style: TextStyle(fontSize: fs * 0.95, height: 1.15, color: Colors.amberAccent, shadows: shadow)),
             ]),
           ),
@@ -4216,21 +4262,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final g = RoomGeom(w);
     final avail = bodyH - MediaQuery.paddingOf(context).top - g.headerH - g.barH - 110 - (_pkStage ? RoomPkPanel.height : 0);
     final spec = seatLayoutFor(_seatCount, skin: _micSkin);
-    final need = _seatAreaHeight(w, 1, score: _scoreFits(spec, w));
+    final need = _seatAreaHeight(w, 1, score: false);
     if (need <= avail) return 1.0;
     if (avail <= 0) return 0.72;
     return (avail / need).clamp(0.72, 1.0).toDouble();
-  }
-
-  /// Puan (elmas) satırı yalnızca satırlar arasında yer varsa gösterilir (çok koltuklu modlarda gizli, Yoho gibi).
-  bool _scoreFits(SeatLayoutSpec spec, double w) {
-    if (spec.pitch.isEmpty) return true;
-    var minGap = double.infinity;
-    for (var r = 0; r < spec.pitch.length; r++) {
-      final gap = spec.pitch[r] * w - ((spec.rows[r].dia + seatCircleBoost) * w + 8) / 2 - ((spec.rows[r + 1].dia + seatCircleBoost) * w + 8) / 2;
-      if (gap < minGap) minGap = gap;
-    }
-    return minGap >= 2 + _seatNameH + 2 + _seatScoreH + 6;
   }
 
   Widget _seatGrid(double w, double sc) {

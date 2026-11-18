@@ -40,7 +40,7 @@ router.get('/', async (req, res) => {
      ORDER BY fr.responded_at DESC NULLS LAST LIMIT 500`,
     [req.user.id],
   );
-  const users = r.rows.map((x) => publicUser(x, req.user.id));
+  const users = r.rows.map((x) => publicUser(x, req.user.id, { reveal: true }));
   res.json({ users: await attachCurrentRooms(users).catch(() => users) });
 });
 
@@ -54,7 +54,7 @@ router.get('/requests', async (req, res) => {
      ORDER BY fr.created_at DESC LIMIT 100`,
     [req.user.id],
   );
-  res.json({ requests: r.rows.map((x) => ({ user: publicUser(x, req.user.id), createdAt: x.requested_at })) });
+  res.json({ requests: r.rows.map((x) => ({ user: publicUser(x, req.user.id, { reveal: true }), createdAt: x.requested_at })) });
 });
 
 // Arkadaşlık isteği gönder (karşı taraf zaten istek göndermişse otomatik kabul olur)

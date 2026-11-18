@@ -911,4 +911,6 @@ const kAr = <String, String>{
   'Sıfırlama kuralı': 'قاعدة التصفير',
   'Sayım süresi doldu, puan tablosu kapandı.': 'انتهى الوقت وأُغلقت لوحة النقاط.',
   '{name} puan tablosunu kapattı!': '{name} أغلق لوحة النقاط!',
+  'Boş': 'فارغ',
+  'İLK 3': 'أفضل 3',
 };

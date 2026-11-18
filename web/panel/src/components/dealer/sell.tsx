@@ -121,7 +121,7 @@ export default function DealerSell() {
                 placeholder="ID ya da @kullaniciadi"
                 autoComplete="off"
               />
-              <button type="submit" disabled={finding || !q.trim()} className="gold-button inline-flex items-center gap-2 disabled:opacity-60">
+              <button type="submit" disabled={finding || !q.trim()} className="gold-button shrink-0 inline-flex items-center gap-2 disabled:opacity-60">
                 <Search size={16} />
                 {finding ? "Aranıyor..." : "Bul"}
               </button>
