@@ -1,3 +1,25 @@
+## v2.124.2 — Etkinlik izni: yöneticiler de izne tabi
+- Yönetici hesapları dahil, yalnızca izin listesindeki kişiler Etkinlikleri görür ve açar.
+
+## v2.124.1 — Etkinlikler yalnızca izinli kişilere
+- Etkinlikler menüsünü yalnızca yönetimin izin verdiği kişiler görür ve açabilir (yöneticiler dahil, istisna yok). Karar sunucuda:
+  oda menüsü, etkinlik listesi, H5 sayfası ve etkinlik açma uçları izinsiz kişiye kapalıdır. Migration 081.
+- Panel > Oda Etkinlikleri > Görme izni: ID ya da kullanıcı adıyla izin ver / kaldır.
+
+## v2.124.0 — Oda etkinlikleri (bağlantı yapıştır → açılır) + Coins Bayisi Merkezi
+- Etkinlikler: yönetim paneli > Sistem > Oda Etkinlikleri. Satıra bağlantı yapıştırılınca uygulamada "Yakında" kalkar,
+  dokununca açılır (alt pencere / tam ekran / tarayıcı). Yer tutucular: {uid} {publicId} {name} {avatar} {lang} {roomId} {token} {ts}.
+  {token}: kişiye ve etkinliğe özel 2 saatlik oyun bileti (oturum bileti değildir).
+- Coin'li oyun sağlayıcısı API'si: POST /api/activity-provider/:id/user ve /:id/balance (HMAC-SHA256 imza, ±5 dk,
+  orderId ile tekrar güvenli, cüzdan + mali kayıt + canlı bakiye). Migration 080.
+- Coins Bayisi Merkezi (profil menüsü, yalnızca bayi): satıştaki Coin, Kendine yükle, Kullanıcıya Coins Yükle
+  (ID ile ara → kişi kartı → miktar → Anında / 5 dakika sonra → not → sipariş onayı), işletme verileri,
+  Yeniden Şarj Geçmişi (tarih aralığı, Tümü / Satın alma / Satış), Stok yükle (ödeme yöntemi + toptan paket →
+  ödeme bağlantısı açılır, referanslı talep), Taleplerim.
+- API: /api/dealer/self, /api/dealer/transactions, /api/dealer/stats (total), /api/dealer/sell delayMinutes,
+  /api/dealer/topup-packages (methods), /api/admin/dealer-shop (paketler + ödeme bağlantıları).
+- Panel: Ekonomi > Bayi Mağazası (paket fiyatları, ödeme bağlantısı yapıştırma).
+
 ## v2.123.3 — Derleme düzeltmesi
 - flutter analyze uyarısı (room_screen.dart: kullanılmayan `spec` değişkeni) giderildi; APK yeniden derlenir.
 

@@ -26,7 +26,8 @@ import { router as inventoryRouter } from './routes/inventory.js';
 import { router as roomsRouter } from './routes/rooms.js';
 import { router as familiesRouter } from './routes/families.js';
 import { router as wipRouter } from './routes/wip.js';
-import { router as dealersRouter } from './routes/dealers.js';
+import { router as dealersRouter, startDealerDeliveryTicker, shopAdminRouter as dealerShopAdminRouter } from './routes/dealers.js';
+import { router as activitiesRouter, providerRouter as activityProviderRouter, adminRouter as activitiesAdminRouter } from './routes/activities.js';
 import { router as adminRouter } from './routes/admin.js';
 import { router as giftsRouter } from './routes/gifts.js';
 import { router as agenciesRouter } from './routes/agencies.js';
@@ -170,6 +171,10 @@ app.use('/api/leaderboards', leaderboardsRouter);
 app.use('/api/families', familiesRouter);
 app.use('/api/wip', wipRouter);
 app.use('/api/dealer', dealersRouter);
+app.use('/api/activities', activitiesRouter);
+app.use('/api/activity-provider', activityProviderRouter); // oyun sağlayıcısı (sunucu → sunucu, imzalı)
+app.use('/api/admin/activities', activitiesAdminRouter);
+app.use('/api/admin/dealer-shop', dealerShopAdminRouter);
 app.use('/api/admin/usd', usdAdminRouter); // dolar cüzdanı yönetimi (çekim talepleri); genel admin yönlendiricisinden önce
 app.use('/api/admin', adminRouter);
 app.use('/api/usd', usdRouter); // dolar cüzdanı: bakiye, admin'e ve bayiye gönderim
@@ -268,6 +273,7 @@ const themeSweeper = startThemeSweeper();
 const screenshotPruner = setInterval(() => pruneScreenshots().catch((e) => console.error('Ekran görüntüsü kayıt temizliği:', e.message)), 6 * 3600e3);
 const pkTicker = startPkTicker();
 const scoreboardTicker = startScoreboardTicker();
+const dealerDeliveryTicker = startDealerDeliveryTicker();
 const gameTicker = startGameTicker();
 const eventsTicker = startWeeklyEventsTicker();
 const notifyJanitor = startNotificationJanitor();
@@ -306,6 +312,7 @@ async function shutdown(signal) {
   clearInterval(screenshotPruner);
   clearInterval(pkTicker);
   clearInterval(scoreboardTicker);
+  clearInterval(dealerDeliveryTicker);
   clearInterval(gameTicker);
   clearInterval(eventsTicker);
   clearInterval(notifyJanitor);

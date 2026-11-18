@@ -8,6 +8,7 @@ import 'app_theme.dart';
 import '../l10n/l10n.dart';
 import '../screens/usd_wallet_screen.dart';
 import '../screens/user_screens.dart';
+import 'external_webview.dart';
 
 /// Kendi sunucumuzdaki bir H5 sayfasını uygulama içinde gösteren genel pencere.
 ///
@@ -118,6 +119,13 @@ class _AppWebViewModalState extends State<AppWebViewModal> {
         if (mounted) Navigator.of(context).maybePop();
       case 'open':
         _openScreen(data);
+      case 'openActivity':
+        // Yönetimin bağlantı yapıştırdığı etkinlik: sunucudan dolu bağlantı alınır, ayrı (dış) pencerede açılır.
+        final id = data?['id']?.toString() ?? '';
+        final room = data?['roomId']?.toString();
+        if (mounted && RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(id)) {
+          await openActivity(context, id, roomId: room != null && RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(room) ? room : null);
+        }
     }
   }
 

@@ -12,6 +12,7 @@ import '../widgets/common.dart';
 import '../widgets/id_badge.dart';
 import '../widgets/cp_widgets.dart';
 import '../widgets/app_webview_modal.dart';
+import 'dealer_center_screen.dart';
 import 'family_screen.dart';
 import 'social_screens.dart';
 import 'store_screens.dart';
@@ -328,6 +329,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
               sub: '${agencyOwned['name']} · ${const {'pending': 'İnceleniyor', 'active': 'Aktif', 'suspended': 'Askıda', 'rejected': 'Reddedildi'}[agencyOwned['status']] ?? agencyOwned['status']}')
         else if (agencyAssistant != null)
           row(Icons.support_agent, Pal.cyan, tx('Ajans Merkezi'), () => _open(agencyCenterPage()), sub: '${agencyAssistant['agencyName']} · ${tx('Asistan')}'),
+        // Coins Bayisi Merkezi (Yoho "Coins bayim"): yalnızca aktif bayi.
+        if (isDealer) row(Icons.monetization_on, Pal.gold, tx('Coins Bayisi Merkezi'), () => _open(const DealerCenterScreen()), sub: tx('Kullanıcılara Coin yükle, stok ve satış verileri')),
         row(Icons.shield_outlined, const Color(0xFFFF4FA8), tx('Koruyuculuğum'), () => _open(MyGuardianScreen(profileBuilder: (id) => UserProfileScreen(userId: id))), sub: tx('Koruyucuların ve koruduğun kişiler')),
         row(Icons.event_available, Pal.gold, tx('Günlük Giriş'), () => showCheckinDialog(context)),
       ]),

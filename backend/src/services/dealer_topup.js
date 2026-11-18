@@ -42,6 +42,8 @@ const row = (r) => ({
   referenceNote: r.reference_note,
   status: r.status,
   reviewNote: r.review_note,
+  priceTry: r.price_try != null ? Number(r.price_try) : null,
+  refCode: r.ref_code ?? null,
   reviewedAt: r.reviewed_at,
   createdAt: r.created_at,
   ...(r.dealer_name !== undefined ? { dealerName: r.dealer_name } : {}),
@@ -53,12 +55,37 @@ export const requestView = row;
  * Bayi bakiye talebi oluşturur. Çağıran aktif bir dealer_accounts sahibi olmalı (route'ta doğrulanır).
  * coins paketten türetilir; istemci serbest miktar gönderemez.
  */
-export async function createTopupRequest(c, { dealerUserId, dealerId, packageCode, referenceNote }) {
-  const pkg = requirePackage(packageCode);
+/** Yönetimden düzenlenen toptan paketler (dealer_packages); tablo yoksa / boşsa sabit liste. */
+export async function loadPackages(run, { all = false } = {}) {
+  try {
+    const rows = (await run(`SELECT * FROM dealer_packages ${all ? '' : 'WHERE active'} ORDER BY sort_order, coins`)).rows;
+    if (rows.length || all) {
+      return rows.map((r) => ({ code: r.code, coins: BigInt(r.coins), priceTry: Number(r.price_try), listTry: Number(r.list_try), label: r.label, active: r.active, sortOrder: r.sort_order }));
+    }
+  } catch (e) {
+    if (e?.code !== '42P01') throw e;
+  }
+  return DEALER_TOPUP_PACKAGES;
+}
+
+export const methodView = (m, { admin = false } = {}) => ({
+  id: m.id, name: m.name, icon: m.icon, badge: m.badge, ready: !!m.url_template,
+  ...(admin ? { urlTemplate: m.url_template, active: m.active, sortOrder: m.sort_order } : {}),
+});
+
+/** Ödeme bağlantısındaki yer tutucuları doldurur: {price} {coins} {code} {ref} {dealer}. */
+export function fillPayUrl(tpl, v) {
+  return tpl.replace(/\{(price|coins|code|ref|dealer)\}/g, (_, k) => encodeURIComponent(v[k] ?? ''));
+}
+
+export async function createTopupRequest(c, { dealerUserId, dealerId, packageCode, referenceNote, methodId = null, refCode = null }) {
+  const pkgs = await loadPackages((t, p) => c.query(t, p));
+  const pkg = pkgs.find((p) => p.code === packageCode);
+  if (!pkg) throw fail('Geçersiz paket.');
   const r = await c.query(
-    `INSERT INTO dealer_topup_requests(dealer_user_id, dealer_id, requested_coins, package_code, reference_note)
-     VALUES($1,$2,$3,$4,$5) RETURNING *`,
-    [dealerUserId, dealerId, pkg.coins.toString(), pkg.code, referenceNote || null],
+    `INSERT INTO dealer_topup_requests(dealer_user_id, dealer_id, requested_coins, package_code, reference_note, pay_method_id, price_try, ref_code)
+     VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+    [dealerUserId, dealerId, pkg.coins.toString(), pkg.code, referenceNote || null, methodId, pkg.priceTry, refCode],
   );
   return row(r.rows[0]);
 }

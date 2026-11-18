@@ -22,10 +22,15 @@ export function renderErrorPage(message, nonce) {
 }
 
 /** Etkinlik sayfası. [roomId] doğrulanmış UUID, [appVersion] safeVersion'dan geçmiş olmalıdır. */
-export function renderActivitiesPage({ roomId, appVersion, nonce }) {
-  const cards = ACTIVITIES.map((a) => `
-    <button class="card" data-id="${esc(a.id)}"${a.soon ? ' disabled' : ''}${a.game ? ' data-game="1"' : ''}>
-      <span class="ico">${a.icon}</span>
+export function renderActivitiesPage({ roomId, appVersion, nonce, items }) {
+  // items: yönetimden gelen etkinlikler (bağlantılı). Verilmezse sabit liste (eski davranış). Hafıza Kartları hep ilk sırada.
+  const list = items
+    ? [ACTIVITIES[0], ...items.map((i) => ({ id: i.id, icon: i.icon, title: i.title, desc: i.subtitle, soon: !i.ready, link: i.ready }))]
+    : ACTIVITIES;
+  const icon = (ic) => (/^(https:\/\/|\/)/.test(ic) ? `<img src="${esc(ic)}" alt="">` : esc(ic));
+  const cards = list.map((a) => `
+    <button class="card" data-id="${esc(a.id)}"${a.soon ? ' disabled' : ''}${a.game ? ' data-game="1"' : ''}${a.link ? ' data-act="1"' : ''}>
+      <span class="ico">${a.game ? a.icon : icon(a.icon)}</span>
       <span class="txt"><b>${esc(a.title)}</b><small>${esc(a.desc)}</small></span>
       ${a.soon ? '<em>Yakında</em>' : ''}
     </button>`).join('');
@@ -41,7 +46,7 @@ body{margin:0;background:#0b0906;color:#f6efdf;font:14px system-ui,-apple-system
 .bal span{color:#b3a584;font-size:12px}.bal b{color:#ffd54f;font-size:18px}
 .card{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:#17130c;color:inherit;border:1px solid #4d3c1c;border-radius:14px;padding:12px;margin-bottom:10px;font:inherit}
 .card:disabled{opacity:.7}
-.ico{font-size:28px;width:44px;height:44px;display:flex;align-items:center;justify-content:center;background:#221b10;border-radius:12px}
+.ico img{width:36px;height:36px;object-fit:contain;border-radius:8px}.ico{font-size:28px;width:44px;height:44px;display:flex;align-items:center;justify-content:center;background:#221b10;border-radius:12px}
 .txt{flex:1;display:flex;flex-direction:column;gap:2px}.txt small{color:#b3a584}
 em{font-style:normal;font-size:11px;color:#1c1405;background:#f2b92a;border-radius:8px;padding:2px 8px}
 #game{display:none}#game.on{display:block}#list.off{display:none}
@@ -115,6 +120,12 @@ em{font-style:normal;font-size:11px;color:#1c1405;background:#f2b92a;border-radi
   }
   document.querySelectorAll('[data-game]').forEach(function (b) {
     b.onclick = function () { document.getElementById('list').className = 'off'; document.getElementById('game').className = 'on'; startMemory(); };
+  });
+  // Bağlantılı etkinlik: uygulama sunucudan bağlantıyı (yer tutucular doldurulmuş) alıp açar.
+  document.querySelectorAll('[data-act]').forEach(function (b) {
+    b.onclick = function () {
+      try { window.TRLive && window.TRLive.postMessage(JSON.stringify({ type: 'openActivity', id: b.getAttribute('data-id'), roomId: ROOM_ID })); } catch (e) {}
+    };
   });
   document.getElementById('back').onclick = function () { document.getElementById('game').className = ''; document.getElementById('list').className = ''; };
   toApp('getToken');

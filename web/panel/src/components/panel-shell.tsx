@@ -34,6 +34,8 @@ import {
   Camera,
   Server,
   CalendarDays,
+  CreditCard,
+  PartyPopper,
   type LucideIcon,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -82,6 +84,7 @@ const adminGroups: NavGroup[] = [
     links: [
       { label: "Mali Kayıtlar", href: "/admin/coins", icon: Coins, adminOnly: true },
       { label: "Bayiler", href: "/admin/dealers", icon: Store, adminOnly: true },
+      { label: "Bayi Mağazası", href: "/admin/dealer-shop", icon: CreditCard, adminOnly: true },
       { label: "Fasulye Cüzdanı", href: "/admin/usd", icon: Wallet, adminOnly: true },
       { label: "Şanslı Havuzlar", href: "/admin/lucky", icon: Clover, adminOnly: true },
       { label: "İçerik Yükle", href: "/admin/upload", icon: Upload, adminOnly: true },
@@ -97,6 +100,7 @@ const adminGroups: NavGroup[] = [
     links: [
       { label: "Duyurular", href: "/admin/announcements", icon: Megaphone, adminOnly: true },
       { label: "Etkinlikler", href: "/admin/events", icon: CalendarDays, adminOnly: true },
+      { label: "Oda Etkinlikleri", href: "/admin/activities", icon: PartyPopper, adminOnly: true },
       { label: "Ayarlar", href: "/admin/settings", icon: Settings, adminOnly: true },
       { label: "Sunucu", href: "/admin/server", icon: Server, adminOnly: true },
     ],

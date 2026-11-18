@@ -474,9 +474,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       get('/api/rooms/${widget.roomId}/mic/queue'),
       ownerId != null && ownerId != Session.id ? get('/api/rooms/hosts/$ownerId/favorite') : Future.value(null),
       get('/api/app/config'),
+      get('/api/activities/access'),
     ]);
     if (!mounted) return;
-    final s = res[0], pk = res[1], roomPk = res[2], lb = res[3], q = res[4], f = res[5], c = res[6];
+    final s = res[0], pk = res[1], roomPk = res[2], lb = res[3], q = res[4], f = res[5], c = res[6], act = res[7];
     setState(() {
       if (s != null) {
         _sbKnown = s.containsKey('session');
@@ -496,6 +497,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         _activitiesOn = c['roomActivitiesEnabled'] != false;
         _cardGameOn = c['cardGameEnabled'] != false;
       }
+      // İzin sunucuda: izinli değilse (ya da sorgu yanıtsızsa) Etkinlikler menüsü hiç görünmez.
+      if (act?['allowed'] != true) _activitiesOn = false;
     });
     if (q != null) {
       _queueLoaded = true;
