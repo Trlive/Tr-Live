@@ -6,7 +6,7 @@ import { userLimit, ipLimit } from '../firewall.js';
 import { fail, text, uuid, assetUrl, oneOf } from '../http.js';
 import { jwtSecret } from '../config.js';
 import { hub } from '../realtime.js';
-import { installGame, removeGame, getGameFile, gameInfo, SDK_JS, injectSdk, GAME_LIMITS } from '../services/activity_games.js';
+import { installGame, removeGame, gameLink, getGameFile, gameInfo, SDK_JS, injectSdk, GAME_LIMITS } from '../services/activity_games.js';
 
 // ---------------------------------------------------------------------------------------------------------------
 // Etkinlikler (v2.124): yönetici yalnızca BAĞLANTI yapıştırır; uygulama o bağlantıyı açar.
@@ -56,7 +56,7 @@ export function providerSign(secret, { activityId, ts, token, orderId, amount })
 
 /** Bağlantıdaki yer tutucuları doldurur (değerler adres için kodlanır). */
 export function fillLink(link, values) {
-  return link.replace(/\{(base|uid|publicId|name|avatar|lang|roomId|token|ts)\}/g, (_, k) => encodeURIComponent(values[k] ?? ''));
+  return link.replace(/\{(base|uid|publicId|name|avatar|lang|roomId|token|ts)\}/g, (_, k) => (k === 'base' ? String(values.base ?? '') : encodeURIComponent(values[k] ?? '')));
 }
 
 const itemView = (r, { admin = false } = {}) => ({
@@ -386,6 +386,11 @@ adminRouter.post('/', async (req, res) => {
 adminRouter.patch('/:id', async (req, res) => {
   const id = uuid(req.params.id, 'Etkinlik');
   const v = readItem(req.body ?? {}, true);
+  // Zip ile yüklenmiş oyun varken bağlantı boş gönderilirse (eski form) oyunun bağlantısı korunur.
+  if (v.link_url === '') {
+    const g = (await query(`SELECT version FROM activity_games WHERE activity_id = $1`, [id])).rows[0];
+    if (g) v.link_url = gameLink(id, g.version);
+  }
   const cols = Object.keys(v);
   if (!cols.length) throw fail('Değişiklik yok.');
   const r = await query(

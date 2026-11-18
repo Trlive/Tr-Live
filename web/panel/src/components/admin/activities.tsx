@@ -45,7 +45,7 @@ export default function AdminActivities() {
           <AccessCard />
           {data.items.length === 0 && <Empty title="Etkinlik yok." />}
           {data.items.map((x) => (
-            <Row key={x.id} item={x} onDone={reload} />
+            <Row key={`${x.id}:${x.linkUrl}`} item={x} onDone={reload} />
           ))}
           <button
             type="button"

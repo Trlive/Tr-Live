@@ -60,6 +60,11 @@ export function extractGame(buf) {
   return { files, total };
 }
 
+/** Yüklü oyunun bağlantısı (oyuncuya özel bilgiler açılırken doldurulur). */
+export function gameLink(activityId, version) {
+  return `{base}/games/${activityId}/v${version}/index.html?uid={uid}&token={token}&name={name}&lang={lang}&roomId={roomId}`;
+}
+
 /** Oyunu yükler: yeni sürüm yazar, eskileri siler. Döner: { version, files, bytes }. */
 export async function installGame(activityId, buf) {
   const { files, total } = extractGame(buf);
@@ -78,7 +83,7 @@ export async function installGame(activityId, buf) {
       [activityId, version, files.length, total],
     );
     // Bağlantı kendiliğinden yazılır: oyuncuya özel bilet ve bilgiler açılırken doldurulur ({base} = sunucu adresi).
-    const link = `{base}/games/${activityId}/v${version}/index.html?uid={uid}&token={token}&name={name}&lang={lang}&roomId={roomId}`;
+    const link = gameLink(activityId, version);
     await c.query(`UPDATE activity_items SET link_url = $2, updated_at = NOW() WHERE id = $1`, [activityId, link]);
     memo.clear();
     return { version, files: files.length, bytes: total, link };

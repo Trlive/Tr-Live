@@ -1,3 +1,8 @@
+## v2.126.4 — Zip oyun "Yakında" kalıyordu
+- Panelde oyun yükledikten sonra "Kaydet"e basınca eski (boş) bağlantı oyunun bağlantısını siliyordu; artık yüklü oyunun bağlantısı korunur, form yüklemeden sonra yenilenir.
+- 085: bağlantısı boşalmış yüklü oyunlar kendiliğinden düzeltilir.
+- {base} adresi artık kodlanmadan yazılır (oyun adresi bozuk açılıyordu).
+
 ## v2.126.3 — Panel derlemesi: glibc tabanlı Node + hata bağlantısı düzeltmesi
 - Panel derlemesi node:20-alpine yerine node:20-bookworm-slim ile yapılır (Next/Tailwind yerel paketleri için daha sağlam).
 - "Derleme hatası" bağlantısı mutlak yola alındı (/yonetim/derleme-hatasi.txt); dosyaya npm install çıktısı da eklendi.
