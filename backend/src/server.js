@@ -27,7 +27,7 @@ import { router as roomsRouter } from './routes/rooms.js';
 import { router as familiesRouter } from './routes/families.js';
 import { router as wipRouter } from './routes/wip.js';
 import { router as dealersRouter, startDealerDeliveryTicker, shopAdminRouter as dealerShopAdminRouter } from './routes/dealers.js';
-import { playRouter as activityPlayRouter, router as activitiesRouter, providerRouter as activityProviderRouter, adminRouter as activitiesAdminRouter } from './routes/activities.js';
+import { hostedGamesRouter, playRouter as activityPlayRouter, router as activitiesRouter, providerRouter as activityProviderRouter, adminRouter as activitiesAdminRouter } from './routes/activities.js';
 import { router as adminRouter } from './routes/admin.js';
 import { router as giftsRouter } from './routes/gifts.js';
 import { router as agenciesRouter } from './routes/agencies.js';
@@ -120,6 +120,7 @@ app.get('/media/:file', async (req, res) => {
   res.send(hit.data);
 });
 
+app.use('/games', hostedGamesRouter); // zip ile yüklenen HTML oyunlar + TRGame SDK
 app.use('/uploads', express.static(config.uploadDir, {
   maxAge: '7d', index: false, dotfiles: 'deny',
   setHeaders: (res) => res.setHeader('X-Content-Type-Options', 'nosniff'),

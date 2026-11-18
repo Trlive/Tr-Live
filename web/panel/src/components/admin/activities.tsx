@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { PartyPopper, Plus, Trash2 } from "lucide-react";
-import { api } from "@/lib/api";
+import { api, apiBinary } from "@/lib/api";
 import { useApi } from "@/lib/use-api";
 import { Badge, Card, Empty, ErrorBox, Loading, PageHeader, inputCls } from "@/components/ui";
 import { ActionMsg, Field, btnDangerOutline, btnSmall, selectCls, useAction } from "./kit";
@@ -11,6 +11,7 @@ type Item = {
   id: string; title: string; subtitle: string; icon: string; openMode: "sheet" | "full" | "browser";
   ready: boolean; sortOrder: number; linkUrl: string; enabled: boolean; hasSecret: boolean;
   coinPlay: boolean; minBet: string; maxBet: string; maxMultiplier: number;
+  game: { version: number; files: number; bytes: string; uploadedAt: string } | null;
 };
 
 const MODES: Record<string, string> = { sheet: "Alt pencere (oda arkada sürer)", full: "Tam ekran", browser: "Telefonun tarayıcısı" };
@@ -36,7 +37,7 @@ export default function AdminActivities() {
               <li>Bağlantıda şu yer tutucular kullanılabilir (açılırken doldurulur): <code className="text-[#d7b56d]">{PLACEHOLDERS}</code></li>
               <li><code className="text-[#d7b56d]">{"{token}"}</code>: o kişiye ve yalnızca bu etkinliğe özel 2 saatlik oyun bileti (oturum bileti değildir).</li>
               <li>Coin&apos;li oyun sağlayıcısı: imza anahtarını girin; sağlayıcı <code>/api/activity-provider/&lt;etkinlik-id&gt;/user</code> ve <code>/balance</code> uçlarını kullanır (belge: backend/src/routes/activities.js).</li>
-              <li>Coin&apos;li oyun (kendi HTML oyunların): oyun sayfası <code>{"{token}"}</code> ile <code>POST /api/activity-play/&lt;etkinlik-id&gt;/bet</code> (<code>{"{token, bet}"}</code> → roundId) ve <code>/settle</code> (<code>{"{token, roundId, multiplier}"}</code>) çağırır. Çarpanı oyun bildirir; giriş/çıkış, sınırlar ve kayıtlar sunucuda. İmza anahtarı gerekmez.</li>
+              <li>Kendi HTML oyunların: her etkinlikte <b>Oyun dosyası (zip)</b> yükle; sunucu yayınlar, bağlantıyı yazar ve oyun sayfasına <code>TRGame</code> SDK&apos;sını ekler (Coin bahis / sonuç tek satır). Coin&apos;li oyun için aşağıdan &quot;Coin bahsi açık&quot; yap.</li>
               <li>&quot;Hafıza Kartları&quot; uygulamanın kendi oyunudur ve her zaman ilk sıradadır.</li>
             </ul>
           </Card>
@@ -120,6 +121,7 @@ function Row({ item, onDone }: { item: Item; onDone: () => void }) {
           </label>
         </Field>
       </div>
+      <GameUpload item={item} onDone={onDone} />
       <div className="mt-3 flex flex-wrap gap-2">
         <button type="button" disabled={busy} onClick={save} className={btnSmall}>Kaydet</button>
         {item.linkUrl && (
@@ -215,5 +217,62 @@ function GameFeeCard() {
         <ActionMsg msg={msg} />
       </div>
     </Card>
+  );
+}
+
+/** Oyun zip'i: sunucu açar, yayınlar ve bağlantıyı kendisi yazar. Oyun sayfasında TRGame SDK otomatik hazırdır. */
+function GameUpload({ item, onDone }: { item: Item; onDone: () => void }) {
+  const { busy, msg, run } = useAction();
+  const g = item.game;
+  return (
+    <div className="mt-4 rounded-xl border border-[#383024] p-3">
+      <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+        <b className="text-white">Oyun dosyası (zip)</b>
+        {g ? <Badge tone="green">v{g.version} · {g.files} dosya · {(Number(g.bytes) / 1048576).toFixed(1)} MB</Badge> : <Badge tone="gray">Yüklenmedi</Badge>}
+      </div>
+      <p className="mb-2 text-xs text-gray-500">Zip&apos;in kökünde (ya da tek klasörde) <code>index.html</code> olmalı. Yükleyince bağlantı kendiliğinden yazılır; yeni zip yüklemek oyunu günceller (uygulama yenilemek gerekmez).</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          type="file"
+          accept=".zip,application/zip"
+          disabled={busy}
+          className="text-sm text-gray-300"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            e.target.value = "";
+            if (!f) return;
+            run("Oyun yüklendi, bağlantı otomatik yazıldı.", async () => {
+              await apiBinary(`/api/admin/activities/${item.id}/game`, f);
+              onDone();
+            });
+          }}
+        />
+        {g && (
+          <button
+            type="button"
+            disabled={busy}
+            className={btnDangerOutline}
+            onClick={() => run("Oyun kaldırıldı.", async () => {
+              if (!window.confirm("Yüklenen oyun silinsin mi?")) return false;
+              await api(`/api/admin/activities/${item.id}/game`, { method: "DELETE" });
+              onDone();
+            })}
+          >
+            Oyunu kaldır
+          </button>
+        )}
+      </div>
+      <div className="mt-2"><ActionMsg msg={msg} /></div>
+      <details className="mt-2 text-xs text-gray-400">
+        <summary className="cursor-pointer text-[#d7b56d]">Oyunda Coin nasıl kullanılır (SDK)</summary>
+        <pre className="mt-2 overflow-x-auto rounded bg-black/40 p-2 text-[11px] leading-relaxed text-gray-300">{`// SDK sayfaya otomatik eklenir: window.TRGame
+const me = await TRGame.me();            // { balance, name, minBet, maxBet, maxMultiplier }
+const r  = await TRGame.play(500, async (round) => {
+  // ... oyunu oyna ...
+  return 2.5;                            // çarpan (0 = kaybetti)
+});                                      // { payout, balance, roundId }
+// ya da adım adım: TRGame.bet(500) → TRGame.settle(roundId, çarpan)`}</pre>
+      </details>
+    </div>
   );
 }

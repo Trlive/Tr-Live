@@ -108,7 +108,7 @@ export function startFirewallJanitor() {
 
 // ---------------- Express ara katmanları ----------------
 /** Herkese açık dosya yolları (görsel, animasyon, emoji): API hız bütçesinden ayrı sayılır. */
-export const isMediaPath = (url) => typeof url === 'string' && (url.startsWith('/uploads/') || url.startsWith('/media/') || url.startsWith('/api/emoji/'));
+export const isMediaPath = (url) => typeof url === 'string' && (url.startsWith('/uploads/') || url.startsWith('/media/') || url.startsWith('/games/') || url.startsWith('/api/emoji/'));
 
 export function firewall() {
   return (req, res, next) => {

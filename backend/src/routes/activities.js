@@ -1,11 +1,12 @@
 import crypto from 'node:crypto';
-import { Router } from 'express';
+import express, { Router } from 'express';
 import { query, tx } from '../database.js';
 import { requireAuth, requireSuperAdmin } from '../auth.js';
 import { userLimit, ipLimit } from '../firewall.js';
 import { fail, text, uuid, assetUrl, oneOf } from '../http.js';
 import { jwtSecret } from '../config.js';
 import { hub } from '../realtime.js';
+import { installGame, removeGame, getGameFile, gameInfo, SDK_JS, injectSdk, GAME_LIMITS } from '../services/activity_games.js';
 
 // ---------------------------------------------------------------------------------------------------------------
 // Etkinlikler (v2.124): yönetici yalnızca BAĞLANTI yapıştırır; uygulama o bağlantıyı açar.
@@ -55,7 +56,7 @@ export function providerSign(secret, { activityId, ts, token, orderId, amount })
 
 /** Bağlantıdaki yer tutucuları doldurur (değerler adres için kodlanır). */
 export function fillLink(link, values) {
-  return link.replace(/\{(uid|publicId|name|avatar|lang|roomId|token|ts)\}/g, (_, k) => encodeURIComponent(values[k] ?? ''));
+  return link.replace(/\{(base|uid|publicId|name|avatar|lang|roomId|token|ts)\}/g, (_, k) => encodeURIComponent(values[k] ?? ''));
 }
 
 const itemView = (r, { admin = false } = {}) => ({
@@ -103,7 +104,7 @@ router.post('/:id/launch', requireAuth, userLimit('activity_launch', 60, 60e3), 
   const base = `${req.protocol}://${req.get('host')}`;
   const avatar = u.avatar_url ? (u.avatar_url.startsWith('http') ? u.avatar_url : base + u.avatar_url) : '';
   const url = fillLink(item.link_url, {
-    uid: u.id, publicId: u.public_id ?? '', name: u.display_name || u.username, avatar, lang, roomId,
+    base, uid: u.id, publicId: u.public_id ?? '', name: u.display_name || u.username, avatar, lang, roomId,
     token: issueGameToken(u.id, item.id), ts: String(Math.floor(Date.now() / 1000)),
   });
   res.json({ url, openMode: item.open_mode, title: item.title });
@@ -273,6 +274,35 @@ playRouter.post('/:id/settle', ipLimit('activity_play', 6000, 60e3), async (req,
   res.json({ code: out.code, ...(out.code === 0 ? { data: out.data } : { message: out.message }) });
 });
 
+// ---------------- Barındırılan oyunlar (herkese açık dosya sunumu) ----------------
+// /games/_sdk.js  → TRGame SDK;  /games/<etkinlik>/v<N>/<yol>  → zip'ten yüklenen oyun dosyaları.
+export const hostedGamesRouter = Router();
+const GAME_CSP = "default-src 'self' data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; base-uri 'self'; form-action 'none'; frame-ancestors 'none'";
+
+hostedGamesRouter.get('/_sdk.js', (_req, res) => {
+  res.set({ 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'public, max-age=300', 'X-Content-Type-Options': 'nosniff' }).send(SDK_JS);
+});
+
+async function serveGame(req, res) {
+  const id = String(req.params.id ?? '');
+  const ver = /^v(\d{1,6})$/.exec(String(req.params.ver ?? ''));
+  if (!/^[0-9a-f-]{36}$/i.test(id) || !ver) return res.status(404).end();
+  const raw = Array.isArray(req.params.path) ? req.params.path.join('/') : String(req.params.path ?? '');
+  const path = raw === '' ? 'index.html' : raw;
+  if (path.includes('..') || path.startsWith('/')) return res.status(404).end();
+  const f = await getGameFile(id, Number(ver[1]), path);
+  if (!f) return res.status(404).type('text/plain').send('Bulunamadı.');
+  const headers = { 'Content-Type': f.mime, 'Cache-Control': 'public, max-age=31536000, immutable', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' };
+  if (f.mime.startsWith('text/html')) {
+    // Sayfa her açılışta biletle gelir; önbellekte yeni bilet olmasın diye HTML önbelleklenmez.
+    res.set({ ...headers, 'Cache-Control': 'no-store', 'Content-Security-Policy': GAME_CSP });
+    return res.send(injectSdk(f.data.toString('utf8')));
+  }
+  res.set(headers).send(f.data);
+}
+hostedGamesRouter.get('/:id/:ver', ipLimit('game_files', 60000, 3600e3), serveGame);
+hostedGamesRouter.get('/:id/:ver/*path', ipLimit('game_files', 60000, 3600e3), serveGame);
+
 // ---------------- Yönetim ----------------
 adminRouter.use(requireAuth, requireSuperAdmin);
 
@@ -301,7 +331,8 @@ adminRouter.delete('/access/:userId', async (req, res) => {
 
 adminRouter.get('/', async (req, res) => {
   const rows = (await query(`SELECT * FROM activity_items ORDER BY sort_order, created_at`)).rows;
-  res.json({ items: rows.map((r) => itemView(r, { admin: true })) });
+  const games = await gameInfo(rows.map((r) => r.id));
+  res.json({ items: rows.map((r) => ({ ...itemView(r, { admin: true }), game: games.get(r.id) ?? null })) });
 });
 
 function readItem(b, partial) {
@@ -316,7 +347,7 @@ function readItem(b, partial) {
     const l = String(b.linkUrl ?? '').trim();
     if (l) {
       let u;
-      try { u = new URL(l.replace(/\{[a-zA-Z]+\}/g, 'x')); } catch { throw fail('Bağlantı geçersiz.'); }
+      try { u = new URL(l.replace(/^\{base\}/, 'https://x.test').replace(/\{[a-zA-Z]+\}/g, 'x')); } catch { throw fail('Bağlantı geçersiz.'); }
       if (u.protocol !== 'https:') throw fail('Bağlantı https:// ile başlamalı.');
       if (l.length > 1000) throw fail('Bağlantı çok uzun.');
     }
@@ -363,6 +394,20 @@ adminRouter.patch('/:id', async (req, res) => {
   );
   if (!r.rows[0]) throw fail('Etkinlik bulunamadı.', 404);
   res.json({ item: itemView(r.rows[0], { admin: true }) });
+});
+
+
+// Oyun zip'i yükle: sunucu güvenle açar, /games/<id>/v<N>/ altında yayınlar, bağlantıyı kendisi yazar.
+adminRouter.post('/:id/game', express.raw({ type: () => true, limit: GAME_LIMITS.totalBytes }), async (req, res) => {
+  const id = uuid(req.params.id, 'Etkinlik');
+  if (!Buffer.isBuffer(req.body) || !req.body.length) throw fail('Zip dosyası gönderilmedi.');
+  const out = await installGame(id, req.body);
+  res.json({ ok: true, ...out });
+});
+
+adminRouter.delete('/:id/game', async (req, res) => {
+  await removeGame(uuid(req.params.id, 'Etkinlik'));
+  res.json({ ok: true });
 });
 
 adminRouter.delete('/:id', async (req, res) => {

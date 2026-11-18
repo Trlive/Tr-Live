@@ -1,3 +1,11 @@
+## v2.126.0 — Oyun zip yükle: sunucu barındırır, bağlantı ve API otomatik
+- Panel > Oda Etkinlikleri > etkinlik > "Oyun dosyası (zip)": HTML oyunun zip'i yüklenir; sunucu güvenle açar (../, gizli ve
+  izinsiz dosyalar atlanır, 60 MB / 800 dosya sınırı), veritabanına yazar ve /games/<etkinlik>/v<N>/ altında yayınlar.
+  Bağlantı kendiliğinden yazılır; yeni zip = güncelleme (uygulama yenilemek gerekmez). Migration 084.
+- Oyun sayfasına TRGame SDK otomatik eklenir: TRGame.me(), TRGame.bet(), TRGame.settle(), TRGame.play(bahis, oyun) →
+  Coin bahis/sonuç uçları (activity-play) tek satırla. Bilet adresten okunur.
+- Bağlantıda {base} (sunucu adresi) yer tutucusu.
+
 ## v2.125.2 — Oda menüsü düzeni, ID rengi, sahip çıkınca oda fotoğrafı
 - İnteraktif Özellikler: üst sıra PK · Şanslı Çanta · Sayı tahtası; alt sıra Ludo · TEK (Uno) · Etkinlikler. Ludo/TEK'teki
   altın çerçeve tüm özelliklere uygulandı. Temel Araçlar daireleri uygulamanın sarısında.
