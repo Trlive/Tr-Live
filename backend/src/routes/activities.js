@@ -66,7 +66,7 @@ const itemView = (r, { admin = false } = {}) => ({
   openMode: r.open_mode,
   ready: !!r.link_url,
   sortOrder: r.sort_order,
-  ...(admin ? { linkUrl: r.link_url, enabled: r.enabled, hasSecret: !!r.app_secret, updatedAt: r.updated_at } : {}),
+  ...(admin ? { coinPlay: r.coin_play === true, minBet: String(r.min_bet), maxBet: String(r.max_bet), maxMultiplier: Number(r.max_multiplier), linkUrl: r.link_url, enabled: r.enabled, hasSecret: !!r.app_secret, updatedAt: r.updated_at } : {}),
 });
 
 // ---------------- Kullanıcı ----------------
@@ -174,6 +174,105 @@ providerRouter.post('/:id/balance', ipLimit('activity_provider', 6000, 60e3), as
   res.json({ code: out.code, ...(out.data ? { data: out.data } : { message: out.message }) });
 });
 
+// ---------------- Coin'li tur sistemi (oyun sayfası → sunucu; kullanıcıya özel oyun bileti ile) ----------------
+// Oyun sayfası (herhangi bir adreste barınan HTML) kendi `{token}` bileti ile şunları çağırır:
+//   POST /api/activity-play/:id/me      { token }                         → bakiye, Gümüş, bahis sınırları
+//   POST /api/activity-play/:id/bet     { token, bet }                    → bahis Coin'i düşer, { roundId, balance }
+//   POST /api/activity-play/:id/settle  { token, roundId, multiplier }    → ödeme = bahis × çarpan (sınırlı), { payout, balance }
+// Çarpanı oyun bildirir; sunucu giriş/çıkışı, sınırları (en az/en çok bahis, en yüksek çarpan), tek seferlik
+// sonuçlandırmayı ve kayıtları (cüzdan + mali kayıt) kendisi yapar.
+export const playRouter = Router();
+
+async function playContext(req) {
+  const id = String(req.params.id ?? '');
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return { err: [1005, 'Etkinlik geçersiz.'] };
+  const item = (await query(`SELECT * FROM activity_items WHERE id = $1 AND enabled`, [id])).rows[0];
+  if (!item || !item.coin_play) return { err: [1005, 'Bu etkinlikte Coin oyunu kapalı.'] };
+  const userId = readGameToken(req.body?.token, id);
+  if (!userId) return { err: [1003, 'Oyun bileti geçersiz ya da süresi doldu.'] };
+  if (!(await canSeeActivities(userId))) return { err: [1003, 'Etkinlikler için izniniz yok.'] };
+  return { id, item, userId };
+}
+
+const limits = (item) => ({ minBet: String(item.min_bet), maxBet: String(item.max_bet), maxMultiplier: Number(item.max_multiplier) });
+
+playRouter.post('/:id/me', ipLimit('activity_play', 6000, 60e3), async (req, res) => {
+  const ctx = await playContext(req);
+  if (ctx.err) return res.json({ code: ctx.err[0], message: ctx.err[1] });
+  const u = (await query(`SELECT id, public_id, display_name, username, avatar_url, coins FROM users WHERE id = $1 AND account_status = 'active'`, [ctx.userId])).rows[0];
+  if (!u) return res.json({ code: 1003, message: 'Kullanıcı bulunamadı.' });
+  res.json({ code: 0, data: { ...userData(u), ...limits(ctx.item) } });
+});
+
+playRouter.post('/:id/bet', ipLimit('activity_play', 6000, 60e3), async (req, res) => {
+  const ctx = await playContext(req);
+  if (ctx.err) return res.json({ code: ctx.err[0], message: ctx.err[1] });
+  const betStr = String(req.body?.bet ?? '').trim();
+  if (!/^\d{1,12}$/.test(betStr)) return res.json({ code: 1005, message: 'Bahis geçersiz.' });
+  const bet = BigInt(betStr);
+  if (bet < BigInt(ctx.item.min_bet) || bet > BigInt(ctx.item.max_bet)) {
+    return res.json({ code: 1005, message: `Bahis ${ctx.item.min_bet} – ${ctx.item.max_bet} arasında olmalı.` });
+  }
+  const out = await tx(async (c) => {
+    const u = (await c.query(`SELECT coins FROM users WHERE id = $1 AND account_status = 'active' FOR UPDATE`, [ctx.userId])).rows[0];
+    if (!u) return { code: 1003, message: 'Kullanıcı bulunamadı.' };
+    const open = (await c.query(`SELECT COUNT(*)::int AS n FROM activity_rounds WHERE user_id = $1 AND activity_id = $2 AND status = 'open'`, [ctx.userId, ctx.id])).rows[0].n;
+    if (open >= 5) return { code: 1005, message: 'Önce açık turları sonuçlandırın.' };
+    const before = BigInt(u.coins);
+    if (before < bet) return { code: 1004, message: 'Coin yetersiz.' };
+    const after = before - bet;
+    await c.query(`UPDATE users SET coins = $2, updated_at = NOW() WHERE id = $1`, [ctx.userId, after.toString()]);
+    const round = (await c.query(`INSERT INTO activity_rounds(activity_id, user_id, bet) VALUES($1,$2,$3) RETURNING id`, [ctx.id, ctx.userId, bet.toString()])).rows[0];
+    await c.query(
+      `INSERT INTO wallet_transactions(user_id, transaction_type, coin_amount, reference_id, description) VALUES($1,'activity_spend',$2,$3,$4)`,
+      [ctx.userId, (-bet).toString(), round.id, `${ctx.item.title} bahsi`],
+    );
+    await c.query(
+      `INSERT INTO financial_audit_logs(user_id, action, reference_type, reference_id, amount_coins, balance_before, balance_after, metadata)
+       VALUES($1,'activity_bet','activity_round',$2,$3,$4,$5,$6)`,
+      [ctx.userId, round.id, (-bet).toString(), before.toString(), after.toString(), JSON.stringify({ activityId: ctx.id })],
+    );
+    return { code: 0, data: { roundId: round.id, balance: after.toString() }, userId: ctx.userId };
+  });
+  if (out.code === 0) hub.sendToUser(out.userId, { type: 'wallet', coins: out.data.balance });
+  res.json({ code: out.code, ...(out.code === 0 ? { data: out.data } : { message: out.message }) });
+});
+
+playRouter.post('/:id/settle', ipLimit('activity_play', 6000, 60e3), async (req, res) => {
+  const ctx = await playContext(req);
+  if (ctx.err) return res.json({ code: ctx.err[0], message: ctx.err[1] });
+  const roundId = String(req.body?.roundId ?? '');
+  const mRaw = Number(req.body?.multiplier);
+  if (!/^[0-9a-f-]{36}$/i.test(roundId) || !Number.isFinite(mRaw) || mRaw < 0) return res.json({ code: 1005, message: 'Tur ya da çarpan geçersiz.' });
+  const mult = Math.round(mRaw * 100); // yüzdelik: 2,5x → 250
+  if (mult > Math.round(Number(ctx.item.max_multiplier) * 100)) return res.json({ code: 1005, message: `Çarpan en fazla ${Number(ctx.item.max_multiplier)} olabilir.` });
+  const out = await tx(async (c) => {
+    const r = (await c.query(`SELECT * FROM activity_rounds WHERE id = $1 AND user_id = $2 AND activity_id = $3 FOR UPDATE`, [roundId, ctx.userId, ctx.id])).rows[0];
+    if (!r) return { code: 1005, message: 'Tur bulunamadı.' };
+    const u = (await c.query(`SELECT coins FROM users WHERE id = $1 FOR UPDATE`, [ctx.userId])).rows[0];
+    if (r.status === 'settled') return { code: 0, data: { payout: String(r.payout), balance: String(u.coins), duplicate: true }, userId: ctx.userId };
+    const payout = (BigInt(r.bet) * BigInt(mult)) / 100n;
+    const before = BigInt(u.coins);
+    const after = before + payout;
+    if (payout > 0n) {
+      await c.query(`UPDATE users SET coins = $2, updated_at = NOW() WHERE id = $1`, [ctx.userId, after.toString()]);
+      await c.query(
+        `INSERT INTO wallet_transactions(user_id, transaction_type, coin_amount, reference_id, description) VALUES($1,'activity_win',$2,$3,$4)`,
+        [ctx.userId, payout.toString(), r.id, `${ctx.item.title} kazancı (x${mult / 100})`],
+      );
+      await c.query(
+        `INSERT INTO financial_audit_logs(user_id, action, reference_type, reference_id, amount_coins, balance_before, balance_after, metadata)
+         VALUES($1,'activity_win','activity_round',$2,$3,$4,$5,$6)`,
+        [ctx.userId, r.id, payout.toString(), before.toString(), after.toString(), JSON.stringify({ activityId: ctx.id, multiplier: mult / 100, bet: String(r.bet) })],
+      );
+    }
+    await c.query(`UPDATE activity_rounds SET status = 'settled', payout = $2, multiplier = $3, settled_at = NOW() WHERE id = $1`, [r.id, payout.toString(), mult / 100]);
+    return { code: 0, data: { payout: payout.toString(), balance: after.toString() }, userId: ctx.userId };
+  });
+  if (out.code === 0) hub.sendToUser(out.userId, { type: 'wallet', coins: out.data.balance });
+  res.json({ code: out.code, ...(out.code === 0 ? { data: out.data } : { message: out.message }) });
+});
+
 // ---------------- Yönetim ----------------
 adminRouter.use(requireAuth, requireSuperAdmin);
 
@@ -226,6 +325,19 @@ function readItem(b, partial) {
   if (b.openMode !== undefined) out.open_mode = oneOf(b.openMode, ['sheet', 'full', 'browser'], 'Açılış biçimi');
   if (b.enabled !== undefined) out.enabled = b.enabled === true;
   if (b.sortOrder !== undefined) out.sort_order = Math.max(-1000, Math.min(1000, Number.parseInt(b.sortOrder, 10) || 0));
+  const whole = (v, label, lo, hi) => {
+    const n = Number(v);
+    if (!Number.isInteger(n) || n < lo || n > hi) throw fail(`${label} ${lo}–${hi} arası tam sayı olmalı.`);
+    return n;
+  };
+  if (b.coinPlay !== undefined) out.coin_play = b.coinPlay === true;
+  if (b.minBet !== undefined) out.min_bet = whole(b.minBet, 'En az bahis', 1, 1000000000);
+  if (b.maxBet !== undefined) out.max_bet = whole(b.maxBet, 'En çok bahis', 1, 1000000000);
+  if (b.maxMultiplier !== undefined) {
+    const m = Number(b.maxMultiplier);
+    if (!Number.isFinite(m) || m < 0 || m > 100000) throw fail('En yüksek çarpan 0–100000 arası olmalı.');
+    out.max_multiplier = Math.round(m * 100) / 100;
+  }
   if (b.appSecret !== undefined) out.app_secret = text(b.appSecret, 'İmza anahtarı', { max: 200 }) ?? '';
   return out;
 }

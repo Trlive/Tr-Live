@@ -6,6 +6,7 @@ import { loadPublicRows } from './users.js';
 import { roomUser } from '../views.js';
 import { fail } from '../http.js';
 import { nonOverlapping } from '../ticker.js';
+import { getConfig } from './app_config.js';
 
 // Oyun türleri: saf motor + oyuncu sınırı. Yeni oyun eklerken buraya ve 074 geçişindeki CHECK listesine yazılır.
 export const GAME_TYPES = {
@@ -51,6 +52,12 @@ async function tekView(g, waiting, run, viewerId) {
 }
 
 export async function gameView(gameId, run = query, viewerId = null) {
+  const v = await gameViewBase(gameId, run, viewerId);
+  if (v) v.entrySilver = String(await entryFee(v.type ?? 'ludo'));
+  return v;
+}
+
+async function gameViewBase(gameId, run, viewerId) {
   const g = (await run(`SELECT * FROM room_games WHERE id = $1`, [gameId])).rows[0];
   if (!g) return null;
   const waiting = (await run(`SELECT user_id, seat FROM room_game_players WHERE game_id = $1 ORDER BY seat`, [gameId])).rows;
@@ -97,6 +104,55 @@ export async function broadcastGame(gameId) {
 
 export async function openGameOfRoom(roomId, run = query) {
   return (await run(`SELECT * FROM room_games WHERE room_id = $1 AND status IN ('waiting','playing')`, [roomId])).rows[0] || null;
+}
+
+// ---- Gümüş girişi ----
+// Ludo ve TEK'e katılmak Gümüş ister (ayardan: ludoEntrySilver / tekEntrySilver; 0 = ücretsiz). Ücret oyuncu listeye
+// girerken tek işlemde düşer ve oyuncu satırına yazılır; oyun BAŞLAMADAN çıkan ya da iptal edilen oyunda iade edilir.
+export async function entryFee(gameType) {
+  const cfg = await getConfig();
+  const v = Number(gameType === 'tek' ? cfg.tekEntrySilver : cfg.ludoEntrySilver);
+  return Number.isFinite(v) && v > 0 ? BigInt(Math.floor(v)) : 0n;
+}
+
+/** Oyuncu satırı eklendikten sonra çağrılır (aynı işlem içinde). Gümüş yetmezse hata verir → satır da geri alınır. */
+export async function chargeEntry(c, { gameId, userId, gameType, fee }) {
+  if (fee <= 0n) return null;
+  const w = (await c.query(`SELECT silver FROM users WHERE id = $1 FOR UPDATE`, [userId])).rows[0];
+  if (!w || BigInt(w.silver) < fee) throw fail(`Katılmak için ${fee.toLocaleString('tr-TR')} Gümüş gerekir; Gümüşün yetersiz.`, 402);
+  const after = BigInt(w.silver) - fee;
+  await c.query(`UPDATE users SET silver = $2, updated_at = NOW() WHERE id = $1`, [userId, after.toString()]);
+  await c.query(`UPDATE room_game_players SET silver_paid = $3 WHERE game_id = $1 AND user_id = $2`, [gameId, userId, fee.toString()]);
+  await c.query(
+    `INSERT INTO silver_transactions(user_id, amount, balance_after, type, reference, description) VALUES($1,$2,$3,'game_entry',$4,$5)`,
+    [userId, (-fee).toString(), after.toString(), gameId, `${gameType === 'tek' ? 'TEK' : 'Ludo'} girişi`],
+  );
+  return after;
+}
+
+/** Bekleyen oyundan çıkan / iptal edilen oyuncuların Gümüşünü iade eder ve satırlarını siler (userIds yoksa hepsi). */
+export async function refundAndRemove(c, gameId, userIds = null) {
+  const rows = (await c.query(
+    `DELETE FROM room_game_players WHERE game_id = $1 ${userIds ? 'AND user_id = ANY($2::uuid[])' : ''} RETURNING user_id, silver_paid`,
+    userIds ? [gameId, userIds] : [gameId],
+  )).rows;
+  const out = [];
+  for (const r of rows) {
+    const paid = BigInt(r.silver_paid);
+    if (paid <= 0n) continue;
+    const w = (await c.query(`UPDATE users SET silver = silver + $2, updated_at = NOW() WHERE id = $1 RETURNING silver`, [r.user_id, paid.toString()])).rows[0];
+    if (!w) continue;
+    await c.query(
+      `INSERT INTO silver_transactions(user_id, amount, balance_after, type, reference, description) VALUES($1,$2,$3,'game_refund',$4,'Oyun girişi iadesi')`,
+      [r.user_id, paid.toString(), w.silver, gameId],
+    );
+    out.push({ userId: r.user_id, silver: String(w.silver) });
+  }
+  return out;
+}
+
+export function pushSilver(list) {
+  for (const x of list) if (x?.silver != null) hub.sendToUser(x.userId, { type: 'wallet', silver: String(x.silver) });
 }
 
 /** Oyun satırı beklenen türde değilse hata verir (bir oyunun hamle ucu başka oyunun durumunu bozmasın). */
@@ -147,7 +203,7 @@ export async function forfeitUserInRoom(userId, roomId) {
   if (!g) return;
   if (g.status === 'waiting') {
     if (g.created_by === userId) { await cancelRoomGame(roomId); return; }
-    await query(`DELETE FROM room_game_players WHERE game_id = $1 AND user_id = $2`, [g.id, userId]);
+    pushSilver(await tx((c) => refundAndRemove(c, g.id, [userId])));
     await broadcastGame(g.id);
     return;
   }
@@ -160,10 +216,18 @@ export async function forfeitUserInRoom(userId, roomId) {
 }
 
 export async function cancelRoomGame(roomId) {
-  const r = await query(
-    `UPDATE room_games SET status = 'cancelled', finished_at = NOW() WHERE room_id = $1 AND status IN ('waiting','playing') RETURNING id`, [roomId],
-  );
-  for (const g of r.rows) await broadcastGame(g.id);
+  const refunds = [];
+  const ids = await tx(async (c) => {
+    // Henüz başlamamış oyunların girişleri iade edilir; oynanmakta olan oyunda giriş yanar.
+    const waiting = (await c.query(`SELECT id FROM room_games WHERE room_id = $1 AND status = 'waiting' FOR UPDATE`, [roomId])).rows;
+    for (const w of waiting) refunds.push(...(await refundAndRemove(c, w.id)));
+    const r = await c.query(
+      `UPDATE room_games SET status = 'cancelled', finished_at = NOW() WHERE room_id = $1 AND status IN ('waiting','playing') RETURNING id`, [roomId],
+    );
+    return r.rows.map((x) => x.id);
+  });
+  pushSilver(refunds);
+  for (const id of ids) await broadcastGame(id);
 }
 
 // Süresi dolan sıralar için otomatik oyun (AFK koruması).

@@ -23,3 +23,10 @@ test('günlük giriş: ödül listesi okunur, bozuksa varsayılan', () => {
   assert.deepEqual(parseCoins('1,2,3'), [20, 20, 20, 20, 50, 50, 100]);
 });
 
+
+test('günlük giriş Gümüşü: varsayılan 1.-6. gün 1.000, 7. gün 10.000', async () => {
+  const { parseCoins, DEFAULT_SILVER } = await import('../src/checkin_rules.js');
+  assert.deepEqual(DEFAULT_SILVER, [1000, 1000, 1000, 1000, 1000, 1000, 10000]);
+  assert.deepEqual(parseCoins('1,2,3', DEFAULT_SILVER), DEFAULT_SILVER);
+  assert.deepEqual(parseCoins('5,5,5,5,5,5,50', DEFAULT_SILVER), [5, 5, 5, 5, 5, 5, 50]);
+});

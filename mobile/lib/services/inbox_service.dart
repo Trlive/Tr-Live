@@ -21,6 +21,7 @@ class Inbox {
       final t = e['type'];
       // Bakiye sunucuda değişti (ör. bayi Coin yükledi): ekrandaki bakiye hemen güncellenir.
       if (t == 'wallet' && e['coins'] != null) Session.setCoins('${e['coins']}');
+      if (t == 'wallet' && e['silver'] != null) Session.setSilver('${e['silver']}');
       // Mesajlar sekmesindeki her şey (bildirim, arkadaşlık/CP isteği, destek, ekip duyurusu, ajans daveti, aile sohbeti)
       // normal mesaj gibi sekme rozetini artırır.
       if (t == 'inbox_update') {

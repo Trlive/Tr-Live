@@ -216,8 +216,8 @@ class _HiddenIdPillState extends State<HiddenIdPill> with SingleTickerProviderSt
   }
 }
 
-/// Kullanıcı kimliği: gizli kullanıcıda gizli kimlik kapsülü; takılı renkli ID (bronz/gümüş/altın) varsa metalik; yoksa WIP'li kişide
-/// adı gibi renkli/parlayan "ID: …", değilse sade "ID" etiketi + numara. user: publicId, specialId, idColor, wipLevel,
+/// Kullanıcı kimliği: gizli kullanıcıda gizli kimlik kapsülü; takılı renkli ID (bronz/gümüş/altın) varsa metalik; yoksa sade "ID: …"
+/// (WIP ID rengini değiştirmez). user: publicId, specialId, idColor, wipLevel,
 /// nameColor alanları okunur. Oda kimliği de oda sahibinin bu kimliğidir (Yoho gibi; kimlik değişince oda da değişir).
 class IdBadge extends StatelessWidget {
   final Map<String, dynamic>? user;
@@ -232,15 +232,12 @@ class IdBadge extends StatelessWidget {
     if (user?['isHidden'] == true) return HiddenIdPill(alias: user?['hiddenId']?.toString() ?? '', height: fontSize * 1.7);
     final String id = displayIdOf(user);
     if (id.isEmpty) return const SizedBox.shrink();
-    final level = (user?['wipLevel'] as num?)?.toInt();
-    final nameColor = parseColor(user?['nameColor'] as String?);
     final String tier = user?['idColor']?.toString() ?? '';
-    // Özel ID = rakamları kullanıcının seçtiği ID; ayrı bir görünümü yok. Görünüm yalnızca takılı renkli ID'ye (bronz/gümüş/altın) bağlıdır.
+    // ID rengi WIP'e bağlı DEĞİLDİR: yalnızca takılı renkli ID'ye (bronz/gümüş/altın) bağlıdır; yoksa sade "ID: …".
+    // (Özel ID = rakamları kullanıcının seçtiği ID; ayrı bir görünümü yoktur.)
     final Widget label = kIdColors.containsKey(tier)
         ? ColoredIdText(text: id, tier: tier, fontSize: fontSize + 0.5)
-        : (level != null && level > 0)
-            ? WipNameText('ID: $id', level: level, color: nameColor, style: TextStyle(fontSize: fontSize, color: nameColor ?? color))
-            : PlainIdText(id: id, fontSize: fontSize, color: color);
+        : PlainIdText(id: id, fontSize: fontSize, color: color);
     if (!copyable) return label;
     return InkWell(
       borderRadius: BorderRadius.circular(12),

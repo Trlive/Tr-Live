@@ -13,12 +13,18 @@ class Session {
 
   static String get id => me.value?['id']?.toString() ?? '';
   static String get coins => me.value?['coins']?.toString() ?? '0';
+  static String get silver => me.value?['silver']?.toString() ?? '0';
   static bool get isStaff => ['admin', 'support'].contains(me.value?['systemRole']);
   static bool get isAdmin => me.value?['systemRole'] == 'admin';
 
   static void setCoins(String coins) {
     final u = me.value;
     if (u != null) me.value = {...u, 'coins': coins};
+  }
+
+  static void setSilver(String silver) {
+    final u = me.value;
+    if (u != null) me.value = {...u, 'silver': silver};
   }
 
   static void clear() => me.value = null;

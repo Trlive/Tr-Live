@@ -293,8 +293,10 @@ class _LudoScreenState extends State<LudoScreen> with SingleTickerProviderStateM
     final players = listOf(g['players']);
     final joined = _me != null;
     final isCreator = g['createdBy'] == Session.id;
+    final fee = int.tryParse('${g['entrySilver'] ?? 0}') ?? 0;
     return ListView(padding: const EdgeInsets.all(16), children: [
       Text('Ludo · oyuncular bekleniyor (${players.length}/4)', style: Theme.of(context).textTheme.titleMedium),
+      if (fee > 0) Padding(padding: const EdgeInsets.only(top: 4), child: Text('Giriş: 🥈 ${fmtNumber(fee)} Gümüş (başlamadan ayrılırsan iade edilir) · Gümüşün: ${fmtNumber(Session.silver)}', style: const TextStyle(color: Color(0xFFD7DDE6), fontSize: 12.5))),
       const SizedBox(height: 8),
       for (final p in players)
         ListTile(
@@ -305,7 +307,7 @@ class _LudoScreenState extends State<LudoScreen> with SingleTickerProviderStateM
       const SizedBox(height: 8),
       const Text('2-4 kişi oynar. Ücretsizdir; Coin bahsi yoktur. Zar için 30 sn süreniz var; üst üste 3 kez süre aşılırsa oyundan çıkarılırsınız.', style: TextStyle(color: Colors.white54, fontSize: 12)),
       const SizedBox(height: 12),
-      if (!joined) FilledButton.icon(onPressed: players.length >= 4 ? null : () => _call('/api/games/${g['id']}/join'), icon: const Icon(Icons.login), label: const Text('Katıl')),
+      if (!joined) FilledButton.icon(onPressed: players.length >= 4 ? null : () => _call('/api/games/${g['id']}/join'), icon: const Icon(Icons.login), label: Text(fee > 0 ? 'Katıl · 🥈 ${fmtNumber(fee)}' : 'Katıl')),
       if (joined && !isCreator) OutlinedButton(onPressed: () => _call('/api/games/${g['id']}/leave'), child: const Text('Ayrıl')),
       if (isCreator) FilledButton.icon(onPressed: players.length < 2 ? null : () => _call('/api/games/${g['id']}/start'), icon: const Icon(Icons.play_arrow), label: const Text('Oyunu başlat')),
       if (isCreator || widget.canManage) TextButton(onPressed: () => _call('/api/games/${g['id']}/cancel'), child: const Text('Oyunu iptal et')),

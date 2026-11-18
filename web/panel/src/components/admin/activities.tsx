@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PartyPopper, Plus, Trash2 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useApi } from "@/lib/use-api";
@@ -10,6 +10,7 @@ import { ActionMsg, Field, btnDangerOutline, btnSmall, selectCls, useAction } fr
 type Item = {
   id: string; title: string; subtitle: string; icon: string; openMode: "sheet" | "full" | "browser";
   ready: boolean; sortOrder: number; linkUrl: string; enabled: boolean; hasSecret: boolean;
+  coinPlay: boolean; minBet: string; maxBet: string; maxMultiplier: number;
 };
 
 const MODES: Record<string, string> = { sheet: "Alt pencere (oda arkada sürer)", full: "Tam ekran", browser: "Telefonun tarayıcısı" };
@@ -35,9 +36,11 @@ export default function AdminActivities() {
               <li>Bağlantıda şu yer tutucular kullanılabilir (açılırken doldurulur): <code className="text-[#d7b56d]">{PLACEHOLDERS}</code></li>
               <li><code className="text-[#d7b56d]">{"{token}"}</code>: o kişiye ve yalnızca bu etkinliğe özel 2 saatlik oyun bileti (oturum bileti değildir).</li>
               <li>Coin&apos;li oyun sağlayıcısı: imza anahtarını girin; sağlayıcı <code>/api/activity-provider/&lt;etkinlik-id&gt;/user</code> ve <code>/balance</code> uçlarını kullanır (belge: backend/src/routes/activities.js).</li>
+              <li>Coin&apos;li oyun (kendi HTML oyunların): oyun sayfası <code>{"{token}"}</code> ile <code>POST /api/activity-play/&lt;etkinlik-id&gt;/bet</code> (<code>{"{token, bet}"}</code> → roundId) ve <code>/settle</code> (<code>{"{token, roundId, multiplier}"}</code>) çağırır. Çarpanı oyun bildirir; giriş/çıkış, sınırlar ve kayıtlar sunucuda. İmza anahtarı gerekmez.</li>
               <li>&quot;Hafıza Kartları&quot; uygulamanın kendi oyunudur ve her zaman ilk sıradadır.</li>
             </ul>
           </Card>
+          <GameFeeCard />
           <AccessCard />
           {data.items.length === 0 && <Empty title="Etkinlik yok." />}
           {data.items.map((x) => (
@@ -62,6 +65,7 @@ function Row({ item, onDone }: { item: Item; onDone: () => void }) {
   const [f, setF] = useState({
     title: item.title, subtitle: item.subtitle, icon: item.icon, linkUrl: item.linkUrl, openMode: item.openMode,
     enabled: item.enabled, sortOrder: String(item.sortOrder), appSecret: "",
+    coinPlay: item.coinPlay, minBet: item.minBet, maxBet: item.maxBet, maxMultiplier: String(item.maxMultiplier),
   });
   const { busy, msg, run } = useAction();
   const set = (k: keyof typeof f, v: string | boolean) => setF((p) => ({ ...p, [k]: v }));
@@ -69,7 +73,7 @@ function Row({ item, onDone }: { item: Item; onDone: () => void }) {
     run("Kaydedildi.", async () => {
       await api(`/api/admin/activities/${item.id}`, {
         method: "PATCH",
-        body: { ...f, sortOrder: Number(f.sortOrder) || 0, ...(f.appSecret ? {} : { appSecret: undefined }) },
+        body: { ...f, sortOrder: Number(f.sortOrder) || 0, minBet: Number(f.minBet) || 1, maxBet: Number(f.maxBet) || 1, maxMultiplier: Number(f.maxMultiplier) || 0, ...(f.appSecret ? {} : { appSecret: undefined }) },
       });
       onDone();
     });
@@ -98,6 +102,18 @@ function Row({ item, onDone }: { item: Item; onDone: () => void }) {
         <Field label="Coin API imza anahtarı" hint={item.hasSecret ? "Kayıtlı. Değiştirmek için yenisini yazın." : "Boş = Coin API kapalı (yalnızca bağlantı açılır)."}>
           <input className={inputCls} value={f.appSecret} onChange={(e) => set("appSecret", e.target.value)} placeholder={item.hasSecret ? "••••••••" : ""} />
         </Field>
+        <Field label="Coin'li oyun" hint="Açıksa oyun sayfası bahis açıp sonuç bildirebilir (Coin düşer / eklenir).">
+          <label className="flex items-center gap-2 text-sm text-gray-300">
+            <input type="checkbox" checked={f.coinPlay} onChange={(e) => set("coinPlay", e.target.checked)} /> Coin bahsi açık
+          </label>
+        </Field>
+        {f.coinPlay && (
+          <>
+            <Field label="En az bahis (Coin)"><input className={inputCls} value={f.minBet} inputMode="numeric" onChange={(e) => set("minBet", e.target.value.replace(/\D/g, ""))} /></Field>
+            <Field label="En çok bahis (Coin)"><input className={inputCls} value={f.maxBet} inputMode="numeric" onChange={(e) => set("maxBet", e.target.value.replace(/\D/g, ""))} /></Field>
+            <Field label="En yüksek çarpan" hint="Oyunun bildireceği çarpan bunu aşamaz (güvenlik sınırı)."><input className={inputCls} value={f.maxMultiplier} inputMode="decimal" onChange={(e) => set("maxMultiplier", e.target.value.replace(/[^\d.]/g, ""))} /></Field>
+          </>
+        )}
         <Field label="Görünürlük">
           <label className="flex items-center gap-2 text-sm text-gray-300">
             <input type="checkbox" checked={f.enabled} onChange={(e) => set("enabled", e.target.checked)} /> Uygulamada göster
@@ -165,6 +181,39 @@ function AccessCard() {
           </li>
         ))}
       </ul>
+    </Card>
+  );
+}
+
+/** Ludo ve TEK (Uno) oda oyunlarına giriş ücreti (Gümüş). Oyuncu listeye girerken düşer; oyun başlamadan çıkarsa iade edilir. */
+function GameFeeCard() {
+  const cfg = useApi<{ config: Record<string, unknown> }>("/api/admin/app-config");
+  const [ludo, setLudo] = useState("500");
+  const [tek, setTek] = useState("500");
+  const { busy, msg, run } = useAction();
+  useEffect(() => {
+    const c = cfg.data?.config;
+    if (!c) return;
+    setLudo(String(c.ludoEntrySilver ?? 500));
+    setTek(String(c.tekEntrySilver ?? 500));
+  }, [cfg.data]);
+  return (
+    <Card title="Oyun giriş ücreti (Gümüş)" subtitle="Odadaki Ludo ve TEK (Uno) oyunlarına katılmak Gümüş ister. 0 = ücretsiz.">
+      <div className="grid gap-3 md:grid-cols-2">
+        <Field label="Ludo"><input className={inputCls} inputMode="numeric" value={ludo} onChange={(e) => setLudo(e.target.value.replace(/\D/g, ""))} /></Field>
+        <Field label="TEK (Uno)"><input className={inputCls} inputMode="numeric" value={tek} onChange={(e) => setTek(e.target.value.replace(/\D/g, ""))} /></Field>
+      </div>
+      <div className="mt-3 flex items-center gap-3">
+        <button
+          type="button"
+          disabled={busy || cfg.loading}
+          className={btnSmall}
+          onClick={() => run("Kaydedildi.", async () => { await api("/api/admin/app-config", { method: "PUT", body: { ludoEntrySilver: Number(ludo) || 0, tekEntrySilver: Number(tek) || 0 } }); cfg.reload(); })}
+        >
+          Kaydet
+        </button>
+        <ActionMsg msg={msg} />
+      </div>
     </Card>
   );
 }

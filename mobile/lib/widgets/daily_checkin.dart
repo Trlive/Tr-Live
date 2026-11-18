@@ -73,7 +73,8 @@ class _CheckinDialogState extends State<_CheckinDialog> {
     Session.refresh();
     final items = (r['items'] as List? ?? const []).whereType<Map>().map((m) => (m['name'] ?? '').toString()).where((x) => x.isNotEmpty).toList();
     final coins = int.tryParse('${r['coins'] ?? 0}') ?? 0;
-    final parts = [if (coins > 0) '${fmtNumber(coins)} Coin', ...items];
+    final silver = int.tryParse('${r['silver'] ?? 0}') ?? 0;
+    final parts = [if (coins > 0) '${fmtNumber(coins)} Coin', if (silver > 0) '${fmtNumber(silver)} ${tx('Gümüş')}', ...items];
     toast(context, parts.isEmpty ? tx('Giriş yapıldı!') : '🎉 ${tx('{x} hesabına eklendi!', {'x': parts.join(' + ')})}');
   }
 
@@ -210,14 +211,19 @@ class _CheckinDialogState extends State<_CheckinDialog> {
   Widget _dayCard(Map<String, dynamic> d, {required bool signed, required bool next}) {
     final n = (d['day'] as num?)?.toInt() ?? 0;
     final coins = int.tryParse('${d['coins'] ?? 0}') ?? 0;
+    final silver = int.tryParse('${d['silver'] ?? 0}') ?? 0;
+    final silverLine = silver > 0
+        ? Text('🥈 ${fmtNumber(silver)}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Color(0xFFD7DDE6), fontSize: 11, fontWeight: FontWeight.w800))
+        : const SizedBox.shrink();
     final items = [for (final it in (d['items'] as List? ?? const [])) if (it is Map) Map<String, dynamic>.from(it)];
     final dpr = MediaQuery.devicePixelRatioOf(context);
     final top = items.isEmpty
-        ? Column(mainAxisSize: MainAxisSize.min, children: [
+        ? FittedBox(fit: BoxFit.scaleDown, child: Column(mainAxisSize: MainAxisSize.min, children: [
             _coin(38),
             const SizedBox(height: 6),
             Text('${fmtNumber(coins)} Coin', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Pal.text, fontSize: 13, fontWeight: FontWeight.w800)),
-          ])
+            silverLine,
+          ]))
         : Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
             for (final it in items.take(2))
               Expanded(
@@ -244,6 +250,7 @@ class _CheckinDialogState extends State<_CheckinDialog> {
                   _coin(40),
                   const SizedBox(height: 4),
                   Text('${fmtNumber(coins)} Coin', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Pal.text, fontSize: 11, fontWeight: FontWeight.w800)),
+                  silverLine,
                 ]),
               ),
           ]);

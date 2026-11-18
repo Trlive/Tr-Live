@@ -43,7 +43,7 @@ export function renderActivitiesPage({ roomId, appVersion, nonce, items }) {
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 body{margin:0;background:#0b0906;color:#f6efdf;font:14px system-ui,-apple-system,sans-serif;padding:12px 14px calc(14px + env(safe-area-inset-bottom))}
 .bal{display:flex;align-items:center;justify-content:space-between;background:#17130c;border:1px solid #4d3c1c;border-radius:14px;padding:12px 14px;margin-bottom:12px}
-.bal span{color:#b3a584;font-size:12px}.bal b{color:#ffd54f;font-size:18px}
+.bal span{color:#b3a584;font-size:12px}.bal b{color:#ffd54f;font-size:18px}.bal small{font-size:10.5px;opacity:.8}#silver{color:#d7dde6}.fee{background:#c9d2de!important;color:#1b1f26!important;white-space:nowrap}
 .card{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:#17130c;color:inherit;border:1px solid #4d3c1c;border-radius:14px;padding:12px;margin-bottom:10px;font:inherit}
 .card:disabled{opacity:.7}
 .ico img{width:36px;height:36px;object-fit:contain;border-radius:8px}.ico{font-size:28px;width:44px;height:44px;display:flex;align-items:center;justify-content:center;background:#221b10;border-radius:12px}

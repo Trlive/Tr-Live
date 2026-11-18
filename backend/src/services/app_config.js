@@ -35,9 +35,12 @@ export const CONFIG_DEFAULTS = Object.freeze({
   roomActivitiesEnabled: true,
   // TEK kart oyunu (oda içi, WebView). Herkes için geçerli genel anahtar; kapalıyken menüde görünmez, yeni oyun açılamaz.
   cardGameEnabled: true,
+  ludoEntrySilver: 500, // Ludo'ya giriş (Gümüş); 0 = ücretsiz
+  tekEntrySilver: 500, // TEK (Uno) oyununa giriş (Gümüş); 0 = ücretsiz
   // Günlük giriş (7 gün): gün gün Coin ödülü; 7. gün ayrıca çerçeve / araç (boşsa verilmez), eşya süresi gün.
   checkinEnabled: true,
   checkinCoins: '20,20,20,20,50,50,100',
+  checkinSilver: '1000,1000,1000,1000,1000,1000,10000',
   checkinFrameId: '',
   checkinVehicleId: '',
   checkinItemDays: 7,
@@ -134,7 +137,7 @@ export function validateConfigPatch(body) {
       if (typeof v !== 'string' || v.length > 300) throw fail('Mesaj en fazla 300 karakter olmalı.');
     } else if (k === 'roomNotice') {
       if (typeof v !== 'string' || v.length > 500) throw fail('Oda uyarı duyurusu en fazla 500 karakter olmalı.');
-    } else if (k === 'checkinCoins') {
+    } else if (k === 'checkinCoins' || k === 'checkinSilver') {
       if (typeof v !== 'string' || !/^\s*\d{1,9}(\s*,\s*\d{1,9}){6}\s*$/.test(v)) throw fail('Günlük giriş ödülleri 7 sayı olmalı (ör. 20,20,20,20,50,50,100).');
     } else if (k === 'firebaseProjectId') {
       if (typeof v !== 'string' || (v && !/^[a-z0-9][a-z0-9-]{3,38}[a-z0-9]$/.test(v))) throw fail('Firebase proje kimliği geçersiz (ör. trlive-12345).');
@@ -159,7 +162,7 @@ export function validateConfigPatch(body) {
       const limits = {
         strikeLimit: [1, 20], strikeWindowMin: [1, 1440], muteMinutes: [1, 1440], maxMuteMinutes: [1, 10080],
         luckyRtpBps: [0, 9000], luckyJackpotShareBps: [0, 8000], luckyReceiverBps: [0, 5000], luckyMaxWin: [1, 1000000000], luckyAnnounceMultiplier: [10, 1000],
-        flyTextCoins: [0, 1000000], checkinItemDays: [1, 90], smtpPort: [1, 65535],
+        flyTextCoins: [0, 1000000], ludoEntrySilver: [0, 100000000], tekEntrySilver: [0, 100000000], checkinItemDays: [1, 90], smtpPort: [1, 65535],
         usdWithdrawMinCents: [100, 100000000], usdDealerMinCents: [100, 100000000], usdDealerCoinsPerUsd: [1, 100000000],
         usdCoinsPerUsd: [1, 100000000], usdExchangeMinCents: [1, 100000000],
         mediaMp4MaxWidth: [180, 1080], mediaMp4MaxHeight: [180, 1920], mediaMp4MaxFps: [10, 30], mediaMp4MaxKb: [256, 40960],

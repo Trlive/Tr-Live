@@ -979,4 +979,6 @@ const kAr = <String, String>{
   'İşletmeye Genel Bakış': 'نظرة عامة على العمل',
   'Şarj': 'شحن',
   'Şarj için': 'الشحن إلى',
+  'Gümüş': 'فضة',
+  'Gümüş bakiyen': 'رصيد الفضة',
 };

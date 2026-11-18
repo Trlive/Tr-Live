@@ -1,11 +1,14 @@
 // Günlük giriş kuralları (saf mantık, veritabanı gerektirmez; test edilebilir).
 
 /** "20,20,20,20,50,50,100" → [20, 20, 20, 20, 50, 50, 100]. Bozuk değerde varsayılan. */
-export function parseCoins(v) {
+export function parseCoins(v, fallback = [20, 20, 20, 20, 50, 50, 100]) {
   const parts = String(v ?? '').split(',').map((x) => Number(x.trim()));
   if (parts.length === 7 && parts.every((n) => Number.isInteger(n) && n >= 0 && n <= 999999999)) return parts;
-  return [20, 20, 20, 20, 50, 50, 100];
+  return fallback;
 }
+
+/** Günlük giriş Gümüş ödülleri: 1.-6. gün 1.000, 7. gün 10.000. */
+export const DEFAULT_SILVER = [1000, 1000, 1000, 1000, 1000, 1000, 10000];
 
 /**
  * Bugün giriş yapılırsa kaçıncı gün olur. [last]: son kayıt { streak, gap } (gap = bugün - son gün, gün).

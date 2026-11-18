@@ -1,3 +1,24 @@
+## v2.125.2 — Oda menüsü düzeni, ID rengi, sahip çıkınca oda fotoğrafı
+- İnteraktif Özellikler: üst sıra PK · Şanslı Çanta · Sayı tahtası; alt sıra Ludo · TEK (Uno) · Etkinlikler. Ludo/TEK'teki
+  altın çerçeve tüm özelliklere uygulandı. Temel Araçlar daireleri uygulamanın sarısında.
+- ID rengi WIP'e bağlı değil: yalnızca takılı Renkli ID (bronz/gümüş/altın) ID'yi renklendirir; WIP'li kişinin ID'si sade yazı.
+- Oda sahibi odadan çıkınca (oda yardımcıyla açık kalırsa) odanın üstündeki profil fotoğrafı ve ID artık kaybolmuyor.
+
+## v2.125.1 — Gümüş artık Ludo / TEK (Uno) oyunlarının girişi için
+- Gümüş, etkinliklerde değil odadaki Ludo ve TEK oyunlarına katılırken düşer (varsayılan 500; panel > Oda Etkinlikleri >
+  Oyun giriş ücreti, 0 = ücretsiz). Kuran da katılan da öder; oyun başlamadan ayrılan / iptal edilen oyunda iade edilir,
+  başlamış oyunda giriş yanar. Gümüş yetmezse katılım olmaz. Ludo lobisinde ücret ve Gümüş bakiyesi görünür. Migration 083.
+- Etkinlikler yalnızca Coin ile çalışır (Gümüş girişi ve Ludo/Uno etkinlik satırları kaldırıldı).
+
+## v2.125.0 — Gümüş madeni para + Coin'li etkinlik sistemi
+- Gümüş: yeni para birimi; yalnızca Ludo / Uno gibi etkinliklere GİRİŞ için (Coin'e çevrilmez). Günlük girişte 1.-6. gün
+  1.000, 7. gün 10.000 Gümüş (panelden değişir). Etkinlik kartında giriş ücreti rozeti, açarken sunucu Gümüşten düşer
+  (yetmezse açılmaz). Ludo ve Uno etkinlikleri (giriş 500 Gümüş) eklendi; bağlantıyı panele yapıştır. Migration 082.
+- Coin'li etkinlik: oyun sayfası kullanıcıya özel {token} ile /api/activity-play/:id/bet (bahis düşer) ve /settle
+  (çarpanı oyun bildirir, ödeme = bahis × çarpan) çağırır. Sunucu: en az/en çok bahis, en yüksek çarpan sınırı, turu tek
+  kez sonuçlandırma, cüzdan + mali kayıt, canlı bakiye. İmza anahtarı gerekmez.
+- Panel: Oda Etkinlikleri'nde giriş Gümüşü, Coin bahsi ve sınırlar; Günlük giriş'te Gümüş ödülleri.
+
 ## v2.124.2 — Etkinlik izni: yöneticiler de izne tabi
 - Yönetici hesapları dahil, yalnızca izin listesindeki kişiler Etkinlikleri görür ve açar.
 

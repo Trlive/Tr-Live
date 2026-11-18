@@ -27,7 +27,7 @@ import { router as roomsRouter } from './routes/rooms.js';
 import { router as familiesRouter } from './routes/families.js';
 import { router as wipRouter } from './routes/wip.js';
 import { router as dealersRouter, startDealerDeliveryTicker, shopAdminRouter as dealerShopAdminRouter } from './routes/dealers.js';
-import { router as activitiesRouter, providerRouter as activityProviderRouter, adminRouter as activitiesAdminRouter } from './routes/activities.js';
+import { playRouter as activityPlayRouter, router as activitiesRouter, providerRouter as activityProviderRouter, adminRouter as activitiesAdminRouter } from './routes/activities.js';
 import { router as adminRouter } from './routes/admin.js';
 import { router as giftsRouter } from './routes/gifts.js';
 import { router as agenciesRouter } from './routes/agencies.js';
@@ -81,6 +81,8 @@ app.use(helmet({
   hsts: { maxAge: 31536000, includeSubDomains: true },
 }));
 app.use(firewall()); // IP yasağı, WAF kuralları, IP başına hız sınırı (CORS ve gövde okumadan önce)
+// Etkinlik oyun sayfaları başka adreste barınır: yalnızca bu uç, kimlik bilgisi taşımadan her adresten çağrılabilir (yetki = oyun bileti).
+app.use('/api/activity-play', cors({ origin: true, allowedHeaders: ['Content-Type'], maxAge: 600 }));
 app.use(cors({
   origin: config.corsOrigin.includes('*') ? true : config.corsOrigin,
   allowedHeaders: ['Content-Type', 'Authorization', 'X-App-Version', 'Idempotency-Key', 'X-Client'],
@@ -172,6 +174,7 @@ app.use('/api/families', familiesRouter);
 app.use('/api/wip', wipRouter);
 app.use('/api/dealer', dealersRouter);
 app.use('/api/activities', activitiesRouter);
+app.use('/api/activity-play', activityPlayRouter); // oyun sayfası → sunucu (oyun bileti ile Coin bahis/sonuç)
 app.use('/api/activity-provider', activityProviderRouter); // oyun sağlayıcısı (sunucu → sunucu, imzalı)
 app.use('/api/admin/activities', activitiesAdminRouter);
 app.use('/api/admin/dealer-shop', dealerShopAdminRouter);

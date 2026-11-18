@@ -2,7 +2,7 @@ import { query, tx } from '../database.js';
 import { fail } from '../http.js';
 import { getConfig } from './app_config.js';
 import { equipIfNone, announceUserChange } from './users.js';
-import { parseCoins, nextStreak, progress } from '../checkin_rules.js';
+import { parseCoins, nextStreak, progress, DEFAULT_SILVER } from '../checkin_rules.js';
 
 // Günlük giriş (7 gün): her gün bir kez "Giriş yap" → o günün Coin ödülü; 7. gün ayrıca çerçeve / araç (yönetim seçer).
 // Gün İstanbul saatine göre. Aynı gün ikinci kez alınamaz (birincil anahtar: kullanıcı + gün).
@@ -31,13 +31,14 @@ async function day7Items(cfg, run = query) {
 export async function checkinState(userId) {
   const cfg = await getConfig();
   const coins = parseCoins(cfg.checkinCoins);
+  const silver = parseCoins(cfg.checkinSilver, DEFAULT_SILVER);
   const items = await day7Items(cfg);
   const { signedDays, signedToday } = progress(await lastCheckin(query, userId));
   return {
     enabled: cfg.checkinEnabled !== false,
     signedDays,
     signedToday,
-    days: coins.map((c, i) => ({ day: i + 1, coins: String(c), items: i === 6 ? items : [] })),
+    days: coins.map((c, i) => ({ day: i + 1, coins: String(c), silver: String(silver[i]), items: i === 6 ? items : [] })),
   };
 }
 
@@ -45,17 +46,19 @@ export async function claimCheckin(userId) {
   const cfg = await getConfig();
   if (cfg.checkinEnabled === false) throw fail('Günlük giriş şu an kapalı.', 403);
   const coins = parseCoins(cfg.checkinCoins);
+  const silverDays = parseCoins(cfg.checkinSilver, DEFAULT_SILVER);
   const result = await tx(async (c) => {
-    const u = (await c.query(`SELECT coins FROM users WHERE id = $1 FOR UPDATE`, [userId])).rows[0];
+    const u = (await c.query(`SELECT coins, silver FROM users WHERE id = $1 FOR UPDATE`, [userId])).rows[0];
     if (!u) throw fail('Kullanıcı bulunamadı.', 404);
     const last = await lastCheckin((t, p) => c.query(t, p), userId);
     if (last && last.gap === 0) throw fail('Bugün zaten giriş yaptın. Yarın tekrar gel!', 409);
     const streak = nextStreak(last);
     const amount = BigInt(coins[streak - 1]);
+    const silverAmount = BigInt(silverDays[streak - 1]);
     const items = streak === 7 ? await day7Items(cfg, (t, p) => c.query(t, p)) : [];
     await c.query(
-      `INSERT INTO daily_checkins(user_id, day, streak, coins, items) VALUES($1, ${TODAY}, $2, $3, $4)`,
-      [userId, streak, amount.toString(), JSON.stringify(items)],
+      `INSERT INTO daily_checkins(user_id, day, streak, coins, silver, items) VALUES($1, ${TODAY}, $2, $3, $5, $4)`,
+      [userId, streak, amount.toString(), JSON.stringify(items), silverAmount.toString()],
     );
     const before = BigInt(u.coins);
     const after = before + amount;
@@ -69,6 +72,15 @@ export async function claimCheckin(userId) {
         `INSERT INTO financial_audit_logs(user_id, action, reference_type, reference_id, amount_coins, balance_before, balance_after, metadata)
          VALUES($1,'daily_checkin','daily_checkin',$2,$3,$4,$5,$6)`,
         [userId, String(streak), amount.toString(), before.toString(), after.toString(), JSON.stringify({ streak })],
+      );
+    }
+    let silverAfter = BigInt(u.silver);
+    if (silverAmount > 0n) {
+      silverAfter += silverAmount;
+      await c.query(`UPDATE users SET silver = $2, updated_at = NOW() WHERE id = $1`, [userId, silverAfter.toString()]);
+      await c.query(
+        `INSERT INTO silver_transactions(user_id, amount, balance_after, type, reference, description) VALUES($1,$2,$3,'daily_checkin',$4,$5)`,
+        [userId, silverAmount.toString(), silverAfter.toString(), String(streak), `Günlük giriş Gümüşü (${streak}. gün)`],
       );
     }
     for (const it of items) {
@@ -87,7 +99,7 @@ export async function claimCheckin(userId) {
       );
       await equipIfNone((t, p) => c.query(t, p), userId, it.category, r.rows[0].id);
     }
-    return { streak, coins: amount.toString(), items, balance: after.toString() };
+    return { streak, coins: amount.toString(), silver: silverAmount.toString(), items, balance: after.toString(), silverBalance: silverAfter.toString() };
   });
   if (result.items.length) announceUserChange(userId);
   return result;

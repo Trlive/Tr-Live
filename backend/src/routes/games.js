@@ -6,7 +6,7 @@ import { fail, uuid } from '../http.js';
 import * as ludo from '../ludo.js';
 import * as tek from '../tek.js';
 import { getConfig } from '../services/app_config.js';
-import { gameView, broadcastGame, openGameOfRoom, mutateGame, startGame, GAME_TYPES, engineOf, assertGameType } from '../services/games.js';
+import { gameView, broadcastGame, openGameOfRoom, mutateGame, startGame, GAME_TYPES, engineOf, assertGameType, entryFee, chargeEntry, refundAndRemove, pushSilver } from '../services/games.js';
 
 export const router = Router();
 router.use(requireAuth);
@@ -54,6 +54,8 @@ router.post('/rooms/:roomId/games', userLimit('game_create', 10, 60e3), async (r
   const type = req.body?.type ?? 'ludo';
   if (!Object.hasOwn(GAME_TYPES, type)) throw fail('Bu oyun henüz desteklenmiyor.');
   if (type === 'tek' && (await getConfig()).cardGameEnabled === false) throw fail('Bu oyun şu an kapalı.', 403);
+  const fee = await entryFee(type);
+  let paidSilver = null;
   const id = await tx(async (c) => {
     await c.query(`SELECT id FROM rooms WHERE id = $1 AND is_active = TRUE FOR UPDATE`, [roomId]);
     const open = await openGameOfRoom(roomId, (t, p) => c.query(t, p));
@@ -62,8 +64,10 @@ router.post('/rooms/:roomId/games', userLimit('game_create', 10, 60e3), async (r
     const options = type === 'ludo' && ludo.MODES.includes(req.body?.mode) ? { mode: req.body.mode } : {};
     const g = (await c.query(`INSERT INTO room_games(room_id, created_by, game_type, state) VALUES($1,$2,$3,$4) RETURNING id`, [roomId, req.user.id, type, JSON.stringify({ options })])).rows[0];
     await c.query(`INSERT INTO room_game_players(game_id, user_id, seat) VALUES($1,$2,0)`, [g.id, req.user.id]);
+    paidSilver = await chargeEntry(c, { gameId: g.id, userId: req.user.id, gameType: type, fee });
     return g.id;
   });
+  if (paidSilver != null) pushSilver([{ userId: req.user.id, silver: paidSilver }]);
   await broadcastGame(id);
   res.status(201).json({ game: await gameView(id, query, req.user.id) });
 });
@@ -78,6 +82,8 @@ async function gameInRoom(gameId, userId) {
 router.post('/games/:id/join', userLimit('game', 60, 60e3), async (req, res) => {
   const id = uuid(req.params.id, 'Oyun');
   const g = await gameInRoom(id, req.user.id);
+  const fee = await entryFee(g.game_type);
+  let paidSilver = null;
   await tx(async (c) => {
     const row = (await c.query(`SELECT status FROM room_games WHERE id = $1 FOR UPDATE`, [id])).rows[0];
     if (row.status !== 'waiting') throw fail('Oyuna artık katılınamaz.', 409);
@@ -87,7 +93,9 @@ router.post('/games/:id/join', userLimit('game', 60, 60e3), async (req, res) => 
     if (taken.length >= max) throw fail('Oyun dolu.', 409);
     const free = Array.from({ length: max }, (_, s) => s).find((s) => !taken.some((p) => p.seat === s));
     await c.query(`INSERT INTO room_game_players(game_id, user_id, seat) VALUES($1,$2,$3)`, [id, req.user.id, free]);
+    paidSilver = await chargeEntry(c, { gameId: id, userId: req.user.id, gameType: g.game_type, fee });
   });
+  if (paidSilver != null) pushSilver([{ userId: req.user.id, silver: paidSilver }]);
   await broadcastGame(g.id);
   res.json({ game: await gameView(g.id, query, req.user.id) });
 });
@@ -98,7 +106,7 @@ router.post('/games/:id/leave', async (req, res) => {
   if (g.status === 'waiting') {
     // Ludo'da kurucu oyuncu listesinden çıkamaz. TEK'te çıkabilir: oyunu açıp kendisi oynamadan başlatabilir.
     if (g.created_by === req.user.id && g.game_type !== 'tek') throw fail('Kurucu ayrılamaz; oyunu iptal edin.', 409);
-    await query(`DELETE FROM room_game_players WHERE game_id = $1 AND user_id = $2`, [id, req.user.id]);
+    pushSilver(await tx((c) => refundAndRemove(c, id, [req.user.id])));
   } else if (g.status === 'playing') {
     await mutateGame(id, (state, row) => ({ state: engineOf(row).forfeit(state, req.user.id) }));
   } else throw fail('Oyun zaten bitti.', 409);
@@ -119,7 +127,14 @@ router.post('/games/:id/cancel', async (req, res) => {
   const m = await assertMember(g.room_id, req.user.id);
   if (g.created_by !== req.user.id && !['owner', 'cohost'].includes(m.role)) throw fail('Bu işlem için yetkiniz yok.', 403);
   if (!['waiting', 'playing'].includes(g.status)) throw fail('Oyun zaten bitti.', 409);
-  await query(`UPDATE room_games SET status = 'cancelled', finished_at = NOW() WHERE id = $1 AND status IN ('waiting','playing')`, [id]);
+  const refunds = await tx(async (c) => {
+    const cur = (await c.query(`SELECT status FROM room_games WHERE id = $1 FOR UPDATE`, [id])).rows[0];
+    // Başlamamış oyunda girişler iade edilir; oynanmakta olan oyunda giriş yanar.
+    const back = cur?.status === 'waiting' ? await refundAndRemove(c, id) : [];
+    await c.query(`UPDATE room_games SET status = 'cancelled', finished_at = NOW() WHERE id = $1 AND status IN ('waiting','playing')`, [id]);
+    return back;
+  });
+  pushSilver(refunds);
   res.json({ game: await broadcastGame(id) });
 });
 

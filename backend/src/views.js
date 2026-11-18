@@ -116,6 +116,7 @@ export function selfUser(row) {
     setupDone: row.setup_done !== false,
     city: row.city ?? null,
     coins: String(row.coins),
+    silver: String(row.silver ?? 0),
     diamonds: String(row.diamonds),
     totalSentCoins: String(row.total_sent_coins),
     totalReceivedDiamonds: String(row.total_received_diamonds),

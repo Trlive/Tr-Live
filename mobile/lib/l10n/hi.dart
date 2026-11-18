@@ -979,4 +979,6 @@ const kHi = <String, String>{
   'İşletmeye Genel Bakış': 'व्यवसाय अवलोकन',
   'Şarj': 'टॉप-अप',
   'Şarj için': 'किसके लिए टॉप-अप',
+  'Gümüş': 'सिल्वर',
+  'Gümüş bakiyen': 'आपका सिल्वर',
 };

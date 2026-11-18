@@ -2112,15 +2112,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                     height: 44,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [Color.lerp(tint, Colors.white, 0.28)!, tint, Color.lerp(tint, Colors.black, 0.22)!],
-                      ),
-                      border: Border.all(color: Colors.white.withValues(alpha: active ? 0.9 : 0.22), width: active ? 1.6 : 0.8),
-                      boxShadow: [BoxShadow(color: tint.withValues(alpha: 0.45), blurRadius: 8, offset: const Offset(0, 2))],
+                      // Tüm araçlar uygulamanın sarısında (tint yalnızca "açık" çubuğunu boyar).
+                      gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFFFFE082), Color(0xFFF2B92A), Color(0xFFB8860B)]),
+                      border: Border.all(color: Colors.white.withValues(alpha: active ? 0.95 : 0.3), width: active ? 1.8 : 0.8),
+                      boxShadow: const [BoxShadow(color: Color(0x66F2B92A), blurRadius: 8, offset: Offset(0, 2))],
                     ),
-                    child: Icon(icon, size: 21, color: Colors.white),
+                    child: Icon(icon, size: 21, color: const Color(0xFF1A1405)),
                   ),
                   const SizedBox(height: 5),
                   Text(label, textAlign: TextAlign.center, maxLines: 2, style: const TextStyle(fontSize: 11, color: Color(0xFFDADADF), height: 1.15)),
@@ -2128,7 +2125,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                   Container(
                     width: 16,
                     height: 3,
-                    decoration: BoxDecoration(color: active ? tint : Colors.transparent, borderRadius: BorderRadius.circular(2)),
+                    decoration: BoxDecoration(color: active ? const Color(0xFFF2B92A) : Colors.transparent, borderRadius: BorderRadius.circular(2)),
                   ),
                 ]),
               ),
@@ -2144,7 +2141,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         const cTeal = Color(0xFF14B8A6);
 
         // İnteraktif özellik: kare görsel kutu + etiket.
-        Widget tile(Widget art, String label, VoidCallback onTap, {List<Color> colors = const [Color(0xFF2B2B30), Color(0xFF151518)]}) => InkWell(
+        Widget tile(Widget art, String label, VoidCallback onTap, {List<Color> colors = const [Color(0xFF2B2B30), Color(0xFF151518)], bool framed = true}) => InkWell(
               borderRadius: BorderRadius.circular(10),
               onTap: onTap,
               child: SizedBox(
@@ -2155,7 +2152,13 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                     height: 56,
                     clipBehavior: Clip.antiAlias,
                     alignment: Alignment.center,
-                    decoration: BoxDecoration(borderRadius: BorderRadius.circular(9), gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: colors)),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(9),
+                      gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: colors),
+                      // Ludo / TEK görselindeki altın çerçevenin aynısı tüm özelliklerde.
+                      border: framed ? Border.all(color: const Color(0xFFE9B63A), width: 2.2) : null,
+                      boxShadow: framed ? const [BoxShadow(color: Color(0x44F2B92A), blurRadius: 6)] : null,
+                    ),
                     child: art,
                   ),
                   const SizedBox(height: 5),
@@ -2219,6 +2222,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                     InkResponse(onTap: () => Navigator.pop(sheet), radius: 18, child: const Icon(Icons.close, size: 22, color: Colors.white)),
                   ]),
                   const SizedBox(height: 10),
+                  // Üst sıra: PK · Şanslı Çanta · Sayı tahtası. Alt sıra: Ludo · TEK (Uno) · Etkinlikler.
                   Wrap(spacing: 10, runSpacing: 8, children: [
                     // Sesli oda: oda içi PK (sahip / yardımcı sahip). Görüntülü: rakip yayına PK daveti (sahip).
                     if (_isVideo ? _myRole == 'owner' : _isOwnerOrCohost)
@@ -2232,16 +2236,19 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                 : run(() => _isVideo ? showPkChallengeSheet(context, roomId: widget.roomId) : showRoomPkSetup(context, roomId: widget.roomId, seatCount: _seatCount)),
                         colors: const [Color(0xFF1A237E), Color(0xFF0D0D1A), Color(0xFFB71C1C)],
                       ),
+                    tile(Image.asset('assets/images/lucky_pouch.webp', width: 48, height: 48), tx('Şanslı Çanta'), () => run(() => showBagSend(context, widget.roomId)), colors: const [Color(0xFF3A1010), Color(0xFF1A0808)]),
                     // Sayı tahtası (Yoho): süreli / elle sayım, sıfırlama kuralları, sonuç ve geçmiş.
                     if (_canSeatManage)
                       tile(const Icon(Icons.leaderboard_rounded, size: 32, color: Color(0xFFFFD54F)), tx('Sayı tahtası'),
                           () => run(() => showScoreboardSetup(context, roomId: widget.roomId, session: _sbSession)),
                           colors: const [Color(0xFF5A3B00), Color(0xFF0B0906)]),
-                    tile(const LudoLogo(size: 56), 'Ludo', () => run(() => _tekDockKey.currentState?.openPanel(type: 'ludo')), colors: kGoldDeep),
+                  ]),
+                  const SizedBox(height: 10),
+                  Wrap(spacing: 10, runSpacing: 8, children: [
+                    tile(const LudoLogo(size: 56), 'Ludo', () => run(() => _tekDockKey.currentState?.openPanel(type: 'ludo')), colors: kGoldDeep, framed: false),
                     // TEK kart oyunu: odanın üstünde açılan oyun penceresi (herkes açabilir; oyunu oda yetkilisi kurar).
-                    if (_cardGameOn) tile(const TekLogo(size: 56), 'TEK', () => run(() => _tekDockKey.currentState?.openPanel(type: 'tek')), colors: const [Color(0xFF2A2010), Color(0xFF0B0906)]),
+                    if (_cardGameOn) tile(const TekLogo(size: 56), 'TEK', () => run(() => _tekDockKey.currentState?.openPanel(type: 'tek')), colors: const [Color(0xFF2A2010), Color(0xFF0B0906)], framed: false),
                     if (_activitiesOn) tile(const Icon(Icons.celebration, size: 30, color: Colors.white), tx('Etkinlikler'), () => run(_openRoomActivities), colors: const [Color(0xFF14506B), Color(0xFF0A1F2B)]),
-                    tile(Image.asset('assets/images/lucky_pouch.webp', width: 48, height: 48), tx('Şanslı Çanta'), () => run(() => showBagSend(context, widget.roomId)), colors: const [Color(0xFF3A1010), Color(0xFF1A0808)]),
                   ]),
                   const SizedBox(height: 16),
                   Text(tx('Temel Araçlar'), style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.white)),
@@ -2529,7 +2536,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   /// "Bu yayıncıyı takip edin" kartı (dokununca yayıncı favorilere eklenir).
   Widget _followCard(double maxW) {
     final owner = _members.where((m) => m['role'] == 'owner');
-    final ou = owner.isEmpty ? null : mapOf(owner.first['user']);
+    final ou = (owner.isEmpty ? null : mapOf(owner.first['user'])) ?? mapOf(_room?['owner']);
     return Align(
       alignment: Alignment.centerLeft,
       child: GestureDetector(
@@ -4443,8 +4450,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   Widget _headerRow1(RoomGeom g) {
     final h = g.row1H;
     final owner = _members.where((m) => m['role'] == 'owner');
-    final ownerUser = owner.isEmpty ? null : mapOf(owner.first['user']);
-    final idUser = ownerUser ?? mapOf(_room?['owner']);
+    // Sahip odadan çıksa da (oda yardımcıyla açık kalır) fotoğraf ve kimlik odanın kayıtlı sahibinden gelir.
+    final ownerUser = (owner.isEmpty ? null : mapOf(owner.first['user'])) ?? mapOf(_room?['owner']);
+    final idUser = ownerUser;
     final name = (_room?['name'] ?? widget.initialName).toString();
     final cover = Api.absoluteUrl(_room?['coverUrl'] as String?);
     _syncDockCover(cover ?? Api.absoluteUrl(ownerUser?['avatarUrl'] as String?));

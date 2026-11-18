@@ -979,4 +979,6 @@ const kEn = <String, String>{
   'İşletmeye Genel Bakış': 'Business overview',
   'Şarj': 'Top up',
   'Şarj için': 'Top up for',
+  'Gümüş': 'Silver',
+  'Gümüş bakiyen': 'Your Silver',
 };

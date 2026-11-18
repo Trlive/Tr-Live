@@ -284,6 +284,7 @@ function Checkin() {
   const { busy, msg, run } = useAction();
   const [on, setOn] = useState(true);
   const [coins, setCoins] = useState<string[]>(["20", "20", "20", "20", "50", "50", "100"]);
+  const [silver, setSilver] = useState<string[]>(["1000", "1000", "1000", "1000", "1000", "1000", "10000"]);
   const [frame, setFrame] = useState("");
   const [vehicle, setVehicle] = useState("");
   const [days, setDays] = useState("7");
@@ -293,6 +294,8 @@ function Checkin() {
     setOn(c.checkinEnabled !== false);
     const parts = String(c.checkinCoins ?? "20,20,20,20,50,50,100").split(",");
     setCoins(Array.from({ length: 7 }, (_, i) => (parts[i] ?? "0").trim()));
+    const sp = String(c.checkinSilver ?? "1000,1000,1000,1000,1000,1000,10000").split(",");
+    setSilver(Array.from({ length: 7 }, (_, i) => (sp[i] ?? "0").trim()));
     setFrame(String(c.checkinFrameId ?? ""));
     setVehicle(String(c.checkinVehicleId ?? ""));
     setDays(String(c.checkinItemDays ?? 7));
@@ -310,6 +313,13 @@ function Checkin() {
           {coins.map((c, i) => (
             <Field key={i} label={`${i + 1}. gün (Coin)`}>
               <input className={inputCls} inputMode="numeric" value={c} onChange={(e) => setCoins(coins.map((x, j) => (j === i ? e.target.value.replace(/\D/g, "") : x)))} />
+            </Field>
+          ))}
+        </div>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
+          {silver.map((c, i) => (
+            <Field key={i} label={`${i + 1}. gün (Gümüş)`} hint={i === 0 ? "Yalnızca Ludo / Uno girişinde harcanır." : undefined}>
+              <input className={inputCls} inputMode="numeric" value={c} onChange={(e) => setSilver(silver.map((x, j) => (j === i ? e.target.value.replace(/\D/g, "") : x)))} />
             </Field>
           ))}
         </div>
@@ -345,10 +355,10 @@ function Checkin() {
           disabled={busy}
           onClick={() =>
             run("Kaydedildi.", async () => {
-              if (coins.some((c) => c === "")) throw new Error("Her gün için Coin girin (0 olabilir).");
+              if (coins.some((c) => c === "") || silver.some((c) => c === "")) throw new Error("Her gün için Coin ve Gümüş girin (0 olabilir).");
               await api("/api/admin/app-config", {
                 method: "PUT",
-                body: { checkinEnabled: on, checkinCoins: coins.join(","), checkinFrameId: frame, checkinVehicleId: vehicle, checkinItemDays: Number(days) || 7 },
+                body: { checkinEnabled: on, checkinCoins: coins.join(","), checkinSilver: silver.join(","), checkinFrameId: frame, checkinVehicleId: vehicle, checkinItemDays: Number(days) || 7 },
               });
               cfg.reload();
             })
