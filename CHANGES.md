@@ -1,3 +1,14 @@
+## v2.128.1 — Wild King: oyunun kendi yönetici ayarları geri geldi
+- Oyunun kazanç kontrolü sunucuda ve panelde (Sistem → Wild King): kazanç kontrolü modu (otomatik / saf rastgele), hedef RTP, isabet oranı, en yüksek kazanç, free spin ve jackpot şansı. Varsayılanlar oyunun kendi değerleri (RTP 92, isabet 30). İstemci şeritleri sunucudan alır.
+- Sahte kazanan akışı ve uydurma jackpot büyümesi geri konmadı (havuz ve akış gerçek).
+
+## v2.128.0 — Wild King slotu oyuna gömüldü (sunucuda, saf rastgele, Coin ile)
+- Wild King artık bu sunucuda çalışır: sonuç güvenli rastgele (crypto) ile belirlenir, kazanca göre AYARLANMAZ. Bakiye Coin cüzdanı; free spin, Çılgın Slot, kart kumarı ve jackpot sunucuda (durum yarıda kalırsa kaldığı yerden devam eder).
+- Özgün oyundaki sahte parçalar KALDIRILDI: bot kazanç akışı, uydurma jackpot büyümesi, sonucu hedef RTP'ye çeken kontrol, istemci içi admin paneli/şifresi. Jackpot havuzu yalnızca gerçek bahislerden oluşur; kazanan akışı gerçek oyunculardır.
+- Ödeme çarpanı panelden (varsayılan %95; oyuncuya da yansır). Teorik geri ödeme kurallar ekranında yazar.
+- Panel: Sistem → Wild King (kasa kârı, gerçekleşen geri ödeme, havuz, limitler). Etkinliklere "Wild King" kartı eklenir (087).
+- Gerçek tarayıcıda (headless Chrome) istemci + sunucu uçtan uca denendi: spin, free spin, Çılgın Slot, kart kumarı bakiyesi veritabanıyla birebir tuttu.
+
 ## v2.127.0 — Kedi Çarkı oyuna gömüldü (sunucuda, Coin ile)
 - Kedi Çarkı artık bu sunucuda çalışır: çok oyunculu tur motoru, sonuç ve ödeme sunucuda; WebSocket /ws/kedi, istemci /g/kedi/. Oyuncuya özel oyun bileti + etkinlik izni olmayan giremez.
 - Bahis/kazanç Coin cüzdanından (idempotent txId, cüzdan kaydı + denetim kaydı). Kasa payı varsayılan %80 (panelden değişir).

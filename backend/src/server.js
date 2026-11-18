@@ -55,6 +55,7 @@ import { router as pkRouter } from './routes/pk.js';
 import { router as gamesRouter } from './routes/games.js';
 import { router as feedRouter } from './routes/feed.js';
 import { router as systemRouter } from './routes/system.js';
+import { wildRouter, wildClientRouter, wildAdminRouter } from './games/wild.js';
 import { startKedi, kediClientRouter, kediAdminRouter } from './games/kedi.js';
 import { router as roomActivitiesRouter } from './routes/room_activities.js';
 import { router as usdRouter, adminRouter as usdAdminRouter } from './routes/usd.js';
@@ -121,6 +122,7 @@ app.get('/media/:file', async (req, res) => {
   res.send(hit.data);
 });
 
+app.use('/g/wild', wildClientRouter); // gömülü Wild King istemcisi (API: /api/wildking)
 app.use('/g/kedi', kediClientRouter); // gömülü Kedi Çarkı istemcisi (WebSocket: /ws/kedi)
 app.use('/games', hostedGamesRouter); // zip ile yüklenen HTML oyunlar + TRGame SDK
 app.use('/uploads', express.static(config.uploadDir, {
@@ -181,6 +183,8 @@ app.use('/api/activity-play', activityPlayRouter); // oyun sayfası → sunucu (
 app.use('/api/activity-provider', activityProviderRouter); // oyun sağlayıcısı (sunucu → sunucu, imzalı)
 app.use('/api/admin/activities', activitiesAdminRouter);
 app.use('/api/admin/kedi', kediAdminRouter);
+app.use('/api/admin/wildking', wildAdminRouter);
+app.use('/api/wildking', wildRouter); // Wild King: oyun bileti ile spin / bonus / kumar
 app.use('/api/admin/dealer-shop', dealerShopAdminRouter);
 app.use('/api/admin/usd', usdAdminRouter); // dolar cüzdanı yönetimi (çekim talepleri); genel admin yönlendiricisinden önce
 app.use('/api/admin', adminRouter);
