@@ -358,3 +358,27 @@ ama maliyeti yayın tarafında, kod tarafında değil.
 Yukarıdaki tabloda: 5 → `web/panel` modülleştirme, 6-8 → mobil. Gerekçe aynı: hata maliyeti düşükten
 yükseğe. Panel kırılırsa yönetici görür; `room_screen.dart` kırılırsa 
 uygulamanın en çok kullanılan ekranı kırılır.
+
+## Dosya bölerken: import listesi elle değil, denetimle
+
+Bir dosyayı modüllere bölerken "hangi adlar kullanılıyor?" sorusunu desenle yanıtlamak
+güvenilir değildir. `...yayma(x)` yazımı dört ayrı yerde gözden kaçtı ve canlıda
+"Sunucu hatası" olarak çıktı (v2.146.0).
+
+Kural: bölmeden sonra **`npm run check` çalıştırılmadan** hiçbir bölme bitmiş sayılmaz.
+İki denetim bu işi yapar:
+
+- `tools/free_idents.mjs` — kullanılan ama tanımlı/import olmayan ad → o uç "Sunucu hatası".
+- `tools/export_check.mjs` — import edilen ama dışa verilmeyen ad → sunucu hiç açılmaz.
+
+## Güvenlik ağı yazarken
+
+Yanlış alarm veren araç, araçsızlıktan kötüdür: kimse bakmaz. **Sessiz kaçırma ondan da
+kötüdür:** araç yeşil yanar, hata canlıya gider.
+
+Bu yüzden her denetim aracı, yazıldığı gün **kasten bozulmuş kodla** sınanır:
+1. Temiz kodda susmalı.
+2. Hatanın her biçimi (düz çağrı, yayma, çok satırlı import, `export const` gövdesi)
+   ayrı ayrı denenmeli ve her biri yakalanmalı.
+3. Araç girdiyi hiç okuyamadıysa "hata yok" değil **"bozuğum"** demeli ve çıkış kodu
+   vermeli (`export_check.mjs`: hiç import okunmazsa 2 ile çıkar).

@@ -1,7 +1,7 @@
 // Yönetici paneli — resmi etkinlikler ve dönem kapatma.
 // Ortak yardımcılar ve import'lar: admin.shared.js
 import { Router } from 'express';
-import { STATEMENT_TABLES, announceUserChange, closePeriod, creditPeriod, creditStatement, fail, isWalletPeriod, loadConfig, notifyUser, oneOf, parsePeriodKey, periodKey, previousPeriod, query, referralStatementJson, requireSuperAdmin, text, tx, uuid } from './admin.shared.js';
+import { STATEMENT_TABLES, agencyStatementJson, announceUserChange, assistantStatementJson, closePeriod, creditPeriod, creditStatement, fail, hostStatementJson, isWalletPeriod, loadConfig, notifyUser, oneOf, parsePeriodKey, periodKey, previousPeriod, query, referralStatementJson, requireSuperAdmin, text, tx, uuid } from './admin.shared.js';
 
 export const router = Router();
 

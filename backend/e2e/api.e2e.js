@@ -171,7 +171,11 @@ test('amiral hediye (5.000.000 Coin): basım bütçesi, gönderim, şerit, defte
   // 1) Yönetici amiral hediyeyi oluşturur.
   const made = await api('POST', '/api/admin/gifts', {
     token: U.d.token,
-    body: { name: `Amiral ${tag}`, coinPrice: String(PRICE), animationUrl: 'https://cdn.example.com/amiral.svga', animationFormat: 'svga', category: 'vip' },
+    // Kategori 'vip' OLMAMALI: Vip hediyeleri WIP 3 ayrıcalığıdır (gifts.routes.js) ve bu
+    // senaryoyu gönderen kişinin WIP'i yok — hediye değil, o kapı sınanmış olurdu. Vip kapısının
+    // kendi sınavı aşağıda ("WIP yok → Vip hediye yok"). Ayrıca 5M'lik bir hediye Vip listesinde
+    // kalsaydı, o sınav hediyeyi kategoriden seçtiği için bakiyesi yetmeyip kırılırdı.
+    body: { name: `Amiral ${tag}`, coinPrice: String(PRICE), animationUrl: 'https://cdn.example.com/amiral.svga', animationFormat: 'svga', category: 'popular' },
   });
   ok(made, 'amiral hediye oluşturulmalı');
   const giftId = made.body.id;

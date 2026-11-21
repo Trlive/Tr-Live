@@ -3441,3 +3441,85 @@ Araç `npm run verify` zincirine eklendi.
 3. madde (`List` ↔ `Set`) **tip denetimi** gerektiriyor ve bu ortamda Dart derleyicisi yok.
 `verify` artık bunu her çalıştırmada açıkça yazıyor: tip hataları ve null güvenliği **yalnızca
 CI'ın Mobil işinde** görülür.
+
+## v2.146.0 — Canlıdaki "Sunucu hatası" ve e2e'nin dört hatası
+
+Kullanıcı oda açmaya çalışırken "Sunucu hatası" alıyordu. Sebep, dosyaları modüllere bölerken
+yaptığım **tek bir sınıf hatanın dört ayrı yerde kalmış olmasıydı**.
+
+### Kök neden: bölme aracım `...yayma` yazımını görmüyordu
+
+Bölme aracı "bu dosya hangi adları kullanıyor?" sorusunu yanıtlarken `...profileJson(p)` gibi
+yayma (spread) yazımlarını **özellik erişimi** sanıyordu (`...` içindeki noktalar yüzünden).
+Bu yüzden o adları import listesine yazmadı. Sonuç: dosya sözdizimsel olarak doğru, sunucu
+açılıyor, birim testleri geçiyor — ama **o uç çağrıldığı anda** ReferenceError.
+
+| Dosya | Eksik ad | Kırılan şey |
+|---|---|---|
+| `rooms.routes.js` | `profileJson` | `GET /api/rooms/mine` → **"Yayın başlat" ekranı, oda açma** |
+| `admin_events.routes.js` | `hostStatementJson` | `GET /api/admin/payouts/:id` → ajans dönem detayı |
+| `admin_events.routes.js` | `agencyStatementJson` | aynı uç |
+| `admin_events.routes.js` | `assistantStatementJson` | aynı uç |
+
+Dördü de import listesine eklendi.
+
+### Dört e2e hatasının haritası
+
+1. **amiral hediye → HTTP 403.** Test 5.000.000 Coin'lik hediyeyi `category: 'vip'` ile
+   oluşturuyordu; Vip hediyeleri WIP 3 ayrıcalığıdır ve gönderenin WIP'i yok. Test, adının
+   söylediği şeyi (bütçe, gönderim, şerit, defter, mutabakat) değil, Vip kapısını sınıyordu.
+   Kapının kendi sınavı zaten var. Kategori `popular` yapıldı. **Yan fayda:** 5M'lik hediye
+   Vip listesinde kalsaydı, aşağıdaki Vip sınavı hediyeyi kategoriden seçtiği için bakiyesi
+   yetmeyip o da kırılacaktı.
+2. **ajans/yayıncı → HTTP 500.** Yukarıdaki `admin_events.routes.js` eksikleri.
+3. **kalıcı oda → `undefined.audio`.** `GET /api/rooms/mine` 500 dönüyordu (`profileJson`);
+   test yanıttan `rooms.audio` okuyamadı.
+4. **sesli/görüntülü maaş → 44 !== 2.** Bu, 2 numaranın **artçısıydı**. Ajans testi 596.
+   satırda ölünce 627. satırdaki `pay-levels/reset` hiç çalışmadı; sesli tablo 2 seviyede
+   kaldı, görüntülü tablo 44'te. Teste dokunulmadı: 2 düzelince kendiliğinden geçer.
+
+### Kalıcı güvenlik ağı: iki yeni denetim (`npm run check` içinde)
+
+Bu hata sınıfını bir daha canlıda görmemek için:
+
+- **`backend/tools/free_idents.mjs` — tanımsız ad.** Kullanılan ama hiçbir yerde tanımlanmayan
+  / import edilmeyen adları bulur. Bulduğu şey tam olarak "Sunucu hatası"dır.
+- **`backend/tools/export_check.mjs` — eksik dışa verim.** İçe aktarılan her adın karşı dosyada
+  gerçekten `export` edildiğini doğrular. Bu sınıf sunucuyu **hiç açtırmaz**. 963 import denetleniyor.
+
+İkisi de `npm run check` ve `npm run verify` içinde; CI'ın `unit` işi artık bu hataları
+**yüklemeden önce** kırar.
+
+#### Araçları yazarken yaptığım ve düzelttiğim hatalar
+
+Bir güvenlik ağının kendisi yanılıyorsa, ağ olmamasından kötüdür. Bu yüzden ikisi de kasten
+bozulmuş kodla sınandı. Yol boyunca çıkan yanlış alarmlar ve **sessiz kaçırmalar**:
+
+- Eski `unresolved_refs.mjs` **3591 yanlış alarm** veriyordu: dizeleri yorumlardan önce
+  siliyordu, Türkçe yorumdaki kesme işareti ("anahtarı'nın") dize başı sanılıyordu; ayrıca
+  tanımlayıcı deseni ASCII'ydi, "işlem" gibi adlar parçalanıyordu. Yerine yeni araç geçti.
+- `Array.from()` kod NOKTASI, `src[i]` kod BİRİMİ adresler. Emoji (🃏) geçen bir satırdan
+  sonra tüm silme bir karakter kayıyordu.
+- Şablon dizesinin `${...}` içindeki iç içe dizeler (`${x ? 'ASC' : 'DESC'}`) kod sanılıyordu.
+- `export const x = f(y)` satırlarının **tamamı** atlanıyordu — dosyaların çoğu böyle yazıldığı
+  için aracın en büyük kör noktasıydı.
+- `if (x) {` parantezi parametre listesi sayılıyordu; böylece araç **aradığı hatayı görmez**
+  hale geliyordu (yanlış alarmın tersi: sessiz kaçırma, daha tehlikelisi).
+- `export_check` yorum silmeyi kendi başına yapınca aynı "/*" tuzağına düştü; sınanmış tek
+  tarayıcıya bağlandı. Sonra dize içleri de silinince modül yolları görünmez oldu —
+  tırnaklar korunup yol ham kaynaktan okunuyor. Araç artık **hiç import okumazsa "bozuğum"
+  diyor**, "hata yok" demiyor.
+
+### APK
+
+`actions/upload-artifact` adımı kaldırıldı. Actions depolama kotası dolduğu için her derlemede
+kırmızı satır bırakıyordu. APK zaten **Releases → `son-apk`** etiketine yükleniyor; o bağlantı
+kalıcı ve kotaya sayılmıyor. 72 MB'lık dosyayı iki yere koymanın faydası yoktu.
+
+### Doğrulanan / doğrulanamayan
+
+Doğrulandı: 220 dosya sözdizimi · dağıtım yolları · rota haritası · **313 birim testi** ·
+tanımsız ad yok · 963 import karşılığını buluyor · Dart ön denetimi.
+
+**Doğrulanamadı (bu ortamda npm kapalı, gerçek paketler yok):** sunucunun açılması ve e2e.
+Dört e2e hatasının düzeltmesi kodun okunmasıyla bulundu, çalıştırılarak değil. Karar CI'ındır.

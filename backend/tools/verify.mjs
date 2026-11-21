@@ -100,10 +100,16 @@ console.log(`\n${failed ? `${failed} kontrol BAŞARISIZ` : 'Yerel kontroller tam
 console.log(`
 BU ARAÇ ŞUNLARI DOĞRULAMAZ — yayından önce CI'da görülmeli:
 
-  1. Sunucunun GERÇEKTEN açılması
+  1. Sunucunun GERÇEKTEN açılması ve uçların gerçekten çalışması
      Bu ortamda paketler taklit; app.js gerçek Express'le çalıştırılamıyor. Sunucuyu açan tek
      yer CI'ın e2e işi. Modül taşımasında sunucuyu açtırmayan üç hata vardı ve buradaki
      kontrollerin hepsi yeşildi. "Testler geçti" ile "sunucu açılıyor" AYNI ŞEY DEĞİLDİR.
+
+     v2.146.0'dan beri iki kör nokta KAPANDI (scripts/check.mjs içinde):
+       · tanımsız ad (free_idents.mjs)   → uç çağrılınca "Sunucu hatası"
+       · eksik dışa verim (export_check.mjs) → sunucu hiç açılmaz
+     Bunlar yalnızca BU iki sınıfı görür. Veritabanı şeması, SQL, null, sıralama, yetki ve
+     iş kuralı hataları hâlâ yalnızca e2e'de çıkar.
 
   2. Dart TİP denetimi (flutter analyze)
      Yukarıdaki Dart ön denetimi yalnızca import ve tanımsız ad bakar. List<int> ↔ Set<int>

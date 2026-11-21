@@ -1,6 +1,6 @@
 // Tüm kaynak dosyaların sözdizimini denetler (node --check yalnızca verilen dosyaya bakar; içe aktarılanlara bakmaz).
 import { readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 const roots = ['src', 'test', 'e2e', 'scripts'];
@@ -35,5 +35,21 @@ const dp = spawnSync(process.execPath, [new URL('../tools/deploy_paths.mjs', imp
 process.stdout.write(dp.stdout || '');
 process.stderr.write(dp.stderr || '');
 if (dp.status !== 0) failed += 1;
+
+// Tanımsız ad ve eksik dışa verim denetimi.
+//
+// İkisi de "sözdizimi doğru ama çalışınca patlar" sınıfındandır ve birim testleri
+// o yolu çağırmıyorsa sessiz kalırlar:
+//  - Tanımsız ad → uç çağrılınca ReferenceError → kullanıcıya "Sunucu hatası".
+//    (v2.146.0'da canlıda "oda açılamıyor" hatasının sebebi tam buydu: rooms.routes.js
+//     profileJson'u kullanıyor ama import etmiyordu.)
+//  - Eksik dışa verim → modül bağlanamaz → sunucu HİÇ açılmaz.
+const srcFiles = files.filter((f) => f.startsWith(`src${sep}`) || f.startsWith(`e2e${sep}`));
+for (const tool of ['free_idents.mjs', 'export_check.mjs']) {
+  const r = spawnSync(process.execPath, [new URL(`../tools/${tool}`, import.meta.url).pathname, ...srcFiles], { encoding: 'utf8' });
+  process.stdout.write(r.stdout || '');
+  process.stderr.write(r.stderr || '');
+  if (r.status !== 0) failed += 1;
+}
 
 process.exit(failed ? 1 : 0);
