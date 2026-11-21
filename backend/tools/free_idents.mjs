@@ -102,8 +102,9 @@ export function blankNonCode(src) {
         j++;
       }
       blank(seg, Math.min(j, n));
-      if (i < n) out[i] = ' ';
-      if (j < n) out[j] = ' ';
+      // Ters tırnaklar KORUNUR (tıpkı ' ve " gibi): e2e_routes.mjs şablonlu adresleri
+      // (`/api/rooms/${id}/members`) bu sınırlardan buluyor. Silindiklerinde araç
+      // şablonlu çağrıların HİÇBİRİNİ göremiyordu — 334 çağrı okuyup "tamam" diyordu.
       i = Math.min(j + 1, n); prev = 'x'; continue;
     }
     if (c === '/') {

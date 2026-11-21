@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tr_live/services/api.dart';
 import 'package:tr_live/services/presence_service.dart';
-import 'package:tr_live/screens/ludo_screen.dart' show tokenCenter;
 import 'package:tr_live/widgets/common.dart';
 
 void main() {
@@ -20,21 +19,9 @@ void main() {
     expect(fmtMoney(null), '0,00 USD');
   });
 
-  test('Ludo taş konumları sunucu yoluyla uyumlu', () {
-    // Kırmızı başlangıç (progress 0) → (1,6) hücresi merkezi
-    expect(tokenCenter(0, 0, 0), const Offset(1.5, 6.5));
-    // Yeşil başlangıç küresel kare 13 → (8,1)
-    expect(tokenCenter(1, 0, 0), const Offset(8.5, 1.5));
-    // Sarı başlangıç küresel kare 26 → (13,8)
-    expect(tokenCenter(2, 0, 0), const Offset(13.5, 8.5));
-    // Mavi başlangıç küresel kare 39 → (6,13)
-    expect(tokenCenter(3, 0, 0), const Offset(6.5, 13.5));
-    // Kırmızı ev sütunu ilk hücre (progress 51) → (1,7)
-    expect(tokenCenter(0, 51, 0), const Offset(1.5, 7.5));
-    // Kırmızı 50 → son ortak yol karesi (0,7)'den önceki (0,6)? küresel 50
-    expect(tokenCenter(0, 50, 0), const Offset(0.5, 7.5));
-  });
-
+  // Ludo tahta geometrisi sınavı kaldırıldı: oyun artık uygulamada değil, sunucudan
+  // gelen pakette çalışıyor (kullanıcının "oyunlar kodlarda olmayacak" kuralı). Tahtayı
+  // çizen taraf sunucu olduğu için konum doğrulaması da orada yapılmalı.
   test('fmtDuration saat ve dakika', () {
     expect(fmtDuration(59), '0 dk');
     expect(fmtDuration(3600 + 5 * 60), '1 sa 5 dk');

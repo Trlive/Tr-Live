@@ -382,3 +382,53 @@ Bu yüzden her denetim aracı, yazıldığı gün **kasten bozulmuş kodla** sı
    ayrı ayrı denenmeli ve her biri yakalanmalı.
 3. Araç girdiyi hiç okuyamadıysa "hata yok" değil **"bozuğum"** demeli ve çıkış kodu
    vermeli (`export_check.mjs`: hiç import okunmazsa 2 ile çıkar).
+
+## E2E yazarken: adresi uydurma, denetlet
+
+Bir e2e testini yazarken adresi hatırdan yazmak, o testi çalıştırana kadar yanlış kalır.
+`GET /api/gifts/global` yazılmıştı, gerçeği `GET /api/gifts/global/recent` idi; hata CI'da,
+hem de başka hatalar temizlendikten sonra çıktı.
+
+`tools/e2e_routes.mjs` bunu kapatır: sunucunun tam adres listesini bağlamaları izleyerek
+çıkarır ve e2e'deki her `api(...)` çağrısıyla eşler. `npm run check` içinde çalışır.
+
+**Node test koşucusu bir testte ilk hatada durur.** Bu yüzden aynı dosyadaki hatalar
+turlara yayılır: her CI turunda bir tane. Bir hatayı düzeltirken, aynı sınıftan başka
+hata kalıp kalmadığını **araçla toptan** sormak gerekir; tek tek kovalamak tur israfıdır.
+
+## Araçtaki sessiz kaçırmayı nasıl fark edersin
+
+Yanlış alarm gürültülüdür, fark edilir. Sessiz kaçırma sessizdir: araç yeşil yanar.
+İki gerçek örnek:
+
+- `e2e_routes.mjs` ilk halinde şablonlu adresleri (`` `/api/.../${id}` ``) hiç okumuyordu;
+  334 çağrı görüp "hepsi tamam" dedi. Gerçekte 774 çağrı vardı.
+- `export_check.mjs` modül yollarını okuyamayınca hiçbir import görmedi.
+
+Kural: her denetim aracı **ne kadar şey incelediğini sayıyla yazar** (774 çağrı, 963 import,
+644 adres) ve **hiç girdi okuyamadıysa "hata yok" değil "bozuğum" der**, sıfırdan farklı
+çıkış kodu verir. Sayı beklenenden küçükse araç bozuktur, kod temiz değil.
+
+## Büyük bir ekranı bölerken: ölçüt mekanik olsun
+
+`room_screen.dart` 5357 satırdı. Bölerken hangi parçanın "yalıtık" olduğuna göz kararı
+karar vermek, davranışı sessizce değiştirme riski taşır. Bunun yerine ölçüt **mekanik**
+uygulandı: gövdesinde hiçbir ekran alanına (`_room`, `_members` …), `setState`, `widget.`
+ya da `mounted` geçmeyen metotlar taşındı. Bu ölçütü bir betikle saydık; 5357 satırın
+yalnızca 110'u bu ölçütü geçiyordu.
+
+Taşımadan önce **parantezsiz (tear-off) kullanım** aranır: `_pill` yeniden adlandırılırken
+`_pill(` dışında bir kullanım kalsaydı, yeniden adlandırma eksik kalır ve derleyici
+olmadan fark edilmezdi.
+
+### Geri kalanı neden taşımadık
+
+En büyük metotlar (355 satırlık üye kartı, 326 satırlık olay dağıtıcısı) ekranın durumuna
+bağlı. Dart'ta bir sınıf `part` ile bölünemez; bunları ayırmanın yolu gövdeleri `extension`
+içine almak ve **her üye erişimini `this.` ile yazmaktır** — tek bir metotta yüzlerce
+düzenleme demek. Bu ortamda Dart derleyicisi yok; böyle bir değişikliği doğrulamadan
+göndermek, son turlarda tam olarak yaptığımız hatadır.
+
+Doğru yol, dosyayı taşımak değil **durumu bir denetleyiciye (controller) çıkarmaktır**:
+oda durumu + olay işleme ayrı bir sınıfa alınır, ekran yalnızca çizer. Bu ayrı ve büyük
+bir iştir; `flutter analyze` çalıştırılabilen bir ortamda, adım adım yapılmalıdır.

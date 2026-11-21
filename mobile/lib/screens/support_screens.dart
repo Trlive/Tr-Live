@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../hybrid/sdui/v2/sdui_screen_view.dart';
 import '../services/api.dart';
 import '../services/session.dart';
 import '../services/socket_service.dart';
@@ -27,7 +28,16 @@ class CustomerServiceScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Müşteri Hizmetleri Merkezi')),
-      body: ListView(padding: const EdgeInsets.all(12), children: [
+      // SDUI v2 pilotu: bu ekranın içeriği sunucudan gelebilir (konu başlıkları, sıraları,
+      // duyurular APK çıkmadan değişir). Sunucuda yayın yoksa, uygulama sürümü yetmiyorsa
+      // ya da kullanıcı kademeli açılış diliminde değilse AŞAĞIDAKİ yerleşik ekran çizilir.
+      // Yerleşik sürüm silinmez: SDUI'nin üçüncü geri düşme kademesi odur.
+      body: SduiScreenView(screenId: 'help', fallback: _builtIn),
+    );
+  }
+
+  Widget _builtIn(BuildContext context) {
+    return ListView(padding: const EdgeInsets.all(12), children: [
         GridView.count(
           crossAxisCount: 2,
           shrinkWrap: true,
@@ -60,8 +70,7 @@ class CustomerServiceScreen extends StatelessWidget {
             child: const Text('Çevrimiçi müşteri hizmetleri', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
           ),
         ),
-      ]),
-    );
+    ]);
   }
 }
 

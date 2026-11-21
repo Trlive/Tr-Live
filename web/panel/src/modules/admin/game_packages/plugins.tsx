@@ -7,12 +7,12 @@ import { useApi } from "@/core/api/use-api";
 import { Badge, Card, Empty, ErrorBox, Loading, PageHeader, StatCard, inputCls } from "@/shared/components/ui";
 import { ActionMsg, Field, btnDangerOutline, btnSmall, selectCls, useAction } from "@/shared/components/kit";
 
-type Pkg = { id: string; name: string; version: string; enabled: boolean; files: number; bytes: string; installedAt: string; hasPanel: boolean; running: boolean; error: string | null; sha256: string | null; uploader: string | null };
+type Pkg = { id: string; name: string; version: string; enabled: boolean; files: number; bytes: string; installedAt: string; hasPanel: boolean; running: boolean; error: string | null; sha256: string | null; uploader: string | null; tables: string[]; trusted: boolean };
 type AuditRow = {
   id: string; pluginId: string; action: string; version: string | null; sha256: string | null;
   files: number | null; bytes: string | null; detail: Record<string, unknown> | null; createdAt: string; admin: string | null;
 };
-const actionText: Record<string, string> = { install: "Yüklendi", enable: "Açıldı", disable: "Kapatıldı", restart: "Yeniden başlatıldı", remove: "Kaldırıldı" };
+const actionText: Record<string, string> = { install: "Yüklendi", enable: "Açıldı", disable: "Kapatıldı", restart: "Yeniden başlatıldı", remove: "Kaldırıldı", trust: "Tam veritabanı erişimi AÇILDI", untrust: "Tam veritabanı erişimi kapatıldı" };
 type FieldDef = { key: string; label: string; type: "number" | "text" | "select" | "bool"; hint?: string; scale?: number; options?: { value: string | number; label: string }[] };
 type Schema = {
   title?: string; description?: string;
@@ -68,6 +68,18 @@ export default function AdminPlugins() {
             action={p.error ? <Badge tone="red">Hata</Badge> : p.running ? <Badge tone="green">Çalışıyor</Badge> : <Badge tone="gray">Kapalı</Badge>}
           >
             {p.error && <p className="mb-2 text-sm text-[#e35d5d]">{p.error}</p>}
+            {/* Paketin veritabanı yetkisi. Dar yetki varsayılandır: paket yalnızca kurulum
+                SQL'inde kendi oluşturduğu tabloları görür. Tam erişim, paketin veritabanının
+                tamamına ulaşması demektir ve yalnızca bizim yazdığımız paketlerde açılmalıdır. */}
+            <p className="mb-2 text-xs">
+              {p.trusted ? (
+                <span className="text-[#e3a15d]">Tam veritabanı erişimi açık — bu paket tüm tabloları okuyup yazabilir.</span>
+              ) : (
+                <span className="text-white/50">
+                  Dar yetki{p.tables?.length ? `: ${p.tables.join(", ")}` : " — kendi tablosu yok"}
+                </span>
+              )}
+            </p>
             <div className="flex flex-wrap gap-2">
               {p.hasPanel && p.running && (
                 <button type="button" className={btnSmall} onClick={() => setOpen(open === p.id ? null : p.id)}>{open === p.id ? "Ayarları gizle" : "Ayarlar ve istatistik"}</button>
@@ -76,6 +88,20 @@ export default function AdminPlugins() {
                 {p.enabled ? "Kapat" : "Aç"}
               </button>
               <button type="button" disabled={busy} className={btnSmall} onClick={() => run("Yeniden başlatıldı.", async () => { await api(`/api/admin/plugins/${p.id}/restart`, { method: "POST" }); reload(); })}>Yeniden başlat</button>
+              <button
+                type="button"
+                disabled={busy}
+                className={btnSmall}
+                onClick={() => {
+                  if (!p.trusted && !confirm(`"${p.name}" paketine veritabanının TAMAMINA erişim verilecek.\n\nBunu yalnızca paketi kendimiz yazdıysak yapın. Üçüncü taraf bir pakette bu, tüm kullanıcı ve cüzdan verisine açık kapı demektir.`)) return;
+                  run(p.trusted ? "Tam erişim kapatıldı." : "Tam erişim açıldı.", async () => {
+                    await api(`/api/admin/plugins/${p.id}/trust`, { method: "POST", body: { trusted: !p.trusted } });
+                    reload();
+                  });
+                }}
+              >
+                {p.trusted ? "Tam erişimi kapat" : "Tam erişim ver"}
+              </button>
               <button
                 type="button"
                 disabled={busy}

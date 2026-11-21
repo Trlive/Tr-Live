@@ -105,10 +105,11 @@ BU ARAÇ ŞUNLARI DOĞRULAMAZ — yayından önce CI'da görülmeli:
      yer CI'ın e2e işi. Modül taşımasında sunucuyu açtırmayan üç hata vardı ve buradaki
      kontrollerin hepsi yeşildi. "Testler geçti" ile "sunucu açılıyor" AYNI ŞEY DEĞİLDİR.
 
-     v2.146.0'dan beri iki kör nokta KAPANDI (scripts/check.mjs içinde):
+     v2.146.1'den beri üç kör nokta KAPANDI (scripts/check.mjs içinde):
        · tanımsız ad (free_idents.mjs)   → uç çağrılınca "Sunucu hatası"
        · eksik dışa verim (export_check.mjs) → sunucu hiç açılmaz
-     Bunlar yalnızca BU iki sınıfı görür. Veritabanı şeması, SQL, null, sıralama, yetki ve
+       · e2e'nin olmayan adresi çağırması (e2e_routes.mjs) → HTTP 404 "Adres bulunamadı"
+     Bunlar yalnızca BU üç sınıfı görür. Veritabanı şeması, SQL, null, sıralama, yetki ve
      iş kuralı hataları hâlâ yalnızca e2e'de çıkar.
 
   2. Dart TİP denetimi (flutter analyze)

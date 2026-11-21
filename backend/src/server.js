@@ -16,6 +16,7 @@ import { promoteBootstrapAdmins } from './modules/system/bootstrap.service.js';
 import { startScoreboardTicker } from './modules/rooms/scoreboard.service.js';
 import { startReconcileTicker } from './modules/wallet/reconcile.service.js';
 import { nonOverlapping } from './infrastructure/queue/ticker.js';
+import { runAlertChecks } from './modules/system/alerts.service.js';
 import { startWeeklyEventsTicker } from './modules/events/weekly_events.service.js';
 import { startNotificationJanitor } from './modules/notifications/notify.service.js';
 import { router as dealersRouter, startDealerDeliveryTicker, shopAdminRouter as dealerShopAdminRouter } from './modules/dealers/dealers.routes.js';
@@ -86,6 +87,14 @@ const idemJanitor = setInterval(nonOverlapping(() => pruneIdempotencyKeys().catc
 const banJanitor = setInterval(nonOverlapping(() => pruneRoomBans().catch((e) => console.error('Oda yasağı temizliği:', e.message))), 3600e3);
 banJanitor.unref();
 idemJanitor.unref();
+// Alarm turu: kurallar beş dakikada bir değerlendirilir (ALERT_INTERVAL_MIN ile değişir).
+// Daha sık çalıştırmanın faydası yok — ölçüm penceresi 15 dakika; daha seyrek olursa
+// gece çıkan bir sorun saatlerce fark edilmez.
+const alertTicker = setInterval(
+  nonOverlapping(() => runAlertChecks().catch((e) => console.error('Alarm turu:', e.message))),
+  Math.max(Number(process.env.ALERT_INTERVAL_MIN) || 5, 1) * 60e3,
+);
+alertTicker.unref();
 loadBans().then((n) => n && console.log(`${n} aktif IP yasağı yüklendi.`)).catch((e) => console.error('IP yasakları yüklenemedi:', e.message));
 promoteBootstrapAdmins().catch((e) => console.error('ADMIN_USERNAMES uygulanamadı:', e.message));
 seedThemeImages().then((n) => n && console.log(`${n} oda teması görseli yüklendi.`)).catch((e) => console.error('Tema görselleri yüklenemedi:', e.message));

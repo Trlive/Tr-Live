@@ -52,4 +52,16 @@ for (const tool of ['free_idents.mjs', 'export_check.mjs']) {
   if (r.status !== 0) failed += 1;
 }
 
+// E2E'nin çağırdığı her adres sunucuda var mı?
+//
+// route_map.mjs "taşımada adres kayboldu mu?" sorusuna bakar; testin adresi DOĞRU
+// yazdığına bakmaz. Bir test `/api/gifts/global` çağırıyordu, gerçek adres
+// `/api/gifts/global/recent` idi → HTTP 404 "Adres bulunamadı".
+// Node test koşucusu ilk hatada o testi bırakır; bu yüzden böyle hatalar CI'da
+// sırayla, her turda bir tane çıkar. Bu araç hepsini bir kerede gösterir.
+const er = spawnSync(process.execPath, [new URL('../tools/e2e_routes.mjs', import.meta.url).pathname], { encoding: 'utf8' });
+process.stdout.write(er.stdout || '');
+process.stderr.write(er.stderr || '');
+if (er.status !== 0) failed += 1;
+
 process.exit(failed ? 1 : 0);

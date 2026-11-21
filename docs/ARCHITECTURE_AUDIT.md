@@ -59,7 +59,7 @@ güvenlik katmanları kurulmuş** bir sistem. Bu denetimin en önemli sonucu şu
 | # | Bulgu | Neden kritik | Karar |
 |---|---|---|---|
 | 1 | ~~Eski oyun API'si sonucu istemciden alıyor~~ | Oyuncu kendi kazancını belirleyebiliyordu. | ✅ Kapandı (v2.131.0) — [F-01](#f-01) |
-| 2 | Oyun paketleri sunucuda tam yetkiyle çalışıyor | Yüklenen paket veritabanının tamamına erişir. Artık kim neyi yükledi kayıtlı; yetki daraltma P1. | 🟡 — [O-01](#o-01) |
+| 2 | Oyun paketleri sunucuda tam yetkiyle çalışıyor | Yetki daraltıldı (v2.147.0): paket yalnızca kendi tablolarını görür. Ayrı süreçte çalıştırma (adım 3) kaldı. | 🟢 — [O-01](#o-01) |
 | 3 | ~~Bakiye ile işlem defteri arasında mutabakat yok~~ | Kaçak sessizce kalırdı. | ✅ Kapandı (v2.131.0) — [F-02](#f-02) |
 | 4 | Tek sunucu örneği sınırı (bellek içi durum) | İkinci sunucu açıldığı an oda/soket/limit bozulur. | 🟡 P1 — [G-01](#g-01) |
 | 5 | Medya dosyaları PostgreSQL içinde | Veritabanı şişer, maliyet ve yedek süresi büyür, CDN yok. | 🟡 P1 — [V-02](#v-02) |
@@ -414,7 +414,7 @@ aynı olayı iki kez gönderebilir).
 ## 8. Bulgular — Oyun platformu ve WebView
 
 <a id="o-01"></a>
-### O-01 · Oyun paketleri tam yetkiyle çalışıyor — 🟡 adım 1 ✅ (v2.131.1) · adım 2–3 P1/P2
+### O-01 · Oyun paketleri tam yetkiyle çalışıyor — 🟡 adım 1 ✅ (v2.131.1) · adım 2 ✅ (v2.147.0) · adım 3 P2
 
 **Mevcut:** Panelden yüklenen oyun paketi, sunucu sürecinin **içinde** çalışıyor ve kendisine
 `query`, `tx`, cüzdan ve hub veriliyor (`backend/src/services/plugins.js`). Yükleme yetkisi
@@ -556,8 +556,37 @@ ve etkin moderasyon istiyor. Bu madde **yayın engelidir**, sonraya bırakılama
 zip ile güncelleme, veritabanı taşıma, Figma görselleri. Zip yükleyince sunucu kendini
 güncelliyor ve APK derlemesi tetikleniyor. Bu, tek kişilik ekip için doğru kurgu.
 
+<a id="sdui-v2"></a>
+### SDUI v2 — 🟢 altyapı ✅ (v2.148.0) · 12 ekranın taşınması sürüyor
+
+**Durum (ölçüldü, v2.147.1):** 34 ekranın **1'i** (ana ekran) SDUI kullanıyordu; SDUI yalnızca
+sekme sırası/görünürlüğü ve 3 bölüm türünü sürüyordu. Yani hibrit altyapı vardı, hibrit
+İÇERİK yoktu.
+
+**v2.148.0'da kurulan:** genel bileşen ağacı (yerleşim · bölüm · liste · form · detay · durum),
+taslak/yayın ayrımı, kademeli açılış (%), en düşük uygulama sürümü, sürüm geçmişi ve geri alma.
+Pilot: Yardım / Müşteri Hizmetleri ekranı.
+
+**Üç güvenlik kararı:**
+1. `api` eylemi **serbest adres ALMAZ**, yalnızca izinli ad. Ad → uç eşlemesi hem sunucuda hem
+   uygulamada KODDADIR. Serbest adres olsaydı, düzeni kaydedebilen biri bütün telefonlara
+   istediği yere istek attırabilirdi — SDUI o noktada uzaktan kod çalıştırmaya dönüşürdü.
+2. Form doğrulaması **yalnızca kullanıcı rahatlığıdır**; formu alan uç kuralları kendi
+   doğrular ve düzenden gelenlere hiç bakmaz.
+3. Eski uygulamaya çizemeyeceği düğüm **hiç gönderilmez** (sunucu süzer) ve uygulama
+   tanımadığını **atlar**. İki kat, çünkü tek kat yeterli olsaydı yanlış tek bir `minApp`
+   kaydı eski telefonlarda boş ekran demekti.
+
+**Yerel kalanlar (ilkeye göre, taşınmayacak):** ses/görüntü odaları, mikrofon-kamera, LiveKit,
+giriş ve oturum, cüzdan/Coin/Elmas/çekim, satın alma doğrulaması, gerçek zamanlı mesajlaşma
+çekirdeği, kritik moderasyon.
+
+**Kalan:** 11 ekranın düzeninin yazılması ve kademeli yayını. Oda ekranının 5.142 satırının
+çözümü SDUI değil — durumu denetleyiciye çıkaran refaktör (bkz. docs/MODULE_STANDARD.md).
+
+---
 <a id="i-02"></a>
-### I-02 · Gözlemlenebilirlik — 🟡 GELİŞTİRİLECEK · P2
+### I-02 · Gözlemlenebilirlik — ✅ Kapandı (v2.147.0)
 
 **Mevcut:** Panelde canlı sistem ekranı (CPU, bellek, çalışma süresi, veritabanı gecikmesi,
 bağlantı havuzu, veritabanı boyutu), güvenlik olay kaydı, **mobil hata kayıtlarının sunucuya
@@ -565,8 +594,19 @@ toplanması** (`/api/client-errors`).
 **Boşluk:** Yapılandırılmış log yok (77 adet `console.error`), metrik dışa aktarımı
 (Prometheus/OpenTelemetry) yok, **alarm yok** (bir şey bozulduğunda kimse haber almıyor),
 SLO tanımı yok.
-**Yapılacak:** Yapılandırılmış log → metrik → alarm sırasıyla. En azından: API hata oranı,
-veritabanı havuzu doluluğu, ödenmemiş kazanç sayısı ve mutabakat farkı için alarm.
+**Yapıldı (v2.147.0):** Üçü de, denetimde yazıldığı sırayla.
+1. **Yapılandırılmış log** (`infrastructure/observability/log.js`): tek satır JSON, sabit alan
+   adları, hassas alanlar maskeli. Hata ara katmanı ve yavaş/hatalı istekler buraya yazıyor.
+2. **Metrik** (`infrastructure/observability/metrics.js` + `middleware/observability/timing.js`):
+   uç bazında p50/p95/p99, 4xx/5xx, en yavaş SQL. Ölçüm anahtarı gerçek yol değil ROTA DESENİ
+   (kardinalite patlaması olmasın). Panel: **Yönetim → Ölçümler**.
+3. **Alarm** (`modules/system/alerts.service.js`, tablo `alerts`): API hata oranı, havuz
+   doluluğu, p95 gecikme, mutabakat farkı, mutabakatın hiç çalışmaması, ödenmemiş hak ediş.
+   Beş dakikada bir değerlendirilir; açılır ve düzelince kendi kapanır. Bildirim yalnızca
+   AÇILIRKEN gider (alarm yorgunluğu). Aynı kural açıkken ikinci satır açılmaz.
+
+**Sınır:** Ölçümler bellekte ve tek sunucu örneği içindir (bkz. G-01); ikinci örnek açıldığı
+gün Prometheus'a taşınmalı. Kalıcı olan tek şey alarmlardır.
 
 <a id="i-03"></a>
 ### I-03 · Yük testi — 🟢 araç ✅ (v2.145.0) · gerçek koşu sende
@@ -655,7 +695,7 @@ Elindeki plan iyi hazırlanmış ama **kodu görmeden** yazılmış. Aşağıda 
 | 15.3 Kullanıcı güvenliği | Şikâyet/engel/ban var; tek kuyruk yok | 🟡 S-06 |
 | 15.4 Yönetici denetimi | Kayıt var; **ikinci onay ve 2FA yok** | 🔵 K-04 |
 | 16. Alan adları, dağıtım | Tek sunucu + docker-compose + nginx + LiveKit | 🟡 G-01, I-04 |
-| 17. Gözlemlenebilirlik | Panel ekranı var; metrik/alarm/SLO yok | 🟡 I-02 |
+| 17. Gözlemlenebilirlik | Log + uç bazında metrik + alarm ✅ (v2.147.0); SLO tanımı hâlâ yok | 🟢 I-02 |
 | 18. Yük testleri | Yok | 🔵 I-03 |
 | 19. Mağaza uygunluğu | Hukuki metinler, hesap silme, veri temizliği var; moderasyon kuyruğu ve ödeme eksik | 🟡 S-06, F-04 |
 
@@ -727,7 +767,7 @@ Sıra bağımlılığa göredir; atlanırsa sonraki adım boşa gider.
 
 14. **[K-03]** İzin matrisi · **[K-02]** eski token yolunun kaldırılması.
 15. **[G-02]** WebSocket sıra numarası · **[G-04]** LiveKit webhook'ları.
-16. **[I-02]** Yapılandırılmış log → metrik → alarm · **[I-05]** OpenAPI.
+16. ~~**[I-02]** Yapılandırılmış log → metrik → alarm~~ ✅ v2.147.0 · **[I-05]** OpenAPI.
 17. **[O-04]** Ortak oyun protokolü · **[O-01 adım 3]** paketin ayrı süreçte çalışması.
 18. **[S-03]** Token'ların anahtar deposuna taşınması · **[F-05]** KYC ve çekim limitleri.
 

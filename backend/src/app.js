@@ -51,8 +51,11 @@ import { router as dealerTopupPageRouter } from './modules/dealers/dealer_topup_
 import { getConfig, compareVersions } from './modules/system/app_config.service.js';
 import { router as luckyRouter, startBagTicker } from './modules/gifts/luckybag.routes.js';
 import { firewall, bodyGuard, ipLimit, loadBans, startFirewallJanitor, wsClientIp, isBanned, noteViolation } from './middleware/security/firewall.js';
+import { timing } from './middleware/observability/timing.js';
+import { log } from './infrastructure/observability/log.js';
 import { router as assetsRouter } from './modules/assets/assets.routes.js';
 import { router as sduiRouter } from './modules/sdui/sdui.routes.js';
+import { router as sduiV2Router } from './modules/sdui/v2/sdui_v2.routes.js';
 import { redactSecrets } from './middleware/security/redact.js';
 import { r2Config } from './infrastructure/storage/storage.js';
 import { cdnUrlFor } from './modules/media/offload.service.js';
@@ -67,6 +70,10 @@ app.use(helmet({
   hsts: { maxAge: 31536000, includeSubDomains: true },
 }));
 app.use(firewall()); // IP yasağı, WAF kuralları, IP başına hız sınırı (CORS ve gövde okumadan önce)
+// Süre ölçümü güvenlik duvarından SONRA: yasaklı IP'lerin anlık istek seli gerçek
+// gecikme sayılarını bozmasın. Yönlendirmeden önce olmak zorunda, çünkü süreyi
+// isteğin en başından saymalı.
+app.use(timing);
 // Etkinlik oyun sayfaları başka adreste barınır: yalnızca bu uç, kimlik bilgisi taşımadan her adresten çağrılabilir (yetki = oyun bileti).
 app.use('/api/activity-play', cors({ origin: true, allowedHeaders: ['Content-Type'], maxAge: 600 }));
 app.use(cors({
@@ -186,6 +193,7 @@ app.use('/api', agenciesRouter);
 app.use('/api', agencyCenterRouter);
 app.use('/api', assetsRouter);
 app.use('/api', sduiRouter);
+app.use('/api', sduiV2Router);
 app.use('/api', musicRouter);
 app.use('/api', luckyRouter);
 app.use('/api', pkRouter);
@@ -236,7 +244,7 @@ app.use((error, req, res, next) => {
     // Adres maskelenerek yazılır: oyun sayfaları bileti sorgu dizesinde taşır ve maskelenmezse
     // bilet hata kayıtlarında, saklama süresi boyunca düz metin olarak dururdu.
     // Kendi standardımız: "Log: yapılandırılmış, hassas veri içermeyen".
-    console.error(`[veritabanı] ${req.method} ${redactSecrets(req.originalUrl)}: ${down} — ${error.message}`);
+    log.error('db_unavailable', { method: req.method, url: redactSecrets(req.originalUrl), reason: down, code: error.code, message: error.message });
     // Kısa hata kodu mesajda görünür: günlüğe bakılamasa da ekran görüntüsünden sebep anlaşılır (adres/şifre içermez).
     const tag = String(error.code || 'baglanti').slice(0, 32);
     return res.status(503).json({ message: `Sunucu şu an veritabanına bağlanamıyor (kod: ${tag}). Lütfen biraz sonra tekrar deneyin.`, code: 'db_unavailable' });
@@ -247,7 +255,11 @@ app.use((error, req, res, next) => {
   if (error.status === 503) return res.status(503).json({ message: error.message });
   const pg = PG_ERRORS[error.code];
   if (pg) return res.status(pg[0]).json({ message: pg[1] });
-  console.error(`[hata] ${req.method} ${redactSecrets(req.originalUrl)}:`, error);
+  // Yapılandırılmış kayıt: serbest metin yerine tek satır JSON. Böylece "hangi uç kaç kez
+  // 500 verdi" sorusu metin aramadan yanıtlanır ve ölçümlerle aynı alan adlarını kullanır.
+  log.error('unhandled_error', {
+    method: req.method, url: redactSecrets(req.originalUrl), userId: req.user?.id ?? null, error,
+  });
   res.status(500).json({ message: 'Sunucu hatası.' });
 });
 

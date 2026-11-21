@@ -3523,3 +3523,259 @@ tanımsız ad yok · 963 import karşılığını buluyor · Dart ön denetimi.
 
 **Doğrulanamadı (bu ortamda npm kapalı, gerçek paketler yok):** sunucunun açılması ve e2e.
 Dört e2e hatasının düzeltmesi kodun okunmasıyla bulundu, çalıştırılarak değil. Karar CI'ındır.
+
+## v2.146.1 — Olmayan adres: 404 ve onu bir daha yaşatmayacak denetim
+
+v2.146.0 dört e2e hatasının üçünü kapattı. Kalan bir tanesi şuydu:
+
+    amiral hediye → global şerit → HTTP 404 {"message":"Adres bulunamadı."}
+
+Test `GET /api/gifts/global` çağırıyordu. Gerçek adres `GET /api/gifts/global/recent`.
+Bu testi ben yazmıştım ve **hiç çalıştırmamıştım**. Adres düzeltildi.
+
+### Neden hatalar teker teker çıkıyor — ve bunu nasıl bitirdim
+
+Node test koşucusu bir testte ilk hatada o testi bırakır. Dolayısıyla aynı dosyadaki
+hatalar **sırayla** görünür: bir tur bir tane. Dört hatayı kapatınca beşinci ortaya çıktı.
+Bu, tek tek kovalanacak bir şey değil; sınıfı toptan kapatmak gerekiyordu.
+
+**`backend/tools/e2e_routes.mjs`** (yeni): `app.js`'ten başlayıp router bağlamalarını iç içe
+izleyerek sunucunun TAM adres listesini çıkarır (644 adres), sonra e2e'deki her `api(...)`
+çağrısını (774 çağrı) bu listeyle eşler. Eşleşmeyen varsa **hepsini birden** yazar ve
+"yakın adresler" olarak doğrusunu önerir. `npm run check` ve `npm run verify` içinde.
+
+Kasten bozularak sınandı: sabit yol, şablonlu yol (`/api/rooms/${id}/...`) ve yanlış yöntem
+— üçü de yakalanıyor, temiz kodda susuyor.
+
+### Aracı yazarken yakaladığım iki sessiz kaçırma
+
+Araç ilk halinde "tamam" diyordu ama **yanlış sebeple**:
+
+1. **Bağlama çözümlemesi eksikti.** `app.use('/api/auth', araKatman, authRouter, authSocialRouter)`
+   gibi çok argümanlı bağlamalarda yalnızca ilk ada bakıyordum; o da ara katman olduğu için
+   auth adreslerinin hiçbiri listeye girmiyordu. Araç `/api/auth/login`'i bile "yok" sanıyordu
+   (7 yanlış alarm). Argüman listesi artık dengeli parantezle okunuyor; `app.get(['/health',
+   '/api/health'], …)` gibi dizi yazımı da destekleniyor.
+2. **Şablonlu adreslerin tamamı görünmüyordu.** Ortak tarayıcı, şablon dizesinin ters
+   tırnaklarını da siliyordu; bu yüzden `` `/api/rooms/${id}/members` `` biçimindeki
+   çağrıların **hiçbiri** okunmuyordu. Araç 334 çağrı okuyup "hepsi tamam" diyordu —
+   gerçekte 774 çağrı var. Ters tırnaklar artık korunuyor (tırnaklar gibi).
+
+İkincisi yanlış alarmdan beterdi: araç yeşil yanıyor ama baktığı şey yarısı bile değil.
+Bu yüzden her denetim aracı artık **girdiyi hiç okuyamadığında "bozuğum" diyor**, "hata yok"
+demiyor — ve her biri yazıldığı gün kasten bozulmuş kodla sınanıyor.
+
+### Testin tamamı koda karşı okundu
+
+Aynı testin bir daha başka bir satırdan kırılmaması için 169–235 arası satır satır
+uygulamayla karşılaştırıldı: `POST /api/admin/gifts` → `201 {id}` ✓ · `category: 'popular'`
+geçerli (zaten varsayılan) ✓ · `POST /api/admin/users/:id/coins` → `{budget}` döndürüyor ve
+deftere `transaction_type = 'system_test'` yazıyor ✓ · gönderim yanıtında `totalCoins` ✓ ·
+global şerit kaydı yalnızca `lucky` ve gizli odaya bakıyor, kategoriye bakmıyor — yani
+`vip` → `popular` değişikliği şeridi etkilemiyor ✓ · şerit yanıtı `events[].coinAmount`
+dizesi ✓. Diğer testlerin hediye seçimleri ada göre (Rose, Heart, Şanslı Çan) ya da
+`vip`/`lucky` kategorisine göre; 5M'lik `popular` hediyeyi hiçbiri seçmiyor ✓.
+
+### Doğrulanan / doğrulanamayan
+
+Doğrulandı: 220 dosya sözdizimi · dağıtım yolları · rota haritası · **313 birim testi** ·
+tanımsız ad yok · 963 import karşılığını buluyor · **774 e2e adresinin tamamı var** ·
+Dart ön denetimi.
+
+**Doğrulanamadı:** bu ortamda npm kapalı olduğu için sunucu açılamıyor ve e2e koşturulamıyor.
+404 sınıfı artık kapalı; ama iddia (assertion) ve veritabanı durumu hataları hâlâ yalnızca
+CI'da görünür.
+
+## v2.147.0 — Kalan üç görev: gözlemlenebilirlik, oyun paketi yetkisi, ekran bölme
+
+### 1. Gözlemlenebilirlik (I-02) — kapandı
+
+Denetimdeki boşluk aynen şuydu: *"bir şey yavaşladığında nereye bakacağımız belli değil"*
+ve *"alarm yok — bir şey bozulduğunda kimse haber almıyor"*. Üçü de, denetimde yazıldığı
+sırayla yapıldı: **log → metrik → alarm**.
+
+**Yapılandırılmış log** (`infrastructure/observability/log.js`): tek satır JSON, sabit alan
+adları. `token`, `password`, `authorization` gibi alanlar değeriyle birlikte maskeleniyor;
+adresler zaten var olan `redactSecrets`'tan geçiyor. Paket eklenmedi.
+
+**Uç bazında ölçüm** (`metrics.js` + `middleware/observability/timing.js`): her uç için
+p50/p95/p99, 4xx/5xx, en yüksek süre; ayrıca en yavaş SQL listesi ve havuz durumu.
+Panel: **Yönetim → Ölçümler**.
+
+İki karar burada önemli:
+- **Ölçüm anahtarı gerçek yol değil, rota deseni** (`/api/rooms/:roomId/members`). Gerçek
+  yol kullanılsaydı her oda kimliği ayrı satır açar, bellek ve liste şişerdi. E2E bunu
+  sınıyor: uç listesinde UUID görürse test kırılıyor.
+- **Ortalama ikinci planda.** Bir uç isteklerin %95'inde 80 ms, %5'inde 9 saniye sürüyorsa
+  ortalama "iyi" görünür ama kullanıcıların yirmide biri uygulamayı donmuş sanır.
+  Sıralama varsayılan olarak p95'e göre; bunun için ayrı bir birim testi var.
+
+SQL süresi `query` ve `tx` içinde ölçülüyor. `tx` havuzdan gelen bağlantıya yama atıyor;
+**yama bağlantı havuza dönerken sökülüyor** — sökülmeseydi her işlem bir öncekinin
+sarmalayıcısını sarar, sorgular birden çok kez sayılır ve bellek sızardı.
+
+**Alarm** (`modules/system/alerts.service.js`, tablo `alerts`): API hata oranı, havuz
+doluluğu, p95 gecikme, mutabakat farkı, **mutabakatın hiç çalışmaması** (sessizlik iyi haber
+değildir) ve ödenmemiş hak ediş. Beş dakikada bir değerlendirilir.
+- Açılır, düzelince **kendi kapanır**.
+- Aynı kural açıkken ikinci satır açılmaz (tekil dizin); tekrarlar sayılır. Yoksa 5 dakikada
+  bir tetiklenen bir kural geceyi 288 satırla doldurur ve kimse bakmaz olurdu.
+- Bildirim yalnızca alarm **açılırken** gider, her turda değil.
+- Bir kuralın hatası diğerlerini durdurmaz: tek bozuk sorgu yüzünden bütün alarm sistemi
+  sessizce kapanmasın.
+
+Eşikler ortam değişkeniyle ayarlanır (`ALERT_ERROR_RATE`, `ALERT_P95_MS`, `ALERT_POOL_WAITING`,
+`ALERT_UNPAID_DAYS`, `ALERT_RECONCILE_HOURS`, `ALERT_INTERVAL_MIN`, `SLOW_QUERY_MS`).
+Hata oranı için **en az 50 istek** aranıyor: 2 istekten 1'i hata ise %50 çıkar ve her gece
+boş yere alarm çalardı.
+
+**Sınır:** ölçümler bellekte ve tek sunucu örneği içindir; ikinci örnek açıldığı gün
+Prometheus'a taşınmalı. Kalıcı olan tek şey alarmlardır.
+
+### 2. Oyun paketi yetki daraltma (O-01 adım 2) — kapandı
+
+Paketlere ham `query`/`tx` veriliyordu: yüklenen bir oyun paketi `users`,
+`wallet_transactions`, `admin_sessions` — **veritabanının tamamını** okuyup yazabiliyordu.
+
+- Paketin **sahip olduğu tablolar** kurulum SQL'inden çıkarılıp kayda yazılıyor
+  (`game_plugins.tables`). Çalışma anındaki izin listesi budur; paket listeyi kendi kodundan
+  genişletemez, çünkü liste süper adminin onayladığı kurulum SQL'inden geliyor.
+- `ctx.db` her sorguyu denetliyor (`sandbox/sql_guard.js`): tek deyim, yalnızca
+  SELECT/INSERT/UPDATE/DELETE/WITH, sistem nesneleri yasak, dokunulan her tablo izin
+  listesinde olmalı. JOIN, alt sorgu ve CTE de denetleniyor. **17 birim testi.**
+- `game_kv` ortak bir anahtar alanıydı: her paket diğerinin anahtarını okuyup yazabiliyordu.
+  Anahtarlar paket başına ayrıldı.
+- Ham `query`/`tx` artık yalnızca **güvenilir** pakette. Yeni yükleme varsayılan olarak
+  güvenilmez; güveni süper admin panelden, uyarı onaylayarak veriyor ve bu denetim kaydına
+  yazılıyor. Hâlihazırda kurulu paketler göçte güvenilir sayıldı, yoksa çalışan bir oyun
+  bu sürümle kırılırdı.
+
+**Açıkça yazıyorum: bu bir kum havuzu değildir.** Paket hâlâ aynı süreçte çalışıyor ve
+`import('node:fs')` ile bu kapıyı tamamen atlayabilir. Yani bu daraltma **dürüst ama hatalı**
+paketi durdurur, **kötü niyetli** paketi durdurmaz. Kötü niyetliye karşı tek gerçek çözüm
+paketi ayrı süreçte, kendi veritabanı kullanıcısıyla çalıştırmaktır (O-01 adım 3). **O iş
+bitene kadar üçüncü taraf paket yüklenmemelidir.**
+
+### 3. room_screen.dart bölme — bu turun payı
+
+5357 → **5142 satır**; üç yeni dosya (`gift_flight.dart`, `seat_fx.dart`, `room_chrome.dart`).
+
+Ölçüt göz kararı değil **mekanik**: gövdesinde hiçbir ekran alanına (`_room`, `_members` …),
+`setState`, `widget.` ya da `mounted` geçmeyen metotlar taşındı. Betikle sayıldığında 5357
+satırın yalnızca **110'u** bu ölçütü geçiyordu; hediye uçuş animasyonu ile birlikte 215 satır.
+Yeniden adlandırmadan önce parantezsiz (tear-off) kullanım arandı — biri kalsaydı yeniden
+adlandırma eksik kalır ve derleyici olmadan fark edilmezdi.
+
+**Geri kalanı neden taşımadım.** En büyük metotlar (355 satırlık üye kartı, 326 satırlık olay
+dağıtıcısı) ekranın durumuna bağlı. Dart'ta bir sınıf `part` ile bölünemez; tek yol gövdeleri
+`extension` içine alıp **her üye erişimini `this.` ile yazmak** — tek metotta yüzlerce
+düzenleme. Bu ortamda Dart derleyicisi yok. Doğrulayamadığım 2000 satırlık bir değişiklik
+göndermek, son üç turda tam olarak yaptığımız hatayı tekrarlamak olurdu. Doğru yol dosyayı
+taşımak değil **durumu bir denetleyiciye çıkarmaktır**; ayrı ve büyük bir iş, `flutter analyze`
+çalıştırılabilen bir ortamda adım adım yapılmalı. `docs/MODULE_STANDARD.md`'ye yazıldı.
+
+### Doğrulanan / doğrulanamayan
+
+Doğrulandı: 228 dosya sözdizimi · dağıtım yolları · rota haritası · **338 birim testi**
+(25 yeni: 8 ölçüm, 17 SQL kapısı) · tanımsız ad yok · 983 import · **789 e2e adresinin
+tamamı var** · Dart ön denetimi.
+
+**Doğrulanamadı:** npm kapalı olduğu için sunucu açılmıyor ve e2e koşmuyor; Dart derleyicisi
+olmadığı için `flutter analyze` çalışmıyor. Yeni e2e testleri (ölçümler, alarmlar, paket
+yetkisi) ilk kez CI'da koşacak.
+
+## v2.147.1 — Ölü kod temizliği: oyun hâlâ kodun içindeydi
+
+Hibrit durum ölçülürken çıktı: iki dosya **hiçbir yerden çağrılmıyordu**.
+
+- `lib/screens/ludo_screen.dart` (418 satır) — Ludo oyununun **uygulama içi** sürümü.
+  Oyun çoktan sunucudan geliyor (`room_tek_dock` → `/api/activity-play/...`), ama eski
+  yerel sürüm kodda duruyordu. "Oyunlar kodlarda olmayacak" kuralına doğrudan aykırı:
+  kod satılırsa oyun da gidiyordu.
+- `lib/screens/discover_screen.dart` (105 satır) — işlevi `feed_screen`'e taşınmıştı.
+- `test/common_test.dart` içindeki Ludo tahta geometrisi sınavı: artık bizde olmayan
+  kodu sınıyordu, kaldırıldı. Tahtayı sunucu çizdiği için doğrulama da orada olmalı.
+
+Toplam **523 satır** çıktı; Dart 49.236 → 48.713 satır.
+
+Bunları bulan tarama **kalıcı hale getirildi**: `mobile/tools/dart_check.py` artık
+hiçbir yerden import edilmeyen dosyaları da bildiriyor. `flutter analyze` kullanılmayan
+**import**'u görür, kullanılmayan **dosyayı** görmez — o yüzden bu kör nokta araçla
+kapatıldı. Kasten bırakılan ölü bir dosyayla sınandı: yakalıyor, temiz kodda susuyor.
+
+Ölü dosya yalnızca yer kaplamaz: bakarken gerçek sanılır ve **satılan kodun içinde gider**.
+
+## v2.148.0 — SDUI v2: 12 ekranı APK'sız değiştirebilen altyapı + ilk pilot
+
+Ölçüm şunu söylüyordu: 34 ekranın **1'i** SDUI kullanıyor, o da yalnızca sekme sırası ve
+3 bölüm türü. Hibrit altyapı vardı, hibrit **içerik** yoktu. Bu sürüm o boşluğu kapatıyor.
+
+### Bileşen ağacı
+
+Yerleşim (column, row, grid, scroll, container, divider) · Bölüm (title, banner, card, notice) ·
+Liste (list, listItem, avatarRow, badge, emptyState) · Detay (keyValue, description, image,
+status) · Form (form, textInput, select, checkbox, toggle) · Durum (loading, error) ·
+Veriye bağlı (repeater).
+
+Sunucu ve uygulama aynı kataloğu taşır; panel kataloğu **sunucudan** okur. İki yere yazılsaydı
+biri eskir ve panel, sunucunun kabul etmeyeceği düzenler kaydettirmeye çalışırdı.
+
+### Yayın yönetimi
+
+- **Taslak ve yayın ayrı.** v1'de kaydet = yayınla idi; deneme yapmak canlıyı bozmak demekti.
+- **Kademeli açılış.** "Yayınla" düğmesi "herkese ver" demek değil: varsayılan %1. Yüzde
+  kullanıcı kimliğinden `sha256` ile türetilir — **rastgele değil**; rastgele olsaydı aynı
+  kullanıcı her açılışta farklı ekran görür, "bende öyle değildi" şikâyeti doğardı.
+- **Acil kapat = %0.** Saniyeler sürer, APK beklemez.
+- **Sürüm geçmişi ve geri alma.** Geri alma **taslağı da** eski sürümle değiştirir; yoksa
+  panelde bozuk taslak durur ve bir sonraki "yayınla" aynı hatayı geri getirir — geri almanın
+  en sık görülen tuzağı budur.
+- **En düşük uygulama sürümü.** Eski APK'ya çizemeyeceği düğüm **hiç gönderilmez**.
+
+### Üç güvenlik kararı — plandaki "izinli API action" burada şöyle oldu
+
+1. **`api` eylemi serbest adres ALMAZ.** Yalnızca izinli **ad**: `{"type":"api","name":"markAllRead"}`.
+   Adın hangi uca hangi yöntemle gideceği hem sunucuda hem uygulamada **koddadır**. Serbest
+   adres olsaydı, düzeni kaydedebilen biri (ya da sunucuya giren biri) bütün telefonlara
+   istediği yere istek attırabilirdi; SDUI o noktada uzaktan kod çalıştırmaya dönüşürdü.
+   Listeye iş eklemek APK gerektirir — bu bir eksiklik değil, **sınırın kendisi**.
+2. **Form doğrulaması yalnızca kullanıcı rahatlığıdır.** `required`/`maxLength` ekranda anında
+   uyarı gösterir. Formu alan uç kuralları **kendi** doğrular ve düzenden gelenlere hiç bakmaz.
+   Aksi halde istemciden gelen kuralla istemciden gelen veriyi doğrulamış olurduk; bu,
+   doğrulama değildir.
+3. **İki kat sürüm koruması.** Sunucu ağacı uygulama sürümüne göre süzer, uygulama ayrıca
+   tanımadığı türü atlar. Tek kat yeterli olsaydı, yanlış tek bir `minApp` kaydı eski
+   telefonlarda boş ekran demekti.
+
+Ayrıca: serbest renk kodu yok (yalnızca renk **rolleri** — sunucu siyah üstüne siyah bir ekran
+üretemesin), simge adları kapalı liste, `openUrl` yine WebView izin listesinden geçiyor,
+ağaç derinliği/düğüm sayısı sınırlı (telefonu kilitleyen düzen kaydedilemesin).
+
+### Pilot: Yardım / Müşteri Hizmetleri
+
+Ekran `SduiScreenView` ile sarıldı, **yerleşik Dart sürümü geri düşme kademesi olarak duruyor**
+ve silinmedi. Göç, ekranın birebir karşılığını **taslak** olarak yüklüyor; `published` NULL
+olduğu için **bu sürüm kullanıcı tarafında hiçbir şeyi değiştirmiyor**. Panelden "yayınla"
+denene kadar herkes bugünkü ekranı görür.
+
+Geri düşme üç kademeli: sunucudan gelen ekran → telefonda saklanan son **çalışan** ekran →
+uygulamanın yerleşik ekranı. Üçüncü kademe pazarlık konusu değil: sunucu yanıt vermediğinde
+arayüzün de kaybolması, uygulamayı sunucuya rehin vermek olurdu. Bozuk ya da boş ekran
+**saklanmaz** — saklasaydık uygulama ağ olmasa bile her açılışta bozuk açılırdı.
+
+### Araç düzeltmesi
+
+`e2e_routes.mjs` bir dosyanın birden çok router'ını ayırt edemiyordu; `export const router`
+(uygulama) ile `export const adminRouter` (panel) aynı dosyadaysa ikisinin adreslerini de aynı
+önekin altına yazıyor ve `/api/admin/sdui/v2/...` gibi **var olmayan adresler** üretiyordu.
+Artık hangi dışa verimin bağlandığını izliyor. Adres sayısı 651 → 525'e düştü (hayaletler);
+810 e2e çağrısının tamamı hâlâ tutuyor, yani gerçek adres kaybı yok.
+
+### Doğrulanan / doğrulanamayan
+
+Doğrulandı: 232 dosya sözdizimi · **359 birim testi** (21 yeni: şema, eylem kapısı, sınırlar,
+sürüm karşılaştırma) · 999 import · **810 e2e adresinin tamamı var** · rota haritası ·
+Dart ön denetimi · göçün tohum taslağı şemadan geçiyor.
+
+**Doğrulanamadı:** npm kapalı, sunucu açılmıyor, e2e koşmuyor, `flutter analyze` yok. Yeni
+e2e testleri (taslak/yayın, yüzde, sürüm eşiği, geri alma) ilk kez CI'da koşacak.

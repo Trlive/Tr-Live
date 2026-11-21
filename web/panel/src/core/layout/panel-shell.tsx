@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
+  Activity,
   LayoutDashboard,
   Users,
   Coins,
@@ -104,9 +105,11 @@ const adminGroups: NavGroup[] = [
       { label: "Oda Etkinlikleri", href: "/admin/activities", icon: PartyPopper, adminOnly: true },
       { label: "Oyun Paketleri", href: "/admin/plugins", icon: PartyPopper, adminOnly: true },
       { label: "Ana Ekran Düzeni", href: "/admin/sdui", icon: LayoutDashboard, adminOnly: true },
+      { label: "Ekran Düzenleri", href: "/admin/screens", icon: LayoutDashboard, adminOnly: true },
       { label: "Özellik Bayrakları", href: "/admin/flags", icon: ToggleLeft, adminOnly: true },
       { label: "Ayarlar", href: "/admin/settings", icon: Settings, adminOnly: true },
       { label: "Sunucu", href: "/admin/server", icon: Server, adminOnly: true },
+      { label: "Ölçümler", href: "/admin/metrics", icon: Activity, adminOnly: true },
     ],
   },
 ];

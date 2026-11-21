@@ -1,5 +1,6 @@
 import pg from 'pg';
 import { config } from '../../config.js';
+import { recordQuery } from '../observability/metrics.js';
 
 const { Pool } = pg;
 let pool;
@@ -53,7 +54,22 @@ export function db() {
   return pool;
 }
 
-export const query = (text, params = []) => db().query(text, params);
+// Sorgu süresi ölçülür: "uygulama yavaş" şikâyetinde suçlunun uç mu yoksa tek bir SQL mi
+// olduğunu ayırt etmenin tek yolu bu. Ölçüm yalnızca SÜRE ve normalleştirilmiş sorgu
+// metnini alır; parametre DEĞERLERİ hiçbir zaman kayda girmez.
+async function timed(sql, run) {
+  const t = process.hrtime.bigint();
+  try {
+    const r = await run();
+    recordQuery({ ms: Number(process.hrtime.bigint() - t) / 1e6, sql });
+    return r;
+  } catch (error) {
+    recordQuery({ ms: Number(process.hrtime.bigint() - t) / 1e6, sql, failed: true });
+    throw error;
+  }
+}
+
+export const query = (text, params = []) => timed(text, () => db().query(text, params));
 
 /** Bağlantı havuzu durumu (yönetim paneli). */
 export function poolStats() {
@@ -63,6 +79,10 @@ export function poolStats() {
 
 export async function tx(fn) {
   const client = await db().connect();
+  // İşlem içindeki sorgular da ölçülür. Yavaş SQL'lerin çoğu işlem içindedir (kilit bekleme),
+  // ölçüm yalnızca havuz üzerinden gidenleri saysaydı en önemli kısmı kaçırırdı.
+  const raw = client.query.bind(client);
+  client.query = (text, params) => (typeof text === 'string' ? timed(text, () => raw(text, params)) : raw(text, params));
   try {
     await client.query('BEGIN');
     const result = await fn(client);
@@ -72,6 +92,10 @@ export async function tx(fn) {
     try { await client.query('ROLLBACK'); } catch (_) { /* bağlantı zaten kopmuş olabilir */ }
     throw error;
   } finally {
+    // Yama SÖKÜLMEK ZORUNDA: bağlantı havuza geri döner ve aynı nesne yeniden kullanılır.
+    // Sökülmezse her tx() bir öncekinin sarmalayıcısını sarar; sarmalayıcı zinciri büyür,
+    // her sorgu birden çok kez sayılır ve bellek sızar.
+    client.query = raw;
     client.release();
   }
 }

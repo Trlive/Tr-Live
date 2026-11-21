@@ -20,6 +20,8 @@ import { readZip } from '../assets/asset_packs.service.js';
 import { cleanPath, gameMime } from './activity_games.service.js';
 import { readGameTokenAny, canSeeActivities } from './activities.routes.js';
 import { CoinWallet } from './game_wallet.service.js';
+import { checkPluginSql, createdTables } from './sandbox/sql_guard.js';
+import { log } from '../../infrastructure/observability/log.js';
 
 const LIMITS = { files: 1500, totalBytes: 80 * 1024 * 1024 };
 const ID_RE = /^[a-z][a-z0-9-]{1,30}$/;
@@ -102,13 +104,41 @@ async function startOne(id) {
     const mod = await import(pathToFileURL(path.join(dir, manifest.server)).href);
     const init = mod.default ?? mod.init;
     if (typeof init !== 'function') throw new Error('Sunucu girişi bir init fonksiyonu dışa aktarmıyor.');
+    // Paketin sahip olduğu tablolar: kurulum SQL'inden çıkarılıp kayda yazılmıştı.
+    // Çalışma anındaki izin listesi budur; paket sonradan listeye tablo EKLEYEMEZ.
+    const owned = Array.isArray(row.tables) ? row.tables : [];
+    const trusted = row.trusted === true;
+
+    /** Dar veritabanı erişimi: yalnızca paketin kendi tabloları. */
+    const scopedDb = (sql, params = []) => {
+      const v = checkPluginSql(sql, owned);
+      if (!v.ok) {
+        // Reddedilen her deneme kayda düşer: bir paketin sınırını zorlaması, paketin
+        // kendisinden önce bizim bilmemiz gereken bir olaydır.
+        log.warn('plugin_sql_denied', { plugin: id, reason: v.reason, sql: String(sql).slice(0, 200) });
+        throw fail(`Oyun paketi yetkisiz sorgu denedi: ${v.reason}`, 403);
+      }
+      return query(sql, params);
+    };
+
     const ctx = {
-      id, manifest, Router, WebSocketServer, express, query, tx, fail, hub, userLimit,
+      id, manifest, Router, WebSocketServer, express, fail, hub, userLimit,
+      // Dar erişim her pakette var. Ham `query`/`tx` YALNIZCA güvenilir (bizim yazdığımız)
+      // paketlerde; yeni yüklenen paketler varsayılan olarak güvenilmezdir.
+      db: scopedDb,
+      tables: owned,
+      trusted,
+      ...(trusted ? { query, tx } : {}),
       log: (...a) => console.error(`[${id}]`, ...a),
       wallet: (name = manifest.name, game = id) => new CoinWallet(name, game),
+      // Anahtar alanı paket başına ayrıldı: bir paket artık diğerinin anahtarını göremez.
       kv: {
-        get: async (key) => (await query(`SELECT value FROM game_kv WHERE key = $1`, [key])).rows[0]?.value ?? null,
-        set: (key, value) => query(`INSERT INTO game_kv(key, value, updated_at) VALUES($1,$2,NOW()) ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()`, [key, JSON.stringify(value)]),
+        get: async (key) => (await query(`SELECT value FROM game_kv WHERE plugin_id = $1 AND key = $2`, [id, String(key)])).rows[0]?.value ?? null,
+        set: (key, value) => query(
+          `INSERT INTO game_kv(plugin_id, key, value, updated_at) VALUES($1,$2,$3,NOW())
+           ON CONFLICT (plugin_id, key) DO UPDATE SET value = $3, updated_at = NOW()`,
+          [id, String(key), JSON.stringify(value)],
+        ),
       },
       api: p.api, // → /api/g/<id>/…
       admin: p.admin, // → /api/admin/plugins/<id>/panel/… (yalnızca süper admin)
@@ -157,13 +187,22 @@ export async function installPackage(buf, adminId = null) {
   const sha256 = packageHash(buf);
   const prev = (await query(`SELECT version, sha256 FROM game_plugins WHERE id = $1`, [id])).rows[0] ?? null;
   const sql = files.find((f) => f.path === 'db.sql')?.data.toString('utf8');
+  // Paketin SAHİP OLDUĞU tablolar kurulum SQL'inden çıkarılır ve kayda yazılır. Çalışma
+  // anındaki izin listesi budur: paket kendi listesini sonradan genişletemez, çünkü liste
+  // paketin kodundan değil, süper adminin onayladığı kurulum SQL'inden geliyor.
+  const owned = createdTables(sql ?? '');
+  // Yeni yükleme güvenilmezdir: ham veritabanı erişimi yok, yalnızca kendi tabloları.
+  // Güveni süper admin ayrıca verir (aşağıdaki uç).
   await tx(async (c) => {
     if (sql?.trim()) await c.query(sql);
     await c.query(
-      `INSERT INTO game_plugins(id, name, version, manifest, files, bytes, sha256, uploaded_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8)
+      `INSERT INTO game_plugins(id, name, version, manifest, files, bytes, sha256, uploaded_by, tables, trusted)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,FALSE)
        ON CONFLICT (id) DO UPDATE SET name = $2, version = $3, manifest = $4, files = $5, bytes = $6,
-         sha256 = $7, uploaded_by = $8, installed_at = NOW()`,
-      [id, String(manifest.name).slice(0, 80), String(manifest.version ?? '').slice(0, 30), JSON.stringify(manifest), files.length, total, sha256, adminId],
+         sha256 = $7, uploaded_by = $8, installed_at = NOW(),
+         tables = (SELECT ARRAY(SELECT DISTINCT unnest(game_plugins.tables || $9::text[]))),
+         trusted = game_plugins.trusted`,
+      [id, String(manifest.name).slice(0, 80), String(manifest.version ?? '').slice(0, 30), JSON.stringify(manifest), files.length, total, sha256, adminId, owned],
     );
     await c.query(`DELETE FROM game_plugin_files WHERE plugin_id = $1`, [id]);
     for (const f of files) await c.query(`INSERT INTO game_plugin_files(plugin_id, path, data) VALUES($1,$2,$3)`, [id, f.path, f.data]);
@@ -238,13 +277,13 @@ pluginAdminRouter.use(requireAuth, requireSuperAdmin);
 pluginAdminRouter.get('/', async (_req, res) => {
   const rows = (await query(
     `SELECT p.id, p.name, p.version, p.enabled, p.files, p.bytes, p.installed_at, p.manifest, p.sha256,
-            u.display_name AS uploader
+            p.tables, p.trusted, u.display_name AS uploader
        FROM game_plugins p LEFT JOIN users u ON u.id = p.uploaded_by ORDER BY p.name`,
   )).rows;
   res.json({
     items: rows.map((r) => ({
       id: r.id, name: r.name, version: r.version, enabled: r.enabled, files: r.files, bytes: String(r.bytes), installedAt: r.installed_at,
-      sha256: r.sha256, uploader: r.uploader,
+      sha256: r.sha256, uploader: r.uploader, tables: r.tables ?? [], trusted: r.trusted === true,
       hasPanel: !!r.manifest?.panel, running: !!live.get(r.id) && !live.get(r.id).error && r.enabled, error: live.get(r.id)?.error ?? null,
     })),
   });
@@ -261,6 +300,25 @@ pluginAdminRouter.patch('/:id', async (req, res) => {
   const p = await startOne(id);
   await auditPlugin(id, on ? 'enable' : 'disable', { adminId: req.user?.id ?? null, version: r.rows[0].version, sha256: r.rows[0].sha256 });
   res.json({ ok: true, error: p?.error ?? null });
+});
+// Ham veritabanı erişimini AÇ/KAPA.
+//
+// Varsayılan kapalıdır: yeni yüklenen paket yalnızca kendi tablolarını görür. Bu anahtar
+// yalnızca BİZİM yazdığımız paketler için ve bilerek açılmalıdır — açıldığı an paket
+// veritabanının tamamına erişir, yani bu daraltmanın sağladığı her şey o paket için düşer.
+// Üçüncü taraf bir paket için ASLA açılmamalı.
+pluginAdminRouter.post('/:id/trust', async (req, res) => {
+  const id = String(req.params.id);
+  const on = req.body?.trusted === true;
+  const r = await query(`UPDATE game_plugins SET trusted = $2 WHERE id = $1 RETURNING version, sha256`, [id, on]);
+  if (!r.rows[0]) throw fail('Paket bulunamadı.', 404);
+  // Yeniden başlatılmadan etkili olmaz: bağlam (ctx) paket başlarken kurulur.
+  const p = await startOne(id);
+  await auditPlugin(id, on ? 'trust' : 'untrust', {
+    adminId: req.user?.id ?? null, version: r.rows[0].version, sha256: r.rows[0].sha256, detail: { trusted: on },
+  });
+  log.warn('plugin_trust_changed', { plugin: id, trusted: on, adminId: req.user?.id ?? null });
+  res.json({ ok: true, trusted: on, error: p?.error ?? null });
 });
 pluginAdminRouter.post('/:id/restart', async (req, res) => {
   const id = String(req.params.id);

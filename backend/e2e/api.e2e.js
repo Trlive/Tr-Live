@@ -216,7 +216,7 @@ test('amiral hediye (5.000.000 Coin): basım bütçesi, gönderim, şerit, defte
   assert.equal(BigInt(recv.diamond_amount), PRICE, 'alıcı satırı artı olmalı');
 
   // 5) Global şerit: 5M eşiği fazlasıyla aşar.
-  const feed = await api('GET', '/api/gifts/global', { token: U.b.token });
+  const feed = await api('GET', '/api/gifts/global/recent', { token: U.b.token });
   ok(feed, 'global şerit');
   assert.ok(feed.body.events.some((e) => e.coinAmount === String(PRICE)), '5M hediye şeride düşmeli');
 
@@ -2109,4 +2109,167 @@ test('sesli / görüntülü ayrı maaş: ayarlar, görüntülü tablo ve maaş t
   ok(await api('PUT', '/api/admin/agency-config', { token: U.d.token, body: { settings: { videoDailyCapMinutes: 0, videoMinSessionMinutes: 0, videoShortfallCutBps: 0 } } }));
   cfg = await get();
   assert.equal(JSON.stringify(cfg.payLevels), audioBefore);
+});
+
+test('ölçümler ve alarmlar: uç bazında gecikme, yetki, alarm açılır ve kapanır', { skip, timeout: 60000 }, async () => {
+  // Ölçümler yalnızca süper adminde. Yardımcı admin ve kullanıcı göremez: bu ekran
+  // tüm uçların adlarını ve trafiğini açığa vurur.
+  status(await api('GET', '/api/admin/metrics', { token: U.a.token }), 403, 'kullanıcı ölçüm göremez');
+
+  // Ölçümün kendisi: bu test şu ana kadar epey istek attı, uç listesi boş olamaz.
+  const m = await api('GET', '/api/admin/metrics', { token: U.d.token });
+  ok(m, 'ölçümler');
+  assert.ok(Array.isArray(m.body.routes), 'uç listesi dizi olmalı');
+  assert.ok(m.body.routes.length > 0, 'hiç uç ölçülmemiş');
+  assert.ok(m.body.window.count > 0, 'pencere boş');
+  assert.ok(m.body.pool.max > 0, 'havuz bilgisi gelmeli');
+
+  // Uç anahtarı DESEN olmalı: gerçek kimlikler listede görünmemeli, yoksa her oda
+  // ayrı satır açar ve bellek şişer.
+  const uuid = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+  const leaked = m.body.routes.find((r) => uuid.test(r.route));
+  assert.equal(leaked, undefined, `uç anahtarında gerçek kimlik var: ${leaked?.route}`);
+
+  // Yüzdelikler tutarlı olmalı.
+  for (const r of m.body.routes) {
+    assert.ok(r.p50 <= r.p95 + 1 && r.p95 <= r.p99 + 1 && r.p99 <= r.maxMs + 1, `yüzdelik sırası bozuk: ${r.route}`);
+  }
+
+  // Sıralama seçenekleri çalışmalı.
+  const byCount = await api('GET', '/api/admin/metrics?sortBy=count&limit=5', { token: U.d.token });
+  ok(byCount);
+  assert.ok(byCount.body.routes.length <= 5, 'limit uygulanmalı');
+  for (let i = 1; i < byCount.body.routes.length; i++) {
+    assert.ok(byCount.body.routes[i - 1].count >= byCount.body.routes[i].count, 'çağrı sayısına göre sıralı değil');
+  }
+
+  // Alarm turu elle çalıştırılabilir ve liste döner.
+  status(await api('POST', '/api/admin/alerts/check', { token: U.a.token }), 403, 'kullanıcı alarm denetleyemez');
+  const run = await api('POST', '/api/admin/alerts/check', { token: U.d.token });
+  ok(run, 'alarm turu');
+  assert.ok(Array.isArray(run.body.open), 'açık alarm listesi dönmeli');
+
+  const list = await api('GET', '/api/admin/alerts', { token: U.d.token });
+  ok(list, 'alarm listesi');
+  assert.ok(Array.isArray(list.body.alerts));
+
+  // Hangi kuralın açıldığı ortama bağlı (mutabakat çalıştı mı, yük ne kadardı).
+  // Bu yüzden belirli bir kural beklenmiyor; AÇIK OLAN HERHANGİ BİRİ üzerinden
+  // "gördüm" ve "iki kez açılmaz" davranışı sınanıyor.
+  const openKey = run.body.open[0];
+  if (openKey) {
+    const a = list.body.alerts.find((x) => x.key === openKey);
+    assert.ok(a, 'açık alarm listede görünmeli');
+    assert.equal(a.resolvedAt, null);
+    // "Gördüm" işareti alarmı kapatmaz, yalnızca kim baktığını kaydeder.
+    ok(await api('POST', `/api/admin/alerts/${a.id}/ack`, { token: U.d.token }), 'gördüm');
+    const after = await api('GET', '/api/admin/alerts', { token: U.d.token });
+    const b = after.body.alerts.find((x) => x.key === openKey);
+    assert.ok(b.ackedAt, 'gördüm işareti kaydedilmeli');
+    assert.equal(b.resolvedAt, null, 'gördüm demek düzeldi demek değildir');
+    // İkinci tur yeni satır AÇMAMALI (alarm yorgunluğu): aynı kayıt sayılır.
+    ok(await api('POST', '/api/admin/alerts/check', { token: U.d.token }));
+    const third = await api('GET', '/api/admin/alerts', { token: U.d.token });
+    assert.equal(third.body.alerts.filter((x) => x.key === openKey && !x.resolvedAt).length, 1, 'aynı alarm iki satır açmamalı');
+  }
+
+  status(await api('POST', '/api/admin/alerts/999999999/ack', { token: U.d.token }), 404, 'olmayan alarm');
+  status(await api('POST', '/api/admin/alerts/abc/ack', { token: U.d.token }), 400, 'geçersiz alarm kimliği');
+});
+
+test('oyun paketi yetkisi: dar erişim varsayılan, tam erişim bilerek açılır', { skip, timeout: 60000 }, async () => {
+  // Paket listesi yetki bilgisini vermeli: panel "bu paket neyi görebiliyor" sorusunu
+  // yanıtlayamazsa daraltmanın bir anlamı kalmaz.
+  const list = await api('GET', '/api/admin/plugins', { token: U.d.token });
+  ok(list, 'paket listesi');
+  assert.ok(Array.isArray(list.body.items));
+  for (const p of list.body.items) {
+    assert.equal(typeof p.trusted, 'boolean', 'yetki durumu listede olmalı');
+    assert.ok(Array.isArray(p.tables), 'sahip olunan tablolar listede olmalı');
+  }
+
+  // Yetki değiştirme yalnızca süper adminde.
+  status(await api('POST', '/api/admin/plugins/yok-boyle/trust', { token: U.a.token }), 403, 'kullanıcı yetki veremez');
+  status(await api('POST', '/api/admin/plugins/yok-boyle/trust', { token: U.d.token, body: { trusted: true } }), 404, 'olmayan paket');
+});
+
+test('SDUI v2: taslak/yayın ayrımı, kademeli açılış, sürüm eşiği ve geri alma', { skip, timeout: 60000 }, async () => {
+  const S = 'help';
+
+  // Katalog: panel düzenleyicisi bileşenleri buradan öğrenir. İki yere yazılsaydı biri eskir
+  // ve panel, sunucunun kabul etmeyeceği düzenler kaydettirmeye çalışırdı.
+  const cat = await api('GET', '/api/admin/sdui2/catalog', { token: U.d.token });
+  ok(cat, 'bileşen kataloğu');
+  assert.ok(cat.body.components.listItem, 'listItem katalogda olmalı');
+  assert.ok(cat.body.apiActions.includes('markAllRead'));
+  status(await api('GET', '/api/admin/sdui2/catalog', { token: U.a.token }), 403, 'kullanıcı katalog göremez');
+
+  // Göç boş yayınla geldi: uygulama hâlâ yerleşik ekranı çiziyor olmalı.
+  const before = await api('GET', `/api/sdui/v2/${S}`, { token: U.a.token, headers: { 'x-app-version': '9.9.9' } });
+  ok(before, 'ekran ucu');
+  assert.equal(before.body.root, null, 'yayın yokken root null olmalı (yerleşik ekran çizilir)');
+
+  // Taslak kaydetmek kullanıcıyı ETKİLEMEZ.
+  const layout = { root: { type: 'column', children: [{ type: 'title', text: `Sınav ${tag}` }] } };
+  ok(await api('PUT', `/api/admin/sdui2/screens/${S}/draft`, { token: U.d.token, body: { layout } }), 'taslak kaydı');
+  const still = await api('GET', `/api/sdui/v2/${S}`, { token: U.a.token, headers: { 'x-app-version': '9.9.9' } });
+  assert.equal(still.body.root, null, 'taslak kaydetmek yayınlamak DEĞİLDİR');
+
+  // Şema reddi: izinli olmayan eylem kaydedilemez.
+  status(await api('PUT', `/api/admin/sdui2/screens/${S}/draft`, {
+    token: U.d.token,
+    body: { layout: { root: { type: 'notice', text: 'x', action: { type: 'api', name: 'dropEverything' } } } },
+  }), 400, 'izinli olmayan işlem reddedilmeli');
+  status(await api('PUT', `/api/admin/sdui2/screens/${S}/draft`, {
+    token: U.d.token, body: { layout: { root: { type: 'sunucu_kodu_calistir' } } },
+  }), 400, 'bilinmeyen bileşen reddedilmeli');
+
+  // Yayınla: varsayılan %1. "Yayınla" düğmesi "herkese ver" demek olmamalı.
+  const pub = await api('POST', `/api/admin/sdui2/screens/${S}/publish`, { token: U.d.token, body: { rollout: 100, minApp: '2.148.0' } });
+  ok(pub, 'yayın');
+  assert.ok(pub.body.revision, 'sürüm özeti dönmeli');
+
+  // Sürüm eşiği: eski uygulama ekranı ALMAZ.
+  const old = await api('GET', `/api/sdui/v2/${S}`, { token: U.a.token, headers: { 'x-app-version': '2.100.0' } });
+  assert.equal(old.body.root, null, 'eski sürüme ekran gönderilmemeli');
+
+  // Yeni uygulama alır.
+  const fresh = await api('GET', `/api/sdui/v2/${S}`, { token: U.a.token, headers: { 'x-app-version': '2.148.0' } });
+  ok(fresh, 'yeni sürüm ekranı almalı');
+  assert.equal(fresh.body.root.type, 'column');
+  assert.equal(fresh.body.root.children[0].text, `Sınav ${tag}`);
+  assert.equal(fresh.body.schemaVersion, 2);
+
+  // Acil kapatma: yüzde 0 = anında herkesten kalkar.
+  ok(await api('POST', `/api/admin/sdui2/screens/${S}/rollout`, { token: U.d.token, body: { rollout: 0 } }));
+  const off = await api('GET', `/api/sdui/v2/${S}`, { token: U.a.token, headers: { 'x-app-version': '2.148.0' } });
+  assert.equal(off.body.root, null, 'yüzde 0 ekranı kaldırmalı');
+
+  // Geri alma: ikinci bir sürüm yayınla, sonra ilkine dön.
+  ok(await api('PUT', `/api/admin/sdui2/screens/${S}/draft`, {
+    token: U.d.token, body: { layout: { root: { type: 'column', children: [{ type: 'title', text: 'İKİNCİ' }] } } },
+  }));
+  ok(await api('POST', `/api/admin/sdui2/screens/${S}/publish`, { token: U.d.token, body: { rollout: 100, minApp: '0.0.0' } }));
+  const second = await api('GET', `/api/sdui/v2/${S}`, { token: U.a.token, headers: { 'x-app-version': '2.148.0' } });
+  assert.equal(second.body.root.children[0].text, 'İKİNCİ');
+
+  const hist = await api('GET', `/api/admin/sdui2/screens/${S}/history`, { token: U.d.token });
+  ok(hist, 'sürüm geçmişi');
+  assert.ok(hist.body.versions.length >= 2, 'her yayın geçmişe yazılmalı');
+  const first = hist.body.versions.find((v) => v.revision === pub.body.revision);
+  assert.ok(first, 'ilk yayın geçmişte bulunmalı');
+
+  ok(await api('POST', `/api/admin/sdui2/screens/${S}/rollback`, { token: U.d.token, body: { versionId: first.id } }), 'geri alma');
+  const back = await api('GET', `/api/sdui/v2/${S}`, { token: U.a.token, headers: { 'x-app-version': '2.148.0' } });
+  assert.equal(back.body.root.children[0].text, `Sınav ${tag}`, 'geri alma eski ekranı getirmeli');
+
+  // Geri alma TASLAĞI DA eski sürümle değiştirmeli; yoksa sonraki "yayınla" hatayı geri getirir.
+  const adminView = await api('GET', `/api/admin/sdui2/screens/${S}`, { token: U.d.token });
+  ok(adminView);
+  assert.equal(adminView.body.draft.root.children[0].text, `Sınav ${tag}`, 'geri alma taslağı da döndürmeli');
+  assert.equal(adminView.body.dirty, false, 'geri almadan sonra yayınlanmamış değişiklik kalmamalı');
+
+  // Yetki: kullanıcı yayınlayamaz.
+  status(await api('POST', `/api/admin/sdui2/screens/${S}/publish`, { token: U.a.token }), 403, 'kullanıcı yayınlayamaz');
+  status(await api('PUT', `/api/admin/sdui2/screens/${S}/draft`, { token: U.a.token, body: { layout } }), 403, 'kullanıcı taslak kaydedemez');
 });

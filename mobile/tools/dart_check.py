@@ -161,6 +161,30 @@ for p in files:
             problems.append(f'{p}:{line}: "{nm}" kullanılıyor ama import edilmemiş '
                             f'(tanımı: {owners[0].relative_to(LIB.parent)})')
 
+# ---- Hiçbir yerden çağrılmayan dosyalar ----
+#
+# `flutter analyze` kullanılmayan IMPORT'u görür, kullanılmayan DOSYAYI görmez.
+# v2.147.1'de böyle iki dosya bulundu: biri Ludo oyununun uygulama içi sürümüydü
+# (418 satır) ve "oyunlar kodlarda olmayacak" kuralına aykırı olarak kodda duruyordu.
+# Ölü dosya yalnızca yer kaplamaz: bakarken gerçek sanılır, satılan kodun içinde gider.
+import os as _os
+from pathlib import Path
+_imported = set()
+for _f in files:
+    _d = _f.parent
+    for _m in re.finditer(r"""(?:import|export)\s+'([^']+)'""", _f.read_text(encoding='utf-8')):
+        _spec = _m.group(1)
+        if _spec.startswith('package:tr_live/'):
+            _imported.add((LIB / _spec[len('package:tr_live/'):]).resolve())
+        elif not _spec.startswith(('package:', 'dart:')):
+            _imported.add(Path(_os.path.normpath(_d / _spec)).resolve())
+for _f in sorted(files):
+    # Test dosyalarını kimse import etmez; onlar ölü değildir.
+    if _f.name == 'main.dart' or str(TEST) in str(_f) or _f.resolve() in _imported:
+        continue
+    _n = len(_f.read_text(encoding='utf-8').split('\n'))
+    problems.append(f'{_f}: hiçbir yerden çağrılmıyor ({_n} satır) — ölü dosya')
+
 for x in sorted(set(problems)):
     print('  - ' + str(x).replace(str(LIB.parent) + '/', ''))
 
@@ -175,6 +199,7 @@ BU DENETİM ŞUNLARI YAKALAMAZ — yalnızca CI'daki `flutter analyze` görür:
   • Tip uyuşmazlıkları (List<int> ↔ Set<int> gibi)
   • Null güvenliği hataları
   • Paketlerden gelen adların yanlış kullanımı
-  • Kullanılmayan değişken / ölü kod uyarıları""")
+  • Kullanılmayan değişken / fonksiyon içi ölü kod
+     (Kullanılmayan DOSYA artık yukarıda bildiriliyor; flutter analyze onu da görmez.)""")
 
 sys.exit(1 if problems else 0)
