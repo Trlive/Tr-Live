@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Yapay zekâ gürültü azaltma (RNNoise). Mikrofon sesi, telefonun / WebRTC'nin gürültü bastırmasından sonra ve

@@ -10,6 +10,7 @@ import '../services/room_dock.dart';
 import '../services/session.dart';
 import '../services/socket_service.dart';
 import '../version.dart';
+import '../hybrid/webview/navigation_policy.dart';
 import 'app_theme.dart';
 
 /// Oyun işaretleri (menü kutusu ve odadaki oyun balonu). Görseller özgündür: assets/images/game_*.webp.

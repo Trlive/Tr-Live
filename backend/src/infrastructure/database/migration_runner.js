@@ -1,11 +1,15 @@
 import 'dotenv/config';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { db, closeDb } from './database.js';
 
 // Çalışma dizininden bağımsız: migration dosyaları bu dosyanın yanındadır.
-const dir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'migrations');
+// Migration klasörü `src/migrations`. Bu dosya `src/infrastructure/database/` altına taşındığı
+// için yol kendi konumuna göre DEĞİL, src köküne göre çözülür.
+//
+// Taşımada gözden kaçan buydu: dosyanın kendisi doğru yere gitti ama içinde okuduğu klasörün
+// yolu eski konuma göreydi. ENOENT: '.../infrastructure/database/migrations'.
+const dir = new URL('../../migrations/', import.meta.url).pathname;
 const LOCK_ID = 727001; // aynı anda iki süreç migration çalıştırmasın
 
 const client = await db().connect();

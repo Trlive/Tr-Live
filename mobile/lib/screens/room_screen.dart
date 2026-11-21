@@ -32,7 +32,6 @@ import '../hybrid/asset_manager/asset_prefetch.dart';
 import '../services/effect_prefs.dart';
 import '../services/error_log.dart';
 import '../services/inbox_service.dart';
-import '../services/media_cache.dart';
 import '../services/music_service.dart';
 import '../services/room_playlist.dart';
 import '../services/headset_audio.dart';
@@ -767,10 +766,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   bool _sbKnown = false;
  // görüntülü odada sohbeti gizle: yalnızca görüntü izlenir
 
-  List<int> get _lockedSeats => ((_room?['lockedSeats'] as List?) ?? const []).map((x) => (x as num).toInt()).toList();
+  // Küme, liste değil: her kullanım `contains` ve sıra anlamsız. Koltuk kuralları (seat_rules.dart)
+  // de küme bekliyor — liste döndürmek tip hatasıydı.
+  Set<int> get _lockedSeats => ((_room?['lockedSeats'] as List?) ?? const []).map((x) => (x as num).toInt()).toSet();
   bool get _canSeatManage => ['owner', 'cohost', 'moderator'].contains(_myRole);
   /// Yetkilinin susturduğu koltuklar: oturan kişi koltukta kalır ama mikrofonu açılmaz; koltukta kırmızı işaret görünür.
-  List<int> get _mutedSeats => ((_room?['mutedSeats'] as List?) ?? const []).map((x) => (x as num).toInt()).toList();
+  Set<int> get _mutedSeats => ((_room?['mutedSeats'] as List?) ?? const []).map((x) => (x as num).toInt()).toSet();
   bool get _seatMuted => seatMuted(members: _members, userId: Session.id, mutedSeats: _mutedSeats);
 
   Future<void> _lockSeat(int index, bool locked) async {

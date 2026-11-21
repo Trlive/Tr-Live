@@ -3322,3 +3322,122 @@ Aynı bağımlılık hatası (1. madde) `flutter pub get` adımında kırıyordu
 Üç hatayı da CI yakaladı — sistem çalıştı. Ama 1. ve 2. madde benim buradaki ortamımda
 yakalanabilirdi: ilki `git ls-remote` ile, ikincisi aracı eksiksiz yazmakla. İkisini de
 kapattım.
+
+## v2.145.2 — Doğrulamanın kendisi düzeltildi
+
+Önceki üç sürümde çıkan hatalar tek bir kök nedene çıkıyor ve onu düzeltmeden devam etmek
+aynı hatayı tekrarlamak olurdu.
+
+### Kök neden
+
+133 dosya taşındı. Sözdizimi, import denetimi, rota haritası (467/467) ve bütün birim testleri
+yeşildi ve "doğrulandı" denildi.
+
+**Sunucu açılmıyordu.** Üç dosya yolu kırıktı. Bu ancak sunucuyu çalıştırmayı deneyince görüldü —
+taşımanın ertesi günü. Dördüncü kırık yol (`e2e/api.e2e.js`) ise güvenlik ağının kendisi eksik
+yazıldığı için kaçtı ve CI'da çıktı.
+
+Hata, kontrollerin yokluğu değildi: **ucuz olan doğrulandı, pahalı olan atlandı ve ikisine aynı
+isim verildi.**
+
+### `npm run verify`
+
+Tek komut: sözdizimi + dağıtım yolları, rota haritası, 47 test dosyası, **ve git'ten gelen
+Flutter bağımlılıklarının hâlâ erişilebilir olması.**
+
+O son kontrol somut bir olaydan geliyor: gürültü azaltma eklentisi kişisel bir depodan geliyordu,
+depo silindi, **her APK derlemesi durdu.** Kod değişmemişti; dışarıdaki bir depo kayboldu ve
+hiçbir yerel kontrol bunu görmüyordu, çünkü hiçbiri depoya ulaşmayı denemiyordu. Artık deniyor.
+
+### Aracın en önemli özelliği: kör noktasını söylemesi
+
+Her çalıştırmada doğrulayamadıklarını da yazıyor:
+
+- **Sunucunun gerçekten açılması** — bu ortamdaki paketler taklit; sunucuyu açan tek yer CI'ın
+  e2e işi
+- **flutter analyze / flutter test** — Dart derleyicisi burada yok
+- **APK derlemesi** — yalnızca CI'da
+
+> Kör noktasını söylemeyen bir araç yanlış güven üretir. Bu hatanın sebebi tam olarak buydu.
+
+### İki kalıcı kural (`docs/MODULE_STANDARD.md`)
+
+1. **"Testler geçti" ile "sunucu açılıyor" aynı şey değildir.** Bir değişiklik, CI'ın üç işi de
+   yeşil olmadan yayına hazır sayılmaz.
+2. **Git bağımlılığı** ya yayımlanmış bir paket olmalı, ya da bizim denetimimizdeki bir depodan
+   ve sabit bir commit'e kilitlenmiş olmalı.
+
+## v2.145.3 — CI'daki beş hata ve kendi hatalarımın kaynağı
+
+Hepsi benim bu oturumda yaptığım değişikliklerden. Tek tek:
+
+### 1. `migration_runner.js` klasörü kendi konumuna göre arıyordu
+
+```
+ENOENT: scandir '.../src/infrastructure/database/migrations'
+```
+
+Dosyayı `src/` kökünden `src/infrastructure/database/` altına taşıdım. İçinde migration klasörünü
+**kendi konumuna göre** çözen bir satır vardı; taşınınca yanlış yere bakmaya başladı. Dosyanın
+yolunu düzelttim ama **dosyanın İÇİNDE okuduğu klasörün yolunu kontrol etmedim.**
+
+Yol artık `src` köküne sabitlendi.
+
+### 2. `WebViewPolicy` tanımsız (`room_tek_dock.dart:65`)
+
+Bu en kötüsü, çünkü sebebi dikkatsizlik: import'u ekledim, hemen ardından başka bir satırı
+**satır numarasıyla** silmek istedim (`sed -i '63d'`). Import eklemek satır numaralarını
+kaydırmıştı ve o komut **yeni eklediğim import'u sildi.** Kontrol ederken `grep -c` kullandım,
+o da doküman yorumundaki kelimeyi sayıp "var" dedi.
+
+İki hata üst üste: kör satır silme, ve doğrulamayı yanlış şeye bakarak yapma.
+
+### 3. `List<int>` ↔ `Set<int>` (3 yerde)
+
+Koltuk kurallarını saf fonksiyonlara çıkarırken imzaları `Set<int>` yazdım; çağrı noktasındaki
+`_lockedSeats`/`_mutedSeats` ise `List<int>` döndürüyordu.
+
+Doğru düzeltme getter'ları `Set<int>` yapmaktı: bu değerlerin **her kullanımı `contains`**,
+sıra hiç kullanılmıyor — yani zaten kümeydi, tipi yanlıştı. `.toSet()` ile çağrı noktalarını
+yamamak, hatayı gizlemek olurdu.
+
+### 4–5. İki kullanılmayan import
+
+`media_cache.dart` (yerine `AssetPrefetch` geçti) ve `foundation.dart` (denoiser devre dışı
+kalınca kullanımı kalmadı).
+
+---
+
+## Asıl mesele: bu hataların hiçbiri derleyici gerektirmiyordu
+
+2, 4 ve 5 — tanımsız ad ve kullanılmayan import — `flutter analyze` olmadan da yakalanabilirdi.
+Yakalanmadı, çünkü **yakalayacak hiçbir şey yoktu.**
+
+### `mobile/tools/dart_check.py`
+
+Dart derleyicisi olmadan yapılabileni yapar: her dosyanın import'larını çözer, `export`
+zincirlerini (`show` dahil) takip eder, `package:tr_live/...` yolunu çözer ve iki şeyi bildirir —
+**kullanılmayan import** ve **projede tanımlı olup import edilmemiş ad.**
+
+Bozup sınadım: `WebViewPolicy` import'unu silince yakaladı, kullanılmayan import ekleyince
+yakaladı.
+
+**Aracın kendisi de dört kez yanlış alarm üretti ve her birini düzelttim:**
+
+| Sahte alarm | Sebep |
+|---|---|
+| 24 uyarı (`SizedBox`, `Column`…) | Girintili widget çağrılarını üst düzey tanım sanıyordu |
+| 30+ uyarı (`NetImg`…) | `export 'net_image.dart';` zincirini takip etmiyordu |
+| `CropSpec` | `export ... show CropSpec;` biçimini anlamıyordu |
+| `guard` | Jenerik işlev imzasını (`guard<T>(...)`) ve çok satırlı imzaları kaçırıyordu |
+
+Bunları düzeltmeden bırakmak, aracı çöpe atmakla aynı şeydi: *yanlış alarm üreten araca kimse
+bakmaz, yani olmamasından beterdir.* Aynı şey bir önceki sürümde adres haritasında da olmuştu.
+
+Araç `npm run verify` zincirine eklendi.
+
+### Hâlâ yakalanamayan
+
+3. madde (`List` ↔ `Set`) **tip denetimi** gerektiriyor ve bu ortamda Dart derleyicisi yok.
+`verify` artık bunu her çalıştırmada açıkça yazıyor: tip hataları ve null güvenliği **yalnızca
+CI'ın Mobil işinde** görülür.

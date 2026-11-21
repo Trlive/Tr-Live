@@ -55,6 +55,26 @@ Bu yüzden kural:
 Yani bir sürümde ya dosya taşınır (mantık bitine dokunulmaz), ya mantık değişir. İkisi birden asla.
 Bir şey bozulursa hangisinin bozduğu tartışma konusu olmaz.
 
+### Yayın öncesi kural (21 Kasım 2026, bir hatadan sonra yazıldı)
+
+Modüllere ayırma sırasında 133 dosya taşındı. Sözdizimi, import denetimi, rota haritası ve bütün
+birim testleri yeşildi. **Ama sunucu açılmıyordu** — üç dosya yolu kırıktı ve bu ancak sunucuyu
+çalıştırmayı deneyince görüldü. Dördüncüsü de güvenlik ağının kendisi eksik yazıldığı için
+kaçtı; CI yakaladı.
+
+Buradan çıkan kural:
+
+> **"Testler geçti" ile "sunucu açılıyor" aynı şey değildir.**
+> Bir değişiklik, CI'ın üç işi de (backend, e2e, Mobil) yeşil olmadan yayına hazır sayılmaz.
+> `npm run verify` yerel kontrolleri toplar ve **doğrulayamadıklarını da yazar** — kör noktasını
+> söylemeyen araç yanlış güven üretir, bu hatanın sebebi tam olarak buydu.
+
+İkinci kural, dışarıdaki bağımlılıklar için:
+
+> Git'ten gelen bir bağımlılık ya yayımlanmış (pub.dev / npm) bir paket olmalı, ya da **bizim
+> denetimimizdeki** bir depodan ve **sabit bir commit'e kilitlenmiş** olmalı. Kişisel bir depoya
+> bağlı kalmak, o depo silindiği gün bütün derlemelerin durması demektir — bu da yaşandı.
+
 ### Güvenlik ağı: adres haritası
 
 `backend/tools/route_map.mjs` sunucunun **tüm** API adreslerini kaynaktan çıkarır
