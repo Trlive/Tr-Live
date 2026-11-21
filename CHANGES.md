@@ -3779,3 +3779,239 @@ Dart ön denetimi · göçün tohum taslağı şemadan geçiyor.
 
 **Doğrulanamadı:** npm kapalı, sunucu açılmıyor, e2e koşmuyor, `flutter analyze` yok. Yeni
 e2e testleri (taslak/yayın, yüzde, sürüm eşiği, geri alma) ilk kez CI'da koşacak.
+
+## v2.148.1 — Üç CI hatası ve üçünü de bir daha kaçırmayacak denetimler
+
+### 1. Yardımcı adminler panelin TAMAMINDAN kilitlenmişti (en ağırı)
+
+CI'da `kullanıcı arama → HTTP 403` diye göründü; sebebi SDUI'ydi. Yani **hatanın göründüğü
+yer ile olduğu yer alakasızdı.**
+
+```js
+// sdui_v2.routes.js
+export const adminRouter = Router();
+adminRouter.use(requireSuperAdmin);   // ← tek satır
+
+// admin.routes.js
+router.use(sduiV2AdminRouter);        // ← YOL ÖNEKİ YOK
+```
+
+Express'te **öneksiz bağlanan** bir router'ın `use()` ara katmanı, o router'ın kendi
+adreslerine değil **üst router'a gelen her isteğe** uygulanır. Ara katman `next(hata)`
+derse istek öteki adreslere hiç ulaşamaz. Sonuç: `support` yetkili yardımcı adminler
+kullanıcı arama dahil **bütün panelden** 403 alırdı.
+
+Yetki artık her adrese ayrı yazılı. **`backend/tools/router_scope.mjs`** bu sınıfı kalıcı
+kapatıyor: öneksiz bağlanan bir router'da yol öneki olmayan `use()` varsa `npm run check`
+kırılıyor. İki yönlü sınandı — hatayı geri koyunca yakalıyor, önekli bağlamada susuyor.
+
+### 2. "Yayınlanmamış değişiklik" uyarısı hiç sönmüyordu
+
+PostgreSQL `jsonb` anahtar sırasını korumaz; (uzunluk, bayt) sırasına göre saklar. Sürüm
+özeti düz `JSON.stringify` ile alınıyordu, yani **koddan üretilen nesne ile veritabanından
+okunan aynı içerik farklı özet veriyordu.** Panel sürekli "yayınlanmamış değişiklik var"
+diyordu ve geri alma bile temizlemiyordu. CI'da:
+`geri almadan sonra yayınlanmamış değişiklik kalmamalı: true !== false`.
+
+Özet artık **kurallı** biçimden alınıyor (anahtarlar sıralı). Dizi sırası içeriktir,
+sıralanmaz: iki bileşenin yeri değişirse ekran değişmiştir. Üçünü de sınayan birim testi
+eklendi; ayrıca yayınla → jsonb dönüşü → geri al → `dirty` yolunun tamamı çevrimdışı
+canlandırılarak doğrulandı.
+
+### 3. Kullanılmayan alan (`_loading`)
+
+SDUI ekranında dört kez **yazılıp hiç okunmayan** bir alan kalmıştı. `flutter analyze`
+bunu hata sayıyor, benim aracım görmüyordu. Alan kaldırıldı; onunla birlikte anlamsız üç
+`setState` de gitti.
+
+**`mobile/tools/dart_check.py` artık bunu ve iki şeyi daha görüyor:**
+- hiç **okunmayan özel alan** (`unused_field`) — yazmak kullanmak değildir
+- hiç **kullanılmayan özel metot** (`unused_element`)
+- hiçbir yerden çağrılmayan **dosya** — `flutter analyze` bunu hiç görmez
+
+#### Bu aracı yazarken düzelttiğim üç kendi hatam
+
+Güvenlik ağının kendisi yanılıyorsa ağ olmamasından beterdir, o yüzden yazıyorum:
+
+- İlk desen `room_format.dart`'ta **katastrofik geri izlemeye** girip aracı kilitledi;
+  denetim hiç bitmiyordu. Satır bazlı, belirsizlik bırakmayan desene çevrildi (1,7 sn → 0,008 sn).
+- Dizeleri tamamen silen `strip()` ile sayım yapınca `'$_prefix$screen'` gibi
+  **interpolasyonlarda** geçen alanlar "hiç okunmuyor" sanıldı: 11 bulgunun 10'u sahteydi.
+  Dart'ta interpolasyon KODDUR; artık korunuyor.
+- Kullanım deseni `$`'ı hem önde hem arkada dışlıyordu; `$_prefix$screen` iki interpolasyon
+  yan yana olduğu için ikisi de görünmez kalmıştı.
+
+Her iki denetim de kasten bozulmuş kodla iki yönlü sınandı: CI'ın bulduğu hatanın aynısını
+yakalıyor, temiz kodda susuyor.
+
+### Ayrıca düzeltilen (CI'ın göremediği, okuyarak bulduklarım)
+
+- **Pull-to-refresh çalışmıyordu.** `RefreshIndicator` aşağı çekmeyi ancak kaydırılabilir bir
+  çocukta algılar; kök bileşen `scroll` değilse (düz bir `column`) çekmek hiçbir şey yapmazdı.
+- **Sarmalı (wrap) satırlar iki kez çiziliyordu** — `row` dalında çocuklar iki kez inşa ediliyordu.
+- **`tx` içindeki sorgu sarmalayıcısı üçüncü argümanı düşürüyordu**; pg'nin
+  `query(text, values, callback)` biçimi bozulurdu.
+
+### Kontrol edilip SORUN BULUNMAYANLAR
+
+Aynı sınıftan başka hata var mı diye bakılan ve temiz çıkanlar — "bakmadım" ile
+"baktım, temiz" farkı önemli:
+
+- **SDUI v1'de aynı özet hatası var mı?** Yok: v1 her zaman doğrulanmış nesneyi özetliyor,
+  ham jsonb'yi değil.
+- **Başka öneksiz router'da sızan ara katman var mı?** Yok: 74 bağlama denetlendi.
+- **Yeni Flutter API'leri repoyla uyumlu mu?** Evet: `withValues` zaten 47 yerde,
+  `DropdownButtonFormField(initialValue:)` cüzdan ekranında, `?eleman` sözdizimi
+  `asset_manifest.dart`'ta kullanılıyor — hepsi CI'dan geçmiş.
+- **Yeni Dart dosyalarında kullanılmayan özel üye var mı?** Yok (araç doğruladı).
+- **Alarm sorgularındaki tablo/sütun adları doğru mu?** `wallet_recon_runs`,
+  `host/agency/assistant_statements`, `payout_periods.closed_at`, `users.system_role`,
+  `users.account_status` — hepsi göçlerle karşılaştırıldı.
+
+### Doğrulanan / doğrulanamayan
+
+Doğrulandı: 232 dosya sözdizimi · **360 birim testi** · 999 import · 810 e2e adresi ·
+74 router bağlaması · rota haritası · Dart ön denetimi (ölü dosya + kullanılmayan alan/metot) ·
+kırılan e2e iddiasının çevrimdışı canlandırması.
+
+**Doğrulanamadı:** npm kapalı, sunucu açılmıyor, e2e koşmuyor, `flutter analyze` yok.
+Tip hataları ve null güvenliği hâlâ yalnızca CI'da görünür.
+
+## v2.148.2 — Oda üstündeki sayfa neden "ekran görünümünü kaybediyordu" + vektörel düzen
+
+### Bulunan hata: `tek.html` bir PARÇA olarak yazılmıştı
+
+Oda üstünde açılan TEK oyunu sayfasında `<!doctype html>` ve `<meta name="viewport">`
+**yoktu**. Yanındaki `ludo.html`de ikisi de vardı; fark yalnızca bu iki satırdı ve gözle
+karşılaştırmadıkça görünmüyordu. Sonuçları:
+
+1. **Viewport etiketi yok → Android WebView sayfayı ~980 CSS piksellik SANAL bir ekrana
+   çizip küçültüyor.** Oda üstündeki küçük pencerede bu, her şeyin minicik görünmesi,
+   oranların bozulması ve dokunmaların kayması demek. Senin tarifin tam buydu:
+   "açılan sayfada ekran görünümünü kaybediyor".
+2. **Doctype yok → tarayıcı QUIRKS kipinde.** Orada `html,body{height:100%}`,
+   `.box{max-height:100%}` gibi yüzdeli yükseklikler beklendiği gibi çözülmüyor; yani
+   sayfanın kendi yerleşimi de bozuluyordu.
+
+Sayfaya düzgün bir `<head>` verildi. **Yapı doğrulanarak:** ilk denemede dosyada zaten
+bir `</head>` olduğunu fark etmeyip ikincisini eklemiştim; etiket çiftleri sayılarak
+yakalandı ve düzeltildi.
+
+**`backend/tools/webview_pages.mjs`** bu sınıfı kalıcı kapatıyor: WebView'e sunulan her
+sayfada doctype ve viewport aranıyor (`npm run check` içinde, 6 sayfa denetleniyor).
+Kasten bozularak iki yönlü sınandı.
+
+### Ekran mimarisi: dört yeni yerleşim bileşeni
+
+| Bileşen | Ne işe yarar |
+|---|---|
+| `aspectRatio` | Kart/afiş oranını korur. **Sabit piksel yükseklik artık yazılmıyor** — dar ekranda taşıyor, geniş ekranda sırıtıyordu. |
+| `maxWidth` | Geniş ekranda satır 900 piksele uzayıp okunmaz hale gelmesin. |
+| `safeArea` | Alt çentik/gezinme çubuğu sayfanın son öğesini yutmasın. |
+| `spacer` | Boşluk bir tasarım kararı; her bileşene rastgele padding vermek yerine. |
+
+### Vektörel bileşenler: `icon` · `shape` · `progress`
+
+Üçü de **kodla çizilir, görsel indirmez** (`shape` bir `CustomPainter`: daire, halka,
+yuvarlatılmış kare, nokta, çizgi). Üç kazanç:
+
+- **Keskinlik** — PNG 3x yoğunluklu ekranda bulanıklaşır, vektör her yoğunlukta nettir.
+- **Hız** — indirme yok: ekran anında açılır, çevrimdışı da çizilir.
+- **Tema** — rengini `tone`'dan alır; marka rengi ya da gece/gündüz değişince kendi uyar.
+
+`image` artık yalnızca **gerçek fotoğraf** için (afiş, avatar). Simge, ayraç, rozet,
+ilerleme halkası, çerçeve → vektör.
+
+Kapalı liste kuralı burada da geçerli: `shape: "ucgen"` ya da serbest renk kodu reddedilir.
+
+### Kalan 11 ekran için rehber ve referans düzen
+
+- **`docs/SDUI_LAYOUT_GUIDE.md`** — sayfa iskeleti (maxWidth → column → title → içerik →
+  ayraç → eylem → safeArea), oran kuralı, vektör/görsel ayrımı, dikey ritim (12–16 / 6–10),
+  renk rolleri, boş durum zorunluluğu ve WebView sayfası kuralları.
+- **`106_sdui_help_layout.sql`** — Yardım ekranının bu mimariyle yazılmış referans düzeni
+  (26 düğüm). Kalan ekranlar bunu örnek alacak.
+
+Göç **yalnızca taslağı** ve **yalnızca hiç elle düzenlenmemişse** günceller
+(`draft_updated_by IS NULL`): kullanıcı tarafında hiçbir şey değişmez, yöneticinin emeği
+de ezilmez. 105'i düzenlemek yerine ayrı göç yazıldı, çünkü göçler bir kez uygulanır ve
+105 canlıda çalışmış olabilir.
+
+### Doğrulanan / doğrulanamayan
+
+Doğrulandı: 232 dosya · **364 birim testi** (4 yeni: oran, genişlik sınırı, vektör
+bileşenleri, kapalı liste) · 999 import · 810 e2e adresi · 74 router bağlaması ·
+6 WebView sayfası · referans düzen şemadan geçiyor · HTML etiket çiftleri.
+
+**Doğrulanamadı:** sayfanın küçük pencerede göz kararı nasıl durduğu — bunu ancak
+telefonda sen görebilirsin. Araç yalnızca "ekranı doğru ölçüyor mu" sorusunu yanıtlar.
+
+## v2.148.3 — Veri gelen ekranların temeli + şema/uygulama eşleşme denetimi
+
+### Sessizce boş ekran verecek bir boşluk vardı
+
+`repeater` ve `avatarRow` **şemada tanımlıydı ama çizicide karşılıkları yoktu.** Bu sınıf
+hiçbir yerde hata vermez:
+
+1. Panel o bileşeni katalogda **gösterir**, yönetici ekrana koyar, kaydeder, yayınlar.
+2. Uygulama tanımadığı türü **atlar** (bilerek — eski APK çökmesin diye).
+3. Kullanıcı **boş ekran** görür. Hiçbir kayıtta iz yoktur.
+
+Gelen kutusu, etkinlikler, ilişkiler — veri gelen bütün ekranlar böyle çizilecekti.
+İkisi de yazıldı; **`backend/tools/sdui_parity.mjs`** bu sınıfı kalıcı kapatıyor: şemadaki
+her bileşenin/eylemin/kaynağın uygulamada karşılığı var mı diye bakıyor (47 tanım,
+`npm run check` içinde). Üç yönlü kasten bozularak sınandı.
+
+### Veri kaynakları: dördü uydurmaymış
+
+Şema `faq`, `tasks`, `familyMembers`, `agencyReport` kaynaklarını tanıtıyordu. Uçlara tek
+tek bakıldı: **ikisi hiç uç değil, ikisi liste değil nesne döndürüyor.** Dördü de kaldırıldı.
+
+Kalan dördünün karşılığı uçtan doğrulandı:
+
+| Kaynak | Uç | Yanıt anahtarı |
+|---|---|---|
+| `events` | `/api/activities` | `items` |
+| `inbox` | `/api/me/notifications` | `notifications` |
+| `relations` | `/api/friends` | `users` |
+| `dealerCatalog` | `/api/dealer/topup-packages` | `packages` |
+
+### Şablon bağlama — bilerek çok dar
+
+`repeater`'ın çocukları şablondur: metinlerdeki `{alan}` her öğenin alanıyla değiştirilir.
+**Yalnızca düz alan adı**; ifade, çağrı, iç içe erişim ya da koşul yok. Şablon dili eklemek,
+sunucuya uygulamanın içinde mantık çalıştırma yetkisi vermeye giden yoldur — SDUI'nin tüm
+güvenliği "sunucu yeni davranış üretemez" kuralına dayanıyor. Bilinmeyen alan boş dizeye
+çevrilir, kullanıcıya süslü parantez gösterilmez.
+
+Veri gelmezse (hata ya da boş liste) `emptyText` çizilir: **boş ekran, bozuk ekrandan ayırt
+edilemez.**
+
+### 11 ekranın gerçek karşılıkları çıkarıldı — plan koda birebir oturmuyor
+
+`docs/SDUI_SCREEN_MAP.md`. Varsayımla düzen yazmak, hiç açılmayacak ekranlar üretmek olurdu:
+
+- **İkisi zaten dinamik** (etkinlik listesi ve detayı sunucudan geliyor) — yapılacak iş yok.
+- **Biri hiç uygun değil:** `event_screen.dart` mevsimsel etkinlik SANATI (869 satır, tema
+  görselleri, hafta tarihleri). Orada tasarımın kendisi üründür; sunucudan gelen bir ağaçla
+  çizilemez, çizilse kötüleşir.
+- **Altısı kısmi:** ekranın bilgi/liste kısmı SDUI'ye gider, işlem akışı (üyelik, ödeme,
+  istek kabul) yerel kalır — mimari ilke zaten bunu söylüyor. Aile ekranı 24 durumlu sınıf,
+  ilişkiler 16; bunları tümden taşımaya çalışmak bugün çalışan akışları bozmak olurdu.
+
+Yani hedef "11 ekranı taşımak" değil, **her ekranın SDUI'ye giden kısmını taşımak**.
+
+### Sıradaki işler yazıldı
+
+`docs/BACKLOG.md`: Ludo zar sonucunun görünmemesi · zar görseli · 6 atınca taş oynatmayıp
+tekrar atma ve 2–3 sonucu birlikte oynama · TEK ve Ludo hızlandırma · hediye şeffaflık
+kalitesi ve animasyon sistemi (SVGA/Lottie/alfa video, şeffaf arka plan testleri, boyut
+optimizasyonu, ön yükleme, çakışma yönetimi) · asset güvenliği maddeleri.
+
+### Doğrulanan / doğrulanamayan
+
+Doğrulandı: 232 dosya · **366 birim testi** (2 yeni) · 999 import · 810 e2e adresi ·
+74 router bağlaması · 6 WebView sayfası · **47 şema/uygulama tanımı** · Dart ön denetimi.
+
+**Doğrulanamadı:** `repeater`'ın gerçek veriyle nasıl çizildiği — ağ çağrısı gerektiriyor,
+ilk kez telefonda görülecek.

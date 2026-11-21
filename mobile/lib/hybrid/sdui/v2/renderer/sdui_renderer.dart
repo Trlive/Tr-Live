@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../widgets/net_image.dart';
 import '../registry/action_registry.dart';
+import '../registry/source_registry.dart';
 import '../schema/sdui_node.dart';
 
 /// SDUI v2 çizicisi: bileşen ağacını Flutter widget'larına çevirir.
@@ -29,6 +30,33 @@ class SduiRenderer extends StatefulWidget {
 
 class _SduiRendererState extends State<SduiRenderer> {
   final Map<String, dynamic> _form = {};
+  /// Çekilmiş veri kaynakları. Aynı kaynak bir ekranda iki kez kullanılsa bile tek çağrı.
+  final Map<String, Future<List<Map<String, dynamic>>>> _sources = {};
+
+  Future<List<Map<String, dynamic>>> _source(String name) =>
+      _sources.putIfAbsent(name, () => SduiSources.load(name));
+
+  /// Şablon düğümünü bir öğeye bağlar: metin alanlarındaki {alan} yerine değer konur.
+  /// Eylemlerdeki `arg` de bağlanır — "bu öğeyi aç" ancak böyle yazılabilir.
+  SduiNode _bind(SduiNode n, Map<String, dynamic> item) {
+    final props = <String, dynamic>{};
+    for (final e in n.props.entries) {
+      final v = e.value;
+      if (v is String) {
+        props[e.key] = bindText(v, item);
+      } else if (v is Map && v['arg'] is String) {
+        props[e.key] = {...v, 'arg': bindText(v['arg'] as String, item)};
+      } else {
+        props[e.key] = v;
+      }
+    }
+    return SduiNode(
+      type: n.type,
+      id: n.id,
+      props: props,
+      children: [for (final k in n.children) _bind(k, item)],
+    );
+  }
 
   @override
   Widget build(BuildContext context) => _build(context, widget.root) ?? const SizedBox.shrink();
@@ -53,12 +81,14 @@ class _SduiRendererState extends State<SduiRenderer> {
           ),
         );
       case 'row':
-        final kids = _gap(_kids(c, n), n.intOf('gap') ?? 0, true);
+        // Çocuklar BİR KEZ çizilir: ilk sürümde sarmalı (wrap) dalında _kids yeniden
+        // çağrılıyordu, yani her satır iki kez inşa ediliyordu.
+        final kids = _kids(c, n);
         return Padding(
           padding: EdgeInsets.all((n.intOf('padding') ?? 0).toDouble()),
           child: n.boolOf('wrap')
-              ? Wrap(spacing: (n.intOf('gap') ?? 0).toDouble(), runSpacing: 6, children: _kids(c, n))
-              : Row(crossAxisAlignment: _crossRow(n.str('align')), children: kids),
+              ? Wrap(spacing: (n.intOf('gap') ?? 0).toDouble(), runSpacing: 6, children: kids)
+              : Row(crossAxisAlignment: _crossRow(n.str('align')), children: _gap(kids, n.intOf('gap') ?? 0, true)),
         );
       case 'grid':
         final cols = (n.intOf('columns') ?? 2).clamp(1, 6);
@@ -279,6 +309,154 @@ class _SduiRendererState extends State<SduiRenderer> {
           onChanged: (v) => setState(() => _form[name] = v),
         );
 
+      // ---- Veriye bağlı ----
+      //
+      // Çocuklar ŞABLONDUR: her öğe için {alan} değerleriyle yeniden bağlanır.
+      // Veri gelmezse (hata, boş liste) emptyText gösterilir — boş ekran, bozuk ekrandan
+      // ayırt edilemez; bu yüzden boş durum metni her zaman çizilir.
+      case 'repeater':
+        final src = n.str('source');
+        if (src == null) return null;
+        final max = (n.intOf('max') ?? 20).clamp(1, 100);
+        return FutureBuilder<List<Map<String, dynamic>>>(
+          future: _source(src),
+          builder: (fc, snap) {
+            if (snap.connectionState != ConnectionState.done) {
+              return const Padding(padding: EdgeInsets.all(20), child: Center(child: CircularProgressIndicator(strokeWidth: 2)));
+            }
+            final items = snap.data ?? const <Map<String, dynamic>>[];
+            if (items.isEmpty) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 24),
+                child: Center(
+                  child: Text(n.str('emptyText') ?? 'Burada henüz bir şey yok.',
+                      style: const TextStyle(color: Color(0x99FFFFFF))),
+                ),
+              );
+            }
+            return Column(mainAxisSize: MainAxisSize.min, children: [
+              for (final item in items.take(max))
+                for (final k in n.children) ?_build(fc, _bind(k, item)),
+            ]);
+          },
+        );
+      case 'avatarRow':
+        final asrc = n.str('source');
+        if (asrc == null) return null;
+        final amax = (n.intOf('max') ?? 8).clamp(1, 30);
+        return FutureBuilder<List<Map<String, dynamic>>>(
+          future: _source(asrc),
+          builder: (fc, snap) {
+            final items = (snap.data ?? const <Map<String, dynamic>>[]).take(amax).toList();
+            if (items.isEmpty) return const SizedBox.shrink();
+            return InkWell(
+              onTap: actionOf(n) == null ? null : () => _run(actionOf(n)),
+              child: SizedBox(
+                height: 34,
+                child: Stack(children: [
+                  for (var i = 0; i < items.length; i++)
+                    Positioned(
+                      left: i * 22.0,
+                      child: Container(
+                        width: 32,
+                        height: 32,
+                        decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFF1A1A1E)),
+                        padding: const EdgeInsets.all(1.5),
+                        child: ClipOval(
+                          child: NetImg('${items[i]['avatarUrl'] ?? ''}', fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => const Icon(Icons.person, size: 18, color: Color(0x66FFFFFF))),
+                        ),
+                      ),
+                    ),
+                ]),
+              ),
+            );
+          },
+        );
+
+      // ---- Yerleşim mimarisi ----
+      //
+      // Sabit piksel yükseklik veren bir kart dar ekranda taşar, geniş ekranda sırıtır.
+      // aspectRatio oranı korur; maxWidth geniş ekranda satırın okunamayacak kadar
+      // uzamasını engeller. Sayfa düzeni her telefonda aynı görünsün diye bunlar var.
+      case 'aspectRatio':
+        final w = (n.intOf('w') ?? 16).clamp(1, 100);
+        final hh = (n.intOf('h') ?? 9).clamp(1, 100);
+        return AspectRatio(
+          aspectRatio: w / hh,
+          child: Stack(fit: StackFit.expand, children: _kids(c, n)),
+        );
+      case 'maxWidth':
+        return Align(
+          alignment: switch (n.str('align')) {
+            'start' => Alignment.centerLeft,
+            'end' => Alignment.centerRight,
+            _ => Alignment.center,
+          },
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: (n.intOf('width') ?? 560).toDouble()),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: _kids(c, n)),
+          ),
+        );
+      case 'safeArea':
+        return SafeArea(
+          top: n.boolOf('top'),
+          bottom: n.boolOf('bottom'),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: _kids(c, n)),
+        );
+      case 'spacer':
+        return SizedBox(height: (n.intOf('size') ?? 12).toDouble());
+
+      // ---- Vektörel ----
+      //
+      // Hepsi KOD İLE çizilir, görsel indirmez: her ekran yoğunluğunda keskin durur,
+      // çevrimdışı da çizilir, rengini temadan alır.
+      case 'icon':
+        return Icon(
+          SduiActions.icon(n.str('name')),
+          size: (n.intOf('size') ?? 24).toDouble(),
+          color: SduiActions.tone(n.str('tone')),
+        );
+      case 'shape':
+        final sz = (n.intOf('size') ?? 24).toDouble();
+        return SizedBox(
+          width: n.str('kind') == 'line' ? double.infinity : sz,
+          height: n.str('kind') == 'line' ? (n.intOf('thickness') ?? 2).toDouble() : sz,
+          child: CustomPaint(
+            painter: _ShapePainter(
+              kind: n.str('kind') ?? 'circle',
+              color: SduiActions.tone(n.str('tone'), fallback: const Color(0xFFD7B56D)),
+              thickness: (n.intOf('thickness') ?? 3).toDouble(),
+            ),
+          ),
+        );
+      case 'progress':
+        final v = ((n.intOf('value') ?? 0).clamp(0, 100)) / 100.0;
+        final tone = SduiActions.tone(n.str('tone'), fallback: const Color(0xFFD7B56D));
+        if (n.str('kind') == 'ring') {
+          final sz = (n.intOf('size') ?? 56).toDouble();
+          return SizedBox(
+            width: sz,
+            height: sz,
+            child: Stack(alignment: Alignment.center, children: [
+              CircularProgressIndicator(value: v, strokeWidth: 4, color: tone, backgroundColor: const Color(0x22FFFFFF)),
+              if (n.str('label') != null)
+                Text(n.str('label')!, style: TextStyle(fontSize: sz * 0.26, fontWeight: FontWeight.w800, color: tone)),
+            ]),
+          );
+        }
+        return Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+          if (n.str('label') != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text(n.str('label')!, style: const TextStyle(fontSize: 12, color: Color(0x99FFFFFF))),
+            ),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: LinearProgressIndicator(value: v, minHeight: 6, color: tone, backgroundColor: const Color(0x22FFFFFF)),
+          ),
+        ]);
+
       // ---- Durum ----
       case 'loading':
         return const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator(strokeWidth: 2)));
@@ -350,4 +528,42 @@ class _SduiRendererState extends State<SduiRenderer> {
     }
     return out;
   }
+}
+
+
+/// Vektörel süs çizimi: daire, halka, yuvarlatılmış kare, nokta, çizgi.
+///
+/// Görsel dosyası YERİNE kod. Üç sebeple: her ekran yoğunluğunda keskin durur (PNG 3x
+/// ekranda bulanıklaşır), indirme beklemez (çevrimdışı da çizilir) ve rengini temadan alır.
+class _ShapePainter extends CustomPainter {
+  final String kind;
+  final Color color;
+  final double thickness;
+
+  const _ShapePainter({required this.kind, required this.color, required this.thickness});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final p = Paint()..color = color..isAntiAlias = true;
+    final r = Rect.fromLTWH(0, 0, size.width, size.height);
+    switch (kind) {
+      case 'ring':
+        p
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = thickness;
+        canvas.drawCircle(r.center, (size.shortestSide - thickness) / 2, p);
+      case 'rounded':
+        canvas.drawRRect(RRect.fromRectAndRadius(r, Radius.circular(size.shortestSide * 0.28)), p);
+      case 'dot':
+        canvas.drawCircle(r.center, size.shortestSide * 0.22, p);
+      case 'line':
+        canvas.drawRRect(RRect.fromRectAndRadius(r, Radius.circular(size.height / 2)), p);
+      default:
+        canvas.drawCircle(r.center, size.shortestSide / 2, p);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_ShapePainter old) =>
+      old.kind != kind || old.color != color || old.thickness != thickness;
 }

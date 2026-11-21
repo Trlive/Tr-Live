@@ -55,6 +55,70 @@ def strip(src: str) -> str:
     return ''.join(out)
 
 
+def strip_keep_interp(src: str) -> str:
+    """Yorumları ve dizeleri siler AMA dize icindeki $ad / ${...} ifadelerini KORUR.
+
+    strip() dize icini tamamen siliyor. Kullanilmayan alan denetimi onunla yapilinca
+    '$_prefix$screen' gibi interpolasyonlarda gecen alanlar "hic okunmuyor" sanildi:
+    11 bulgunun 10'u sahteydi. Dart'ta interpolasyon KODDUR; silinmemeli.
+    """
+    out, i, n = [], 0, len(src)
+    while i < n:
+        c = src[i]
+        if c == '/' and src[i:i + 2] == '//':
+            j = src.find(chr(10), i)
+            j = n if j < 0 else j
+            out.append(' ' * (j - i))
+            i = j
+        elif c == '/' and src[i:i + 2] == '/*':
+            j = src.find('*/', i + 2)
+            j = n if j < 0 else j + 2
+            out.append(' ' * (j - i))
+            i = j
+        elif c == '"' or c == "'":
+            triple = src[i:i + 3] in ('"' * 3, "'" * 3)
+            q = src[i:i + 3] if triple else c
+            j = i + len(q)
+            out.append(' ' * len(q))
+            while j < n:
+                if src[j] == '\\':
+                    out.append('  ')
+                    j += 2
+                    continue
+                if src[j:j + len(q)] == q:
+                    out.append(' ' * len(q))
+                    j += len(q)
+                    break
+                if src[j] == '$':
+                    if j + 1 < n and src[j + 1] == '{':
+                        depth, k = 0, j + 1
+                        while k < n:
+                            if src[k] == '{':
+                                depth += 1
+                            elif src[k] == '}':
+                                depth -= 1
+                                if depth == 0:
+                                    k += 1
+                                    break
+                            k += 1
+                        out.append(src[j:k])
+                        j = k
+                        continue
+                    k = j + 1
+                    while k < n and (src[k].isalnum() or src[k] == '_'):
+                        k += 1
+                    out.append(src[j:k])
+                    j = k
+                    continue
+                out.append(' ')
+                j += 1
+            i = j
+        else:
+            out.append(c)
+            i += 1
+    return ''.join(out)
+
+
 # Her dosyanın tanımladığı üst düzey adlar (sınıf, enum, mixin, extension, üst düzey işlev/sabit)
 # ÜST DÜZEY tanım = satır başında, GİRİNTİSİZ. Girintiyi de eşleştiren bir desen, gövdedeki
 # widget çağrılarını (`SizedBox(...)`) tanım sanar ve araç yanlış alarm üretir — ki yanlış alarm
@@ -185,6 +249,73 @@ for _f in sorted(files):
     _n = len(_f.read_text(encoding='utf-8').split('\n'))
     problems.append(f'{_f}: hiçbir yerden çağrılmıyor ({_n} satır) — ölü dosya')
 
+# ---- Hiç OKUNMAYAN özel alan (unused_field) ----
+#
+# `flutter analyze` bunu "warning: The value of the field '_x' isn't used" diye bildirir ve
+# CI'ı kırar. v2.148.0'da SDUI ekranında `_loading` alanı dört kez YAZILIP hiç OKUNMAMIŞTI;
+# bu araç göremediği için hata ancak CI'da çıktı.
+#
+# Ölçüt analyze ile aynı: yazmak kullanmak değildir. Bir alan yalnızca atama sol tarafında
+# geçiyorsa okunmuyordur ve gereksizdir.
+# Satır bazlı ve iç içe niceleyicisiz: tip kısmında boşluk sınıfı geçmiyor.
+# İlk sürüm `(?:[\w<>,\s?\[\]]+?\s+)?` kullanıyordu ve room_format.dart'ta
+# katastrofik geri izlemeye girip aracı KİLİTLİYORDU — denetim hiç bitmiyordu.
+_FIELD = re.compile(r'^[ \t]{2,}(?:(?:static|late|final|const|covariant)[ \t]+)*'
+                    r'(?:[A-Za-z_][\w<>,?\[\]]*[ \t]+)?(_[A-Za-z]\w*)[ \t]*(?:=(?![=>])|;)')
+for _f in sorted(files):
+    _code = strip_keep_interp(_f.read_text(encoding='utf-8'))
+    _lines = _code.split('\n')
+    # Okuma sayımı için tüm adların konumlarını BİR KEZ çıkar (alan başına dosya taramak yerine).
+    _uses = {}
+    # Önceki karakterde $ DIŞLANMAZ: Dart'ta '$_prefix' interpolasyonu alanın OKUNMASIDIR.
+    # Dışlandığında 11 bulgunun 7'si sahte çıkmıştı.
+    # $ ne önde ne ARKADA dışlanır: '$_prefix$screen' iki interpolasyon yan yanadır ve
+    # ikisi de okumadır. Arkadaki $ dışlandığında bu kullanımlar görünmez kalıyordu.
+    for _u in re.finditer(r'(?<![\w])(_[A-Za-z]\w*)(?![\w])', _code):
+        _uses.setdefault(_u.group(1), []).append(_u)
+    for _i, _l in enumerate(_lines):
+        _m = _FIELD.match(_l)
+        if not _m:
+            continue
+        _name = _m.group(1)
+        _declPos = sum(len(x) + 1 for x in _lines[:_i]) + _m.start(1)
+        _reads = 0
+        for _u in _uses.get(_name, []):
+            if _u.start() == _declPos:
+                continue  # bildirimin kendisi
+            # Yalnızca atama SOL TARAFI ise okuma değildir: `_x = 1` yazmadır,
+            # `_x == 1`, `_x => 1`, `_x += 1` okumadır.
+            if re.match(r'[ \t]*=(?![=>])', _code[_u.end():_u.end() + 3]):
+                continue
+            _reads += 1
+        if _reads == 0:
+            problems.append(f'{_f}:{_i + 1}: "{_name}" alanı hiç OKUNMUYOR (yalnızca yazılıyor) — flutter analyze bunu hata sayar')
+
+# ---- Hiç kullanılmayan özel metot (unused_element) ----
+#
+# `flutter analyze` bunu da hata sayar (CI uyarıları hata kabul ediyor). Alan denetimiyle
+# aynı mantık; burada okuma/yazma ayrımı gerekmez: metodun adı başka hiçbir yerde geçmiyorsa
+# kullanılmıyordur.
+_METHOD = re.compile(r'^[ \t]*(?:(?:static|final|const|external|@override)[ \t]+)*'
+                     r'(?:[A-Za-z_][\w<>,?\[\]]*[ \t]+)?(_[A-Za-z]\w*)(?:<[^<>]*>)?[ \t]*\(')
+for _f in sorted(files):
+    _code = strip_keep_interp(_f.read_text(encoding='utf-8'))
+    _lines = _code.split('\n')
+    _uses = {}
+    for _u in re.finditer(r'(?<![\w])(_[A-Za-z]\w*)(?![\w])', _code):
+        _uses.setdefault(_u.group(1), []).append(_u.start())
+    for _i, _l in enumerate(_lines):
+        _m = _METHOD.match(_l)
+        if not _m:
+            continue
+        # Gerçekten gövdesi olan bir bildirim mi (çağrı değil)?
+        if not re.search(r'\)[\s\w]*[{=]', '\n'.join(_lines[_i:_i + 6])):
+            continue
+        _name = _m.group(1)
+        _pos = sum(len(x) + 1 for x in _lines[:_i]) + _m.start(1)
+        if not [o for o in _uses.get(_name, []) if o != _pos]:
+            problems.append(f'{_f}:{_i + 1}: "{_name}" metodu hiç kullanılmıyor — flutter analyze bunu hata sayar')
+
 for x in sorted(set(problems)):
     print('  - ' + str(x).replace(str(LIB.parent) + '/', ''))
 
@@ -199,7 +330,11 @@ BU DENETİM ŞUNLARI YAKALAMAZ — yalnızca CI'daki `flutter analyze` görür:
   • Tip uyuşmazlıkları (List<int> ↔ Set<int> gibi)
   • Null güvenliği hataları
   • Paketlerden gelen adların yanlış kullanımı
-  • Kullanılmayan değişken / fonksiyon içi ölü kod
-     (Kullanılmayan DOSYA artık yukarıda bildiriliyor; flutter analyze onu da görmez.)""")
+  • Fonksiyon İÇİNDEKİ kullanılmayan yerel değişkenler
+
+Bu araç artık şunları da görüyor (eskiden yalnızca CI görüyordu):
+  • Hiç okunmayan özel ALAN   (unused_field)
+  • Hiç kullanılmayan özel METOT (unused_element)
+  • Hiçbir yerden çağrılmayan DOSYA — flutter analyze bunu HİÇ görmez""")
 
 sys.exit(1 if problems else 0)

@@ -42,7 +42,6 @@ class _SduiScreenViewState extends State<SduiScreenView> {
   static const _prefix = 'sdui2_';
 
   SduiScreenDoc? _doc;
-  bool _loading = true;
 
   @override
   void initState() {
@@ -69,21 +68,20 @@ class _SduiScreenViewState extends State<SduiScreenView> {
         // Sunucu "bu ekran sende yerleşik olsun" diyor. Saklanan da temizlenir; yoksa
         // panelden kapatmak telefonlarda hiçbir şey değiştirmezdi.
         await prefs.remove(key);
-        if (mounted) setState(() { _doc = null; _loading = false; });
+        if (mounted) setState(() => _doc = null);
         return;
       }
       final parsed = SduiScreenDoc.from(r);
       if (parsed == null || parsed.isEmpty) {
         // Bozuk ya da boş ekran: SAKLANMAZ, eldeki korunur. Bozuğu saklamak, uygulamayı
-        // ağ olmasa bile her açılışta bozuk açmak olurdu.
-        if (mounted) setState(() => _loading = false);
+        // ağ olmasa bile her açılışta bozuk açmak olurdu. Ekranda bir şey değişmez,
+        // bu yüzden setState de çağrılmaz.
         return;
       }
       await prefs.setString(key, jsonEncode(r));
-      if (mounted) setState(() { _doc = parsed; _loading = false; });
+      if (mounted) setState(() => _doc = parsed);
     } catch (_) {
-      // Ağ yok ya da sunucu yanıt vermiyor: saklanan ekran geçerli kalır.
-      if (mounted) setState(() => _loading = false);
+      // Ağ yok ya da sunucu yanıt vermiyor: saklanan ekran geçerli kalır, ekran değişmez.
     }
   }
 
@@ -104,9 +102,15 @@ class _SduiScreenViewState extends State<SduiScreenView> {
       // ilgilendirmez; bekletmek, yerleşik ekran hazırken anlamsız gecikme olurdu.
       return widget.fallback(context);
     }
+    final body = SduiRenderer(root: doc.root, onRefresh: _load, onTab: widget.onTab);
     return RefreshIndicator(
       onRefresh: _load,
-      child: SduiRenderer(root: doc.root, onRefresh: _load, onTab: widget.onTab),
+      // RefreshIndicator aşağı çekmeyi ancak KAYDIRILABİLİR bir çocukta algılar. Kök
+      // bileşen 'scroll' değilse (ör. düz bir column) aşağı çekmek hiçbir şey yapmazdı.
+      // AlwaysScrollableScrollPhysics, içerik ekrandan kısa olsa bile çekmeyi çalıştırır.
+      child: doc.root.type == 'scroll'
+          ? body
+          : SingleChildScrollView(physics: const AlwaysScrollableScrollPhysics(), child: body),
     );
   }
 }

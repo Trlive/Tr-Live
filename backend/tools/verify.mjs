@@ -105,16 +105,19 @@ BU ARAÇ ŞUNLARI DOĞRULAMAZ — yayından önce CI'da görülmeli:
      yer CI'ın e2e işi. Modül taşımasında sunucuyu açtırmayan üç hata vardı ve buradaki
      kontrollerin hepsi yeşildi. "Testler geçti" ile "sunucu açılıyor" AYNI ŞEY DEĞİLDİR.
 
-     v2.146.1'den beri üç kör nokta KAPANDI (scripts/check.mjs içinde):
+     Şu kör noktalar KAPANDI (scripts/check.mjs içinde):
        · tanımsız ad (free_idents.mjs)   → uç çağrılınca "Sunucu hatası"
        · eksik dışa verim (export_check.mjs) → sunucu hiç açılmaz
        · e2e'nin olmayan adresi çağırması (e2e_routes.mjs) → HTTP 404 "Adres bulunamadı"
-     Bunlar yalnızca BU üç sınıfı görür. Veritabanı şeması, SQL, null, sıralama, yetki ve
+       · öneksiz bağlanan router'da sızan ara katman (router_scope.mjs) → alakasız uçta 403
+     Bunlar yalnızca BU sınıfları görür. Veritabanı şeması, SQL, null, sıralama, yetki ve
      iş kuralı hataları hâlâ yalnızca e2e'de çıkar.
 
   2. Dart TİP denetimi (flutter analyze)
-     Yukarıdaki Dart ön denetimi yalnızca import ve tanımsız ad bakar. List<int> ↔ Set<int>
-     gibi tip hataları ve null güvenliği YALNIZCA CI'ın Mobil işinde görülür.
+     Dart ön denetimi artık import, tanımsız ad, ölü dosya, hiç okunmayan ÖZEL ALAN ve hiç
+     kullanılmayan ÖZEL METOT'u da görüyor (son ikisi v2.148.1'de eklendi; CI'ı kıran
+     "_loading alanı kullanılmıyor" hatası bu yüzden kaçmıştı). Ama List<int> ↔ Set<int>
+     gibi TİP hataları ve null güvenliği YALNIZCA CI'ın Mobil işinde görülür.
 
   3. APK derlemesi
      Bağımlılıkların indirilmesi ve Gradle derlemesi yalnızca CI'da.

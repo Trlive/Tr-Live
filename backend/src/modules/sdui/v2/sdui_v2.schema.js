@@ -109,17 +109,57 @@ export const COMPONENTS = {
   checkbox: { children: false, props: { name: 'name', label: 'label', required: 'bool' } },
   toggle: { children: false, props: { name: 'name', label: 'label', hint: 'label' } },
 
+  // ---- Yerleşim mimarisi ----
+  //
+  // Bu dördü "sayfa her telefonda aynı oranlarda dursun" içindir. Sabit piksel yükseklik
+  // veren bir kart, dar ekranda taşar, geniş ekranda sırıtır; `aspectRatio` oranı korur.
+  // `maxWidth` ise geniş ekranda satırın okunamayacak kadar uzamasını engeller.
+  aspectRatio: { children: true, props: { w: 'int', h: 'int' } },
+  maxWidth: { children: true, props: { width: 'int', align: ['start', 'center', 'end'] } },
+  safeArea: { children: true, props: { top: 'bool', bottom: 'bool' } },
+  spacer: { children: false, props: { size: 'int' } },
+
+  // ---- Vektörel ----
+  //
+  // Bunlar KOD İLE ÇİZİLİR, görsel indirmez. Üç kazanç:
+  //   · Her ekran yoğunluğunda keskin durur (PNG 3x ekranda bulanıklaşır).
+  //   · İndirme yok: ekran anında açılır, çevrimdışı da çizilir.
+  //   · Rengi temadan alır; gece/gündüz ya da marka rengi değişince kendi uyar.
+  // Bu yüzden simge ve süs için görsel yerine BUNLAR kullanılmalı; `image` yalnızca
+  // gerçek fotoğraf (afiş, avatar) içindir.
+  icon: { children: false, props: { name: 'icon', size: 'int', tone: 'tone' } },
+  shape: { children: false, props: { kind: ['circle', 'ring', 'rounded', 'dot', 'line'], size: 'int', thickness: 'int', tone: 'tone' } },
+  progress: { children: false, props: { value: 'int', kind: ['bar', 'ring'], tone: 'tone', size: 'int', label: 'label' } },
+
   // ---- Durum ----
   loading: { children: false, props: { } },
   error: { children: false, props: { text: 'label' } },
 
   // ---- Veriye bağlı ----
   // `source`: uygulamanın zaten çağırdığı, ADI İZİNLİ bir veri kaynağı. Serbest adres değil.
+  //
+  // Çocukları ŞABLONDUR: metin alanlarında {alan} yazılır, her öğe için o öğenin alanıyla
+  // değiştirilir. Yalnızca düz alan adı; ifade, çağrı ya da iç içe erişim YOK — şablon dili
+  // eklemek, sunucuya uygulama içinde kod çalıştırma yetkisi vermeye giden yoldur.
   repeater: { children: true, props: { source: 'source', max: 'int', emptyText: 'label' } },
 };
 
-/// İzinli veri kaynakları: ad → uygulamadaki mevcut çağrı. API_ACTIONS ile aynı gerekçe.
-export const SOURCES = ['inbox', 'events', 'relations', 'familyMembers', 'agencyReport', 'dealerCatalog', 'faq', 'tasks'];
+/// İzinli veri kaynakları: ad → uygulamadaki MEVCUT çağrı. API_ACTIONS ile aynı gerekçe.
+///
+/// Buradaki her ad, uygulamanın gerçekten çağırabildiği ve LİSTE döndüren bir uca
+/// karşılık gelir; `alanlar` da o listedeki öğelerin bağlanabilir alanlarıdır.
+///
+/// İlk yazımda `faq`, `tasks`, `familyMembers`, `agencyReport` da vardı; dördünün de
+/// karşılığı YOKTU (ikisi hiç uç değil, ikisi liste değil nesne döndürüyor). Panelde
+/// görünen ama seçilince boş ekran veren bir kaynak, olmayandan beterdir: yönetici
+/// ekranı kurar, yayınlar, kullanıcı boş sayfa görür ve sebebi aranır.
+export const SOURCE_SPECS = {
+  events: { fields: ['id', 'title', 'subtitle', 'icon', 'ready'] },
+  inbox: { fields: ['id', 'kind', 'title', 'body', 'createdAt'] },
+  relations: { fields: ['id', 'displayName', 'username', 'avatarUrl'] },
+  dealerCatalog: { fields: ['id', 'name', 'coins', 'priceText'] },
+};
+export const SOURCES = Object.keys(SOURCE_SPECS);
 
 const str = (v, field, max) => {
   if (v === undefined || v === null) return '';

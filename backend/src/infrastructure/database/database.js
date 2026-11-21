@@ -82,7 +82,9 @@ export async function tx(fn) {
   // İşlem içindeki sorgular da ölçülür. Yavaş SQL'lerin çoğu işlem içindedir (kilit bekleme),
   // ölçüm yalnızca havuz üzerinden gidenleri saysaydı en önemli kısmı kaçırırdı.
   const raw = client.query.bind(client);
-  client.query = (text, params) => (typeof text === 'string' ? timed(text, () => raw(text, params)) : raw(text, params));
+  // Tüm argümanlar olduğu gibi geçirilir: pg'nin query(text, values, callback) biçimi de
+  // çalışsın. Yalnızca metin sorgular ölçülür; nesne/akış biçimleri dokunulmadan geçer.
+  client.query = (...args) => (typeof args[0] === 'string' ? timed(args[0], () => raw(...args)) : raw(...args));
   try {
     await client.query('BEGIN');
     const result = await fn(client);

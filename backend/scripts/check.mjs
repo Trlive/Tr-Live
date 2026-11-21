@@ -64,4 +64,35 @@ process.stdout.write(er.stdout || '');
 process.stderr.write(er.stderr || '');
 if (er.status !== 0) failed += 1;
 
+// Router kapsamı: öneksiz bağlanan bir router'da `use(araKatman)` yazılmış mı?
+//
+// v2.148.0'da tek böyle satır, yardımcı adminleri panelin TAMAMINDAN kilitledi: SDUI
+// router'ına konan yetki denetimi, üst router'a gelen her isteğe uygulandı. CI'da bu
+// "kullanıcı arama → HTTP 403" diye göründü; yani hatanın göründüğü yer ile olduğu yer
+// alakasızdı. Bu sınıfı elle bulmak çok pahalı.
+const rs = spawnSync(process.execPath, [new URL('../tools/router_scope.mjs', import.meta.url).pathname], { encoding: 'utf8' });
+process.stdout.write(rs.stdout || '');
+process.stderr.write(rs.stderr || '');
+if (rs.status !== 0) failed += 1;
+
+// WebView'e sunulan sayfalar ekranı doğru ölçüyor mu (doctype + viewport)?
+//
+// `tek.html` bunlarsız yazılmıştı: Android WebView sayfayı ~980px sanal ekrana çizip
+// küçültüyor, doctype olmadığı için de quirks kipinde yüzdeli yükseklikler bozuluyordu.
+// Oda üstündeki küçük pencerede bu "sayfa ekran görünümünü kaybetti" demekti.
+const wp = spawnSync(process.execPath, [new URL('../tools/webview_pages.mjs', import.meta.url).pathname], { encoding: 'utf8' });
+process.stdout.write(wp.stdout || '');
+process.stderr.write(wp.stderr || '');
+if (wp.status !== 0) failed += 1;
+
+// SDUI: şema (sunucu) ile çizici (Flutter) aynı şeyleri biliyor mu?
+//
+// Şemaya bir bileşen eklenip çiziciye eklenmezse hiçbir yerde hata olmaz: panel onu
+// katalogda gösterir, yönetici ekrana koyar, uygulama tanımadığı için ATLAR, kullanıcı
+// BOŞ EKRAN görür. `repeater` ve `avatarRow` ile tam bu olmuştu.
+const sp = spawnSync(process.execPath, [new URL('../tools/sdui_parity.mjs', import.meta.url).pathname], { encoding: 'utf8' });
+process.stdout.write(sp.stdout || '');
+process.stderr.write(sp.stderr || '');
+if (sp.status !== 0) failed += 1;
+
 process.exit(failed ? 1 : 0);

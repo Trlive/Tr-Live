@@ -18,7 +18,27 @@ import { log } from '../../../infrastructure/observability/log.js';
 const TTL_MS = 30_000;
 const cache = new Map();
 
-export const revisionOf = (payload) => crypto.createHash('sha256').update(JSON.stringify(payload)).digest('hex').slice(0, 16);
+/**
+ * İçerik özeti — ANAHTAR SIRASINDAN BAĞIMSIZ.
+ *
+ * PostgreSQL `jsonb` anahtar sırasını korumaz; (uzunluk, bayt) sırasına göre saklar. Düz
+ * `JSON.stringify` ile özet alınca, koddan üretilen nesne ile veritabanından okunan aynı
+ * içerik FARKLI özet veriyordu. Sonuç: panelde "yayınlanmamış değişiklik var" uyarısı
+ * hiç sönmüyordu ve geri alma bile temizlemiyordu — içerik aynıyken.
+ *
+ * Bu yüzden özet, nesneyi önce KURALLI biçime (anahtarlar sıralı) çevirerek alınır.
+ */
+function canonical(v) {
+  if (Array.isArray(v)) return v.map(canonical);
+  if (v && typeof v === 'object') {
+    const out = {};
+    for (const k of Object.keys(v).sort()) out[k] = canonical(v[k]);
+    return out;
+  }
+  return v;
+}
+
+export const revisionOf = (payload) => crypto.createHash('sha256').update(JSON.stringify(canonical(payload))).digest('hex').slice(0, 16);
 
 const verNum = (v) => String(v || '0.0.0').split('.').map((x) => Number.parseInt(x, 10) || 0);
 /** have >= want ? */

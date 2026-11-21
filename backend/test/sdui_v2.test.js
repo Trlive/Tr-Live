@@ -138,3 +138,91 @@ test('versionAtLeast', () => {
   assert.equal(versionAtLeast('', '1.0.0'), false, 'sürüm bildirmeyen eski uygulama geçemez');
   assert.equal(versionAtLeast('10.0.0', '9.99.99'), true, 'sayısal karşılaştırma, metin değil');
 });
+
+// ---- Sürüm özetinin anahtar sırasından bağımsızlığı ----
+//
+// PostgreSQL `jsonb` anahtar sırasını korumaz; (uzunluk, bayt) sırasına göre saklar.
+// Düz JSON.stringify ile özet alınınca, koddan üretilen nesne ile veritabanından okunan
+// AYNI içerik farklı özet veriyordu. Sonuç: panelde "yayınlanmamış değişiklik var" uyarısı
+// hiç sönmüyor, geri alma bile temizlemiyordu. CI'da e2e şöyle kırıldı:
+// "geri almadan sonra yayınlanmamış değişiklik kalmamalı: true !== false".
+test('sürüm özeti anahtar sırasından bağımsız (jsonb yeniden sıralar)', async () => {
+  const { revisionOf } = await import('../src/modules/sdui/v2/sdui_v2.service.js');
+  const kodSirasi = { schemaVersion: 2, screenId: 'help', root: { type: 'column', children: [{ type: 'title', text: 'x' }] } };
+  const jsonbSirasi = { root: { children: [{ text: 'x', type: 'title' }], type: 'column' }, screenId: 'help', schemaVersion: 2 };
+  assert.equal(revisionOf(kodSirasi), revisionOf(jsonbSirasi), 'aynı içerik aynı özet vermeli');
+
+  const farkli = { schemaVersion: 2, screenId: 'help', root: { type: 'column', children: [{ type: 'title', text: 'DEĞİŞTİ' }] } };
+  assert.notEqual(revisionOf(kodSirasi), revisionOf(farkli), 'içerik değişince özet değişmeli');
+
+  // Dizi sırası İÇERİKTİR, sıralanmaz: iki bileşenin yeri değişirse ekran değişmiştir.
+  const yerDegisti = { schemaVersion: 2, screenId: 'help', root: { type: 'column', children: [{ type: 'title', text: 'b' }, { type: 'title', text: 'a' }] } };
+  const ilkHali = { schemaVersion: 2, screenId: 'help', root: { type: 'column', children: [{ type: 'title', text: 'a' }, { type: 'title', text: 'b' }] } };
+  assert.notEqual(revisionOf(yerDegisti), revisionOf(ilkHali), 'bileşen sırası değişince özet değişmeli');
+});
+
+// ---- Yerleşim mimarisi ve vektörel bileşenler ----
+
+test('oran ve genişlik sınırı: sayfa her ekranda aynı dursun', () => {
+  const out = validateScreen('events', {
+    root: { type: 'maxWidth', width: 560, align: 'center', children: [
+      { type: 'aspectRatio', w: 16, h: 9, children: [{ type: 'image', url: 'https://cdn.example/a.jpg' }] },
+      { type: 'spacer', size: 12 },
+      { type: 'safeArea', bottom: true, children: [{ type: 'title', text: 'Alt' }] },
+    ] },
+  });
+  assert.equal(out.root.type, 'maxWidth');
+  assert.equal(out.root.width, 560);
+  assert.equal(out.root.children[0].w, 16);
+  assert.equal(out.root.children[0].h, 9);
+  assert.equal(out.root.children[1].size, 12);
+  assert.equal(out.root.children[2].bottom, true);
+});
+
+test('vektörel bileşenler: görsel indirmeden çizilir', () => {
+  const out = validateScreen('events', {
+    root: { type: 'row', children: [
+      { type: 'icon', name: 'trophy', size: 28, tone: 'gold' },
+      { type: 'shape', kind: 'ring', size: 40, thickness: 3, tone: 'primary' },
+      { type: 'progress', kind: 'ring', value: 70, label: '%70', tone: 'success' },
+      { type: 'progress', kind: 'bar', value: 30 },
+    ] },
+  });
+  const [ikon, sekil, halka, cubuk] = out.root.children;
+  assert.equal(ikon.name, 'trophy');
+  assert.equal(sekil.kind, 'ring');
+  assert.equal(halka.value, 70);
+  assert.equal(cubuk.kind, 'bar');
+});
+
+test('vektörel bileşenlerde de kapalı liste geçerli', () => {
+  bad({ type: 'shape', kind: 'ucgen' }, /geçersiz/i);
+  bad({ type: 'icon', name: 'nuke' }, /bilinmeyen simge/i);
+  bad({ type: 'progress', tone: '#ff0000' }, /bilinmeyen renk rolü/i);
+});
+
+test('oran değerleri sınırlı (bölme hatası ve saçma oran olmasın)', () => {
+  bad({ type: 'aspectRatio', w: 5000, h: 1 }, /0–2000/);
+  // 0 kabul edilir ama çizici 1'e sıkıştırır; şema tarafında sayı olması yeter.
+  assert.doesNotThrow(() => validateScreen('events', { root: { type: 'aspectRatio', w: 0, h: 0 } }));
+});
+
+// ---- Veri kaynakları: tanıtılan her kaynağın karşılığı olmalı ----
+test('veri kaynakları yalnızca doğrulanmış uçlardan', () => {
+  // Panelde görünen ama seçilince boş ekran veren bir kaynak, olmayandan beterdir.
+  // İlk yazımda faq/tasks/familyMembers/agencyReport tanıtılmıştı; dördünün de karşılığı yoktu.
+  for (const yok of ['faq', 'tasks', 'familyMembers', 'agencyReport']) {
+    bad({ type: 'repeater', source: yok }, /izinli olmayan veri kaynağı/i);
+  }
+  for (const var_ of ['events', 'inbox', 'relations', 'dealerCatalog']) {
+    assert.doesNotThrow(() => ok({ type: 'repeater', source: var_, emptyText: 'Yok' }), var_);
+  }
+});
+
+test('her kaynağın bağlanabilir alanları tanımlı', async () => {
+  const { SOURCE_SPECS, SOURCES } = await import('../src/modules/sdui/v2/sdui_v2.schema.js');
+  for (const s of SOURCES) {
+    assert.ok(Array.isArray(SOURCE_SPECS[s]?.fields) && SOURCE_SPECS[s].fields.length, `${s}: alan listesi yok`);
+    assert.ok(SOURCE_SPECS[s].fields.includes('id'), `${s}: id alanı olmalı`);
+  }
+});

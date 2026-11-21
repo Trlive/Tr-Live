@@ -36,12 +36,24 @@ router.get('/sdui/v2/:screenId', optionalAuth, async (req, res) => {
 // ---------------- Yönetim ----------------
 
 export const adminRouter = Router();
-adminRouter.use(requireSuperAdmin);
+
+// DİKKAT — `adminRouter.use(requireSuperAdmin)` YAZILMAZ.
+//
+// Bu router admin.routes.js'e YOL ÖNEKİ OLMADAN bağlanıyor (`router.use(adminRouter)`).
+// Express'te öneksiz bağlanan bir router'ın `use()` ara katmanı, o router'ın kendi
+// adreslerine değil, ÜST router'a gelen HER isteğe uygulanır: istek önce buraya girer,
+// ara katman next(hata) derse öteki adreslere hiç ulaşamaz.
+//
+// v2.148.0'da tam bu oldu: tek satır yüzünden yardımcı adminler (`support`) panelin
+// TAMAMINDAN kilitlendi — kullanıcı aramak bile 403 döndü. CI'da "arama → HTTP 403"
+// olarak göründü; sebebi SDUI'ydi.
+//
+// Yetki her adrese AYRI AYRI yazılır. (scripts/check.mjs bu kuralı artık denetliyor.)
 
 /// Bileşen kataloğu: panel düzenleyicisi hangi bileşenlerin ve alanların olduğunu buradan
 /// öğrenir. Katalog iki yere yazılsaydı (panel + sunucu) biri eskir ve panel, sunucunun
 /// kabul etmeyeceği düzenler kaydettirmeye çalışırdı.
-adminRouter.get('/sdui2/catalog', async (_req, res) => {
+adminRouter.get('/sdui2/catalog', requireSuperAdmin, async (_req, res) => {
   res.json({
     components: COMPONENTS,
     icons: ICONS,
@@ -52,23 +64,23 @@ adminRouter.get('/sdui2/catalog', async (_req, res) => {
   });
 });
 
-adminRouter.get('/sdui2/screens', async (_req, res) => {
+adminRouter.get('/sdui2/screens', requireSuperAdmin, async (_req, res) => {
   res.json({ screens: await listScreens() });
 });
 
-adminRouter.get('/sdui2/screens/:screenId', async (req, res) => {
+adminRouter.get('/sdui2/screens/:screenId', requireSuperAdmin, async (req, res) => {
   const out = await adminScreen(String(req.params.screenId));
   if (!out) throw fail('Ekran bulunamadı.', 404);
   res.json(out);
 });
 
-adminRouter.put('/sdui2/screens/:screenId/draft', async (req, res) => {
+adminRouter.put('/sdui2/screens/:screenId/draft', requireSuperAdmin, async (req, res) => {
   res.json(await saveDraft(String(req.params.screenId), req.body?.layout ?? req.body, req.user.id));
 });
 
 /// Önizleme: taslağı, yayınlamadan, istenen uygulama sürümü gözüyle gösterir.
 /// Sürüm parametresi önemli — "eski telefonda nasıl görünecek" sorusu ancak böyle yanıtlanır.
-adminRouter.get('/sdui2/screens/:screenId/preview', async (req, res) => {
+adminRouter.get('/sdui2/screens/:screenId/preview', requireSuperAdmin, async (req, res) => {
   res.json(await previewDraft(String(req.params.screenId), {
     appVersion: String(req.query.appVersion ?? '999.0.0'),
     userId: req.user.id,
@@ -76,7 +88,7 @@ adminRouter.get('/sdui2/screens/:screenId/preview', async (req, res) => {
   }));
 });
 
-adminRouter.post('/sdui2/screens/:screenId/publish', async (req, res) => {
+adminRouter.post('/sdui2/screens/:screenId/publish', requireSuperAdmin, async (req, res) => {
   res.json(await publish(String(req.params.screenId), {
     rollout: req.body?.rollout ?? 1,
     minApp: req.body?.minApp ?? null,
@@ -84,15 +96,15 @@ adminRouter.post('/sdui2/screens/:screenId/publish', async (req, res) => {
   }, req.user.id));
 });
 
-adminRouter.post('/sdui2/screens/:screenId/rollout', async (req, res) => {
+adminRouter.post('/sdui2/screens/:screenId/rollout', requireSuperAdmin, async (req, res) => {
   res.json(await setRollout(String(req.params.screenId), req.body?.rollout, req.user.id));
 });
 
-adminRouter.get('/sdui2/screens/:screenId/history', async (req, res) => {
+adminRouter.get('/sdui2/screens/:screenId/history', requireSuperAdmin, async (req, res) => {
   res.json({ versions: await history(String(req.params.screenId), Number(req.query.limit) || 30) });
 });
 
-adminRouter.post('/sdui2/screens/:screenId/rollback', async (req, res) => {
+adminRouter.post('/sdui2/screens/:screenId/rollback', requireSuperAdmin, async (req, res) => {
   const id = Number(req.body?.versionId);
   if (!Number.isInteger(id) || id <= 0) throw fail('Sürüm kimliği geçersiz.', 400);
   res.json(await rollback(String(req.params.screenId), id, req.user.id));
