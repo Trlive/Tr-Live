@@ -1,7 +1,7 @@
 name: tr_live
 description: TR Live - canlı sesli/görüntülü odalar, aile, WIP, ajans/yayıncı, hediyeler ve yönetim
 publish_to: none
-version: 2.145.0+71
+version: 2.145.1+72
 environment:
   sdk: '>=3.8.0 <4.0.0'
   flutter: '>=3.32.0'
@@ -29,11 +29,19 @@ dependencies:
   audio_session: any
   # Mikrofon ses işleme yöntemi (services/audio_processing.dart). livekit_client zaten bu paketi kullanıyor; 'any' aynı sürüm.
   flutter_webrtc: any
-  # Yapay zekâ gürültü azaltma (RNNoise, BSD-3): flutter_webrtc'nin mikrofon işleme yuvasına takılır (deneysel eklenti).
-  # Bkz. services/denoiser.dart. Sorun çıkarsa bu satır ve denoiser.dart'taki içe aktarma kaldırılır.
-  flutter_webrtc_noise_suppression:
-    git:
-      url: https://github.com/SERDUN/flutter_webrtc_noise_suppression.git
+  # KALDIRILDI: flutter_webrtc_noise_suppression (yapay zekâ gürültü azaltma, RNNoise).
+  #
+  # Kaynak depo (github.com/SERDUN/flutter_webrtc_noise_suppression) artık erişilemiyor:
+  # anonim `git clone` kimlik doğrulaması istiyor, yani depo silinmiş ya da özel yapılmış.
+  # Sonuç: her APK derlemesi `flutter pub get` adımında kırılıyordu — bağımlılık indirilemediği
+  # için derleme hiç başlayamıyordu.
+  #
+  # Üretim derlemesini kontrolümüz dışındaki kişisel bir depoya bağlamak baştan kırılgandı.
+  # Buraya yeni bir git bağımlılığı eklenecekse: ya yayımlanmış (pub.dev) bir paket olmalı,
+  # ya da bizim denetimimizdeki bir depodan ve SABİT bir commit'e (ref:) kilitlenmiş olmalı.
+  #
+  # Yerine ne var: WebRTC'nin kendi gürültü bastırması ve ses yalıtımı oda ekranında zaten açık.
+  # services/denoiser.dart yerinde duruyor ama devre dışı; eklenti geri gelirse tek yerden açılır.
   cupertino_icons: ^1.0.8
   # Yönetimden herkese telefon bildirimi (Firebase gerektirmez). Sürüm sabit: API'si bu sürüme göre yazıldı.
   flutter_local_notifications: 19.5.0

@@ -33,6 +33,10 @@ const REPO = join(ROOT, '..');
 const TARGETS = [
   { file: join(ROOT, 'Dockerfile'), base: ROOT },
   { file: join(ROOT, 'package.json'), base: ROOT },
+  // e2e ve araçlar da alt süreç başlatıyor. İlk sürümde bunlar taranmıyordu ve `e2e/api.e2e.js`
+  // içindeki eski `src/migration_runner.js` yolu gözden kaçtı: CI'da yakalandı, burada değil.
+  // Güvenlik ağının kendisi eksikse, yakaladığı kadarını yakalar.
+  { file: join(ROOT, 'e2e/api.e2e.js'), base: ROOT },
 ];
 
 // node/sh komutlarında geçen .js/.mjs yolları ve new URL('...') içindeki varlık dosyaları.

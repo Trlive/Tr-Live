@@ -3263,3 +3263,62 @@ okunup duruluyor.
 Adres haritası test dosyalarını da tarıyordu. Yeni testim kaynak metnini doğrulamak için
 `router.get('/:roomId/members'` dizesini içeriyordu ve araç bunu **gerçek rota** sandı — sahte
 fark üretti. Test dosyaları artık taranmıyor. *Sahte fark üreten güvenlik ağına kimse bakmaz.*
+
+## v2.145.1 — CI'nın yakaladığı üç hata
+
+v2.145.0 yüklendi ve CI üç iş birden kırdı. Üçü de gerçekti.
+
+### 1. APK derlemesi: kaybolan bağımlılık (en kritik)
+
+```
+git clone --mirror https://github.com/SERDUN/flutter_webrtc_noise_suppression.git
+fatal: could not read Username for 'https://github.com'
+```
+
+Yapay zekâ gürültü azaltma eklentisi (RNNoise) bir **kişisel GitHub deposundan** geliyordu.
+O depo artık erişilemiyor — anonim `git clone` kimlik doğrulaması istiyor, yani silinmiş ya da
+özel yapılmış. Doğruladım: `flutter/flutter` anonim klonlanıyor, bu depo klonlanmıyor.
+
+Sonuç: **her APK derlemesi `flutter pub get` adımında kırılıyordu.** Derleme hiç başlayamıyordu.
+
+Bu, kodla ilgili bir hata değil — **bağımlılık seçimiyle ilgili.** Üretim derlemesini kontrolümüz
+dışındaki kişisel bir depoya bağlamak baştan kırılgandı; sahibi deposunu silince bizim
+derlememiz durdu. pubspec'teki kendi notumuz da bunu öngörmüştü: *"Sorun çıkarsa bu satır ve
+denoiser.dart'taki içe aktarma kaldırılır."*
+
+**Yapılan:** bağımlılık kaldırıldı. `services/denoiser.dart` **yerinde bırakıldı** ama devre dışı
+(`supported => false`). Çağrı noktalarını tek tek sökmek, eklenti geri geldiğinde ya da yerine
+başkası konduğunda hepsini yeniden yazmak demekti; şimdi tek satırdan açılır.
+
+Arayüzde ölü düğme kalmadı: "Gürültü engelleme" anahtarı zaten birleşikti ve WebRTC'nin kendi
+gürültü bastırmasını, ses yalıtımını ve telefonun ses işlemesini yönetmeye devam ediyor.
+**Kaybedilen, RNNoise'un klavye/tabak gibi sesler için verdiği EK kazanç** — temel gürültü
+azaltma çalışıyor.
+
+pubspec'e kural yazıldı: yeni bir git bağımlılığı ya yayımlanmış (pub.dev) bir paket olmalı,
+ya da bizim denetimimizdeki bir depodan ve **sabit bir commit'e kilitlenmiş** olmalı.
+
+### 2. e2e: dördüncü kırık yol — ve güvenlik ağımın kendi eksiği
+
+```
+Cannot find module '.../backend/src/migration_runner.js'
+```
+
+v2.145.0'da Dockerfile ve package.json'daki eski yolu düzelttim. `e2e/api.e2e.js` de aynı yolu
+çağırıyordu ve onu **kaçırdım** — çünkü yazdığım `deploy_paths.mjs` yalnızca Dockerfile ve
+package.json'ı tarıyordu.
+
+*Güvenlik ağının kendisi eksikse, yakaladığı kadarını yakalar.* Araç artık `e2e/` dosyalarını da
+tarıyor. Bozup denedim: eski yolu geri koyduğumda yakaladı.
+
+Deponun tamamını tekrar taradım; başka kırık yol kalmadı.
+
+### 3. Mobil analiz
+
+Aynı bağımlılık hatası (1. madde) `flutter pub get` adımında kırıyordu; kaldırılmasıyla çözüldü.
+
+### Not
+
+Üç hatayı da CI yakaladı — sistem çalıştı. Ama 1. ve 2. madde benim buradaki ortamımda
+yakalanabilirdi: ilki `git ls-remote` ile, ikincisi aracı eksiksiz yazmakla. İkisini de
+kapattım.

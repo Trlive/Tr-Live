@@ -60,7 +60,7 @@ const U = {}; let roomId; let rose; let heart;
 before(async () => {
   if (skip) return;
   pool = new pg.Pool({ connectionString: DB });
-  await run(process.execPath, ['src/migration_runner.js'], { cwd: dir, env });
+  await run(process.execPath, ['src/infrastructure/database/migration_runner.js'], { cwd: dir, env });
   server = spawn(process.execPath, ['src/server.js'], { cwd: dir, env, stdio: ['ignore', 'inherit', 'inherit'] });
   for (let i = 0; i < 60; i++) {
     try { if ((await fetch(`${BASE}/health`)).ok) return; } catch { /* henüz kalkmadı */ }
