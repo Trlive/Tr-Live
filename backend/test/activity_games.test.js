@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import zlib from 'node:zlib';
-import { extractGame, cleanPath, injectSdk } from '../src/services/activity_games.js';
+import { readFile } from 'node:fs/promises';
+import { extractGame, cleanPath, injectSdk } from '../src/modules/games/activity_games.service.js';
 
 // Basit zip üretici (deflate): test için.
 function zip(files) {
@@ -50,4 +51,21 @@ test('SDK sayfaya bir kez eklenir', () => {
   const once = injectSdk('<html><head></head></html>');
   assert.match(once, /_sdk\.js/);
   assert.equal(injectSdk(once), once);
+});
+
+// F-01 (v2.131.0): Coin bahsi oyun sayfasından kaldırıldı. Kazancı istemci bildiriyordu.
+test('SDK ve rotalarda istemci-çarpanlı Coin yolu kalmadı', async () => {
+  const { SDK_JS } = await import('../src/modules/games/activity_games.service.js');
+
+  // SDK: bet/settle/play çağrılırsa sebebi açıklayan hata döner (sessizce başarısız olmaz).
+  assert.ok(!/call\('\/settle'/.test(SDK_JS), 'SDK hâlâ /settle çağırıyor');
+  assert.ok(!/call\('\/bet'/.test(SDK_JS), 'SDK hâlâ /bet çağırıyor');
+  assert.match(SDK_JS, /TRGame\.'\+n\+' kaldirildi/, 'kaldırılan çağrılar açıklayıcı hata vermiyor');
+  assert.match(SDK_JS, /call\('\/me'\)/, 'salt okunur /me ucu SDK’dan kalkmış');
+
+  // Rota kaydı: playRouter'da yalnızca /me kaldı (kaynak üzerinden; Express sürümünden bağımsız).
+  const src = await readFile(new URL('../src/modules/games/activities.routes.js', import.meta.url), 'utf8');
+  const routes = [...src.matchAll(/playRouter\.(get|post|put|patch|delete)\('([^']+)'/g)].map((m) => `${m[1].toUpperCase()} ${m[2]}`);
+  assert.deepEqual(routes, ['POST /:id/me'], `beklenmeyen oyun ucu: ${routes.join(', ')}`);
+  assert.ok(!/coin_play/.test(src), 'coin_play hâlâ kullanılıyor');
 });

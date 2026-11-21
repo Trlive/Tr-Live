@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { renderActivitiesPage, renderErrorPage, safeVersion, ACTIVITIES } from '../src/room_activities_page.js';
+import { renderActivitiesPage, renderErrorPage, safeVersion, ACTIVITIES } from '../src/modules/rooms/activities_page.routes.js';
 
 const ROOM = '123e4567-e89b-12d3-a456-426614174000';
 

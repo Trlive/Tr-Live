@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import * as ludo from '../src/ludo.js';
+import * as ludo from '../src/modules/games/ludo.rules.js';
 
 const T0 = 1_700_000_000_000;
 const seq = (...v) => { let i = 0; return () => (v[i++ % v.length] - 0.5) / 6; }; // zar değerleri sırayla

@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { findLink, findPhone } from '../src/text_safety.js';
-import { publicTextProblem } from '../src/safe_text.js';
-import { classifyText } from '../src/services/moderation.js';
-import { compareVersions, validateConfigPatch } from '../src/services/app_config.js';
-import { cleanDevice, maskIp, REFRESH_RE } from '../src/services/sessions.js';
+import { findLink, findPhone } from '../src/middleware/security/text_safety.js';
+import { publicTextProblem } from '../src/middleware/security/safe_text.js';
+import { classifyText } from '../src/modules/moderation/moderation.service.js';
+import { compareVersions, validateConfigPatch } from '../src/modules/system/app_config.service.js';
+import { cleanDevice, maskIp, REFRESH_RE } from '../src/modules/users/sessions.service.js';
 
 test('link tespiti: açık ve gizlenmiş adresler yakalanır', () => {
   for (const s of [
@@ -80,7 +80,7 @@ test('link tespiti uzun girdide yavaşlamaz', () => {
 });
 
 test('hediye combo sayacı: pencere içinde artar, süre geçince sıfırlanır', async () => {
-  const { nextCombo, COMBO_WINDOW_MS } = await import('../src/combo.js');
+  const { nextCombo, COMBO_WINDOW_MS } = await import('../src/modules/gifts/combo.rules.js');
   assert.equal(nextCombo('k', 1000), 1);
   assert.equal(nextCombo('k', 2000), 2);
   assert.equal(nextCombo('k', 2000 + COMBO_WINDOW_MS), 3, 'pencere sınırında hâlâ combo');

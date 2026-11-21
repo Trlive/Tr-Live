@@ -34,7 +34,19 @@ services:
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:?}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:?}
       TRUST_PROXY: "1"                # nginx arkasında gerçek istemci IP'si için ŞART
-      CORS_ORIGIN: "*"
+      # Tarayıcıdan API'ye istek atabilecek adresler.
+      #
+      # Üretimde "*" artık KABUL EDİLMİYOR (denetim S-05): herhangi bir sitenin tarayıcıdan
+      # API'mize istek atabilmesi demekti. Bugün oturum bileti Authorization başlığıyla taşındığı
+      # için risk düşük, ama bir gün çerez tabanlı bir uca geçilirse bu ayar sessizce açık kapı olur.
+      #
+      # Panel aynı alan adından sunulduğu için varsayılan kendi adresindir. Oyun ya da panel ayrı
+      # bir alan adındaysa .env dosyasına virgülle ekleyin:
+      #   CORS_ORIGIN=https://api.alanadi.com,https://panel.alanadi.com
+      # Boş bırakılabilir: sunucu o zaman PUBLIC_BASE_URL'e daraltır ve uyarı basar.
+      # Panel ya da oyun ayrı alan adındaysa burada açıkça yazın.
+      CORS_ORIGIN: ${CORS_ORIGIN:-}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
       FIREWALL_ALLOW_IPS: ${FIREWALL_ALLOW_IPS:-}
       BANNED_WORDS: ${BANNED_WORDS:-}
     volumes:

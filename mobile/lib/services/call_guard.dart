@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'room_audio.dart';
 
 /// Telefon araması (ya da WhatsApp gibi bir arama) gelince Android, uygulamaya "sesi geçici olarak bırak" der.
 /// Bu sınıf o sinyali dinler: [inCall] true olunca oda sesi ve mikrofon kapatılır, arama bitince geri açılır.
@@ -91,20 +92,14 @@ class CallGuard {
     _startNative();
     if (_sub != null) return;
     try {
-      final s = await AudioSession.instance;
-      // Medya sesi (oda müziği hoparlörden normal çalsın). Kısa bildirim sesleri ("sesi kıs") arama sayılmaz.
-      await s.configure(const AudioSessionConfiguration(
-        androidAudioAttributes: AndroidAudioAttributes(contentType: AndroidAudioContentType.music, usage: AndroidAudioUsage.media),
-        androidAudioFocusGainType: AndroidAudioFocusGainType.gain,
-        androidWillPauseWhenDucked: false,
-      ));
-      _sub ??= s.interruptionEventStream.listen((_) {/* yalnızca odak sinyalini almak için */});
-      // Sinyalleri alabilmek için uygulama ses odağını ister.
-      await s.setActive(true);
+      // Ses oturumunu artık RoomAudio kurar (oda açıkken görüşme yolu, kapalıyken medya yolu).
+      // Burada yalnızca kesinti (arama) sinyali dinlenir; iki yerden ayar yapılırsa biri diğerini ezer
+      // ve kulaklık yönlendirmesi bozulurdu.
+      _sub ??= (await RoomAudio.interruptions()).listen((_) {/* yalnızca odak sinyalini almak için */});
     } catch (_) {/* desteklenmeyen cihaz: arama algılanmaz, oda yine çalışır */}
   }
 
-  /// Oda kapanınca çağrılır; son oda da kapandıysa ses odağı bırakılır (başka uygulamalar normal çalsın).
+  /// Oda kapanınca çağrılır. Ses odağını RoomAudio bırakır.
   Future<void> stop() async {
     if (_users > 0) _users--;
     if (_users > 0) return;
@@ -117,8 +112,5 @@ class CallGuard {
     _native = false;
     _phoneMode = false;
     inCall.value = false;
-    try {
-      await (await AudioSession.instance).setActive(false);
-    } catch (_) {}
   }
 }

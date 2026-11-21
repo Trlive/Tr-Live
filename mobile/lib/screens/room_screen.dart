@@ -1,4 +1,7 @@
 import 'dart:async';
+import '../features/live_rooms/domain/rules/seat_rules.dart';
+import '../features/live_rooms/domain/rules/room_format.dart';
+import '../hybrid/webview/navigation_policy.dart';
 import '../l10n/l10n.dart';
 import '../services/screen_guard.dart';
 import 'dart:math' as math;
@@ -23,6 +26,9 @@ import '../services/api.dart';
 import '../services/background_service.dart';
 import '../services/beauty.dart';
 import '../services/call_guard.dart';
+import '../services/room_audio.dart';
+import '../hybrid/feature_flags/feature_flags.dart';
+import '../hybrid/asset_manager/asset_prefetch.dart';
 import '../services/effect_prefs.dart';
 import '../services/error_log.dart';
 import '../services/inbox_service.dart';
@@ -210,7 +216,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     CallGuard.instance.start();
     WidgetsBinding.instance.addObserver(this);
     FxLoad.pressure.addListener(_onMemoryPressure);
-    MediaCache.warmGifts();
+    AssetPrefetch.run(); // varlık listesi (bayrak kapalıysa eski warmGifts yolu)
     _enter();
   }
 
@@ -345,6 +351,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     CallGuard.instance.inCall.removeListener(_onPhoneCall);
     CallGuard.instance.stop();
     HeadsetAudio.instance.stop();
+    RoomAudio.leave();
     if (_denoiseStarted) unawaited(Denoiser.roomStopped());
     EffectPrefs.roomMuted.value = false;
     _beat?.cancel();
@@ -374,6 +381,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     _lk = null;
     if (room != null) {
       room.removeListener(_onLkChanged);
+      _disposeLkListener();
       room.disconnect().whenComplete(() => room.dispose()).catchError((_) {});
     }
     super.dispose();
@@ -496,6 +504,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         _flyCost = (c['flyTextCoins'] as num?)?.toInt() ?? _flyCost;
         _activitiesOn = c['roomActivitiesEnabled'] != false;
         _cardGameOn = c['cardGameEnabled'] != false;
+        // Oda sesinin görüşme yolundan çalınması (kulaklık ve yankı düzeltmesi). Panelden kapatılabilir.
+        RoomAudio.enabled = c['voiceAudioPath'] != false;
+        Flags.applyConfig(c); // oda açılışında bayraklar da tazelenir
+        WebViewPolicy.applyConfig(c);
       }
       // İzin sunucuda: izinli değilse (ya da sorgu yanıtsızsa) Etkinlikler menüsü hiç görünmez.
       if (act?['allowed'] != true) _activitiesOn = false;
@@ -537,13 +549,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   bool _switching = false;
 
   bool get _inQueue => _queue.contains(Session.id);
-  bool get _noFreeSeat {
-    final taken = <int>{for (final m in _members) if (m['seatIndex'] != null) (m['seatIndex'] as num).toInt()};
-    for (var i = 1; i < _seatCount; i++) {
-      if (!taken.contains(i) && !_lockedSeats.contains(i)) return false;
-    }
-    return true;
-  }
+  bool get _noFreeSeat => noFreeSeat(members: _members, seatCount: _seatCount, lockedSeats: _lockedSeats);
 
   Future<void> _toggleQueue() async {
     final r = await guard(context, () => _inQueue ? Api.delete('/api/rooms/${widget.roomId}/mic/queue') : Api.post('/api/rooms/${widget.roomId}/mic/queue'));
@@ -658,12 +664,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 
   /// Mesajın ilk harfi büyük (Türkçe: i → İ, ı → I).
-  static String _capFirst(String t) {
-    if (t.isEmpty) return t;
-    final f = t[0];
-    final up = f == 'i' ? 'İ' : f == 'ı' ? 'I' : f.toUpperCase();
-    return up + t.substring(1);
-  }
+  static String _capFirst(String t) => capitalizeFirst(t);
 
   Future<void> _sendChat() async {
     final text = _capFirst(_chatCtl.text.trim());
@@ -739,10 +740,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 
   /// Ben çıkarsam oda kapanır mı: odayı açık tutan (sahip / yardımcı sahip) son kişi benim.
-  bool get _closesOnLeave {
-    if (_myRole != 'owner' && _myRole != 'cohost') return false;
-    return !_members.any((m) => m['userId']?.toString() != Session.id && (m['role'] == 'owner' || m['role'] == 'cohost'));
-  }
+  bool get _closesOnLeave => closesOnLeave(myRole: _myRole, myUserId: Session.id, members: _members);
 
   Future<void> _onBack() async {
     if (_closing) return;
@@ -773,10 +771,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   bool get _canSeatManage => ['owner', 'cohost', 'moderator'].contains(_myRole);
   /// Yetkilinin susturduğu koltuklar: oturan kişi koltukta kalır ama mikrofonu açılmaz; koltukta kırmızı işaret görünür.
   List<int> get _mutedSeats => ((_room?['mutedSeats'] as List?) ?? const []).map((x) => (x as num).toInt()).toList();
-  bool get _seatMuted {
-    final i = _mySeatIndex;
-    return i != null && _mutedSeats.contains(i);
-  }
+  bool get _seatMuted => seatMuted(members: _members, userId: Session.id, mutedSeats: _mutedSeats);
 
   Future<void> _lockSeat(int index, bool locked) async {
     await guard(context, () => Api.post('/api/rooms/${widget.roomId}/seats/$index/lock', {'locked': locked}));
@@ -1150,6 +1145,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       _lkPrevState = null;
       _lkCanPublish = null;
       r.removeListener(_onLkChanged);
+      _disposeLkListener();
       r.disconnect().whenComplete(() => r.dispose()).catchError((_) {});
       final wait = Duration(seconds: 2 << _lkRetries.clamp(0, 3)); // 2, 4, 8, 16 sn
       _lkRetries++;
@@ -1231,6 +1227,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     _lkCanPublish = null;
     if (r != null) {
       r.removeListener(_onLkChanged);
+      _disposeLkListener();
       r.disconnect().whenComplete(() => r.dispose()).catchError((_) {});
     }
     _scheduleLkRetry(const Duration(milliseconds: 700));
@@ -1266,17 +1263,22 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       if (url == null || url.isEmpty || token == null) throw ApiException(tx('Ses sunucusu yapılandırılmamış.'));
       await _loadNoisePref();
       await HeadsetAudio.instance.start(); // kulaklık izlenir; ses her zaman görüşme modunda, kulaklığa otomatik yönlenir
+      // Uygulamanın kendi sesleri de (oda müziği, hediye sesleri) görüşme yoluna alınır: tek Bluetooth
+      // bağlantısı kullanılır ve bu sesler yankı gidericinin referansına girer.
+      await RoomAudio.enter();
       final saver = EffectPrefs.powerSave.value;
       room = lk.Room(roomOptions: lk.RoomOptions(
         adaptiveStream: true,
         dynacast: true,
         defaultAudioCaptureOptions: _audioOptions,
-        // Ses: 48 kbps (LiveKit'in önerdiği düzey; konuşma ve şarkı daha net). Şarj tüketimi modunda 32 kbps.
+        // Ses: 64 kbps (LiveKit'in konuşma için önerdiği üst sınır; şarkı ve tiz sesler belirgin şekilde daha net.
+        // 48'den 64'e çıkış yayıncı başına 16 kbps ek yük getirir — DTX sayesinde yalnızca konuşurken).
+        // Şarj tüketimi modunda 32 kbps.
         // Sessizken neredeyse hiç veri gitmez (DTX).
         // "red" (yedekli ses) bilerek BELİRTİLMEDİ: bu SDK'nın eski sürümlerinde ayar ters çalışıyor (red: true yedekli
         // sesi kapatıyor; LiveKit Flutter hata kaydı #1271). Düzeltmeyi içeren sürümde varsayılan değer yedekli sesi
         // kendiliğinden açar; burada elle verilirse o sürümde tersine döner.
-        defaultAudioPublishOptions: lk.AudioPublishOptions(encoding: lk.AudioEncoding(maxBitrate: saver ? 32000 : 48000), dtx: true),
+        defaultAudioPublishOptions: lk.AudioPublishOptions(encoding: lk.AudioEncoding(maxBitrate: saver ? 32000 : 64000), dtx: true),
         // Kamera 540p (varsayılan 720p): güzellik filtresi her kareyi telefonda işlediği için 720p orta sınıf telefonda
         // kare düşürür; 540p'de görüntü akıcı kalır. Şarj tüketimi modunda 360p (daha az ısınma ve şarj).
         defaultCameraCaptureOptions: lk.CameraCaptureOptions(
@@ -1290,11 +1292,26 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       ));
       final created = room;
       created.addListener(_onLkChanged);
+      _disposeLkListener(); // önceki denemeden kalan dinleyici varsa bırakılır
       // Kopma sebebi (tanı kaydı; aynı hesap başka cihazda / sunucudan çıkarılma durumlarına özel davranış).
-      created.createListener().on<lk.RoomDisconnectedEvent>((e) => _onLkDisconnected(gen, e.reason?.name));
+      final listener = created.createListener();
+      listener.on<lk.RoomDisconnectedEvent>((e) => _onLkDisconnected(gen, e.reason?.name));
+      // Oda sesi kapalıyken odaya giren biri mikrofona oturduğunda sesi bir an duyuluyordu: yeni iz
+      // sunucudan geldiği anda çalmaya başlıyor, susturma ise Room'un genel "değişti" bildirimiyle
+      // (iz hazır olduktan sonra) uygulanıyordu. Aradaki boşluk kadar ses sızıyordu.
+      // Abonelik olayı izin kendisini verir: susturma artık ilk örnek çalmadan uygulanır.
+      listener.on<lk.TrackSubscribedEvent>((e) {
+        if (e.track is! lk.AudioTrack) return;
+        if (!_roomMuted && !CallGuard.instance.inCall.value) return;
+        try {
+          e.track.mediaStreamTrack.enabled = false;
+        } catch (_) {/* iz o anda kapanmış */}
+      });
+      _lkListener = listener;
       await created.connect(url, token);
       if (!mounted || _closing || gen != _lkGen) {
         created.removeListener(_onLkChanged);
+        _disposeLkListener();
         await created.disconnect();
         await created.dispose();
         // Bağlanırken bağlantı yenileme istendi: yeni deneme hemen planlanır (yoksa ses bir sonraki sinyale kadar gelmezdi).
@@ -1316,6 +1333,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       final failed = room;
       if (failed != null) {
         failed.removeListener(_onLkChanged);
+        _disposeLkListener();
         failed.disconnect().whenComplete(() => failed.dispose()).catchError((_) {});
       }
       if (!mounted || _closing || gen != _lkGen) return;
@@ -1508,12 +1526,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   bool _takingMic = false;
 
-  int? get _mySeatIndex {
-    for (final m in _members) {
-      if (m['userId']?.toString() == Session.id) return (m['seatIndex'] as num?)?.toInt();
-    }
-    return null;
-  }
+  int? get _mySeatIndex => seatIndexOf(_members, Session.id);
 
   Future<void> _leaveMic() async {
     // Koltuktan iniş anında görünür ve mikrofon hemen kapanır (sunucu yanıtı beklenmez); olmazsa koltuğa geri dönülür.
@@ -1714,14 +1727,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   final Set<String> _accepting = {};
 
   /// Boş (kilitli olmayan) konuk yeri sayısı.
-  int get _freeGuestSeats {
-    final taken = <int>{for (final m in _members) if (m['seatIndex'] != null) (m['seatIndex'] as num).toInt()};
-    var n = 0;
-    for (var i = 1; i < _seatCount; i++) {
-      if (!taken.contains(i) && !_lockedSeats.contains(i)) n++;
-    }
-    return n;
-  }
+  int get _freeGuestSeats => freeGuestSeats(members: _members, seatCount: _seatCount, lockedSeats: _lockedSeats);
 
   bool _canModerate(String targetRole) =>
       (_roleLevel[_myRole] ?? 0) >= 2 && (_roleLevel[_myRole] ?? 0) > (_roleLevel[targetRole] ?? 0) && targetRole != 'owner';
@@ -1930,6 +1936,17 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   /// Açıkken mikrofon sesinde çevre gürültüsü bastırılır (gürültü engelleme + düşük frekans süzgeci + yankı giderme).
   static bool noiseCancel = true;
   bool _denoiseStarted = false; // bu oda için yapay zekâ gürültü azaltma bağlandı mı
+  lk.EventsListener<lk.RoomEvent>? _lkListener;
+
+  /// Ses sunucusu olay dinleyicisini bırakır (oda her kapandığında / yeniden kurulduğunda).
+  void _disposeLkListener() {
+    final l = _lkListener;
+    _lkListener = null;
+    // dispose() bu SDK sürümünde Future döndürüyor olabilir; her iki durumda da derlenmesi için try/catch.
+    try {
+      l?.dispose();
+    } catch (_) {/* zaten bırakılmış */}
+  }
   static bool _noiseLoaded = false;
 
   // Gürültü engelleme açıkken (varsayılan) kalabalığa karşı en güçlü ücretsiz düzen:
@@ -2390,16 +2407,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
 
   /// Renkli saydam sohbet balonu: kullanıcı seviyesine göre renk (Yoho tarzı lacivert taban).
-  Color _bubbleColor(Map<String, dynamic>? u) {
-    // Şeffaf balon: arka plan görünür kalır; seviye yalnızca çok hafif bir renk tonu verir.
-    final lvl = (u?['coinLevel'] as num?)?.toInt() ?? 1;
-    if (lvl >= 60) return const Color(0x33F2B92A); // altın
-    if (lvl >= 45) return const Color(0x33BE185D);
-    if (lvl >= 30) return const Color(0x336D28D9);
-    if (lvl >= 20) return const Color(0x331D4ED8);
-    if (lvl >= 10) return const Color(0x330F766E);
-    return const Color(0x30000000);
-  }
+  Color _bubbleColor(Map<String, dynamic>? u) => bubbleColorOf(u);
 
   // ---------- Sayı tahtası (Yoho) ----------
   void _onScoreboardSession(Map<String, dynamic> e) {
@@ -3660,18 +3668,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 
   /// 1.250 → 1,2K · 3.400.000 → 3,4M (dar koltukta sığsın).
-  static String _short(String v) {
-    final n = BigInt.tryParse(v) ?? BigInt.zero;
-    String f(BigInt x, int d, String u) {
-      final whole = x ~/ BigInt.from(d);
-      final frac = (x % BigInt.from(d)) * BigInt.from(10) ~/ BigInt.from(d);
-      return whole >= BigInt.from(100) || frac == BigInt.zero ? '$whole$u' : '$whole,$frac$u';
-    }
-    if (n >= BigInt.from(1000000000)) return f(n, 1000000000, 'B');
-    if (n >= BigInt.from(1000000)) return f(n, 1000000, 'M');
-    if (n >= BigInt.from(10000)) return f(n, 1000, 'K');
-    return fmtNumber(n.toString());
-  }
+  static String _short(String v) => shortAmount(v);
 
   /// Sayı tahtası rozeti: siyah-altın kapsül, Elmas simgesi + puan; büyüklüğü koltuğa göre (sık modlarda küçülür).
   Widget _scoreBadge(String userId, double slotSize) {

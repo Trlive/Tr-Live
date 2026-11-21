@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import PanelShell from "@/components/panel-shell";
-import AdminRoomThemes from "@/components/admin/room-themes";
+import PanelShell from "@/core/layout/panel-shell";
+import AdminRoomThemes from "@/modules/admin/rooms/room-themes";
 
 export const metadata: Metadata = { title: "Oda Temaları" };
 

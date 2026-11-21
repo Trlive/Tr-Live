@@ -1,4 +1,7 @@
 import 'dart:async';
+import '../hybrid/sdui/resolver/sdui_action.dart';
+import '../hybrid/sdui/renderer/sdui_sections.dart';
+import '../hybrid/sdui/engine/sdui_engine.dart';
 import '../l10n/l10n.dart';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
@@ -78,6 +81,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void initState() {
+    // Düzen açılışta tazelenir. Bayrak kapalıysa motor hiçbir şey döndürmez ve yerleşik düzen çizilir.
+    SduiEngine.refresh('home');
     super.initState();
     Session.me.addListener(_checkTerms);
     _checkTerms();
@@ -240,6 +245,51 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   /// Alt satır (Yoho: yalnızca simge): Sesli | Akış | Görüntülü | Mesajlar | Profil. Seçili simge dolu ve renkli.
+  /// Uygulamanın **yerleşik** sekme düzeni. SDUI kapalıyken, sunucuya ulaşılamadığında ve
+  /// sunucudan gelen düzen geçersizse bu kullanılır. Bu kademe koddadır ve her zaman çalışır:
+  /// sunucu tamamen erişilemez olsa bile uygulama açılır ve gezilebilir.
+  static const _builtInTabs = [
+    (target: 'voice', icon: Icons.mic_none, active: Icons.mic, label: 'Sesli'),
+    (target: 'feed', icon: Icons.dynamic_feed_outlined, active: Icons.dynamic_feed, label: 'Akış'),
+    (target: 'video', icon: Icons.videocam_outlined, active: Icons.videocam, label: 'Görüntülü'),
+    (target: 'messages', icon: Icons.chat_bubble_outline, active: Icons.chat_bubble, label: 'Mesajlar'),
+    (target: 'profile', icon: Icons.person_outline, active: Icons.person, label: 'Profil'),
+  ];
+
+  /// Sekmenin IndexedStack'teki sabit sırası. SDUI sekmeleri yeniden sıralasa da içerik
+  /// bu dizine göre çizilir — sunucu sekmeyi taşır, içeriği değiştiremez.
+  static int _slotOf(String target) => switch (target) {
+        'voice' => 0,
+        'feed' => 1,
+        'video' => 2,
+        'messages' => 3,
+        'profile' => 4,
+        _ => 0,
+      };
+
+  /// Çizilecek sekme listesi: SDUI düzeni varsa ondan, yoksa yerleşikten.
+  ///
+  /// SDUI düzeninde görünür sekme kalmazsa **yerleşiğe düşülür**: gezilemeyen bir uygulama,
+  /// sunucudan gelebilecek en zararlı durumdur. Sunucu bunu kaydettirmiyor, şema da eliyor;
+  /// burası üçüncü ve son savunma.
+  List<({String target, IconData icon, IconData active, String label})> _visibleTabs() {
+    final layout = SduiEngine.layout('home');
+    if (layout == null || layout.tabs.isEmpty) return _builtInTabs;
+    final out = <({String target, IconData icon, IconData active, String label})>[];
+    for (final t in layout.tabs) {
+      if (t.hidden) continue;
+      final base = _builtInTabs.firstWhere((b) => b.target == t.target, orElse: () => _builtInTabs.first);
+      out.add((
+        target: t.target,
+        // Simge sunucudan gelebilir; gelmezse ya da tanınmazsa yerleşik simge kullanılır.
+        icon: t.icon == null ? base.icon : SduiActionResolver.icon(t.icon, fallback: base.icon),
+        active: t.icon == null ? base.active : SduiActionResolver.icon(t.icon, fallback: base.active),
+        label: t.label.isEmpty ? base.label : t.label,
+      ));
+    }
+    return out.isEmpty ? _builtInTabs : out;
+  }
+
   Widget _tabRow() {
     Widget item(int i, IconData icon, IconData activeIcon, String label, {Widget? badge}) {
       final sel = _index == i;
@@ -260,39 +310,52 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
+    final tabs = _visibleTabs();
+    Widget forTab(({String target, IconData icon, IconData active, String label}) t) {
+      final slot = _slotOf(t.target);
+      final label = tx(t.label);
+      // Rozetli iki sekme (mesajlar, profil) kendi rozet bileşenlerini korur.
+      if (t.target == 'messages') {
+        return item(slot, t.icon, t.active, label,
+            badge: ValueListenableBuilder<int>(
+              valueListenable: Inbox.unread,
+              builder: (_, n, __) => Badge(label: Text('$n'), isLabelVisible: n > 0,
+                  child: Icon(_index == slot ? t.active : t.icon, color: _index == slot ? Pal.cyan : Pal.textDim, size: 28)),
+            ));
+      }
+      if (t.target == 'profile') {
+        return item(slot, t.icon, t.active, label,
+            badge: ValueListenableBuilder<Map<String, int>>(
+              valueListenable: Inbox.badges,
+              builder: (_, b, __) => Badge(smallSize: 9, isLabelVisible: (b['total'] ?? 0) > 0,
+                  child: Icon(_index == slot ? t.active : t.icon, color: _index == slot ? Pal.cyan : Pal.textDim, size: 28)),
+            ));
+      }
+      return item(slot, t.icon, t.active, label);
+    }
+
     return Container(
       decoration: const BoxDecoration(color: Pal.surface, border: Border(top: BorderSide(color: Pal.outline, width: 0.8))),
-      child: SafeArea(top: false, child: Row(children: [
-        item(0, Icons.mic_none, Icons.mic, tx('Sesli')),
-        item(1, Icons.dynamic_feed_outlined, Icons.dynamic_feed, tx('Akış')),
-        item(2, Icons.videocam_outlined, Icons.videocam, tx('Görüntülü')),
-        item(
-          3,
-          Icons.chat_bubble_outline,
-          Icons.chat_bubble,
-          tx('Mesajlar'),
-          badge: ValueListenableBuilder<int>(
-            valueListenable: Inbox.unread,
-            builder: (_, n, __) => Badge(label: Text('$n'), isLabelVisible: n > 0, child: Icon(_index == 3 ? Icons.chat_bubble : Icons.chat_bubble_outline, color: _index == 3 ? Pal.cyan : Pal.textDim, size: 28)),
-          ),
-        ),
-        item(
-          4,
-          Icons.person_outline,
-          Icons.person,
-          tx('Profil'),
-          badge: ValueListenableBuilder<Map<String, int>>(
-            valueListenable: Inbox.badges,
-            builder: (_, b, __) => Badge(smallSize: 9, isLabelVisible: (b['total'] ?? 0) > 0, child: Icon(_index == 4 ? Icons.person : Icons.person_outline, color: _index == 4 ? Pal.cyan : Pal.textDim, size: 28)),
-          ),
-        ),
-      ])),
+      child: SafeArea(top: false, child: Row(children: [for (final t in tabs) forTab(t)])),
     );
   }
 
   Widget _scaffold(BuildContext context) {
     return Scaffold(
       body: Column(children: [
+          // Sunucudan gelen bölümler (duyuru, afiş, kart şeridi). Düzen yoksa hiçbir şey çizilmez
+          // ve ekran bugünkü gibi görünür.
+          ValueListenableBuilder<int>(
+            valueListenable: SduiEngine.revision,
+            builder: (_, __, ___) {
+              final layout = SduiEngine.layout('home');
+              if (layout == null || layout.sections.isEmpty) return const SizedBox.shrink();
+              return SafeArea(
+                bottom: false,
+                child: SduiSections(sections: layout.sections, onTab: (t) => _select(_slotOf(t))),
+              );
+            },
+          ),
           // Yoho'da ayrı üst çubuk yok: her sekme kendi başlığını çizer (Sesli/Görüntülü: sekmeler + taç + oda aç).
           Expanded(
             child: SafeArea(
@@ -310,7 +373,10 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ]),
-      bottomNavigationBar: _tabRow(),
+      bottomNavigationBar: ValueListenableBuilder<int>(
+        valueListenable: SduiEngine.revision,
+        builder: (_, __, ___) => _tabRow(),
+      ),
     );
   }
 }

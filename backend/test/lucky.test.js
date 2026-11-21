@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   BASE_TIER, JACKPOT_TIER, JACKPOT_OPEN, LUCKY_BASE, UNIT, luckyTables, poolRates, poolView, seededRandom, drawLuckyPool,
-} from '../src/lucky.js';
+} from '../src/modules/gifts/lucky.rules.js';
 
 const rtpOf = (table) => table.reduce((s, [m, p]) => s + m * p, 0);
 const seed = (hex) => Buffer.from(hex, 'hex');

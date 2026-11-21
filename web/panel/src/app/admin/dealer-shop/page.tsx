@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import PanelShell from "@/components/panel-shell";
-import AdminDealerShop from "@/components/admin/dealer-shop";
+import PanelShell from "@/core/layout/panel-shell";
+import AdminDealerShop from "@/modules/admin/dealers/dealer-shop";
 
 export const metadata: Metadata = { title: "Bayi Mağazası" };
 

@@ -166,6 +166,76 @@ test('oda: oluşturma, etiket, katılma, mikrofon, üyeler', { skip, timeout: 60
   assert.equal(byId[U.b.id].user.coins, undefined, 'üye listesinde bakiye olmamalı');
 });
 
+test('amiral hediye (5.000.000 Coin): basım bütçesi, gönderim, şerit, defter ve mutabakat', { skip, timeout: 120000 }, async () => {
+  const PRICE = 5000000n;
+  // 1) Yönetici amiral hediyeyi oluşturur.
+  const made = await api('POST', '/api/admin/gifts', {
+    token: U.d.token,
+    body: { name: `Amiral ${tag}`, coinPrice: String(PRICE), animationUrl: 'https://cdn.example.com/amiral.svga', animationFormat: 'svga', category: 'vip' },
+  });
+  ok(made, 'amiral hediye oluşturulmalı');
+  const giftId = made.body.id;
+
+  // 2) Gönderene test bütçesinden Coin basılır (bütçe sınırı ve kaydı birlikte denenir).
+  const a0 = await coins(U.a); const b0 = await diamonds(U.b);
+  const grant = await api('POST', `/api/admin/users/${U.a.id}/coins`, {
+    token: U.d.token,
+    body: { amount: String(PRICE), reason: 'Amiral hediye testi', budgetKey: 'system_test' },
+    headers: { 'Idempotency-Key': `e2e-amiral-${tag}` },
+  });
+  ok(grant, 'test bütçesinden basım');
+  assert.equal(grant.body.budget, 'system_test');
+  assert.equal(await coins(U.a), a0 + PRICE);
+  // Ayrı basım tablosu kaldırıldı: basım kaydı defterin kendisi (tür adı = bütçe anahtarı).
+  const iss = await sql(`SELECT transaction_type AS budget_key, coin_amount AS coins FROM wallet_transactions WHERE user_id = $1 ORDER BY id DESC LIMIT 1`, [U.a.id]);
+  assert.equal(iss.rows[0].budget_key, 'system_test');
+  assert.equal(BigInt(iss.rows[0].coins), PRICE, 'basım kaydı tutarı');
+
+  // 3) Hediye gönderilir.
+  const sent = await api('POST', `/api/rooms/${roomId}/gifts/send`, {
+    token: U.a.token, body: { giftId, quantity: 1, distribution: 'single', recipientId: U.b.id },
+  });
+  ok(sent, '5M hediye gönderimi');
+  assert.equal(sent.body.totalCoins, String(PRICE), 'toplam tutar');
+  assert.equal(await coins(U.a), a0, 'basılan Coin hediyeyle tam harcandı');
+  assert.equal(await diamonds(U.b), b0 + PRICE, 'alıcının Elması 5M arttı');
+
+  // 4) Defter: gönderende eksi, alıcıda artı tek satır.
+  const led = await sql(
+    `SELECT transaction_type, coin_amount, diamond_amount FROM wallet_transactions
+      WHERE reference_id IN (SELECT id::text FROM gift_transactions WHERE gift_id = $1) ORDER BY transaction_type`, [giftId],
+  );
+  assert.equal(led.rows.length, 2, 'bir gönderen bir alıcı satırı');
+  const recv = led.rows.find((x) => x.transaction_type === 'gift_received');
+  const send = led.rows.find((x) => x.transaction_type === 'gift_sent');
+  assert.equal(BigInt(send.coin_amount), -PRICE, 'gönderen satırı eksi olmalı');
+  assert.equal(BigInt(recv.diamond_amount), PRICE, 'alıcı satırı artı olmalı');
+
+  // 5) Global şerit: 5M eşiği fazlasıyla aşar.
+  const feed = await api('GET', '/api/gifts/global', { token: U.b.token });
+  ok(feed, 'global şerit');
+  assert.ok(feed.body.events.some((e) => e.coinAmount === String(PRICE)), '5M hediye şeride düşmeli');
+
+  // 6) Seviye: 5M gönderim kullanıcıyı üst seviyelere taşır ama tavanı patlatmaz.
+  const lv = await sql(`SELECT coin_level FROM users WHERE id = $1`, [U.a.id]);
+  assert.ok(lv.rows[0].coin_level > 1 && lv.rows[0].coin_level < 300, `seviye aralık dışı: ${lv.rows[0].coin_level}`);
+
+  // 7) Mutabakat: bu kadar büyük tutardan sonra bile bakiye ile defter birebir tutmalı.
+  const rec = await api('POST', '/api/admin/finance/reconcile/run', { token: U.d.token });
+  ok(rec, 'mutabakat çalışmalı');
+  assert.equal(rec.body.mismatches, 0, 'amiral hediyeden sonra mutabakat farkı çıktı');
+
+  // 8) Bütçe sınırı gerçekten uygulanıyor mu (10M sınır, 5M kullanıldı; 6M reddedilmeli).
+  status(await api('POST', `/api/admin/users/${U.a.id}/coins`, {
+    token: U.d.token, body: { amount: '6000000', reason: 'sınır denemesi', budgetKey: 'system_test' },
+    headers: { 'Idempotency-Key': `e2e-amiral-over-${tag}` },
+  }), 403, 'aylık bütçe sınırı aşılamamalı');
+
+  // Amiral hediye katalogdan çekilir: sonraki testler ucuz hediyelerle çalışır (5M'lik bakiye isteyen
+  // bir gönderim yanlışlıkla seçilmesin).
+  await sql(`UPDATE gifts SET is_active = FALSE WHERE id = $1`, [giftId]);
+});
+
 test('hediye: tekli, KENDİNE hediye, eşit dağıtım, bakiye/muhasebe doğruluğu', { skip, timeout: 60000 }, async () => {
   const a0 = await coins(U.a); const b0 = await diamonds(U.b); const a0d = await diamonds(U.a);
   const single = await api('POST', `/api/rooms/${roomId}/gifts/send`, { token: U.a.token, body: { giftId: rose.id, quantity: 3, distribution: 'single', recipientId: U.b.id } });

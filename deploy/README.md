@@ -29,10 +29,39 @@ Mobil uygulamayı `--dart-define=API_URL=https://api.example.com` ile derleyin.
 - `TRUST_PROXY=1` (compose'ta ayarlı). **Ayarlı değilse tüm kullanıcılar nginx'in IP'sinden geliyormuş gibi görünür ve IP bazlı sınırlar/yasaklar herkesi etkiler.**
 - `FIREWALL_ALLOW_IPS` içine kendi yönetim IP'nizi ekleyin (yanlışlıkla kendinizi banlamayın).
 - `JWT_SECRET` 32+ karakter; üretimde varsayılan değerle sunucu açılmaz.
-- Yedekler: `backup.sh` cron'a ekleyin ve geri yüklemeyi **bir kez deneyin**.
+- Yedekler: `backup.sh` cron'a ekleyin **ve `restore_test.sh`'i ayda bir çalıştırın** (aşağıya bakın).
 - Birden fazla backend örneği çalıştıracaksanız WebSocket yayını, oda temizleyici ve güvenlik duvarı sayaçları bellek içi olduğundan Redis gerekir.
 - Kullanıcı yüklemeleri `/app/uploads` volume'ündedir; yedeklemeye dahil edin.
 
 ## İzleme
 `GET /api/admin/security/events` (yalnızca admin) son güvenlik olaylarını, `.../security/blocks` aktif IP yasaklarını gösterir.
 Uygulama günlükleri JSON satırı olarak `security` alanıyla yazılır; Loki/ELK ile toplanabilir.
+
+## Yedek ve geri yükleme provası
+
+Denenmemiş yedek, yedek değildir. İki betik birlikte çalışır:
+
+```bash
+# Günlük yedek (alır, gzip bütünlüğünü ve dump'ın tamamlandığını doğrular, SHA-256 özeti yazar)
+0 4 * * *   /opt/trlive/deploy/backup.sh >> /var/log/trlive-backup.log 2>&1
+
+# Aylık prova (en son yedeği GEÇİCİ bir veritabanına geri yükler, doğrular, siler — üretime dokunmaz)
+0 5 1 * *   /opt/trlive/deploy/restore_test.sh >> /var/log/trlive-restore-test.log 2>&1
+```
+
+`restore_test.sh` neyi kanıtlar:
+
+| Kontrol | Ne anlama gelir |
+|---|---|
+| gzip + SHA-256 | Dosya bozulmamış, kopyalanan dosya aynı dosya |
+| Geri yükleme | Yedek gerçekten açılıyor (yarım/bozuk dump değil) |
+| Kritik tablolar | `users`, `rooms`, `gifts`, `wallet_transactions`, `schema_migrations` yerinde |
+| Kullanıcı sayısı | Yedek boş değil |
+| **Mutabakat** | Yedekteki bakiyeler ile işlem defteri **tutuyor** (bozuk veriyi geri yüklemiyorsunuz) |
+| **Süre** | Felaket anında verinin kaç saniyede ayağa kalkacağı — ölçülmüş sayı |
+
+Çıkış kodu 0 değilse yedekleriniz güvenilmez; sebebini görmeden başka işe geçmeyin.
+
+> **Sunucu dışı kopya:** Bu yedekler sunucunun kendisinde durur. Sunucu kaybolursa yedek de kaybolur.
+> En az ayda bir `/var/backups/trlive` içeriğini başka bir yere kopyalayın. `*.sha256` dosyalarını da
+> kopyalayın: karşı tarafta aynı dosya olduğunu böyle doğrularsınız.

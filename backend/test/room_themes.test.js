@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { imageInfo, acceptableAsIs } from '../src/services/theme_image_info.js';
+import { imageInfo, acceptableAsIs } from '../src/modules/media/theme_image_info.service.js';
 
 const dir = new URL('../src/samples/themes/', import.meta.url);
 

@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import net from 'node:net';
 import fs from 'node:fs';
-import { sendMail, buildMessage } from '../src/services/mailer.js';
-import { verifyPhoneToken, setCertFetcher } from '../src/services/firebase_verify.js';
+import { sendMail, buildMessage } from '../src/modules/notifications/mailer.service.js';
+import { verifyPhoneToken, setCertFetcher } from '../src/modules/notifications/firebase_verify.service.js';
 
 // ---------- Firebase telefon token'ı ----------
 const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });

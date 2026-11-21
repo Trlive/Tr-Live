@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import PanelShell from "@/components/panel-shell";
-import AdminUpload from "@/components/admin/upload";
+import PanelShell from "@/core/layout/panel-shell";
+import AdminUpload from "@/modules/admin/asset_management/upload";
 
 export const metadata: Metadata = { title: "İçerik Yükle" };
 

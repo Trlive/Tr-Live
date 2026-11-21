@@ -10,7 +10,11 @@ import '../version.dart';
 class ApiException implements Exception {
   final String message;
   final int? statusCode;
-  ApiException(this.message, [this.statusCode]);
+
+  /// Sunucunun özel durum etiketi (`totp_required`, `update_required`, `db_unavailable`).
+  /// Çağıran, metin karşılaştırmak yerine buna bakar: hata mesajı değişince kod kırılmasın.
+  final String? code;
+  ApiException(this.message, [this.statusCode, this.code]);
   @override
   String toString() => message;
 }
@@ -200,11 +204,12 @@ class Api {
       if (token != null && token == sentToken) onUnauthorized?.call();
     }
     final message = data is Map && data['message'] is String ? data['message'] as String : 'İstek başarısız (${r.statusCode}).';
+    final errCode = data is Map && data['code'] is String ? data['code'] as String : null;
     if (r.statusCode == 426) {
       final url = data is Map && data['updateUrl'] is String ? data['updateUrl'] as String : null;
       onUpdateRequired?.call(message, url);
     }
-    throw ApiException(message, r.statusCode);
+    throw ApiException(message, r.statusCode, errCode);
   }
 
   static Future<Map<String, dynamic>> get(String path, {Map<String, String>? query}) =>

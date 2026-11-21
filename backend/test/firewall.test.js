@@ -7,7 +7,7 @@ process.env.FIREWALL_MEDIA_PER_MINUTE = '4';
 process.env.FIREWALL_BAN_THRESHOLD = '20';
 process.env.FIREWALL_ALLOW_IPS = '8.8.8.8';
 delete process.env.DATABASE_URL;
-const fw = await import('../src/firewall.js');
+const fw = await import('../src/middleware/security/firewall.js');
 
 const makeReq = (ip, url = '/api/rooms', extra = {}) => ({ ip, originalUrl: url, headers: { 'user-agent': 'Dart/3.8' }, socket: { remoteAddress: ip }, ...extra });
 function run(mw, req) {

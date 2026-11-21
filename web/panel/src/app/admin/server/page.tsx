@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import PanelShell from "@/components/panel-shell";
-import AdminServer from "@/components/admin/server";
+import PanelShell from "@/core/layout/panel-shell";
+import AdminServer from "@/modules/admin/system_monitor/server";
 
 export const metadata: Metadata = { title: "Sunucu" };
 

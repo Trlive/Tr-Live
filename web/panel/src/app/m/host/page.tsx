@@ -1,8 +1,8 @@
 "use client";
 
-import MobileShell from "@/components/center/mobile-shell";
-import { HostHome, HostStatements, PayTable } from "@/components/center/host-center";
-import { t } from "@/lib/i18n";
+import MobileShell from "@/modules/agency/shell/mobile-shell";
+import { HostHome, HostStatements, PayTable } from "@/modules/agency/broadcasters/host-center";
+import { t } from "@/shared/utils/i18n";
 
 // Uygulama içi Yayıncı Merkezi (WebView). Oturum uygulamadan gelir; dil ?lang= ile.
 export default function Page() {

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import PanelShell from "@/components/panel-shell";
-import AdminLuckyPools from "@/components/admin/lucky-pools";
+import PanelShell from "@/core/layout/panel-shell";
+import AdminLuckyPools from "@/modules/admin/gifts/lucky-pools";
 
 export const metadata: Metadata = { title: "Şanslı Havuzlar" };
 

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import PanelShell from "@/components/panel-shell";
-import AdminSupport from "@/components/admin/support";
+import PanelShell from "@/core/layout/panel-shell";
+import AdminSupport from "@/modules/admin/moderation/support";
 
 export const metadata: Metadata = {
   title: "Destek",

@@ -15,6 +15,9 @@ export function jwtSecret() {
   return 'dev-only-change-me';
 }
 
+/// `*` yerine kullanılan geçici değer (bkz. validateConfig). Üretimde yalnızca eski kurulumlarda devreye girer.
+let corsFallback = null;
+
 export function validateConfig() {
   if (!env.DATABASE_URL) throw new Error('DATABASE_URL tanımlı değil.');
   if (isProd) {
@@ -25,12 +28,49 @@ export function validateConfig() {
     if (!env.LIVEKIT_API_KEY || !env.LIVEKIT_API_SECRET || !env.LIVEKIT_URL) {
       console.warn('[uyarı] LiveKit ayarları eksik; sesli/görüntülü bağlantı çalışmaz.');
     }
+    // CORS üretimde açık bırakılamaz.
+    //
+    // Oturum bileti `Authorization` başlığıyla taşındığı için tarayıcıdan oturum çalınması
+    // riski düşük — ama `*`, herhangi bir sitenin tarayıcıdan API'mize istek atabilmesi demek.
+    // Bir gün çerez tabanlı bir uca geçilirse bu ayar sessizce açık kapı olur. Ayrıca panel ve
+    // oyun adreslerini açıkça yazmak, hangi kökenlerin beklendiğini belgeler.
+    //
+    // ## Geçiş yolu — niçin doğrudan hata vermiyoruz
+    //
+    // Çalışan kurulumlarda `CORS_ORIGIN='*'` yazıyor. Burada koşulsuz hata atsaydık, sunucu
+    // kendini güncellediği an AÇILMAZDI: site, kimse bir şey yapmadan düşerdi. Bir güvenlik
+    // sıkılaştırması, uygulandığı gün hizmeti kesiyorsa yanlış uygulanmıştır.
+    //
+    // Bu yüzden: `*` yazılıysa ve sunucunun kendi adresi (PUBLIC_BASE_URL) biliniyorsa, kısıt
+    // ona daraltılır ve uyarı basılır. Açık kapı kapanır, sunucu ayakta kalır.
+    //
+    // Kendi adresi de bilinmiyorsa durulacak güvenli bir değer yok: orada hata doğrudur.
+    const cors = (env.CORS_ORIGIN || '').trim();
+    const self = (env.PUBLIC_BASE_URL || '').trim().replace(/\/+$/, '');
+    if (!cors || cors === '*') {
+      if (!self) {
+        throw new Error(
+          'Üretimde CORS_ORIGIN tanımlı olmalı ve "*" olamaz. ' +
+          'Panel ve oyun adreslerini virgülle yazın (ör. CORS_ORIGIN=https://panel.alanadi.com,https://oyun.alanadi.com).',
+        );
+      }
+      corsFallback = self;
+      console.warn(
+        `[uyarı] CORS_ORIGIN="${cors || '(boş)'}" üretimde kabul edilmiyor; geçici olarak ${self} kullanılıyor. ` +
+        'Kalıcı çözüm: .env dosyasına CORS_ORIGIN yazın (panel ve oyun adresleriyle birlikte).',
+      );
+    }
   }
 }
 
 export const config = {
   port: Number(env.PORT || 3000),
-  corsOrigin: (env.CORS_ORIGIN || '*').split(',').map((s) => s.trim()).filter(Boolean),
+  // Geliştirmede '*' kabul edilir; üretimde validateConfig() bunu daraltır ya da reddeder.
+  // Getter: validateConfig() config nesnesi kurulduktan SONRA çalışır, sabit değer eski kalırdı.
+  get corsOrigin() {
+    const raw = corsFallback || env.CORS_ORIGIN || '*';
+    return raw.split(',').map((s) => s.trim()).filter(Boolean);
+  },
   trustProxy: env.TRUST_PROXY === undefined ? false : (/^\d+$/.test(env.TRUST_PROXY) ? Number(env.TRUST_PROXY) : env.TRUST_PROXY === 'true'),
   uploadDir: env.UPLOAD_DIR || path.join(process.cwd(), 'uploads'),
   // Bu değerin (Coin) üstündeki hediyeler tüm kullanıcılara global şerit olarak gider.

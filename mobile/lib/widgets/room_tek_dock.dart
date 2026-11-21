@@ -60,13 +60,9 @@ class RoomTekDockState extends State<RoomTekDock> with SingleTickerProviderState
   StreamSubscription? _sub;
   Timer? _poll;
   late final AnimationController _pulse = AnimationController(vsync: this, duration: const Duration(milliseconds: 700));
-  late final Uri _base = Uri.parse(Api.baseUrl);
 
-  bool _sameOrigin(String url) {
-    final u = Uri.tryParse(url);
-    if (u == null) return false;
-    return u.scheme == _base.scheme && u.host == _base.host && u.port == _base.port;
-  }
+  /// Karar WebViewPolicy'de, tek yerde (bkz. hybrid/webview/navigation_policy.dart).
+  bool _sameOrigin(String url) => WebViewPolicy.canLoadInternal(url);
 
   @override
   void initState() {

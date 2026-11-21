@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { periodBounds, previousPeriod, parsePeriodKey, achievedTier, evaluateHost, commissionFor, nextCommissionTier } from '../src/settlement.js';
-import { validateAgencyConfig } from '../src/agency_config.js';
-import { decideWinner, validDuration, remainingSeconds } from '../src/pk_logic.js';
+import { periodBounds, previousPeriod, parsePeriodKey, achievedTier, evaluateHost, commissionFor, nextCommissionTier } from '../src/modules/games/settlement.service.js';
+import { validateAgencyConfig } from '../src/modules/agencies/agency.constants.js';
+import { decideWinner, validDuration, remainingSeconds } from '../src/modules/rooms/pk.rules.js';
 
 const SAL = [
   { level: 1, hours: 20, diamonds: 10000n, salaryCents: 5000n },

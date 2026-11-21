@@ -1,0 +1,127 @@
+import { Router } from 'express';
+import { query } from '../../infrastructure/database/database.js';
+import { requireAuth } from '../../middleware/authentication/auth.js';
+import { oneOf } from '../../shared/errors/http.js';
+import { periodStartIso } from '../../shared/utils/periods.js';
+import { loadPublicRows } from '../users/users.service.js';
+import { publicUser } from '../../shared/utils/views.js';
+import { cpLevelFor } from '../users/levels.rules.js';
+
+export const router = Router();
+router.use(requireAuth);
+
+const cache = new Map(); // anahtar -> { at, data }
+const TTL_MS = 30_000;
+
+// Kendine gönderilen hediyeler sıralamaya dahil edilmez (kendi kendine puan basmayı önlemek için).
+router.get('/', async (req, res) => {
+  const type = oneOf(String(req.query.type ?? 'senders'), ['senders', 'receivers', 'topups', 'families', 'agencies', 'rooms', 'cp'], 'Tür');
+  const period = oneOf(String(req.query.period ?? 'weekly'), ['daily', 'weekly', 'monthly', 'all'], 'Dönem');
+  const key = `${type}:${period}`;
+  const hit = cache.get(key);
+  let rows;
+  if (hit && Date.now() - hit.at < TTL_MS) rows = hit.data;
+  else {
+    const start = periodStartIso(period);
+    if (type === 'agencies') {
+      rows = (await query(
+        `SELECT a.id, a.name, a.logo_url, SUM(COALESCE(gt.diamond_amount, gt.coin_amount)) AS total
+         FROM gift_transactions gt
+         JOIN broadcasters b ON b.user_id = gt.receiver_id AND b.status = 'approved'
+         JOIN agencies a ON a.id = b.agency_id AND a.status = 'active'
+         WHERE gt.sender_id <> gt.receiver_id AND ($1::timestamptz IS NULL OR gt.created_at >= $1::timestamptz)
+         GROUP BY a.id ORDER BY total DESC LIMIT 50`,
+        [start],
+      )).rows;
+    } else if (type === 'rooms') {
+      // Oda kapanınca silindiği için yalnızca şu an açık (gizli olmayan) odalar sıralanır.
+      rows = (await query(
+        `SELECT r.id, r.name, r.room_type, SUM(COALESCE(gt.diamond_amount, gt.coin_amount)) AS total,
+                (SELECT COUNT(*)::int FROM room_members rm WHERE rm.room_id = r.id AND (rm.microphone OR rm.user_id NOT IN (SELECT id FROM active_ghosts))) AS member_count
+         FROM gift_transactions gt JOIN rooms r ON r.id = gt.room_id AND r.is_active = TRUE AND r.is_hidden = FALSE
+         WHERE gt.sender_id <> gt.receiver_id AND ($1::timestamptz IS NULL OR gt.created_at >= $1::timestamptz)
+         GROUP BY r.id ORDER BY total DESC LIMIT 50`,
+        [start],
+      )).rows;
+    } else if (type === 'cp') {
+      // CP: onaylı CP çiftleri, toplam yakınlık puanına (exp) göre. Puan birikimli olduğu için dönemden bağımsızdır.
+      rows = (await query(
+        `SELECT user_a, user_b, exp AS total FROM cp_pairs WHERE relation = 'cp' ORDER BY exp DESC LIMIT 50`,
+      )).rows;
+    } else if (type === 'topups') {
+      // Yükleme: bayi Coin yüklemeleri (dönem içinde).
+      rows = (await query(
+        `SELECT wt.user_id, SUM(wt.coin_amount) AS total FROM wallet_transactions wt
+         WHERE wt.transaction_type IN ('dealer_credit') AND wt.coin_amount > 0 AND ($1::timestamptz IS NULL OR wt.created_at >= $1::timestamptz)
+         GROUP BY wt.user_id ORDER BY total DESC LIMIT 50`,
+        [start],
+      )).rows;
+    } else if (type === 'families') {
+      rows = (await query(
+        `SELECT f.id, f.name, f.logo_url, f.level, SUM(COALESCE(gt.diamond_amount, gt.coin_amount)) AS total
+         FROM gift_transactions gt JOIN family_members fm ON fm.user_id = gt.receiver_id JOIN families f ON f.id = fm.family_id AND f.is_active = TRUE
+         WHERE gt.sender_id <> gt.receiver_id AND ($1::timestamptz IS NULL OR gt.created_at >= $1::timestamptz)
+         GROUP BY f.id ORDER BY total DESC LIMIT 50`,
+        [start],
+      )).rows;
+    } else {
+      const col = type === 'senders' ? 'sender_id' : 'receiver_id';
+      // Sıralama hediye değerine göre: normal hediyede tam fiyat, şanslı hediyede alıcı payı (diamond_amount) — gönderen
+      // ve alan sıralamasında aynı (Yoho / Bigo): geri kazanılan Coin'le tekrar gönderilen şanslı hediye sıralamayı kasmaz.
+      const amount = 'COALESCE(gt.diamond_amount, gt.coin_amount)';
+      rows = (await query(
+        `SELECT gt.${col} AS user_id, SUM(${amount}) AS total FROM gift_transactions gt
+         WHERE gt.sender_id <> gt.receiver_id AND ($1::timestamptz IS NULL OR gt.created_at >= $1::timestamptz)
+         GROUP BY gt.${col} ORDER BY total DESC LIMIT 50`,
+        [start],
+      )).rows;
+    }
+    cache.set(key, { at: Date.now(), data: rows });
+  }
+
+  if (type === 'agencies') {
+    return res.json({ type, period, entries: rows.map((x, i) => ({ rank: i + 1, agency: { id: x.id, name: x.name, logoUrl: x.logo_url }, total: String(x.total) })) });
+  }
+  if (type === 'rooms') {
+    return res.json({ type, period, entries: rows.map((x, i) => ({ rank: i + 1, room: { id: x.id, name: x.name, roomType: x.room_type, memberCount: x.member_count }, total: String(x.total) })) });
+  }
+  if (type === 'cp') {
+    const ids = [...new Set(rows.flatMap((x) => [x.user_a, x.user_b]))];
+    const people = new Map((await loadPublicRows(ids)).map((u) => [u.id, u]));
+    return res.json({
+      type, period,
+      entries: rows.filter((x) => people.has(x.user_a) && people.has(x.user_b))
+        .map((x, i) => ({ rank: i + 1, user: publicUser(people.get(x.user_a), req.user.id), partner: publicUser(people.get(x.user_b), req.user.id), total: String(x.total), level: cpLevelFor(x.total) })),
+    });
+  }
+  if (type === 'families') {
+    return res.json({ type, period, entries: rows.map((x, i) => ({ rank: i + 1, family: { id: x.id, name: x.name, logoUrl: x.logo_url, level: x.level }, total: String(x.total) })) });
+  }
+  const users = new Map((await loadPublicRows(rows.map((x) => x.user_id))).map((u) => [u.id, u]));
+  const entries = rows.filter((x) => users.has(x.user_id)).map((x, i) => ({ rank: i + 1, user: publicUser(users.get(x.user_id), req.user.id), total: String(x.total) }));
+  // Benim sıram (listede yoksa "50+") ve dönem toplamım.
+  const mineIn = entries.find((e) => e.user.id === req.user.id);
+  let me = null;
+  if (mineIn) me = { rank: mineIn.rank, total: mineIn.total };
+  else {
+    const start = periodStartIso(period);
+    let t;
+    if (type === 'topups') {
+      t = (await query(
+        `SELECT COALESCE(SUM(coin_amount), 0) AS total FROM wallet_transactions WHERE user_id = $1 AND transaction_type IN ('dealer_credit') AND coin_amount > 0
+           AND ($2::timestamptz IS NULL OR created_at >= $2::timestamptz)`,
+        [req.user.id, start],
+      )).rows[0].total;
+    } else {
+      const col = type === 'senders' ? 'sender_id' : 'receiver_id';
+      const amount = 'COALESCE(diamond_amount, coin_amount)';
+      t = (await query(
+        `SELECT COALESCE(SUM(${amount}), 0) AS total FROM gift_transactions WHERE ${col} = $1 AND sender_id <> receiver_id
+           AND ($2::timestamptz IS NULL OR created_at >= $2::timestamptz)`,
+        [req.user.id, start],
+      )).rows[0].total;
+    }
+    me = { rank: null, total: String(t) };
+  }
+  res.json({ type, period, entries, me });
+});

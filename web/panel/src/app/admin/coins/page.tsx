@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import PanelShell from "@/components/panel-shell";
-import AdminFinance from "@/components/admin/finance";
+import PanelShell from "@/core/layout/panel-shell";
+import AdminFinance from "@/modules/admin/wallet/finance";
 
 export const metadata: Metadata = {
   title: "Mali Kayıtlar",

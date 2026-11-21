@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import PanelShell from "@/components/panel-shell";
-import AdminMedals from "@/components/admin/medals";
+import PanelShell from "@/core/layout/panel-shell";
+import AdminMedals from "@/modules/admin/events/medals";
 
 export const metadata: Metadata = {
   title: "Madalya Sistemi",

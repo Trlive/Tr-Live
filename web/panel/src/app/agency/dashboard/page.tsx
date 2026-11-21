@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
-import PanelShell from "@/components/panel-shell";
-import { PageHeader } from "@/components/ui";
-import AgencyHome from "@/components/center/agency-home";
+import PanelShell from "@/core/layout/panel-shell";
+import { PageHeader } from "@/shared/components/ui";
+import AgencyHome from "@/modules/agency/dashboard/agency-home";
 
 export const metadata: Metadata = { title: "Genel Bakış" };
 

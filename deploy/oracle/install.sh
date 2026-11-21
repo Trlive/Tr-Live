@@ -138,7 +138,8 @@ LIVEKIT_API_URL='http://host.docker.internal:7880'
 LIVEKIT_API_KEY='${LIVEKIT_API_KEY}'
 LIVEKIT_API_SECRET='${LIVEKIT_API_SECRET}'
 TRUST_PROXY='1'
-CORS_ORIGIN='*'
+# Tarayıcıdan API'ye istek atabilecek adresler. '*' üretimde kabul edilmiyor (denetim S-05).
+CORS_ORIGIN='https://${DOMAIN}'
 PUBLIC_BASE_URL='https://${DOMAIN}'
 UPLOAD_DIR='/app/uploads'
 EOF

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import PanelShell from "@/components/panel-shell";
-import AdminSecurity from "@/components/admin/security";
+import PanelShell from "@/core/layout/panel-shell";
+import AdminSecurity from "@/modules/admin/security/security";
 
 export const metadata: Metadata = {
   title: "Güvenlik",

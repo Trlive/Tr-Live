@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import PanelShell from "@/components/panel-shell";
-import AdminAgencies from "@/components/admin/agencies";
+import PanelShell from "@/core/layout/panel-shell";
+import AdminAgencies from "@/modules/admin/agencies/agencies";
 
 export const metadata: Metadata = {
   title: "Ajanslar",

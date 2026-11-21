@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import PanelShell from "@/components/panel-shell";
-import AdminEvents from "@/components/admin/events";
+import PanelShell from "@/core/layout/panel-shell";
+import AdminEvents from "@/modules/admin/events/events";
 
 export const metadata: Metadata = { title: "Etkinlikler" };
 

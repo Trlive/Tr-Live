@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import PanelShell from "@/components/panel-shell";
-import DealerTopup from "@/components/dealer/topup";
+import PanelShell from "@/core/layout/panel-shell";
+import DealerTopup from "@/modules/dealer/transfers/topup";
 
 export const metadata: Metadata = { title: "Bakiye Talebi" };
 

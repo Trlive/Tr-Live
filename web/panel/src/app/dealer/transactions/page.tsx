@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import PanelShell from "@/components/panel-shell";
-import DealerTransactions from "@/components/dealer/transactions";
+import PanelShell from "@/core/layout/panel-shell";
+import DealerTransactions from "@/modules/dealer/transactions/transactions";
 
 export const metadata: Metadata = { title: "Hareketler" };
 

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   newGame, roll, move, legalMoves, cellOf, SAFE_CELLS, forfeit, autoPlay, pickAuto, FINISH, TURN_MS, MAX_AUTO, seatOfUser, markActive,
-} from '../src/ludo.js';
+} from '../src/modules/games/ludo.rules.js';
 
 const seq = (...vals) => { let i = 0; return () => (vals[i++ % vals.length] - 1) / 6 + 0.001; }; // zar = verilen değer
 const U = ['a', 'b', 'c', 'd'];

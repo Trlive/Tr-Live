@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import PanelShell from "@/components/panel-shell";
-import DealerSell from "@/components/dealer/sell";
+import PanelShell from "@/core/layout/panel-shell";
+import DealerSell from "@/modules/dealer/coin_orders/sell";
 
 export const metadata: Metadata = { title: "Coin Satışı" };
 

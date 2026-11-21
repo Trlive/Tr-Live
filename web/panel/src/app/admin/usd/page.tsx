@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import PanelShell from "@/components/panel-shell";
-import AdminUsd from "@/components/admin/usd";
+import PanelShell from "@/core/layout/panel-shell";
+import AdminUsd from "@/modules/admin/wallet/usd";
 
 export const metadata: Metadata = { title: "Fasulye Cüzdanı" };
 

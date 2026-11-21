@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { supportMayCall, banEnd, banExpired, banMessage, mayActOnUser } from '../src/staff_logic.js';
-import { canManage } from '../src/room_permissions.js';
+import { supportMayCall, banEnd, banExpired, banMessage, mayActOnUser } from '../src/modules/agencies/staff.rules.js';
+import { canManage } from '../src/modules/rooms/permissions.js';
 
 test('yardımcı admin yalnızca dar yetkilere erişir', () => {
   assert.ok(supportMayCall('GET', '/users'));
@@ -61,7 +61,7 @@ test('moderatör yetkileri oda sahibine dokunamaz, normal kullanıcıya uygulan�
   assert.equal(canManage('user', 'user', 'moderate'), false);
 });
 
-import { pickNext, hasFreeSeat } from '../src/mic_queue_logic.js';
+import { pickNext, hasFreeSeat } from '../src/modules/rooms/mic_queue.rules.js';
 test('mikrofon sırası: ilk uygun kişi seçilir, uygun olmayanlar düşer', () => {
   const q = [{ user_id: 'a' }, { user_id: 'b' }, { user_id: 'c' }];
   assert.deepEqual(pickNext(q, new Set(['b', 'c'])), { next: 'b', drop: ['a'] });
@@ -76,7 +76,7 @@ test('boş koltuk hesabı (0. koltuk sahibin, kilitliler sayılmaz)', () => {
 });
 
 test('oda komutları: yönetim ve yardımcı admin dokunulmazlığı', async () => {
-  const { roomStaffShield } = await import('../src/staff_logic.js');
+  const { roomStaffShield } = await import('../src/modules/agencies/staff.rules.js');
   assert.ok(roomStaffShield('user', 'admin'));
   assert.ok(roomStaffShield('admin', 'admin'));
   assert.ok(roomStaffShield('support', 'support'));

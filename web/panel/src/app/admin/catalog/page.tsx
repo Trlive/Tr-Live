@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import PanelShell from "@/components/panel-shell";
-import AdminCatalog from "@/components/admin/catalog";
+import PanelShell from "@/core/layout/panel-shell";
+import AdminCatalog from "@/modules/admin/gifts/catalog";
 
 export const metadata: Metadata = {
   title: "Katalog",

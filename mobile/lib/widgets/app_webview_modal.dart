@@ -1,4 +1,6 @@
 import 'dart:convert';
+import '../hybrid/webview/navigation_policy.dart';
+import '../hybrid/js_bridge/bridge_policy.dart';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import '../services/api.dart';
@@ -43,16 +45,12 @@ class AppWebViewModal extends StatefulWidget {
 class _AppWebViewModalState extends State<AppWebViewModal> {
   late final WebViewController _controller;
   final ValueNotifier<int> _progress = ValueNotifier<int>(0);
-  late final Uri _base = Uri.parse(Api.baseUrl);
   bool _trusted = false; // şu an gösterilen sayfa bizim sunucumuzdan mı
   bool _failed = false;
   bool _pageUsed = false; // sayfa oturum bileti istedi (içeride işlem yapılmış olabilir)
 
-  bool _sameOrigin(String url) {
-    final u = Uri.tryParse(url);
-    if (u == null) return false;
-    return u.scheme == _base.scheme && u.host == _base.host && u.port == _base.port;
-  }
+  /// Karar WebViewPolicy'ye devredildi: üç ayrı pencerenin üç ayrı kuralı olmasın.
+  bool _sameOrigin(String url) => WebViewPolicy.canLoadInternal(url);
 
   @override
   void initState() {
@@ -101,15 +99,13 @@ class _AppWebViewModalState extends State<AppWebViewModal> {
 
   Future<void> _onMessage(JavaScriptMessage m) async {
     if (!_trusted) return;
-    String type;
-    Map? data;
-    try {
-      final d = jsonDecode(m.message);
-      data = d is Map ? d : null;
-      type = d is Map ? (d['type'] ?? '').toString() : m.message;
-    } catch (_) {
-      type = m.message;
-    }
+    // Her çağrı tek bir denetimden geçer ve kaydedilir: hangi sayfa ne istedi, izin verildi mi.
+    await BridgePolicy.handle(widget.url, m.message, _dispatch);
+  }
+
+  Future<void> _dispatch(BridgeMessage msg) async {
+    final type = msg.type;
+    final Map? data = msg.data.isEmpty ? null : msg.data;
     switch (type) {
       case 'getToken':
         await _sendToken();

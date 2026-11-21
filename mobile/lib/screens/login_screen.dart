@@ -22,10 +22,13 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   final _id = TextEditingController(); // telefon ya da kullanıcı adı
   final _password = TextEditingController();
   final _displayName = TextEditingController();
+  final _totp = TextEditingController(); // iki adımlı doğrulama kodu (yalnızca yetkili hesaplarda)
   _Mode _mode = _Mode.start;
   bool _register = false;
   bool _busy = false;
   bool _showPassword = false;
+  // Şifre doğrulandıktan sonra sunucu kod isterse açılır.
+  bool _needTotp = false;
   Map<String, dynamic> _providers = const {'google': false, 'facebook': false, 'phone': true};
   bool _socialCancelled = false;
   // Kayıt / sosyal giriş için yasal onay (18 yaş + Kullanıcı Sözleşmesi + Gizlilik Politikası).
@@ -49,6 +52,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     _id.dispose();
     _password.dispose();
     _displayName.dispose();
+    _totp.dispose();
     super.dispose();
   }
 
@@ -133,11 +137,23 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
         await AuthService.register(id.toLowerCase(), _password.text, name.isEmpty ? id : name);
       } else {
         // Sunucu girilen değerin telefon mu kullanıcı adı mı olduğunu kendisi ayırır.
-        await AuthService.login(_mode == _Mode.username ? id.replaceAll('İ', 'i').toLowerCase() : id, _password.text);
+        await AuthService.login(
+          _mode == _Mode.username ? id.replaceAll('İ', 'i').toLowerCase() : id,
+          _password.text,
+          totpCode: _needTotp ? _totp.text.trim() : null,
+        );
       }
       await _saveConsent();
       if (!mounted) return;
       _goHome();
+    } on TotpRequired {
+      // Şifre doğru, iki adımlı doğrulama kodu gerekiyor. Hata değil, akışın bir adımı:
+      // kırmızı kutu göstermek yerine kod alanı açılır ve şifre korunur.
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _needTotp = true;
+      });
     } catch (e) {
       if (!mounted) return;
       setState(() => _busy = false);
@@ -369,6 +385,26 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
           ),
         ),
       ),
+      if (_needTotp) ...[
+        const SizedBox(height: 12),
+        TextField(
+          controller: _totp,
+          keyboardType: TextInputType.number,
+          autofocus: true,
+          maxLength: 9,
+          cursorColor: _Gold.mid,
+          style: const TextStyle(color: Colors.white, fontSize: 18, letterSpacing: 4),
+          onSubmitted: (_) => _submit(),
+          decoration: _field(tx('Doğrulama kodu'), Icons.verified_user_outlined),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(top: 4, left: 4, right: 4),
+          child: Text(
+            tx('Kimlik doğrulayıcı uygulamanızdaki 6 haneli kodu girin. Telefonunuza erişemiyorsanız kurtarma kodlarınızdan birini yazın.'),
+            style: const TextStyle(color: Color(0xFF9B8E72), fontSize: 12, height: 1.4),
+          ),
+        ),
+      ],
       if (_register) _consent(),
       const SizedBox(height: 22),
       _goldButton(icon: _register ? Icons.how_to_reg_rounded : Icons.login_rounded, text: _register ? tx('Kayıt ol') : tx('Giriş yap'), onTap: _busy ? null : _submit, busy: _busy),

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { renderDealerTopupPage } from '../src/dealer_topup_page.js';
+import { renderDealerTopupPage } from '../src/modules/dealers/dealer_topup_page.service.js';
 
 test('bayi sayfası nonce, kanal ve doğru API yollarını kullanır', () => {
   const html = renderDealerTopupPage({ appVersion: '2.92.0', nonce: 'abc' });

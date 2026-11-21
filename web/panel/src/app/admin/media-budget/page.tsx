@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import PanelShell from "@/components/panel-shell";
-import AdminMediaBudget from "@/components/admin/media-budget";
+import PanelShell from "@/core/layout/panel-shell";
+import AdminMediaBudget from "@/modules/admin/asset_management/media-budget";
 
 export const metadata: Metadata = { title: "Medya Bütçesi" };
 

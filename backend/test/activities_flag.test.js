@@ -1,11 +1,22 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { CONFIG_DEFAULTS, validateConfigPatch } from '../src/services/app_config.js';
+import { CONFIG_DEFAULTS, validateConfigPatch } from '../src/modules/system/app_config.service.js';
 test('genel etkinlik anahtarı tanımlı, bool doğrulanır; panelin gönderdiği anahtarlar kabul edilir', () => {
   assert.equal(CONFIG_DEFAULTS.roomActivitiesEnabled, true);
   assert.deepEqual(validateConfigPatch({ roomActivitiesEnabled: false }), { roomActivitiesEnabled: false });
   assert.throws(() => validateConfigPatch({ roomActivitiesEnabled: 'hayır' }));
-  assert.doesNotThrow(() => validateConfigPatch({ blockRooted: false, sslPinning: false }));
+});
+
+test('kaldırılan güvenlik ayarları geri gelmiyor (denetim S-04)', () => {
+  // blockRooted ve sslPinning tanımlıydı ama mobil tarafta onları okuyan tek satır yoktu.
+  // Hiçbir şey yapmayan bir güvenlik ayarı, yapıyormuş gibi görünür: "SSL pinning açık" sanan
+  // bir yönetici olmayan bir korumaya güvenir. Yanlış güven, korumasızlıktan beterdir.
+  //
+  // Bu test, ayarların "uygulanmadan" geri eklenmesini engeller: eklenirse önce burada kırılır.
+  assert.equal(CONFIG_DEFAULTS.blockRooted, undefined);
+  assert.equal(CONFIG_DEFAULTS.sslPinning, undefined);
+  assert.throws(() => validateConfigPatch({ blockRooted: false }), /Bilinmeyen ayar/);
+  assert.throws(() => validateConfigPatch({ sslPinning: true }), /Bilinmeyen ayar/);
 });
 
 test('doğrulama ayarları: Firebase ve SMTP alanları denetlenir', () => {

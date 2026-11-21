@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../hybrid/webview/navigation_policy.dart';
+import '../hybrid/feature_flags/feature_flags.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api.dart';
@@ -59,6 +61,9 @@ class UpdateRequiredScreen extends StatelessWidget {
 Future<void> checkOptionalUpdate(BuildContext context) async {
   try {
     final c = await Api.get('/api/app/config');
+    // Aynı yanıttan özellik bayrakları da okunur: bayraklar için ayrı istek açılmaz.
+    Flags.applyConfig(c);
+    WebViewPolicy.applyConfig(c);
     final latest = c['latestAppVersion']?.toString() ?? '0.0.0';
     if (_compare(latest, kAppVersion) <= 0) return;
     final prefs = await SharedPreferences.getInstance();

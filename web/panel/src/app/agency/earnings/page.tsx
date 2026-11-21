@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
-import PanelShell from "@/components/panel-shell";
-import { PageHeader } from "@/components/ui";
-import AgencyEarnings from "@/components/center/agency-earnings";
+import PanelShell from "@/core/layout/panel-shell";
+import { PageHeader } from "@/shared/components/ui";
+import AgencyEarnings from "@/modules/agency/earnings/agency-earnings";
 
 export const metadata: Metadata = { title: "Kazançlar" };
 

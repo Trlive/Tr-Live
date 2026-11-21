@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import PanelShell from "@/components/panel-shell";
-import AdminScreenshots from "@/components/admin/screenshots";
+import PanelShell from "@/core/layout/panel-shell";
+import AdminScreenshots from "@/modules/admin/moderation/screenshots";
 
 export const metadata: Metadata = { title: "Ekran Görüntüleri" };
 

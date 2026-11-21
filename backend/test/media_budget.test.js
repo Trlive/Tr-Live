@@ -2,10 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import zlib from 'node:zlib';
 import crypto from 'node:crypto';
-import { limitsFrom, analyze, optimize, parseSvga, buildSvga, imageDims, forClass } from '../src/services/media_optimize.js';
-import { run, withTemp, ffmpegAvailable, probe } from '../src/services/media_tools.js';
-import { ensureVapc, vapcInfo } from '../src/services/media.js';
-import { CONFIG_DEFAULTS } from '../src/services/app_config.js';
+import { limitsFrom, analyze, optimize, parseSvga, buildSvga, imageDims, forClass } from '../src/modules/media/media_optimize.service.js';
+import { run, withTemp, ffmpegAvailable, probe } from '../src/modules/media/media_tools.service.js';
+import { ensureVapc, vapcInfo } from '../src/modules/media/media.service.js';
+import { CONFIG_DEFAULTS } from '../src/modules/system/app_config.service.js';
 
 const L = limitsFrom(CONFIG_DEFAULTS);
 const HAS = await ffmpegAvailable();

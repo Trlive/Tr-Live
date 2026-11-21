@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { regionForCountry, REGIONS } from '../src/regions.js';
+import { regionForCountry, REGIONS } from '../src/shared/constants/regions.js';
 
 test('bölge: Türkiye ve Orta Asya Uzbekistan sekmesinde; Arap, Hindistan, Avrupa ve diğerleri', () => {
   for (const c of ['UZ', 'TR', 'tr', 'AZ', 'KZ', 'CY']) assert.equal(regionForCountry(c), 'uz', c);

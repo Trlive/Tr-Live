@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import PanelShell from "@/components/panel-shell";
-import AdminSettings from "@/components/admin/settings";
+import PanelShell from "@/core/layout/panel-shell";
+import AdminSettings from "@/modules/admin/settings/settings";
 
 export const metadata: Metadata = {
   title: "Yönetim Ayarları",

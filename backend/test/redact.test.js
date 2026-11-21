@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { redactSecrets } from '../src/redact.js';
+import { redactSecrets } from '../src/middleware/security/redact.js';
 
 test('şifre, token ve bağlantı bilgileri maskelenir; sıradan satırlar değişmez', () => {
   const log = [

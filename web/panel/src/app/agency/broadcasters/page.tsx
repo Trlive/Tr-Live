@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
-import PanelShell from "@/components/panel-shell";
-import { PageHeader } from "@/components/ui";
-import AgencyHosts from "@/components/center/agency-hosts";
+import PanelShell from "@/core/layout/panel-shell";
+import { PageHeader } from "@/shared/components/ui";
+import AgencyHosts from "@/modules/agency/broadcasters/agency-hosts";
 
 export const metadata: Metadata = { title: "Yayıncılar" };
 

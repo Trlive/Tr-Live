@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { evaluateVideoPay, evaluatePay, DEFAULT_PAY_LEVELS } from '../src/paytable.js';
-import { evaluateHost, videoRules } from '../src/services/agency_metrics.js';
-import { validateAgencyConfig } from '../src/agency_config.js';
+import { evaluateVideoPay, evaluatePay, DEFAULT_PAY_LEVELS } from '../src/modules/games/paytable.rules.js';
+import { evaluateHost, videoRules } from '../src/modules/agencies/agency_metrics.service.js';
+import { validateAgencyConfig } from '../src/modules/agencies/agency.constants.js';
 
 const L = DEFAULT_PAY_LEVELS;
 const l1 = L[0]; const l2 = L[1];

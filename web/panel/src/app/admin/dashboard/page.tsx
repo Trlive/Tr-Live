@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import PanelShell from "@/components/panel-shell";
-import AdminDashboard from "@/components/admin/dashboard";
+import PanelShell from "@/core/layout/panel-shell";
+import AdminDashboard from "@/modules/admin/dashboard/dashboard";
 
 export const metadata: Metadata = {
   title: "Yönetim Paneli",

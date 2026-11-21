@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import zlib from 'node:zlib';
-import { detectMedia, ensureVapc } from '../src/services/media.js';
+import { detectMedia, ensureVapc } from '../src/modules/media/media.service.js';
 
 const pad = (b) => Buffer.concat([b, Buffer.alloc(16)]);
 
@@ -31,7 +31,7 @@ test('mp4 olmayan veya bozuk dosyada vapc eklenmez', () => {
 });
 
 test('hareketli görsel tespiti: gif ve animasyonlu webp', async () => {
-  const { isAnimatedImage } = await import('../src/services/media.js');
+  const { isAnimatedImage } = await import('../src/modules/media/media.service.js');
   assert.equal(isAnimatedImage(Buffer.from('GIF89a' + '\0'.repeat(20))), 'gif');
   const webp = Buffer.alloc(40); webp.write('RIFF', 0); webp.write('WEBP', 8); webp.write('VP8X', 12); webp[20] = 0x02;
   assert.equal(isAnimatedImage(webp), 'webp');

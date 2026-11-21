@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import PanelShell from "@/components/panel-shell";
-import AdminAnnouncements from "@/components/admin/announcements";
+import PanelShell from "@/core/layout/panel-shell";
+import AdminAnnouncements from "@/modules/admin/events/announcements";
 
 export const metadata: Metadata = {
   title: "Duyurular",

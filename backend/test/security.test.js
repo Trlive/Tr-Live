@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   SlidingWindowLimiter, LockoutTracker, BanList, ViolationTracker, inspectRequest, jsonShapeProblem, normalizeIp,
-} from '../src/firewall_core.js';
-import { cleanLine, cleanMultiline, containsBanned, looksLikeFlood, parseBannedWords, cleanTags } from '../src/text_safety.js';
+} from '../src/middleware/security/firewall_core.js';
+import { cleanLine, cleanMultiline, containsBanned, looksLikeFlood, parseBannedWords, cleanTags } from '../src/middleware/security/text_safety.js';
 
 test('kayan pencere sınırlayıcı: sınırı aşınca reddeder, pencere geçince açar', () => {
   const l = new SlidingWindowLimiter();

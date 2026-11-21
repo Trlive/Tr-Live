@@ -1,0 +1,553 @@
+import { Router } from 'express';
+import { hiddenTxTypes } from '../wallet/coin_budgets.service.js';
+import crypto from 'node:crypto';
+import express from 'express';
+import { query, tx } from '../../infrastructure/database/database.js';
+import { requireAuth, checkPassword, hashPassword, passwordRules } from '../../middleware/authentication/auth.js';
+import { fail, text, oneOf } from '../../shared/errors/http.js';
+import { REGIONS, regionForCountry } from '../../shared/constants/regions.js';
+import { levelInfo, levelExp } from './levels.rules.js';
+import { loadProfile } from './profile.service.js';
+import { activeWip, requireFeature } from '../system/wip.service.js';
+import { isAnimatedImage, mimeFor } from '../media/media.service.js';
+import { detectImage, storeImage, removeUpload, removeAnimatedAvatar, IMAGE_TYPES } from '../media/images.service.js';
+import { publicUser, USER_PUBLIC_COLUMNS, USER_PUBLIC_JOINS } from '../../shared/utils/views.js';
+import { announceUserChange, attachCurrentRooms } from './users.service.js';
+import { cleanPublic } from '../../middleware/security/safe_text.js';
+import { hub } from '../../infrastructure/websocket/realtime.js';
+import { userLimit } from '../../middleware/security/firewall.js';
+import { listSessions, revokeSession, revokeAllSessions, revokeOtherSessions, signAccess, ACCESS_TTL_SEC } from './sessions.service.js';
+import { idempotent } from '../../middleware/validation/idempotency.js';
+import { ghostNow, refreshGhost } from '../rooms/ghost.service.js';
+
+import { familyDailyLogin } from '../families/family.service.js';
+import { TERMS_VERSION } from '../system/legal.service.js';
+import { deleteAccount } from './account_delete.service.js';
+
+/** "YYYY-MM-DD" doğum tarihi bugün itibarıyla en az [years] yaşını doldurmuş mu (takvim günüyle, UTC). */
+export function isAdultBirthDate(iso, years = 18) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!m) return false;
+  const now = new Date();
+  const limit = Date.UTC(now.getUTCFullYear() - years, now.getUTCMonth(), now.getUTCDate());
+  return Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])) <= limit;
+}
+export const router = Router();
+router.use(requireAuth);
+
+const LANG_RE = /^[a-z]{2}(-[A-Z]{2})?$/;
+
+router.get('/', async (req, res) => {
+  familyDailyLogin(req.user.id); // aile katkısı: günlük giriş (beklenmez)
+  const profile = await loadProfile(req.user.id, req.user.id);
+  const wip = await activeWip(req.user.id);
+  res.json({ user: profile, wip });
+});
+
+/** 6 haneli yeni gizli ID; şu an başka bir gizli kullanıcıda olmayan. */
+async function newHiddenAlias(userId) {
+  for (let i = 0; i < 20; i++) {
+    const cand = String(100000 + crypto.randomInt(900000));
+    const used = await query(`SELECT 1 FROM users WHERE hidden_alias = $1 AND is_hidden = TRUE AND id <> $2`, [cand, userId]);
+    if (!used.rowCount) return cand;
+  }
+  return String(100000 + crypto.randomInt(900000));
+}
+
+router.patch('/', async (req, res) => {
+  const b = req.body ?? {};
+  const sets = [];
+  const values = [];
+  const set = (column, value) => { values.push(value); sets.push(`${column} = $${values.length}`); };
+
+  if (b.displayName !== undefined) set('display_name', cleanPublic(text(b.displayName, 'Ad', { min: 1, max: 60, required: true }), 'Ad'));
+  if (b.bio !== undefined) set('bio', cleanPublic(text(b.bio, 'Biyografi', { max: 300 }), 'Biyografi'));
+  if (b.language !== undefined) {
+    if (typeof b.language !== 'string' || !LANG_RE.test(b.language)) throw fail('Dil geçersiz.');
+    set('language', b.language);
+  }
+  // Gizlilik ayarları WIP ayrıcalığıdır (yöneticiler hariç); kapatmak her zaman serbest.
+  const isAdmin = req.user.system_role === 'admin';
+  const needFeature = async (on, feature, what) => { if (on && !isAdmin) await requireFeature(req.user.id, feature, what); };
+  if (b.isHidden !== undefined) {
+    if (typeof b.isHidden !== 'boolean') throw fail('Gizli kullanıcı değeri geçersiz.');
+    if (b.isHidden !== Boolean(req.user.is_hidden)) {
+      await needFeature(b.isHidden, 'hiddenUser', 'Gizli kullanıcı modu');
+      // Yoho gibi: odadayken gizlenilemez / gizlilik kaldırılamaz (odadakiler kim olduğunu eşleştiremesin).
+      // Sahibi olduğu açık oda da sayılır: oda kimliği sahibin kimliği olduğundan değişim odadakilere görünür.
+      const inRoom = await query(
+        `SELECT 1 FROM room_members WHERE user_id = $1 UNION ALL SELECT 1 FROM rooms WHERE owner_id = $1 AND is_active = TRUE LIMIT 1`,
+        [req.user.id],
+      );
+      if (inRoom.rowCount) throw fail('Gizli kullanıcı modunu açıp kapatmak için önce bulunduğun odadan çık (açık odan varsa kapat).', 409);
+      set('is_hidden', b.isHidden);
+      // Her açılışta yeni gizli kimlik verilir (önceki gizli oturumlarla eşleştirilemesin).
+      if (b.isHidden) set('hidden_alias', await newHiddenAlias(req.user.id));
+    }
+  }
+  if (b.hideCountry !== undefined) {
+    if (typeof b.hideCountry !== 'boolean') throw fail('Ülke gizleme değeri geçersiz.');
+    await needFeature(b.hideCountry, 'hideCountry', 'Ülke/Bölgeyi gizleme');
+    set('hide_country', b.hideCountry);
+  }
+  if (b.hideVisits !== undefined) {
+    if (typeof b.hideVisits !== 'boolean') throw fail('Görüntüleme geçmişi değeri geçersiz.');
+    await needFeature(b.hideVisits, 'invisibleVisit', 'Görüntüleme geçmişini gizleme');
+    set('hide_visits', b.hideVisits);
+  }
+  if (b.whoCanDm !== undefined) set('who_can_dm', oneOf(b.whoCanDm, ['everyone', 'following', 'nobody'], 'Mesaj gizliliği'));
+  if (b.gender !== undefined) set('gender', b.gender === null ? null : oneOf(b.gender, ['male', 'female', 'other'], 'Cinsiyet'));
+  if (b.birthDate !== undefined) {
+    if (b.birthDate === null) set('birth_date', null);
+    else {
+      const d = new Date(`${b.birthDate}T00:00:00Z`);
+      // 2025-02-31 gibi takvimde olmayan günler reddedilir (JS bunu Mart'a kaydırır, veritabanı ise hata verir).
+      const ok = /^\d{4}-\d{2}-\d{2}$/.test(String(b.birthDate)) && !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === String(b.birthDate);
+      if (!ok || !isAdultBirthDate(String(b.birthDate)) || isAdultBirthDate(String(b.birthDate), 110)) {
+        throw fail('Doğum tarihi geçersiz (TR Live 18 yaş ve üzeri içindir).');
+      }
+      set('birth_date', b.birthDate);
+    }
+  }
+  if (b.country !== undefined) set('country', text(b.country, 'Ülke', { max: 60 }));
+  // Ülke kodu (ISO, ör. TR): kayıt ekranındaki bayraklı seçim. Bölge ayrıca verilmezse ülkeden belirlenir.
+  if (b.countryCode !== undefined) {
+    if (b.countryCode !== null && (typeof b.countryCode !== 'string' || !/^[A-Z]{2}$/.test(b.countryCode))) throw fail('Ülke kodu geçersiz.');
+    set('country_code', b.countryCode);
+    if (b.region === undefined && b.countryCode) set('region', regionForCountry(b.countryCode));
+  }
+  // Bölge (ana sayfa sekmesi: odan bu bölgede listelenir).
+  if (b.region !== undefined) set('region', oneOf(b.region, REGIONS, 'Bölge'));
+  // Kayıt ekranı bitti (yalnızca true kabul edilir).
+  if (b.setupDone !== undefined) {
+    if (b.setupDone !== true) throw fail('setupDone yalnızca true olabilir.');
+    set('setup_done', true);
+  }
+  // Kayıt ekranında ilk şifre: yalnızca şifresi olmayan hesap (oturumlar kapatılmaz; değiştirmek için /password).
+  if (b.password !== undefined && b.password !== null && b.password !== '') {
+    if (req.user.password_hash) throw fail('Şifreniz zaten var; değiştirmek için Ayarlar > Şifre bölümünü kullanın.', 409);
+    passwordRules(String(b.password));
+    set('password_hash', await hashPassword(String(b.password)));
+  }
+  if (b.city !== undefined) set('city', text(b.city, 'Şehir', { max: 60 }));
+  if (b.showPresence !== undefined) {
+    if (typeof b.showPresence !== 'boolean') throw fail('Çevrimiçi durumu değeri geçersiz.');
+    await needFeature(!b.showPresence, 'hideOnline', 'Çevrimiçi saati gizleme');
+    set('show_presence', b.showPresence);
+  }
+  // SWIP hayalet modu: odalara görünmeden girme, çevrimiçi görünmeme, iz bırakmadan profil ziyareti.
+  let wasGhost = null;
+  if (b.ghostMode !== undefined) {
+    if (typeof b.ghostMode !== 'boolean') throw fail('Hayalet mod değeri geçersiz.');
+    if (b.ghostMode) await requireFeature(req.user.id, 'ghostMode', 'Hayalet mod');
+    wasGhost = await ghostNow(req.user.id);
+    set('ghost_mode', b.ghostMode);
+  }
+  // Fotoğraf yalnızca yükleme uçlarıyla değişir; burada yalnızca kaldırılabilir (null). Dış adres kabul edilmez:
+  // başkasının sunucusundaki görsel, profili görenlerin IP adresini o sunucuya sızdırır.
+  const removed = [];
+  if (b.avatarUrl !== undefined) {
+    if (b.avatarUrl !== null) throw fail('Profil fotoğrafını "Fotoğraf yükle" ile değiştirin.');
+    set('avatar_url', null); set('avatar_animated', false); set('static_avatar_url', null);
+    removed.push(req.user.avatar_url, req.user.static_avatar_url);
+  }
+  if (b.coverUrl !== undefined) {
+    if (b.coverUrl !== null) throw fail('Kapak fotoğrafını "Fotoğraf yükle" ile değiştirin.');
+    set('cover_url', null);
+    removed.push(req.user.cover_url);
+  }
+
+  if (sets.length) {
+    values.push(req.user.id);
+    await query(`UPDATE users SET ${sets.join(', ')}, updated_at = NOW() WHERE id = $${values.length}`, values);
+    for (const url of removed) await removeUpload(url, req.user.id);
+    if (b.avatarUrl === null && req.user.avatar_animated) await removeAnimatedAvatar(req.user.avatar_url, req.user.id);
+    // Çevrimiçi görünürlük ve (hayalet mod değiştiyse) dinlediği odalardaki görünürlük güncellenir.
+    if (b.showPresence !== undefined || b.isHidden !== undefined || b.ghostMode !== undefined) await refreshGhost(req.user.id, wasGhost);
+  }
+  res.json({ user: await loadProfile(req.user.id, req.user.id) });
+  announceUserChange(req.user.id);
+});
+
+// ---- Kişiye özel bildirimler (arkadaşlık isteği, takipçi, arkadaş oda açtı) ----
+// Uygulama kapalıyken gelenler: telefon açılınca son gösterilen numaradan sonrakiler alınır (en fazla 20).
+router.get('/notifications/pending', async (req, res) => {
+  const after = /^\d{1,18}$/.test(String(req.query.after ?? '')) ? String(req.query.after) : '0';
+  const last = (await query(`SELECT COALESCE(MAX(id), 0)::text AS id FROM user_notifications WHERE user_id = $1`, [req.user.id])).rows[0].id;
+  const r = await query(
+    `SELECT n.id::text AS id, n.kind, n.title, n.body, n.data FROM user_notifications n
+     WHERE n.user_id = $1 AND n.id > $2::bigint AND n.created_at > NOW() - INTERVAL '3 days' ORDER BY n.id DESC LIMIT 20`,
+    [req.user.id, after],
+  );
+  res.json({ lastId: last, notifications: r.rows.reverse() });
+});
+
+// Mesajlar → Bildirimler: son 7 günün bildirimleri, en yeni en üstte (sayfalı).
+router.get('/notifications', async (req, res) => {
+  const before = /^\d{1,18}$/.test(String(req.query.before ?? '')) ? String(req.query.before) : null;
+  const r = await query(
+    // Sıralama sayısal numaraya göre (n.id): metne çevrilmiş "id"ye göre sıralamak 9'u 10'un önüne koyuyordu.
+    `SELECT n.id::text AS id, n.kind, n.title, n.body, n.data, n.created_at FROM user_notifications n
+     WHERE n.user_id = $1 AND n.created_at > NOW() - INTERVAL '7 days' AND ($2::bigint IS NULL OR n.id < $2::bigint)
+     ORDER BY n.id DESC LIMIT 100`,
+    [req.user.id, before],
+  );
+  const seen = (await query(`SELECT notify_seen_id::text AS s FROM users WHERE id = $1`, [req.user.id])).rows[0]?.s ?? '0';
+  res.json({ seenId: seen, notifications: r.rows.map((x) => ({ id: x.id, kind: x.kind, title: x.title, body: x.body, data: x.data ?? {}, createdAt: x.created_at })) });
+});
+
+// Okunmamış bildirim sayısı (Mesajlar'daki rozet).
+router.get('/notifications/unread', async (req, res) => {
+  const r = await query(
+    `SELECT COUNT(*)::int AS n FROM user_notifications n JOIN users u ON u.id = n.user_id
+     WHERE n.user_id = $1 AND n.id > u.notify_seen_id AND n.created_at > NOW() - INTERVAL '7 days'
+       AND n.kind NOT IN ('friend_request', 'relation_request')`, // sekme rozetiyle aynı sayım (istekler kendi kartında)
+    [req.user.id],
+  );
+  res.json({ unread: r.rows[0].n });
+});
+
+router.post('/notifications/seen', async (req, res) => {
+  await query(
+    `UPDATE users SET notify_seen_id = GREATEST(notify_seen_id, COALESCE((SELECT MAX(id) FROM user_notifications WHERE user_id = $1), 0)) WHERE id = $1`,
+    [req.user.id],
+  );
+  res.json({ ok: true });
+});
+
+const NOTIFY_PREF_KEYS = ['friend', 'follow', 'room', 'moment', 'family'];
+router.get('/notify-prefs', async (req, res) => {
+  const p = req.user.notify_prefs ?? {};
+  res.json({ prefs: Object.fromEntries(NOTIFY_PREF_KEYS.map((k) => [k, p[k] !== false])) });
+});
+router.put('/notify-prefs', async (req, res) => {
+  const b = req.body ?? {};
+  const next = { ...(req.user.notify_prefs ?? {}) };
+  for (const k of NOTIFY_PREF_KEYS) {
+    if (b[k] === undefined) continue;
+    if (typeof b[k] !== 'boolean') throw fail('Bildirim ayarı true/false olmalı.');
+    next[k] = b[k];
+  }
+  await query(`UPDATE users SET notify_prefs = $2 WHERE id = $1`, [req.user.id, JSON.stringify(next)]);
+  res.json({ prefs: Object.fromEntries(NOTIFY_PREF_KEYS.map((k) => [k, next[k] !== false])) });
+});
+
+// ---- Görsel yükleme: ham bayt (image/png|jpeg|webp), en fazla 3 MB; WIP 5 için hareketli gif/webp, en fazla 5 MB ----
+// Tüm görseller veritabanında saklanır (media_files): sunucu yeniden dağıtılsa da kaybolmaz.
+function imageUpload(column, allowAnimated = false) {
+  const types = allowAnimated ? [...Object.keys(IMAGE_TYPES), 'image/gif'] : Object.keys(IMAGE_TYPES);
+  const parser = express.raw({ type: types, limit: allowAnimated ? '6mb' : '3mb' });
+  return [parser, async (req, res) => {
+    const buf = req.body;
+    if (!Buffer.isBuffer(buf) || !buf.length) throw fail('Görsel gönderilmedi (png, jpeg veya webp).');
+    const animated = allowAnimated ? isAnimatedImage(buf) : null;
+    const old = (await query(`SELECT ${column} AS url, static_avatar_url, avatar_animated FROM users WHERE id = $1`, [req.user.id])).rows[0];
+    if (animated) {
+      // Hareketli profil fotoğrafı: WIP ayrıcalığı (kademesi panelden ayarlanır).
+      await requireFeature(req.user.id, 'animatedAvatar', 'Hareketli profil fotoğrafı');
+      if (buf.length > 5 * 1024 * 1024) throw fail('Hareketli fotoğraf 5 MB’tan küçük olmalı.');
+      const r = await query(
+        `INSERT INTO media_files(kind, mime, ext, size_bytes, data, meta, created_by) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+        [animated, mimeFor(animated), animated, buf.length, buf, JSON.stringify({ purpose: 'avatar_animated' }), req.user.id],
+      );
+      const url = `/media/${r.rows[0].id}.${animated}`;
+      // Önceki sabit fotoğraf yedeklenir; WIP 5 bitince ona dönülür.
+      await query(
+        `UPDATE users SET static_avatar_url = CASE WHEN avatar_animated THEN static_avatar_url ELSE avatar_url END, avatar_animated = TRUE, avatar_url = $1, updated_at = NOW() WHERE id = $2`,
+        [url, req.user.id],
+      );
+      // Eski hareketli fotoğraf veritabanında birikmesin (yalnızca bu kullanıcının yüklediği kayıt silinir).
+      if (old?.avatar_animated) await removeAnimatedAvatar(old.url, req.user.id);
+      res.json({ url, animated: true });
+      announceUserChange(req.user.id);
+      return;
+    }
+    const kind = detectImage(buf);
+    if (!kind || kind !== req.headers['content-type']?.split(';')[0]) throw fail('Görsel biçimi geçersiz.');
+    if (buf.length > 3 * 1024 * 1024) throw fail('Görsel 3 MB’tan küçük olmalı.');
+    const url = await storeImage(buf, kind, req.user.id, column === 'avatar_url' ? 'avatar' : 'cover');
+    if (column === 'avatar_url') {
+      await query(`UPDATE users SET avatar_url = $1, avatar_animated = FALSE, static_avatar_url = NULL, updated_at = NOW() WHERE id = $2`, [url, req.user.id]);
+      await removeUpload(old?.static_avatar_url, req.user.id);
+      if (old?.avatar_animated) await removeAnimatedAvatar(old.url, req.user.id);
+    } else {
+      await query(`UPDATE users SET ${column} = $1, updated_at = NOW() WHERE id = $2`, [url, req.user.id]);
+    }
+    await removeUpload(old?.url, req.user.id);
+    res.json({ url, animated: false });
+    if (column === 'avatar_url') announceUserChange(req.user.id);
+  }];
+}
+
+router.put('/avatar', userLimit('avatar_upload', 15, 3600e3), ...imageUpload('avatar_url', true));
+router.put('/cover', userLimit('cover_upload', 15, 3600e3), ...imageUpload('cover_url'));
+
+router.post('/password', userLimit('password', 5, 15 * 60e3), async (req, res) => {
+  const current = String(req.body?.currentPassword ?? '');
+  const next = String(req.body?.newPassword ?? '');
+  passwordRules(next);
+  // Şifresi olmayan (Google/Facebook) hesap ilk kez şifre belirleyebilir.
+  if (req.user.password_hash && !(await checkPassword(current, req.user.password_hash))) throw fail('Mevcut şifre hatalı.', 403);
+  const hash = await hashPassword(next);
+  // token_version artınca eski oturumlar geçersiz olur.
+  await query(`UPDATE users SET password_hash = $1, token_version = token_version + 1, updated_at = NOW() WHERE id = $2`, [hash, req.user.id]);
+  await revokeAllSessions(req.user.id, 'password');
+  hub.disconnectUser(req.user.id, 'password_changed');
+  res.json({ ok: true, message: 'Şifre değişti. Lütfen yeniden giriş yapın.' });
+});
+
+// Mağaza kuralları gereği uygulama içinden hesap silme.
+router.delete('/', userLimit('acct_delete', 5, 15 * 60e3), async (req, res) => {
+  const password = String(req.body?.password ?? '');
+  if (req.user.password_hash) {
+    if (!(await checkPassword(password, req.user.password_hash))) throw fail('Şifre hatalı.', 403);
+  } else if (!['SİL', 'SIL', 'sil'].includes(String(req.body?.confirm ?? '').trim())) {
+    // Şifresi olmayan (Google/Facebook) hesap: onay için "SİL" yazılır.
+    throw fail('Onay için SİL yazın.', 403);
+  }
+  await deleteAccount(req.user.id);
+  res.json({ ok: true });
+});
+
+// ---- Cihaz oturumları ("Oturumlarım") ----
+router.get('/sessions', async (req, res) => {
+  res.json({ sessions: await listSessions(req.user.id, req.user.session_id ?? null), current: req.user.session_id ?? null });
+});
+
+router.delete('/sessions/:id', userLimit('session_revoke', 30, 10 * 60e3), async (req, res) => {
+  const sid = String(req.params.id);
+  if (!/^[0-9a-f-]{36}$/.test(sid)) throw fail('Oturum bulunamadı.', 404);
+  const n = await revokeSession(req.user.id, sid, 'remote_logout');
+  if (!n) throw fail('Oturum bulunamadı veya zaten kapalı.', 404);
+  res.json({ ok: true, current: sid === req.user.session_id });
+});
+
+// Bu cihaz dışındaki tüm cihazlardan çıkış. Token sürümü artar: eski uygulama sürümlerinin 30 günlük token'ları da
+// geçersiz olur. Bu cihaz yeni bir erişim token'ı alır.
+router.post('/sessions/revoke-others', userLimit('session_revoke', 30, 10 * 60e3), async (req, res) => {
+  const sid = req.user.session_id ?? null;
+  const tv = (await query(`UPDATE users SET token_version = token_version + 1, updated_at = NOW() WHERE id = $1 RETURNING token_version`, [req.user.id])).rows[0].token_version;
+  const n = sid ? await revokeOtherSessions(req.user.id, sid, 'remote_logout') : await revokeAllSessions(req.user.id, 'remote_logout');
+  // Bu cihazın soket bağlantısı açık kalır; diğer cihazların (eski sürümler dahil) bağlantıları kapanır.
+  hub.disconnectUserExcept(req.user.id, sid, 'logout_all');
+  if (!sid) {
+    return res.json({ ok: true, revoked: n, reloginRequired: true });
+  }
+  res.json({ ok: true, revoked: n, token: signAccess({ id: req.user.id, token_version: tv }, sid), expiresIn: ACCESS_TTL_SEC });
+});
+
+// Kullanıcı Sözleşmesi ve Gizlilik Politikası onayı (kayıtta ve metinler güncellenince). Sürüm ve zaman saklanır.
+router.post('/accept-terms', async (req, res) => {
+  if (req.body?.version !== TERMS_VERSION) throw fail('Sözleşme sürümü güncel değil. Uygulamayı güncelleyin.', 409);
+  if (req.body?.adult !== true) throw fail('TR Live 18 yaş ve üzeri içindir.', 403);
+  // Profilde 18 yaşından küçük doğum tarihi kayıtlıysa onay kabul edilmez.
+  const bd = req.user.birth_date ? new Date(req.user.birth_date).toISOString().slice(0, 10) : null;
+  if (bd && !isAdultBirthDate(bd)) throw fail('TR Live 18 yaş ve üzeri içindir. Doğum tarihin 18 yaşından küçük görünüyor; hata olduğunu düşünüyorsan destek ile iletişime geç.', 403);
+  await query(`UPDATE users SET terms_version = $2, terms_accepted_at = NOW() WHERE id = $1`, [req.user.id, TERMS_VERSION]);
+  res.json({ ok: true, termsVersion: TERMS_VERSION });
+});
+
+router.post('/kyc/request', async (req, res) => {
+  const r = await query(`UPDATE users SET kyc_status = 'pending' WHERE id = $1 AND kyc_status IN ('none','rejected') RETURNING kyc_status`, [req.user.id]);
+  if (!r.rowCount) throw fail('Kimlik doğrulama başvurunuz zaten var veya onaylı.', 409);
+  res.json({ ok: true, kycStatus: 'pending' });
+});
+
+// Elmas bozdurma: 5 Elmas = 1 Coin. Onaylı yayıncılar maaş sistemiyle ödendiği için bozduramaz.
+export const DIAMONDS_PER_COIN = 5n;
+router.post('/diamonds/exchange', userLimit('diamond_exchange', 20, 10 * 60e3), idempotent('diamond_exchange'), async (req, res) => {
+  const raw = req.body?.diamonds;
+  if (!/^\d{1,12}$/.test(String(raw ?? ''))) throw fail('Geçerli bir elmas miktarı girin.');
+  const diamonds = BigInt(raw);
+  if (diamonds < DIAMONDS_PER_COIN || diamonds % DIAMONDS_PER_COIN !== 0n) throw fail('Miktar 5 ve katları olmalı (5 Elmas = 1 Coin).');
+  const coins = diamonds / DIAMONDS_PER_COIN;
+  const out = await tx(async (c) => {
+    const u = (await c.query(`SELECT coins, diamonds FROM users WHERE id = $1 FOR UPDATE`, [req.user.id])).rows[0];
+    const b = (await c.query(`SELECT 1 FROM broadcasters WHERE user_id = $1 AND status = 'approved'`, [req.user.id])).rowCount;
+    if (b) throw fail('Onaylı yayıncılar elmasları maaş sistemiyle alır; bozdurma yapılamaz.', 403);
+    if (BigInt(u.diamonds) < diamonds) throw fail('Yeterli elmasınız yok.', 409);
+    const n = (await c.query(`UPDATE users SET diamonds = diamonds - $2, coins = coins + $3, updated_at = NOW() WHERE id = $1 RETURNING coins, diamonds`, [req.user.id, diamonds.toString(), coins.toString()])).rows[0];
+    await c.query(
+      `INSERT INTO wallet_transactions(user_id, transaction_type, coin_amount, diamond_amount, description) VALUES($1,'diamond_exchange',$2,$3,$4)`,
+      [req.user.id, coins.toString(), (-diamonds).toString(), `${diamonds} Elmas → ${coins} Coin`],
+    );
+    return n;
+  });
+  res.json({ ok: true, coins: String(out.coins), diamonds: String(out.diamonds), exchangedCoins: coins.toString() });
+});
+
+// Coin geçmişi: tür grubuna göre süzülebilir, "daha fazla" ile geriye doğru sayfalanır (before = son kaydın zamanı).
+const WALLET_GROUPS = {
+  gift: ['gift_sent', 'gift_received', 'lucky_gift_win'],
+  topup: ['dealer_credit', 'admin_adjustment', 'daily_bonus'],
+  exchange: ['diamond_exchange', 'bean_exchange', 'bean_received'],
+  shop: ['store_purchase', 'wip_purchase'],
+  bag: ['lucky_bag_sent', 'lucky_bag_received', 'lucky_bag_refund'],
+};
+router.get('/wallet', async (req, res) => {
+  const limit = Math.max(1, Math.min(Math.floor(Number(req.query.limit)) || 50, 100));
+  const group = req.query.group ? oneOf(String(req.query.group), Object.keys(WALLET_GROUPS), 'Tür') : null;
+  // İmleç mikrosaniye hassasiyetinde metin olarak taşınır (JS tarihi milisaniyeye yuvarlar, aynı ms'deki kayıt atlanırdı).
+  let before = null;
+  if (req.query.before) {
+    before = String(req.query.before);
+    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?Z$/.test(before)) throw fail('Geçersiz tarih.');
+  }
+  const r = await query(
+    `SELECT id, transaction_type, coin_amount, diamond_amount, description, created_at,
+            to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS cursor
+     FROM wallet_transactions
+     WHERE user_id = $1 AND ($2::text[] IS NULL OR transaction_type = ANY($2::text[])) AND ($3::timestamptz IS NULL OR created_at < $3)
+       -- Basım bütçesinden gelen bakiye (test, etkinlik ödülü, telafi, pazarlama) kullanıcıya
+       -- gösterilmez: sahibin kararı. Defterde durur (aylık sınır ve mutabakat ona bağlı).
+       AND NOT (transaction_type = ANY($5::text[]))
+     ORDER BY created_at DESC LIMIT $4`,
+    [req.user.id, group ? WALLET_GROUPS[group] : null, before, limit, await hiddenTxTypes()],
+  );
+  res.json({
+    transactions: r.rows.map((x) => ({
+      id: x.id, type: x.transaction_type, coinAmount: String(x.coin_amount ?? 0),
+      diamondAmount: String(x.diamond_amount ?? 0), description: x.description, createdAt: x.created_at,
+    })),
+    nextBefore: r.rows.length === limit ? r.rows[r.rows.length - 1].cursor : null,
+  });
+});
+
+// ---- Gelir Merkezi: yayın özeti (Europe/Istanbul gün/ay sınırları) ----
+const TZ = 'Europe/Istanbul';
+function monthParam(v) {
+  const m = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(String(v ?? ''));
+  if (m) return `${m[1]}-${m[2]}`;
+  return new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit' }).format(new Date()).slice(0, 7);
+}
+async function earningsBlock(userId, from, to) {
+  // from/to: Istanbul yerel zaman damgası (metin) — yarı açık aralık
+  const gifts = await query(
+    `SELECT COALESCE(r.room_type, 'audio') AS t, COALESCE(SUM(COALESCE(g.diamond_amount, g.coin_amount)), 0)::text AS d
+     FROM gift_transactions g LEFT JOIN rooms r ON r.id = g.room_id
+     WHERE g.receiver_id = $1 AND g.sender_id <> g.receiver_id
+       AND g.created_at >= ($2::timestamp AT TIME ZONE '${TZ}') AND g.created_at < ($3::timestamp AT TIME ZONE '${TZ}')
+     GROUP BY 1`,
+    [userId, from, to],
+  );
+  const by = Object.fromEntries(gifts.rows.map((x) => [x.t, BigInt(x.d)]));
+  const video = by.video ?? 0n;
+  const audio = Object.entries(by).filter(([k]) => k !== 'video').reduce((a, [, v]) => a + v, 0n);
+  const mic = (await query(
+    `SELECT COALESCE(SUM(EXTRACT(EPOCH FROM (LEAST(COALESCE(ended_at, NOW()), ($3::timestamp AT TIME ZONE '${TZ}')) - GREATEST(started_at, ($2::timestamp AT TIME ZONE '${TZ}'))))), 0)::bigint AS secs,
+            COUNT(DISTINCT (GREATEST(started_at, ($2::timestamp AT TIME ZONE '${TZ}')) AT TIME ZONE '${TZ}')::date)::int AS days
+     FROM mic_sessions WHERE user_id = $1 AND started_at < ($3::timestamp AT TIME ZONE '${TZ}') AND COALESCE(ended_at, NOW()) > ($2::timestamp AT TIME ZONE '${TZ}')`,
+    [userId, from, to],
+  )).rows[0];
+  return {
+    totalDiamonds: String(video + audio), videoDiamonds: String(video), audioDiamonds: String(audio),
+    activeDays: mic.days, activeMinutes: Math.floor(Number(mic.secs) / 60),
+  };
+}
+
+router.get('/earnings/summary', async (req, res) => {
+  const month = monthParam(req.query.month);
+  const [y, m] = month.split('-').map(Number);
+  const next = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
+  const monthly = await earningsBlock(req.user.id, `${month}-01 00:00:00`, `${next}-01 00:00:00`);
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date());
+  const tomorrow = new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date(Date.now() + 86400e3));
+  const daily = await earningsBlock(req.user.id, `${today} 00:00:00`, `${tomorrow} 00:00:00`);
+  res.json({ month, today, monthly, daily });
+});
+
+// Canlı yayın geçmişi (video/sesli): mikrofonda geçirilen oturumlar ve o oturumda alınan elmas.
+router.get('/earnings/history', async (req, res) => {
+  const type = req.query.type === 'video' ? 'video' : 'audio';
+  const offset = Math.max(Number(req.query.offset) || 0, 0);
+  const r = await query(
+    `SELECT s.started_at, s.ended_at,
+            EXTRACT(EPOCH FROM (COALESCE(s.ended_at, NOW()) - s.started_at))::bigint AS secs,
+            (SELECT COALESCE(SUM(COALESCE(g.diamond_amount, g.coin_amount)), 0)::text FROM gift_transactions g
+              WHERE g.receiver_id = s.user_id AND g.sender_id <> g.receiver_id AND g.room_id = s.room_id
+                AND g.created_at >= s.started_at AND g.created_at < COALESCE(s.ended_at, NOW())) AS diamonds
+     FROM mic_sessions s JOIN rooms rm ON rm.id = s.room_id
+     WHERE s.user_id = $1 AND (CASE WHEN rm.room_type = 'video' THEN 'video' ELSE 'audio' END) = $2
+     ORDER BY s.started_at DESC LIMIT 10 OFFSET $3`,
+    [req.user.id, type, offset],
+  );
+  const totals = (await query(
+    `SELECT COUNT(DISTINCT (s.started_at AT TIME ZONE '${TZ}')::date)::int AS days,
+            COALESCE(SUM(EXTRACT(EPOCH FROM (COALESCE(s.ended_at, NOW()) - s.started_at))), 0)::bigint AS secs
+     FROM mic_sessions s JOIN rooms rm ON rm.id = s.room_id
+     WHERE s.user_id = $1 AND (CASE WHEN rm.room_type = 'video' THEN 'video' ELSE 'audio' END) = $2`,
+    [req.user.id, type],
+  )).rows[0];
+  const dia = (await query(
+    `SELECT COALESCE(SUM(COALESCE(g.diamond_amount, g.coin_amount)), 0)::text AS d FROM gift_transactions g LEFT JOIN rooms rm ON rm.id = g.room_id
+     WHERE g.receiver_id = $1 AND g.sender_id <> g.receiver_id AND (CASE WHEN rm.room_type = 'video' THEN 'video' ELSE 'audio' END) = $2`,
+    [req.user.id, type],
+  )).rows[0].d;
+  res.json({
+    type, offset, hasMore: r.rows.length === 10,
+    totals: { activeDays: totals.days, minutes: Math.floor(Number(totals.secs) / 60), diamonds: dia },
+    sessions: r.rows.map((x) => ({ startedAt: x.started_at, endedAt: x.ended_at, seconds: Number(x.secs), diamonds: x.diamonds })),
+  });
+});
+
+// Seviye Merkezi: kullanıcı seviyesi (gönderilen coin) ve yayıncı seviyesi (alınan elmas), 300 kademe.
+router.get('/levels', async (req, res) => {
+  const u = (await query(
+    `SELECT total_sent_coins, total_received_diamonds, level_exp_bonus, host_level_exp_bonus FROM users WHERE id = $1`, [req.user.id],
+  )).rows[0];
+  // Yönetimin verdiği seviye farkı dahil.
+  const user = levelInfo(levelExp(u.total_sent_coins, u.level_exp_bonus));
+  const broadcaster = levelInfo(levelExp(u.total_received_diamonds, u.host_level_exp_bonus));
+  // Eski kayıtlarla uyuşmazlık varsa kendini düzelt.
+  await query(`UPDATE users SET coin_level = $2, gift_level = $3 WHERE id = $1 AND (coin_level <> $2 OR gift_level <> $3)`, [req.user.id, user.level, broadcaster.level]);
+  res.json({ user, broadcaster });
+});
+
+// Kırmızı rozetler (yeni ziyaretçi, yeni takipçi, bekleyen arkadaş isteği).
+router.get('/badges', async (req, res) => {
+  const r = await query(
+    `SELECT (SELECT COUNT(*)::int FROM profile_visitors WHERE profile_user_id = $1 AND last_visited_at > u.visitors_seen_at
+               AND last_visited_at > NOW() - INTERVAL '7 days') AS visitors,
+            (SELECT COUNT(*)::int FROM follows f JOIN users fu ON fu.id = f.follower_id AND fu.account_status = 'active'
+               WHERE f.followed_id = $1 AND f.created_at > u.followers_seen_at) AS followers,
+            -- Liste (/friends/requests) ile aynı kural: kapalı hesaplardan gelen istekler sayılmaz (yoksa rozet hiç sönmüyordu).
+            ((SELECT COUNT(*)::int FROM friend_requests fr JOIN users ru ON ru.id = fr.requester_id AND ru.account_status = 'active'
+                WHERE fr.target_id = $1 AND fr.status = 'pending' AND fr.created_at > NOW() - INTERVAL '7 days')
+             + (SELECT COUNT(*)::int FROM cp_pairs WHERE (user_a = $1 OR user_b = $1) AND request_kind IS NOT NULL
+                  AND request_from <> $1 AND request_at > NOW() - INTERVAL '24 hours'
+                  AND EXISTS (SELECT 1 FROM users ru WHERE ru.id = request_from AND ru.account_status = 'active'))) AS friends,
+            -- Ailemde bekleyen katılma istekleri (yalnızca aile sahibi / yöneticisi için).
+            (SELECT COUNT(*)::int FROM family_join_requests jr
+               JOIN family_members fm ON fm.family_id = jr.family_id AND fm.user_id = $1 AND fm.role IN ('owner','admin')
+               JOIN users ru ON ru.id = jr.user_id AND ru.account_status = 'active') AS family
+     FROM users u WHERE u.id = $1`,
+    [req.user.id],
+  );
+  const x = r.rows[0] ?? { visitors: 0, followers: 0, friends: 0, family: 0 };
+  res.json({ visitors: x.visitors, followers: x.followers, friends: x.friends, family: x.family, total: x.visitors + x.followers + x.friends + x.family });
+});
+
+// Liste açılınca rozet sıfırlanır.
+router.post('/seen', async (req, res) => {
+  const kind = oneOf(req.body?.kind, ['visitors', 'followers'], 'Tür');
+  await query(`UPDATE users SET ${kind}_seen_at = NOW() WHERE id = $1`, [req.user.id]);
+  res.json({ ok: true });
+});
+
+// Profil ziyaretçileri: son 7 gün, en son ziyaret eden en üstte. Liste WIP kademesine bağlı (viewVisitors).
+router.get('/visitors', async (req, res) => {
+  const wip = await activeWip(req.user.id);
+  if (!wip?.features.viewVisitors) throw fail('Ziyaretçi listesi WIP 2 ve üzeri için açıktır.', 403);
+  const r = await query(
+    `SELECT ${USER_PUBLIC_COLUMNS}, pv.visit_count, pv.last_visited_at
+     FROM profile_visitors pv JOIN users u ON u.id = pv.visitor_id ${USER_PUBLIC_JOINS}
+     WHERE pv.profile_user_id = $1 AND pv.last_visited_at > NOW() - INTERVAL '7 days'
+     ORDER BY pv.last_visited_at DESC LIMIT 200`,
+    [req.user.id],
+  );
+  const users = r.rows.map((x) => publicUser(x, req.user.id));
+  const withRooms = await attachCurrentRooms(users).catch(() => users);
+  res.json({
+    visitors: r.rows.map((x, i) => ({ user: withRooms[i], visitCount: x.visit_count, lastVisitedAt: x.last_visited_at })),
+  });
+});

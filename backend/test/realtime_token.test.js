@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { hub, socketToken } from '../src/realtime.js';
+import { hub, socketToken } from '../src/infrastructure/websocket/realtime.js';
 
 const url = (q) => new URL(`/ws${q}`, 'http://localhost');
 

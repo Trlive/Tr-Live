@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import PanelShell from "@/components/panel-shell";
-import { AdminStaff } from "@/components/admin/people";
+import PanelShell from "@/core/layout/panel-shell";
+import { AdminStaff } from "@/modules/admin/users/people";
 
 export const metadata: Metadata = {
   title: "Yetkililer",

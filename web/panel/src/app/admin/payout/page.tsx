@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import PanelShell from "@/components/panel-shell";
-import { Loading } from "@/components/ui";
-import { AdminPayoutDetail } from "@/components/admin/payouts";
+import PanelShell from "@/core/layout/panel-shell";
+import { Loading } from "@/shared/components/ui";
+import { AdminPayoutDetail } from "@/modules/admin/withdrawals/payouts";
 
 export const metadata: Metadata = {
   title: "Dönem Detayı",

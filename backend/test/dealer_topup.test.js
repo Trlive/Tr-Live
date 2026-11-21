@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 delete process.env.DATABASE_URL;
-const { requirePackage, assertReviewable, packageView, DEALER_TOPUP_PACKAGES } = await import('../src/services/dealer_topup.js');
+const { requirePackage, assertReviewable, packageView, DEALER_TOPUP_PACKAGES } = await import('../src/modules/dealers/dealer_topup.service.js');
 
 test('requirePackage geçerli kodu döndürür, geçersizi reddeder', () => {
   const p = requirePackage('D_100K');

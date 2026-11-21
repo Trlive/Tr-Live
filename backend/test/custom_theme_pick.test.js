@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { resolveRoomTheme } from '../src/services/room_themes.js';
+import { resolveRoomTheme } from '../src/modules/rooms/room_themes.service.js';
 
 // Birden çok özel tema: "custom:<id>" seçilen temanın görselini uygular; "custom" kayıtlı görseli korur.
 const A = { id: '11111111-1111-1111-1111-111111111111', image_url: '/uploads/a.jpg' };

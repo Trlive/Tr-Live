@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import PanelShell from "@/components/panel-shell";
-import AdminPlugins from "@/components/admin/plugins";
+import PanelShell from "@/core/layout/panel-shell";
+import AdminPlugins from "@/modules/admin/game_packages/plugins";
 
 export const metadata: Metadata = { title: "Oyun Paketleri" };
 

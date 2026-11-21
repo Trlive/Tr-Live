@@ -1,13 +1,13 @@
 {
   "name": "tr-live-backend",
-  "version": "2.130.0",
+  "version": "2.145.0",
   "private": true,
   "type": "module",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "migrate": "node src/migration_runner.js",
+    "migrate": "node src/infrastructure/database/migration_runner.js",
     "test": "node --test",
     "check": "node scripts/check.mjs",
     "test:e2e": "node --test --test-reporter=spec --test-concurrency=1 e2e/api.e2e.js"

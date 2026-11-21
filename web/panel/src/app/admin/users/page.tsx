@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import PanelShell from "@/components/panel-shell";
-import AdminUsers from "@/components/admin/users";
+import PanelShell from "@/core/layout/panel-shell";
+import AdminUsers from "@/modules/admin/users/users";
 
 export const metadata: Metadata = {
   title: "Kullanıcı Yönetimi",

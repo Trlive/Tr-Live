@@ -1,4 +1,5 @@
-import 'dart:convert';
+import '../hybrid/webview/navigation_policy.dart';
+import '../hybrid/js_bridge/bridge_policy.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
@@ -75,20 +76,27 @@ class _ExternalWebViewState extends State<ExternalWebView> {
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(Pal.bg)
       // Oyun sayfasının "kapat" düğmesi (yalnızca close; başka hiçbir uygulama komutu dışarıdaki sayfaya açılmaz).
+      // Dış sayfaya yalnızca 'close' açıktır; yetki kararı BridgePolicy'de, tek yerde.
+      // Oturum bileti dış sayfaya ASLA verilmez: biletimizi başkasının sunucusuna göndermek,
+      // o sunucunun kullanıcı adına her şeyi yapabilmesi demektir.
       ..addJavaScriptChannel('TrLiveBridge', onMessageReceived: (m) {
-        try {
-          final j = jsonDecode(m.message);
-          if (j is Map && j['type'] == 'close' && mounted) Navigator.of(context).maybePop();
-        } catch (_) {}
+        BridgePolicy.handle(widget.url, m.message, (msg) async {
+          if (msg.type == 'close' && mounted) Navigator.of(context).maybePop();
+        });
       })
       ..setNavigationDelegate(NavigationDelegate(
         onNavigationRequest: (r) {
+          // Düz http artık yüklenmiyor: araya giren, kanal bağlı bir pencereye kod sokabilirdi.
+          // İzin listesi doluysa yabancı alan adı da engellenir.
+          if (WebViewPolicy.canLoadExternal(r.url)) return NavigationDecision.navigate;
           final u = Uri.tryParse(r.url);
-          if (u == null) return NavigationDecision.prevent;
-          if (u.scheme == 'https' || u.scheme == 'http' || u.scheme == 'about' || u.scheme == 'data' || u.scheme == 'blob') {
-            return NavigationDecision.navigate;
+          if (u != null && WebViewPolicy.shouldHandOff(r.url)) {
+            launchUrl(u, mode: LaunchMode.externalApplication).catchError((_) => false);
+          } else if (u != null && u.scheme == 'https') {
+            // İzin listesinde olmayan https adres: uygulama içinde değil, telefonun tarayıcısında
+            // açılır. Orada adres çubuğu görünür, kullanıcı nereye gittiğini bilir.
+            launchUrl(u, mode: LaunchMode.externalApplication).catchError((_) => false);
           }
-          launchUrl(u, mode: LaunchMode.externalApplication).catchError((_) => false);
           return NavigationDecision.prevent;
         },
         onPageStarted: (_) {

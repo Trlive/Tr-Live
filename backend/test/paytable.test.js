@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   DEFAULT_PAY_LEVELS as L, evaluatePay, agencyPrim, bestLevel, validatePayLevels, validateGrades, gradeFor, prettyIdCandidate, SPECIAL_ID_RE,
   DEFAULT_AGENCY_GRADES, payLevelJson,
-} from '../src/paytable.js';
+} from '../src/modules/games/paytable.rules.js';
 
 const H = 3600;
 const S = { allowBalanceMethod: true, requireGameHours: false, penaltyBps: 5000 };

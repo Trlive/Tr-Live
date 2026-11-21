@@ -4,6 +4,7 @@ import 'package:just_audio/just_audio.dart';
 import 'api.dart';
 import 'call_guard.dart';
 import 'effect_prefs.dart';
+import 'room_audio.dart';
 
 /// Odadaki ortak müziği her cihazda yerel olarak, sunucu konumuna senkron çalar.
 /// Sunucu "positionMs" (alındığı andaki konum) gönderir; şimdiki konum = positionMs + (şimdi - alındığıAn).
@@ -23,7 +24,20 @@ class MusicService {
   Timer? _resync;
   int _gen = 0; // her yeni durum/odadan çıkış sayacı artırır; eski (geç gelen) işlemler sonucu ezmesin
 
-  AudioPlayer get _p => _player ??= AudioPlayer();
+  /// Çaların hangi ses yoluyla kurulduğu. Oda açılıp ses görüşme yoluna alınınca (RoomAudio) çalar
+  /// yeniden kurulur: just_audio, ses aygıtı ayarlarını çaları yaratırken okur, sonradan değiştirmez.
+  bool? _playerVoicePath;
+
+  AudioPlayer get _p {
+    final want = RoomAudio.voicePath.value;
+    if (_player != null && _playerVoicePath != want) {
+      final old = _player;
+      _player = null;
+      old?.dispose().catchError((_) {});
+    }
+    _playerVoicePath = want;
+    return _player ??= AudioPlayer();
+  }
 
   /// DJ telefonunda şarkı sunucudan indirilmez, telefondaki dosyadan çalar (sunucu kimliği → dosya yolu).
   final Map<String, String> _localFiles = {};
@@ -135,6 +149,8 @@ class MusicService {
     if (!_callHooked) {
       _callHooked = true;
       CallGuard.instance.inCall.addListener(() => _player?.setVolume(_vol).catchError((_) {}));
+      // Ses yolu değişince (oda açıldı / kapandı) çalan şarkı yeni yoldan devam eder.
+      RoomAudio.voicePath.addListener(_rebindPlayer);
       EffectPrefs.roomMuted.addListener(() => _player?.setVolume(_vol).catchError((_) {}));
     }
     await refresh();
@@ -240,5 +256,36 @@ class MusicService {
     try {
       await _player?.stop();
     } catch (_) {/* yoksay */}
+  }
+
+  /// Ses yolu değişti: çalar yeni ses aygıtı ayarıyla yeniden kurulur, şarkı kaldığı yerden sürer.
+  void _rebindPlayer() {
+    if (_player == null || _playerVoicePath == RoomAudio.voicePath.value) return;
+    final playing = _player!.playing;
+    final pos = _player!.position;
+    final st = state.value;
+    if (!playing || st == null) {
+      final old = _player;
+      _player = null;
+      _playerVoicePath = RoomAudio.voicePath.value;
+      old?.dispose().catchError((_) {});
+      return;
+    }
+    // _p alıcısı eski çaları bırakıp yenisini kurar; sonra aynı konumdan devam edilir.
+    final url = _trackId == null ? _previewPath : null;
+    unawaited(() async {
+      try {
+        final player = _p; // yeni çalar
+        if (url != null) {
+          await player.setFilePath(url);
+        } else {
+          await refresh(); // sunucu durumundan yeniden kurulur (konum sunucudan gelir)
+          return;
+        }
+        await player.seek(pos);
+        await player.setVolume(_vol);
+        unawaited(player.play().catchError((_) {}));
+      } catch (_) {/* yeni yolda açılamadı: sonraki durum güncellemesinde düzelir */}
+    }());
   }
 }

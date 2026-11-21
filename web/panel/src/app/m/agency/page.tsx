@@ -1,12 +1,12 @@
 "use client";
 
-import MobileShell from "@/components/center/mobile-shell";
-import AgencyHome from "@/components/center/agency-home";
-import AgencyHosts from "@/components/center/agency-hosts";
-import AgencyEarnings from "@/components/center/agency-earnings";
-import { AgencyAssistants, AgencyReferrals, AgencyTransfers } from "@/components/center/agency-team";
-import { PayTable } from "@/components/center/host-center";
-import { t } from "@/lib/i18n";
+import MobileShell from "@/modules/agency/shell/mobile-shell";
+import AgencyHome from "@/modules/agency/dashboard/agency-home";
+import AgencyHosts from "@/modules/agency/broadcasters/agency-hosts";
+import AgencyEarnings from "@/modules/agency/earnings/agency-earnings";
+import { AgencyAssistants, AgencyReferrals, AgencyTransfers } from "@/modules/agency/family/agency-team";
+import { PayTable } from "@/modules/agency/broadcasters/host-center";
+import { t } from "@/shared/utils/i18n";
 
 // Uygulama içi Ajans Merkezi (WebView). Oturum uygulamadan gelir; dil ?lang= ile.
 export default function Page() {

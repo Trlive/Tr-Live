@@ -15,4 +15,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s CMD wget -qO- http://
 # Migration'lar advisory lock ile korunur; her açılışta güvenle çalıştırılabilir.
 # "exec": sunucu 1 numaralı süreç olur ve Docker'ın durdurma sinyalini (SIGTERM) kendisi alır. Eskiden sinyal kabukta
 # (sh) kalıyor, sunucu düzgün kapanamıyor ve her güncellemede 10 sn bekleyip zorla öldürülüyordu.
-CMD ["sh", "-c", "node src/migration_runner.js && exec node src/server.js"]
+CMD ["sh", "-c", "node src/infrastructure/database/migration_runner.js && exec node src/server.js"]

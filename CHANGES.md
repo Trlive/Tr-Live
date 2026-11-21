@@ -1,3 +1,20 @@
+## v2.131.1 — P0 tamamlandı: test bütçesi 10M, amiral hediye doğrulaması, paket denetimi, yedek provası
+- **Test bütçesi 1M → 10M.** En pahalı hediye 5.000.000 Coin olacağı için tek gönderim bütçenin yarısını yiyordu.
+- **5.000.000 Coin'lik hediye uçtan uca doğrulandı:** fiyat tavanı (1 trilyon), seviye matematiği (5M → seviye 23; tavan 300. seviye ≈ 3,09 milyar), global şerit eşiği, defter kayıtları ve mobil gösterim ("5M"). E2E senaryosu eklendi: hediye oluşturma → test bütçesinden basım → gönderim → şerit → defter → mutabakat → bütçe sınırı denemesi.
+- **Oyun paketi denetimi (O-01 adım 1):** Her paketin SHA-256 özeti ve yükleyen yönetici kaydediliyor; yükleme, açma, kapatma, yeniden başlatma ve kaldırma denetim tablosuna düşüyor ve panelde "Paket kayıtları" olarak görünüyor. Aynı dosya tekrar yüklenirse uyarı veriyor; yeni sürümde değiştirilen sürümün özeti kayda geçiyor. Yükleme ekranına, paket kodunun sunucuda tam yetkiyle çalıştığı uyarısı kondu.
+- **Hazırlık (staging) ortamı kurulmayacak** (sahip kararı). Yerine kural: bundan sonraki her riskli adım panelden kapatılabilir bir bayrak arkasında gelecek, önce eski yolla yan yana çalışacak ve her riskli dağıtımdan önce yedek provası yapılacak. Gerekçesi ve bedeli `docs/ARCHITECTURE_AUDIT.md` → I-04'te yazılı.
+- **Yedek provası (V-03 kapandı):** `backup.sh` artık aldığı yedeği doğruluyor (gzip bütünlüğü, dump bitiş satırı, boyut kontrolü, SHA-256 özeti); yarım kalan dosya geçerli yedeğin üzerine yazmıyor. Yeni `restore_test.sh` en son yedeği geçici bir veritabanına geri yükleyip kritik tabloları, kullanıcı sayısını ve bakiye-defter mutabakatını sınıyor, geri dönüş süresini yazıyor ve temizliyor. Üretime dokunmuyor. Gerçek PostgreSQL üzerinde uçtan uca denendi.
+
+## v2.131.0 — P0: istemci-çarpanlı oyun yolu kaldırıldı, mutabakat ve basım bütçeleri geldi
+- **F-01 kapandı:** `/api/activity-play/.../bet` ve `/settle` uçları kaldırıldı. Kazancı oyunun kendisi (istemci) bildiriyordu; bileti eline geçiren oyuncu her turda azami çarpanı göndererek kasayı boşaltabilirdi. `coin_play` bayrağı ve bahis/çarpan sütunları da gitti. Coin ile oynanan oyun artık yalnızca sunucuda sonuç üreten iki yoldan çalışır: oyun paketi ya da imzalı sağlayıcı API'si.
+- **F-02 kapandı:** Günlük mutabakat. Her kullanıcı için `bakiye farkı = işlem defteri toplamı` denetlenir; fark bulunursa mali denetim günlüğüne alarm yazılır ve panelde kırmızı uyarı çıkar (Mali kayıtlar → Mutabakat). Önce ölçüldü: bakiyeyi değiştiren 28 kod yolunun tamamı aynı transaction içinde defter yazıyor.
+- **Basım bütçeleri:** Sıfırdan üretilen Coin artık kategoriye ve aylık sınıra bağlı — Yazılım testi, Etkinlik ödülü, Kullanıcı telafisi, Pazarlama. Kim, kime, hangi bütçeden, neden bastı kayıtlı (Mali kayıtlar → Basım bütçesi).
+- Denetim belgesine mimari ilke yazıldı: görünüm WebView'de olabilir, karar yalnızca backend'de.
+
+## v2.130.1 — Mimari denetim belgesi
+- `docs/ARCHITECTURE_AUDIT.md`: hibrit mimariye geçiş öncesi temel denetim. 900+ dosya taranarak her alan korunacak / düzeltilecek / geliştirilecek / eklenecek olarak sınıflandırıldı; her bulgunun kanıt dosyası var.
+- Kod değişikliği yok (yalnızca belge). Bulunan beş öncelikli madde: istemciden kazanç alan eski oyun ucu, oyun paketlerinin tam yetkisi, bakiye–defter mutabakatının olmayışı, tek sunucu örneği sınırı, medyanın veritabanında olması.
+
 ## v2.130.0 — Oyun paketleri: oyun kodu artık depoda değil
 - Oyunlar ana koddan tamamen çıkarıldı. Süper admin **Sistem → Oyun Paketleri** sayfasından paket zip'i yükler; dosyalar veritabanında saklanır, sunucu açılışta paketi çalıştırır (istemci /g/<id>/, API /api/g/<id>/, WebSocket /ws/g/<id>).
 - Paketin yönetim ayarları, istatistikleri ve tabloları aynı sayfada paketin kendisinden gelir (genel form).
@@ -2304,3 +2321,945 @@ Redis/çoklu sunucu · ajans ödeme/maaş otomasyonu · yaş kapısı ve KVKK me
 
 ## v2.3.1
 Yasaklı kelime denetimi artık yalnızca sohbet/DM'de değil; oda adı, kullanıcı adı/görünen ad, biyografi, aile adı ve ajans adında da uygulanır (`backend/src/safe_text.js`).
+
+## v2.132.0 — Ses sorunlarının kökten çözümü
+
+Üç şikâyetin ikisi **aynı kökten** geliyordu: uygulamanın kendi sesleri (oda müziği, hediye sesleri)
+Android'in **medya** yolundan çalıyordu, odadaki konuşmalar ise **görüşme** yolundan. Bu ayrım iki ayrı
+arızaya yol açıyor:
+
+- **Bluetooth kulaklık:** çoğu telefon görüşme (SCO) ile müzik (A2DP) bağlantısını aynı anda kuramaz.
+  İkisi birden istenince biri susuyordu → "kulaklıkta uygulama sesi gelmiyor".
+- **Yankı:** yankı giderici (AEC) yalnızca kendi çaldığı sesi tanır. Medya yolundan çıkan müzik ve
+  hediye sesi hoparlörden çıkıp mikrofona geri girdiğinde AEC onu **tanımıyor, iptal edemiyordu**;
+  karşı taraf odanın sesini yankı olarak duyuyordu.
+
+### Yapılanlar
+
+- **Yeni modül `mobile/lib/services/room_audio.dart`** — oda açıkken sesin tek sahibi. Bütün uygulama
+  sesi görüşme yoluna alınır: tek Bluetooth bağlantısı kullanılır ve müzik/hediye sesi yankı
+  gidericinin referansına girer. Oda kapanınca ses medya moduna döner.
+- `call_guard.dart` artık ses oturumunu **kurmuyor**, yalnızca arama sinyalini dinliyor. (İki yerden
+  ayar yapıldığı için biri diğerini eziyor, kulaklık yönlendirmesi bozuluyordu.)
+- `music_service.dart` — `just_audio` ses aygıtı ayarını çaları **yaratırken** okur, sonradan
+  değiştirmez. Ses yolu değişince çalar yeniden kurulur, şarkı kaldığı yerden sürer.
+- **Oda sesi kapalıyken sızan ses:** susturma, LiveKit'in genel "değişti" bildirimiyle uygulanıyordu;
+  yeni iz ise sunucudan geldiği anda çalmaya başlıyor. Aradaki boşluk kadar ses duyuluyordu. Artık
+  `TrackSubscribedEvent` ile **izin kendisi geldiği anda** susturuluyor; eski tarama güvenlik ağı
+  olarak kalıyor.
+- Ses bit hızı 48 → **64 kbps** (şarj tüketimi modunda 32). Şarkı ve tiz sesler belirgin şekilde daha
+  net; DTX sayesinde ek yük yalnızca konuşurken.
+- Olay dinleyicileri oda her kapandığında bırakılıyor (eskiden sızıyordu).
+
+### Geri alma yolu (canlıda ilerlediğimiz için)
+
+Panel → Ayarlar → **Ses** → "Oda sesini görüşme yolundan çal" kapatılırsa uygulama bir sonraki oda
+açılışında eski davranışa döner. **Yeni APK gerekmez.**
+
+### Dürüst takas
+
+Bluetooth kulaklıkta görüşme bağlantısı dar bantlıdır: oda müziği hoparlördeki kadar "hi-fi"
+duyulmaz. Sesli sohbet uygulamasında doğru takas budur — karşı tarafa yankı gitmesindense müzik biraz
+daha tok duyulur. Kablolu kulaklıkta ve hoparlörde fark yoktur.
+
+### Görüntü
+
+Baştan sona incelendi, değişiklik gerekmedi: 540p (şarj modunda 360p), canlı yayında 1300 kbps/25 fps,
+simulcast + dynacast + adaptiveStream açık. Zayıf internette sunucu düşük katmanı gönderiyor.
+
+## v2.133.0 — Modül standardı ve backend modülleri (1. aşama)
+
+Kod, gönderilen modül yapısına geçiriliyor. Yapıyı **üç düzeltmeyle** kabul ettim; gerekçeler
+`docs/MODULE_STANDARD.md` bölüm 0'da:
+
+1. `models/` ve `repositories/` `presentation/` altında olmaz — `domain/` ve `data/` altında olur
+   (gönderilen `live_rooms` ile `wallet` örnekleri birbiriyle çelişiyordu).
+2. `lib/platform/android/` ve `lib/platform/ios/` diye bir şey yok — Dart kodu orada çalışmaz.
+   `lib/platform/` yalnızca method channel sarmalayıcıları içindir.
+3. 19 özelliğin hepsine üç katman = boş klasör ormanı. Katman sayısı özelliğin boyutuna bağlandı.
+
+### En büyük risk ve ona karşı aldığım önlem
+
+Staging kurmama kararı verdik. Bu, modüllere ayırmayı yapabileceğimiz **en riskli iş** yapıyor:
+bir API adresi taşıma sırasında sessizce düşerse sunucu yine açılır, testler yine geçer, hatayı
+ilk gören kullanıcı olur.
+
+Bu yüzden önce güvenlik ağını kurdum:
+
+- **`backend/tools/route_map.mjs`** — sunucunun tüm API adreslerini kaynaktan çıkarır
+  (bugün 49 bağlama, 467 adres).
+- **`backend/test/route_map.test.js`** — bunu onaylı anlık görüntüyle karşılaştırır. Anahtarda
+  dosya yolu bilerek yok: taşıma dosyayı değiştirir, API yüzeyini değiştirmemelidir.
+- **`backend/tools/move_module.mjs`** — dosyayı taşır, import yollarını düzeltir, **kod satırına
+  dokunmaz**.
+
+Kural: bir sürümde ya dosya taşınır, ya mantık değişir. İkisi birden asla.
+
+### Taşınanlar (14 modül, 34 dosya)
+
+`auth` · `user` · `room` · `chat` · `music` · `game` · `family` · `relation` · `event` · `store` ·
+`feed` · `analytics` · `moderation` · `system`
+
+Taşımadan sonra: adres haritası **birebir aynı**, kırık import yok, tüm testler geçiyor.
+
+### Bilerek sonraya bırakılanlar
+
+`routes/` altında 9 dosya kaldı: finansal modüller (`gifts`, `usd`, `dealers`, `agencies`,
+`agency_center`, `luckybag`) ve `admin.js` (2.391 satır) + `admin_panel.js`.
+
+Sıralama kasıtlı: `admin.js`'i yalnız yönetici kullanır, orada bir şey kırılırsa panelden fark
+edilir ve kullanıcı etkilenmez. Cüzdanda kırılırsa para hareketi etkilenir. `room_screen.dart`
+(5.398 satır) en sona kaldı — uygulamanın en çok kullanılan ekranı ve ses yığınının tamamı orada.
+
+## v2.134.0 — Backend hedef iskeleti tamamlandı
+
+Gönderilen `backend/src/` ağacının tamamı kuruldu. **Mantığa tek satır dokunulmadı** — taşıma ile
+davranış değişikliği aynı sürümde olmaz kuralı korundu.
+
+### Ne oldu
+
+- `routes/` ve `services/` klasörleri **tamamen kalktı**. 133 dosyanın tamamı yerine taşındı.
+- **22 modül:** admin, agencies, analytics, assets, auth, dealers, events, families, games, gifts,
+  media, messaging, moderation, moments, music, notifications, relations, rooms, store, system,
+  users, wallet
+- **`infrastructure/`** — database, websocket, livekit, queue
+- **`middleware/`** — authentication, security, validation
+- **`shared/`** — errors, utils, constants
+- **`app.js` / `server.js` ayrıldı:** app.js (237 satır) Express uygulamasını kurar; server.js
+  (138 satır) yalnızca HTTP sunucusunu, WebSocket'i, zamanlayıcıları ve sinyalleri yönetir.
+  Testler artık uygulamayı dinlemeye başlamadan kurabilir.
+- Modül adları hedefteki gibi çoğul: `user`→`users`, `room`→`rooms`, `chat`→`messaging`,
+  `feed`→`moments`, `family`→`families`, `game`→`games`, `event`→`events`
+
+### Doğrulama
+
+| Kontrol | Sonuç |
+|---|---|
+| API adresi | 467 / 467 — **kaybolan yok** |
+| Router bağlaması | 49 / 49 — **kaybolan yok** |
+| Kırık import | yok |
+| Testler | hepsi geçti |
+| Sözdizimi | tamam |
+
+### Hedef listeden bilinçli sapmalar
+
+- `ledger`, `purchases`, `withdrawals` ayrı modül **yapılmadı** — üçü de aynı atomik işlemin parçası
+  (`wallet_transactions` aynı transaction'da yazılır). Ayırmak, bölünmesi yasak olan şeyi
+  bölünebilirmiş gibi gösterirdi. Hepsi `wallet` içinde.
+- `livekit` modül değil, **altyapı** — iş kuralı içermiyor, `infrastructure/livekit/`'e gitti.
+- `profiles` → `users` içinde, `game_sessions` → `games` içinde (ayrı tablo/yaşam döngüsü yok).
+- `missions`, `medals`, `feature_flags`, `sdui` → **klasör açılmadı**, çünkü henüz kod yok.
+  Boş klasör "burada bir şey var" yanılsaması yaratır.
+
+Gerekçelerin tamamı `docs/MODULE_STANDARD.md`'de.
+
+### Sırada
+
+4. aşama: `admin.js` (2.917 satır) ve `rooms` modülünün dosya içi bölünmesi. Bu artık taşıma değil,
+**bölme** — ayrı sürüm.
+
+## v2.135.0 — Büyük dosyalar bölündü (4. aşama)
+
+Artık **hiçbir rota dosyası 800 satırı geçmiyor.** `ARCHITECTURE_AUDIT.md` A-01'in tamamlanma
+ölçütü buydu.
+
+### `admin.routes.js` — 2.391 satır → 13 dosya
+
+`admin.routes.js` (62) + `admin.shared.js` (351) + konu dosyaları: users (287), coins (69),
+wip (63), catalog (526), support (39), dealers (128), agencies (297), events (235), finance (88),
+moderation (49), security (509).
+
+### `rooms.routes.js` — 1.195 satır → 6 dosya
+
+`rooms.routes.js` (643) + `rooms.shared.js` + mic, moderation, scoreboard, media.
+
+### Nasıl bölündü
+
+Yeni araç: **`backend/tools/split_routes.mjs`**. Dosyayı üst düzey bloklara ayırır (import,
+bildirim, rota kaydı), ortak olanları `<modül>.shared.js`'e alıp dışa açar, rotaları konu
+dosyalarına dağıtır. Alt router'lar ana router'a **ön ek olmadan** bağlanır — yani API adresleri
+birebir aynı kalır.
+
+**Kod satırı değiştirilmedi.**
+
+### Güvenlik ağı güçlendirildi
+
+Adres haritası artık router **değişken adını** da anahtarda tutmuyor: bir dosya alt router'lara
+bölündüğünde ad değişir ama API yüzeyi aynı kalmalıdır. Bunun yerine aynı yolun kaç kez
+tanımlandığı sayılıyor (`GET /:id ×3`) — biri düşerse sayı değişir, yani bölmede kaybolan adres
+yine yakalanır.
+
+Ek olarak `backend/tools/unresolved_refs.mjs`: bölme sonrası bir alt dosyada eksik kalan import'u
+yakalar (çalışma anında `undefined` olurdu, testler görmezdi).
+
+### Doğrulama
+
+501 / 501 adres tanımı · 49 / 49 bağlama · eksik import 0 · kırık import 0 · tüm testler geçti
+
+### Gönderilen diğer ağaçlar hakkında üç itiraz
+
+Ayrıntı `docs/MODULE_STANDARD.md` bölüm 8'de:
+
+1. **`games/catalog/{ludo, okey, uno, jackaroo}` açılmadı** — "oyun kodu depoda olmayacak"
+   kararına aykırı. Eklenti sistemi tam bunun için kuruldu.
+2. **`hybrid/` alt klasörleri açılmadı** — 26 klasörün 4'ünde kod var, 22'si boş olurdu.
+3. **`web/` üçe bölünmedi** — üç derleme, üç yayın, üç Caddy yolu demek. Aynı yalıtım tek uygulama
+   içinde `modules/` ile elde edilir. Bayi panelini ayrı alan adından yayınlamak istiyorsan
+   söyle — o zaman bölmek doğru olur.
+
+## v2.135.0 — Web paneli modüllere ayrıldı
+
+> **Numara notu:** Bu sürüm numarası yukarıdaki "Büyük dosyalar bölündü" kaydıyla birlikte iki kez
+> kullanıldı — benim hatam. İki iş de aynı gün, art arda yapıldı ve ikisi de yayınlandı; sonraki
+> sürüm v2.136.0 olarak devam etti, yani atlanan ya da kaybolan bir sürüm yok. Geçmişi yeniden
+> numaralamak, teslim edilmiş paketlerle kayıtları uyumsuz hale getireceği için düzeltilmedi.
+
+Gönderilen `web/admin/src/` ağacı uygulandı. **İçeriğe tek satır dokunulmadı** — yalnızca dosyalar
+taşındı ve import yolları güncellendi.
+
+### Yeni yapı
+
+```
+web/panel/src/
+├── app/        Next.js rotaları (admin/, agency/, dealer/, m/)
+├── core/       api, auth, layout
+├── shared/     components (ui, kit), utils (i18n)
+└── modules/
+    ├── admin/  dashboard users rooms wallet withdrawals gifts games
+    │           game_packages agencies dealers moderation events
+    │           asset_management security system_monitor settings
+    ├── agency/ dashboard broadcasters earnings family shell
+    └── dealer/ coin_orders transfers transactions shell
+```
+
+`components/admin/` içindeki 37 düz dosya 16 modüle dağıtıldı; `components/center/` → `agency`,
+`components/dealer/` → `dealer`. `components/` ve `lib/` klasörleri tamamen kalktı.
+
+### Hedeften bilinçli sapma: tek uygulama, üç bölüm
+
+Hedef ağaç `web/admin/`, `web/agency/`, `web/dealer/` diye **üç ayrı uygulama** gösteriyor. Bizde
+üçü tek Next.js uygulaması (`app/admin`, `app/agency`, `app/dealer`). Üçe bölmek demek: üç ayrı
+derleme, üç ayrı dağıtım, üç ayrı Caddy yapılandırması ve ortak bileşenler için paylaşılan paket.
+
+Bugünkü panel 103 dosya ve 13.500 satır — bu ölçekte üç uygulamanın getirdiği işletme yükü,
+sağladığı yalıtımdan büyük. **Modül sınırları klasörle çizildi, dağıtım tek bırakıldı.** Panel
+büyüdüğünde ayırma kararı yeniden değerlendirilir; klasör yapısı o günü zaten hazırlıyor.
+
+### Araç
+
+`web/panel/tools/move_ui.mjs` — dosyayı taşır, `@/` ile başlayan import'ları günceller, içeriğe
+dokunmaz. Panelde her import mutlak yazıldığı için taşımada yanlış yol üretme riski yok.
+
+### Doğrulama
+
+TypeScript derlemesi temiz (`tsc --noEmit`), kırık import yok.
+
+### Düzeltme: `admin.js` zaten bölünmüştü
+
+Bir önceki sürümde "admin.js 2.917 satır, bölünecek" dedim. Yanlıştı: o rakam admin modülünün
+**14 dosyasının toplamı**. `admin.routes.js` 62 satır; geri kalanı `admin_agencies`,
+`admin_catalog`, `admin_coins`, `admin_dealers`, `admin_events`, `admin_finance`,
+`admin_moderation`, `admin_security`, `admin_support`, `admin_users`, `admin_wip` dosyalarında.
+
+Backend'de 800 satırı geçen dosya yok; en büyüğü `agency_center.routes.js` 650 satır. Denetimin
+A-01 tamamlanma ölçütü sağlanmış durumda.
+
+### Sıradaki yapı kararı: boş klasör açılmıyor
+
+`hybrid/` ağacındaki altı klasörün beşinde hiç kod yok (sdui: 0 dosya, js_bridge: 0,
+asset_manager: 0, feature_flags: 0). Bu klasörler **kod geldiği gün** açılacak:
+
+| Sıra | İş | Niçin bu sırada |
+|---|---|---|
+| 1 | `feature_flags` | En küçük iş, SDUI'nin önkoşulu |
+| 2 | `asset_manager` | R2 + CDN ile birlikte (V-02) |
+| 3 | `webview` + `js_bridge` | Alan adı allowlist ile birlikte (O-03) |
+| 4 | `sdui` | Redis (G-01) ve feature_flags olmadan yapılamaz |
+| 5 | `game_sdk` | Oyun platformu olgunlaştıktan sonra |
+| 6 | `room_screen.dart` (5.398 satır) | En riskli iş, en son |
+
+## v2.136.0 — Özellik bayrakları (hibrit katmanın geri alma düğmesi)
+
+Hibrit sistemin ilk ve en temel parçası. Staging kurmama kararımızın karşılığı bu: artık riskli bir
+özellik **önce %1 kullanıcıya** açılıyor, sorun çıkmazsa %10, sonra herkese. Bozulursa panelden
+sıfıra iniyor ve etki bir sonraki uygulama açılışında bitiyor — **yeni APK ve mağaza onayı
+beklenmiyor.**
+
+### Niçin önce bu
+
+`hybrid/` ağacındaki altı klasörün beşinde hiç kod yoktu. Sırayı buna göre kurdum ve bayrakları başa
+aldım: SDUI, asset_manager, js_bridge, game_sdk — hepsi canlıda denenecek işler. Birini bayraksız
+açmak, hatayı ilk gören kişinin kullanıcı olması demek. Bayrak sistemi, geri kalan her adımın
+önkoşulu.
+
+### Sunucu
+
+- `feature_flags` tablosu: açık/kapalı, **oran (0-100)**, her zaman açık/kapalı kullanıcı listeleri,
+  en düşük uygulama sürümü, platform sınırı
+- `feature_flag_audit`: her değişiklik kim/ne zaman/önce/sonra olarak kaydedilir. Bir sorun
+  çıktığında "dün gece %10'a çıkarılmış" bilgisi, sorunu aramaktan hızlıdır.
+- `/api/app/config` yanıtına `flags` eklendi — **ayrı istek açılmadı**, zaten okunan yanıta bindi.
+
+### Kritik tasarım kararı: rastgele değil, karma
+
+Oran rastgele sayıyla hesaplansaydı aynı kullanıcı her istekte farklı sonuç alır, özellik ekran
+açılıp kapandıkça gelip giderdi. Bunun yerine kullanıcı kimliği **bayrak anahtarıyla birlikte**
+karmalanıp 0-99 arası bir kovaya yerleştiriliyor:
+
+- Aynı kullanıcı her zaman aynı sonucu alır.
+- Bayrak anahtarı karmaya dahil olduğu için **iki ayrı %10 bayrağı aynı kullanıcı grubuna denk
+  gelmez** — yoksa aynı grup her denemenin kobayı olurdu. Test bunu 2.000 kullanıcıda doğruluyor.
+
+### Güvenli varsayılanlar
+
+- Bilinmeyen bayrak **kapalı**. Sunucuya ulaşılamazsa **kapalı**. Ağ koptuğunda uygulama eski,
+  bilinen davranışa döner — yeni ve denenmemiş yola değil.
+- Her zaman kapalı listesi her şeyin önünde: şikâyet eden kullanıcı, oranı düşürmeden kapatılabilir.
+- Eski sürüm koruması: özelliği olmayan APK'da bayrak açılmaz.
+- Sürüm bilinmiyorsa kademeli bayrak açılmaz.
+
+### Panel
+
+Ayarlar yanında **Özellik Bayrakları** ekranı: %0 / 1 / 5 / 10 / 25 / 50 / 100 düğmeleri ve
+**"Bu kullanıcıda açık mı?"** sorgusu. Sorgu kullanıcının **kovasını** da gösteriyor, çünkü
+"%10'a çıkardım ama hâlâ görmüyor" durumunun cevabı kovadadır.
+
+### Mobil
+
+`mobile/lib/hybrid/feature_flags/feature_flags.dart` — `Flags.on('anahtar')`. Yapılandırma zaten
+okunan iki yerde (açılış ve oda girişi) bayraklar da tazeleniyor.
+
+Kural: **her bayrak kullanımının yanında eski yol durmalı.** Eski yolu silmek bayrağı anlamsız kılar
+— kapatılacak bir şey kalmaz.
+
+### Hazır bekleyen bayraklar (hepsi kapalı)
+
+`sdui_home` · `webview_games` · `asset_bundles` · `game_sdk_v2`
+
+### Düzeltilen kendi hatam
+
+`route_map.mjs --write` komutunu **farkı görmeden** çalıştırdım. Bu, kaybolan bir adresi sessizce
+onaylamak demek — güvenlik ağını etkisiz kılar. Araç artık yazmadan önce kaybolan/eklenen adresleri
+**her zaman** basıyor.
+
+## v2.137.0 — Medya deposu: Postgres'ten R2 + CDN'e
+
+### Bulgu
+
+Denetimde "medya R2'ye taşınacak" yazıyordu ama asıl sorunu ölçünce gördüm: **görseller
+veritabanında bayt olarak duruyor** (`media_files.data`). Her hediye animasyonu, çerçeve ve oda
+teması görüntülendiğinde bir PostgreSQL okuması oluyor. Kalabalık bir odada aynı animasyon onlarca
+kez okunuyor; veritabanı asıl işini — **finansal işlemleri** — yaparken görsel trafiğiyle uğraşıyor.
+Yedek dosyalarının gereksiz büyük olmasının sebebi de bu.
+
+### Çözüm ve en önemli tasarım kararı
+
+Dosyalar R2'ye taşınıp CDN'den sunuluyor. Ama **yükleme noktalarına hiç dokunulmadı.**
+
+Sekiz ayrı yerde `INSERT INTO media_files` var. Hepsini "önce R2'ye yaz" diye değiştirmek, R2 bir an
+yanıt vermediğinde **kullanıcının yüklemesinin başarısız olması** demekti. Oysa taşıma beklemeye
+tahammüllü bir iş. Bu yüzden:
+
+1. Dosyalar veritabanına **her zamanki gibi** yazılıyor — yükleme yolu bit düzeyinde aynı.
+2. Arka planda saatte bir çalışan taşıyıcı onları R2'ye kopyalıyor.
+3. Kopyayı **geri okuyup boyutunu doğruluyor** — doğrulamadan "taşındı" demek, var olmayan dosyaya
+   yönlendirmek olurdu.
+4. Ancak o zaman `storage_key` doluyor ve `/media/:id` adresi CDN'e 308 yönlendiriyor.
+
+### Geri alınabilirlik
+
+**Taşıma ile veritabanı kopyasının silinmesi bilerek ayrı iki adım.** R2'de bir sorun çıkarsa
+`storage_key` temizlenip eski davranışa dönülüyor — dosya kaybı olmuyor. Veritabanı kopyası ancak
+panelden, 7 günden önce taşınmış dosyalar için siliniyor. Yani bir süre iki kopya birden duruyor.
+
+R2 yapılandırılmamışsa **hiçbir şey değişmiyor**: sistem bugünkü gibi çalışıyor.
+
+### Yarım yapılandırma kabul edilmiyor
+
+Beş alanın (hesap kimliği, kova, erişim anahtarı, gizli anahtar, CDN kökü) hepsi dolu olmadan depo
+kapalı sayılıyor. Yarım yapılandırmayla başlamak, dosyaların yarısını R2'de yarısını veritabanında
+bırakır; o karışıklığı temizlemek taşımaktan zordur.
+
+### Sıfır yeni bağımlılık
+
+R2, AWS imza sürüm 4 (SigV4) kullanıyor. `@aws-sdk/client-s3` eklemek **sattığın koda 200+ paket**
+sokardı. İmza algoritması belgeli ve değişmiyor; `node:crypto` ile yüz satırda yazıldı.
+
+Yanlış imza = R2'nin her isteği reddetmesi, ve bu ancak canlıda taşıma başlamayınca fark edilirdi.
+Bu yüzden 10 test var; imzalama anahtarı **AWS belgelerindeki yayımlanmış örnekle birebir**
+doğrulanıyor. Ayrıca `encodeURIComponent`'in kodlamadığı (`*`, `(`, `'`, `!`) karakterler ayrıca
+sınanıyor — imza tam bu farkta bozulur.
+
+### Güvenlik
+
+`r2SecretKey` ve `r2AccessKey` panele **asla ham gönderilmiyor**, denetim defterine maskeli
+yazılıyor. Maskelenmiş değer geri geldiğinde kaydedilmiyor — yoksa gerçek anahtar noktalarla
+ezilir ve depo çalışmaz hale gelirdi.
+
+### Panel
+
+Özellik Bayrakları ekranında **Medya deposu** kartı: ilerleme çubuğu, taşınan/bekleyen boyut,
+son tur sonucu, "şimdi 100 dosya taşı" ve "veritabanı kopyalarını sil". Ayarlar ekranında beş R2
+alanı.
+
+## v2.138.0 — Varlık yöneticisi (asset_manager) ve bulduğum bir hata
+
+### Önce hata: yarım inen dosya kalıcı olarak bozuk kalıyordu
+
+Varlık indirme yolunu incelerken gerçek bir arıza buldum. `MediaCache` indirmeyi doğrudan diske
+akıtıyor ve sonunda yalnızca **"sıfır bayt mı"** diye bakıyordu. Bağlantı yarıda kesilip gövde
+düzgün kapanırsa — ki araya giren vekil sunucularda ve zayıf şebekede olur — **yarım dosya kalıcı
+önbelleğe giriyordu.** Dosya "var" sayıldığı için bir daha indirilmiyor: o hediye o telefonda
+**bir daha asla düzgün oynamıyor.** Kullanıcı "bende bu hediye bozuk görünüyor" der, sorun
+sunucuda aranır, bulunamaz.
+
+CDN yönlendirmesi (v2.137.0) devreye girdiğinden beri bu risk daha da arttı: artık gövde araya
+giren bir CDN'den geliyor.
+
+**Düzeltme:** inen bayt sayısı sunucunun bildirdiği `content-length` ile karşılaştırılıyor;
+uyuşmazsa dosya **kalıcı ada alınmadan önce** atılıyor. Ayrıca önbellekte duran dosyanın boyutu da
+denetleniyor — böylece düzeltmeden önce inmiş bozuk dosyalar da temizlenip yeniden iniyor.
+
+### Varlık listesi (manifest)
+
+Uygulama bugüne kadar hangi dosyayı indireceğini **tesadüfen** öğreniyordu: hediye paneli açılınca
+`/api/gifts` çağrılıp **en ucuz 24 hediye** indiriliyordu. Sonuçları:
+
+- Pahalı ama sık gönderilen bir hediye listeye girmiyorsa, ilk gönderildiğinde ekranda donarak
+  iniyordu. (5.000.000 Coin'lik amiral hediyemiz tam bu durumda.)
+- **Giriş efektleri hiç önceden inmiyordu** — oysa odaya biri girdiği anda gerekiyor.
+- Dosyanın ne kadar olduğu bilinmiyordu; yukarıdaki hatanın yakalanamamasının sebebi de bu.
+
+`GET /api/assets/manifest`: hangi dosya, ne boyutta, hangi damgayla, hangi öncelikle.
+Öncelik 1 = odada her an gerekebilir (giriş efektleri, ucuz hediyeler), 2 = sık, 3 = nadir.
+Kullanıcıya özel görseller (profil fotoğrafı, oda kapağı) listeye **girmiyor** — kişi başına
+değişir, listeyi şişirir, zaten görüldüğü anda iniyor.
+
+**Sürüm, içeriğin özetidir.** Zamana ya da rastgele sayıya bağlı olsaydı her sunucu açılışında
+bütün telefonlar listeyi yeniden indirirdi. Böylece `If-None-Match` ile sorulduğunda 304 dönüyor:
+liste bedava.
+
+### Geri alma
+
+Uygulama **son çalışan sürümü** saklıyor. Yeni listedeki dosyalar inmiyorsa (bozuk yükleme, yanlış
+CDN adresi) eski listeye dönüyor. Eşik bilerek yüksek — tek tük hata normaldir (telefon uykuya
+geçer, ağ kesilir); geri alma yalnızca **listenin kendisi** bozuksa anlamlı.
+
+Hibrit mimaride varlıkların sunucudan gelmesinin bedeli bu: sunucu yanlış bir şey yollarsa
+telefonun elinde dönecek bir yer olmalı.
+
+### Bayrak
+
+`asset_bundles` kapalıyken **eski `warmGifts` yolu bit düzeyinde aynı** çalışıyor. Kuralımızın
+gereği: kapatılacak bir şey kalmazsa bayrağın anlamı kalmaz. Liste alınamazsa da eski yola
+düşülüyor — varlıksız kalmaktansa eski, kaba yöntem iyidir.
+
+### Damgalar
+
+`media_files.sha256` artık R2'den bağımsız olarak dolduruluyor (saatte bir, 50 dosya).
+
+**Dürüst sınır:** damga listede taşınıyor ama **uygulamada doğrulanmıyor.** Dart'ta yerleşik
+SHA-256 yok; `crypto` paketini bu ortamda ekleyip sınayamıyorum ve doğrulayamadığım elle yazılmış
+bir karma işlevini göndermek bozuk dosyadan beter olur. Boyut denetimi gerçek dünyadaki arızayı
+(yarım inme) zaten yakalıyor. Paket eklendiğinde sunucu tarafı hazır.
+
+## v2.139.0 — WebView güvenliği ve JSBridge
+
+Hibrit mimarinin en yüksek riskli parçası. Oda etkinlikleri ve oyunlar WebView'de açılıyor ve bu
+pencerelere bir JavaScript kanalı bağlanıyor.
+
+### Bulduğum üç sorun
+
+**1. Karar üç ayrı yerde, üç farklı şekilde veriliyordu.**
+Oda etkinliği penceresi aynı köken şartı arıyordu. Dış pencere **düz `http`'ye bile izin
+veriyordu**. Oyun rıhtımının kendi kuralı vardı. Üç kuralı birden doğru tutmak mümkün değil;
+birini sıkılaştırınca diğerleri gevşek kalıyor. Kendi modül standardımız da bunu yasaklıyor:
+*"aynı iş mantığının farklı modüllerde kopyalanması"*.
+
+**2. Hiçbir yerde alan adı denetimi yoktu.**
+Etkinlik adresini yönetici panelden yapıştırıyor. Hesap ele geçirilirse ya da adres yanlış
+yazılırsa (`trlve.app` gibi tek harf), kullanıcı **uygulamanın içinde**, uygulama penceresi gibi
+görünen yabancı bir sayfaya gider. WebView'de adres çubuğu yok — kullanıcı farkı anlayamaz.
+
+**3. Köprü çağrılarının kaydı yoktu.**
+Bir sayfanın ne istediği sorusu cevapsızdı.
+
+### Yapılanlar
+
+**Tek karar noktası** — `hybrid/webview/navigation_policy.dart`. Üç pencere de buraya soruyor.
+`hybrid/js_bridge/bridge_policy.dart` komut yetkisini tek yerde tutuyor ve her çağrıyı kaydediyor.
+
+**Alan adı izin listesi** — Ayarlar → WebView güvenliği. Denetim **iki taraflı**: yönetici yanlış
+adresi kaydedemiyor (sunucu), ve eski kayıtlar da açılırken denetleniyor (uygulama). Tek taraf,
+diğerinin atlanabildiği her durumda açık kapı bırakırdı.
+
+**Düz http artık yüklenmiyor.** Araya giren biri, kanal bağlı bir pencereye kod sokabilirdi.
+
+**İzin listesinde olmayan https adres** uygulama içinde değil, **telefonun tarayıcısında** açılıyor
+— orada adres çubuğu görünür, kullanıcı nereye gittiğini bilir.
+
+### Köken ayrımı: dış sayfaya oturum bileti yok
+
+| Komut | Kendi sunucumuz | Dış sayfa |
+|---|---|---|
+| `getToken` (oturum bileti) | ✅ | **❌** |
+| `refreshBalance` (bakiyeyi sunucudan yeniden sor) | ✅ | ❌ |
+| `open` (uygulama ekranı aç) | ✅ | ❌ |
+| `openActivity` | ✅ | ❌ |
+| `close` | ✅ | ✅ |
+
+Biletimizi başkasının sunucusuna göndermek, o sunucunun **kullanıcı adına her şeyi yapabilmesi**
+demektir. Eskiden bu ayrım iki ayrı dosyada iki ayrı `switch` olarak duruyordu — yeni bir komut
+eklerken dış pencereye de açılması an meselesiydi.
+
+Mimari ilkemizin gereği olarak **hiçbir köprü komutu para hareketi yapmıyor**: en fazla bakiyeyi
+sunucudan yeniden sorduruyor ya da bir ekran açıyor.
+
+### En kritik test: etiket sınırı
+
+`host.endsWith('.alanadi.com')` tek başına yazılsaydı, saldırgan **`kotualanadi.com`** alıp listeye
+sızabilirdi. Hem sunucu hem uygulama tarafında uzunluk denetimi var ve 15 test bunu doğruluyor —
+`kotualanadi.com`, `alanadi.com.saldirgan.net`, `trlve.app` hepsi reddediliyor.
+
+Joker (`*.alanadi.com`) alt alan adlarını kapsıyor ama **kökü kapsamıyor**: ikisini isteyen ikisini
+yazar. Sessizce eklemek, listeyi okuyan kişiyi yanıltırdı.
+
+### Geriye uyum
+
+İzin listesi **boşken kısıt yok** — bugünkü davranış. Varsayılanı "her şey yasak" yapmak, panelde
+kayıtlı çalışan etkinlikleri bir anda bozardı; bu kararı kapatma düğmesi olmadan veremeyiz.
+Tek davranış değişikliği: **düz http artık yüklenmiyor** (2026'da gerçek bir site zaten https).
+
+## v2.140.0 — SDUI (sunucudan gelen ekran düzeni) + basım kayıtlarının kaldırılması
+
+### 1. Basım kayıtları kaldırıldı
+
+Bir test/etkinlik/telafi/pazarlama basımı **üç yere** birden yazılıyordu. İkisi kaldırıldı:
+
+- **`coin_issuances` tablosu düşürüldü.** Defterin birebir kopyasıydı — aynı transaction, aynı
+  tutar, aynı bütçe anahtarı. Aylık kullanım artık doğrudan defterden hesaplanıyor. Veri
+  kaybolmadı: her satırın karşılığı defterde duruyor.
+- **Yönetici işlem günlüğüne yazılmıyor.** Bütçeli yüklemeler günlüğü doldurup gerçek
+  düzenlemeleri görünmez kılıyordu. Satış ve düzeltme yüklemeleri her zamanki gibi kaydediliyor.
+- **Kullanıcının hareket listesinde görünmüyor.**
+- **Panelin iki hareket listesinde de görünmüyor**, tür süzgecinden de çıkarıldı.
+- **"Aylık basım" tablosu ve "Son basımlar" listesi kaldırıldı**, `/finance/issuances` adresi silindi.
+
+**Duran tek kayıt: defter satırı.** Sana bunu açıkça söylemem gerek — iki şey ona bağlı:
+
+1. **Aylık bütçe sınırı.** "Bu ay bu bütçeden ne kadar basıldı" sorusunun tek cevabı o satır.
+   Olmasaydı 10.000.000'luk test sınırı denetlenemezdi — sınırsız basım olurdu.
+2. **Günlük mutabakat alarmı.** Kayıtsız bir bakiye artışı, her gün büyüyen kalıcı bir açık üretir.
+   Alarm sürekli yanlış öterse kimse bakmaz; gerçek bir açık olduğunda da fark edilmez.
+
+Satır duruyor ama **hiçbir insanın baktığı yerde görünmüyor.**
+
+Gizlenecek türler **veritabanından** okunuyor, koda yazılmıyor: panelden beşinci bir bütçe
+eklediğinde onun satırları da kendiliğinden gizleniyor.
+
+### 2. SDUI
+
+Mimari ilkenin "dinamik içerik" tarafı: sekmelerin sırası, görünürlüğü, adı, simgesi ve ana
+ekrandaki duyuru/afiş/kart şeritleri artık sunucudan geliyor. Panel → **Ana Ekran Düzeni**.
+
+#### Üç kademeli geri düşme
+
+1. Sunucudan gelen düzen
+2. Telefonda saklanan son çalışan düzen (ağ yoksa)
+3. **Uygulamanın yerleşik düzeni** — koddadır, her zaman çalışır
+
+Üçüncü kademe pazarlık konusu değil. SDUI "arayüzü sunucu belirler" demek; sunucu yanıt
+vermediğinde arayüzün de kaybolması, uygulamayı sunucuya rehin vermek olurdu.
+
+**Bozuk düzen saklanmıyor:** gelen düzen önce çözülüp doğrulanıyor, ancak geçerliyse telefona
+yazılıyor. Bozuğu saklamak, ağ olmasa bile her açılışta bozuk açmak olurdu.
+
+#### En kritik sınır: sunucu yeni yetenek üretemez
+
+Eylemler **kapalı liste** ve hepsi uygulamanın zaten yaptığı şeylere işaret ediyor. Sunucu yeni
+bir davranış tanımlayamaz. SDUI'nin uzaktan kod çalıştırmaya dönüşmemesi buna bağlı.
+
+- Yeni sekme **eklenemez** — var olanlar gizlenir, sıralanır, yeniden adlandırılır. Yeni sekme
+  APK gerektirir.
+- Sekme içeriği **sabit yuvaya** bağlı: sunucu sekmeyi taşıyabilir ama "profil" sekmesine
+  mesajlar ekranını koyduramaz.
+- **Bütün sekmeler gizlenemez** — gezilemeyen uygulama, sunucudan gönderilebilecek en zararlı
+  düzendir. Üç yerde engelleniyor: panelde uyarı, sunucuda ret, uygulamada son savunma.
+- **Oda ekranı, giriş ve cüzdan işlem akışı SDUI'ye kapalı** — ses, görüntü, kimlik doğrulama ve
+  finansal işlemler native kalır (mimari ilke).
+- `openUrl` adresi **WebView izin listesinden geçiyor** (hem kaydederken hem açarken). SDUI,
+  v2.139.0'da kurduğumuz alan adı denetimini atlatmanın yolu olamaz.
+- Görünüm koddan geliyor: sunucu **ne** gösterileceğini söyler, **nasıl** görüneceğini değil.
+  Renk, yazı tipi ve ölçüler uygulamanın kendi bileşenlerinden.
+
+#### Geri alma
+
+Her kayıttan önceki sürüm geçmişe yazılıyor; panelden tek tıkla dönülüyor. Ayrıca düzen
+**kapatılabiliyor** (içeriğe dokunmadan) ve `sdui_home` bayrağı kapalıyken hiç devreye girmiyor.
+Üç ayrı geri dönüş yolu — geri dönüş yolu olmayan bir uzaktan arayüz sistemi, uygulamayı
+kullanılamaz hale getirme yetkisini sunucuya vermek demektir.
+
+#### Sürüm
+
+Düzenin sürümü içeriğinin özeti. ETag olarak gönderiliyor: değişmediyse gövde hiç inmiyor.
+Kaydedilen her düzen normalleştiriliyor, böylece boşluk farkı bütün telefonlara yeniden
+indirtmiyor.
+
+**36 yeni test** (21 SDUI + 7 basım + 8 bayrak/politika).
+
+## v2.141.0 — Oyun SDK'sı ve iki güvenlik bulgusu
+
+### Bulgu 1: bilet hata kayıtlarında düz metin duruyordu
+
+Oyun sayfaları etkinlik biletini adres satırında taşıyor (`/games/<id>/?token=...`). `app.js`
+hata kayıtlarına `req.originalUrl`'i **olduğu gibi** yazıyordu. Yani bir oyun sayfasında hata
+olduğunda bilet, kayıtların saklama süresi boyunca düz metin olarak sunucuda duruyordu.
+
+Kendi modül standardımız şunu söylüyor: *"Log: yapılandırılmış, hassas veri içermeyen."*
+
+Düzeltme: adres `redactSecrets()`'ten geçiriliyor. Test, maskelemenin bilet parametresini gerçekten
+yakaladığını ve zararsız parametreleri (uid, lang) silmediğini doğruluyor.
+
+### Bulgu 2: bilet adres satırında kalıyordu
+
+Sunucu tarafı zaten iyi durumdaydı — bunu önce **kontrol ettim**, varsaymadım: oyun sayfalarında
+`Referrer-Policy: no-referrer` ve `connect-src 'self'` zaten vardı, yani Referer sızıntısı kapalı.
+
+Kalan boşluk telefonun kendi üzerindeydi: adres satırı tarayıcı geçmişine, yer imlerine ve
+"bağlantıyı paylaş" menüsüne giriyor. SDK artık bileti okuyup sessionStorage'a yazdıktan **sonra**
+`history.replaceState` ile adresten siliyor. (Sıra önemli: önce silinirse bilet kaybolur — test
+bu sırayı doğruluyor.)
+
+### Oyun SDK'sı parçalara ayrıldı
+
+Tek dizede yazılıyken hiçbir parçanın gerekçesi okunamıyordu. Hedef ağaçtaki yapıya geçti:
+
+```
+modules/games/sdk/
+├── trlive_game_sdk.js   birleştirici + API yüzeyi
+├── session_client.js    kimlik, bilet, sunucu çağrısı
+├── event_client.js      WebSocket, olaylar, yeniden bağlanma
+└── bridge_client.js     uygulama köprüsü
+```
+
+### Yeniden bağlanma — asıl kazanç
+
+Her oyun paketi kendi WebSocket bağlantısını kuruyordu ve neredeyse hiçbiri yeniden bağlanmayı
+doğru yapmıyor: ya hiç denemiyor (telefon uykudan dönünce oyun donuyor), ya da hemen ve sonsuz
+deniyor (ağ kesintisinde sunucuyu bağlantı isteğiyle dövüyor). SDK tek doğru davranışı bir kez
+yazıyor:
+
+- **Artan bekleme** — 1s, 2s, 4s… en fazla 30s.
+- **Rastgele sapma (%0-30)** — bu olmadan ağ kesintisinden sonra bütün telefonlar **aynı anda**
+  döner ve sunucu kalktığı anda yeniden düşer ("gürleyen sürü"). Sahada en çok gözden kaçan
+  ayrıntı budur; test onu da doğruluyor.
+- **Sayfa arkaya alınınca bağlantı bırakılır**, öne gelince beklemeden kurulur. Arka planda açık
+  bağlantı pil yer ve telefon tarafından nasılsa kesilir.
+- `send()` bağlantı yokken **false döner** — sessizce yutulsaydı oyun "gönderdim" sanıp beklerdi.
+
+### Değişmeyen sınır
+
+`bet`, `settle`, `play` v2.129'da kaldırıldı, geri gelmedi ve gelmeyecek. Oyun sayfası — yani
+kullanıcının telefonunda çalışan kod — hiçbir koşulda kazancı kendisi belirleyemez. Çağrılar
+**açıklayıcı hata fırlatıyor**: sessizce yok olsalardı eski oyunlar hatasız ama ödülsüz çalışır,
+sebebi günlerce aranırdı.
+
+Oyun sayfası uygulamadan **oturum bileti isteyemiyor** (v2.139.0 köprü politikası) ve SDK'da
+böyle bir çağrı yok — test bunu da doğruluyor.
+
+### Bilerek yapılmayanlar
+
+Hedef ağaçtaki `matchmaking/` ve genel `commands/` katmanı **yapılmadı**. Oyun paketleri zaten
+kendi sunucu kodlarına sahip (`query`, `tx`, `hub`, `wallet`, `kv`, `WebSocketServer` bağlamıyla);
+onların üstüne genel bir "komut" kanalı koymak, doğrulanmamış bir geçiş yolu açmanın en bilinen
+yoludur. Gerçek bir oyun paketi ihtiyacı doğduğunda, o ihtiyacın şekline göre yazılacak.
+
+**11 yeni test.**
+
+## v2.142.0 — Oda ekranı: ölçüm, güvenlik ağı ve ilk kurallar
+
+### Ölçüm — planı değiştiren sonuç
+
+`room_screen.dart`'ın 5.398 satırının **5.191'i tek sınıf**: `_RoomScreenState`, 269 üye.
+
+Mantığa dokunmadan taşınabilecek kısım: **209 satır — dosyanın %4'ü.** Kalan üyelerin yarısından
+fazlası ortak değişken duruma dokunuyor (`_members`, `_seats`, `setState`, `widget`).
+
+Yani "dosyayı böl" işi burada bir taşıma değil, **durum makinesinin yeniden yazımı.** Kendi
+kuralımız: *bir sürümde ya taşıma ya mantık değişikliği, ikisi birden asla.*
+
+Dart'taki iki yolu da değerlendirdim:
+
+- **`part` + `extension`:** sınıf part dosyalarına bölünemiyor; extension'a taşınan her metodun
+  gövdesindeki *her* örnek üye erişimi `this.` ister. Binlerce satırlık regex farkı — temiz bir
+  taşıma değil.
+- **Widget çıkarma (doğru yol):** 31 widget kurucusu, 1.616 satır. Her biri 10-20 parametre alan
+  ayrı bileşene dönüşür. `flutter analyze` tip hatasını yakalar ama **aynı tipten yanlış
+  değişkeni geçirmeyi yakalamaz** — `_seatTile` ya da `_bottomBar`'da böyle bir hata doğrudan
+  üretimde görünür.
+
+**Asıl engel:** mobil tarafta 4 test dosyası vardı ve hiçbiri oda ekranına dokunmuyordu.
+Uygulamanın en çok kullanılan ekranını — ses/görüntü yığınının tamamını barındıran 5.000 satırı —
+testsiz ve staging'siz yeniden yazmak, bugüne kadar yaptığımız her şeyden riskli.
+
+Sırayı tersine çevirdim: **önce ağ, sonra atlama.**
+
+### 1. Üye envanteri aracı
+
+`mobile/tools/dart_members.py` — bir dosyadaki sınıf üyelerini listeler. Taşıma öncesi/sonrası
+karşılaştırılır; bir metot sessizce kaybolur ya da adı değişirse yakalanır. Backend'deki
+`route_map.mjs` ile aynı fikir.
+
+Araç ilk yazımında yerel değişkenleri üye sanıyordu (sahte fark üretiyordu). Süslü parantez
+derinliği izlenerek düzeltildi: üye yalnızca sınıf gövdesinin ilk seviyesinde aranıyor. **Gürültü
+üreten bir araca kimse bakmaz** — net ölçüm vermeyen güvenlik ağı, ağ değildir.
+
+### 2. İlk kurallar çıkarıldı ve testle sabitlendi
+
+`features/live_rooms/domain/rules/` altında iki modül:
+
+**`seat_rules.dart`** — boş koltuk sayımı, koltuk bulma, mikrofon kapalı mı, çıkınca oda kapanır mı.
+**`room_format.dart`** — sayı kısaltma, Türkçe ilk harf büyütme, balon rengi.
+
+Hepsi `_RoomScreenState` içinde duruyordu ve **test edilemiyorlardı**: her biri örnek alanlarını
+okuyordu, o alanları kurmak için bütün ekranı ayağa kaldırmak gerekiyordu. Artık girdiler
+parametre; her kural tek başına sınanıyor.
+
+**43 yeni mobil test.** Örnekler:
+
+- `*.alanadi.com` benzeri sınır hataları gibi, burada da kritik olan sınır durumları: kilitli
+  koltuk boş sayılmaz, `seatIndex` bozuk veri geldiğinde koltuk dolu görünmez, kendi satırı iki
+  kez listelenen sahip kendini "başka yönetici" sanmaz (oda kapanması gerekirken açık kalırdı).
+- Sayı kısaltmada kesir **yuvarlanmaz, kırpılır**: 1.999.999 → "1,9M". Yukarı yuvarlamak
+  kullanıcıya elinde olmayan bakiyeyi göstermek olurdu.
+- Türkçe `i` → `İ`: `toUpperCase()` tek başına "istanbul" → "Istanbul" yapar.
+
+**Tek sadeleştirme:** boş koltuk sayımı iki yerde kopyalanmıştı (`_noFreeSeat` ve
+`_freeGuestSeats` aynı kümeyi aynı şekilde hesaplıyordu); tek işleve indi. Test, ikisinin
+matematiksel olarak aynı şey olduğunu doğruluyor.
+
+### Doğrulama
+
+Üye envanteri taşıma sonrası karşılaştırıldı: **8 üyenin hepsi yerinde**, hiçbiri kaybolmadı.
+
+Ayrıca bu ortamda Dart derleyicisi yok; `room_format.dart`'ta `library` direktifini import'lardan
+sonra yazmıştım — Dart'ta bu sözdizimi hatası. Elle okuyarak yakalayıp düzelttim. Gerçek kapı
+yine CI: `flutter analyze` + `flutter test`.
+
+## v2.143.0 — Güvenlik sertleştirmesi: 2FA, CORS, ölü ayarlar, bağımlılık taraması
+
+Denetimdeki açık güvenlik maddelerini taradım ve dördünü kapattım. En yüksek riskliden başladım.
+
+### K-04 · Yönetici iki adımlı doğrulaması (2FA)
+
+Yönetici hesabı **tek bir şifreyle** korunuyordu. O şifre ele geçerse (yeniden kullanılmış şifre,
+oltalama, bulaşmış bilgisayar) saldırgan panelin tamamına sahip olur: Coin basar, kullanıcı
+verisine erişir, ödeme ayarlarını değiştirir. Bütçe sınırları bunu yavaşlatır ama **durdurmaz** —
+sınırları da aynı panelden değiştirebilir.
+
+**Sıfır yeni bağımlılık.** `otplib`/`speakeasy` eklemek sattığın koda onlarca paket daha sokardı.
+TOTP (RFC 6238) `node:crypto` ile elli satır. Yanlış bir uygulama iki yönden de felaket: ya hiçbir
+kodu kabul etmez (yönetici kendi panelinden kilitlenir), ya her kodu kabul eder (2FA hiç yokmuş
+gibi olur). Bu yüzden **RFC 6238'in kendi test vektörleriyle** doğrulanıyor — altı vektörün hepsi
+geçiyor.
+
+Tasarım kararları:
+
+- **Kurulum, doğrulanmadan açılmaz.** Anahtar üretilir ama ilk doğru kod girilene kadar 2FA devreye
+  girmez. Yoksa yanlış kurulumda (QR okunmadı, telefon saati kayık) yönetici kendi panelinden
+  kilitlenirdi.
+- **Kurtarma kodları.** Telefon kaybolursa tek çıkış yolu. Olmasaydı veritabanına elle müdahale
+  gerekirdi — ki o da en kötü anda, baskı altında yapılır. Kodlar **özetlenerek** saklanıyor:
+  veritabanı sızarsa düz metin kodlar 2FA'yı tamamen atlatırdı.
+- **Kapatmak için de kod gerekiyor.** Yalnızca şifreyle kapatılabilseydi, şifreyi çalan kişi önce
+  2FA'yı kapatır sonra girerdi.
+- **Kod denemeleri şifre sayacına yazılıyor:** 6 haneli kod kaba kuvvetle denenemiyor.
+- **"Kod gerekli" yanıtı yalnızca şifre doğruyken dönüyor.** Yanlış şifrede dönseydi, bir hesabın
+  2FA'sının açık olup olmadığı şifre bilmeden öğrenilebilirdi.
+- Pencere ±1 adım (30 sn): telefon saati kayması tolere edilir, ama çalınan kodun ömrü uzamaz.
+  İki adım öncesi reddediliyor — test bunu da doğruluyor.
+
+Hem panelde hem uygulamada akış hazır: şifre doğrulanınca kod alanı açılıyor, şifre korunuyor.
+
+### S-05 · CORS — ve neredeyse yaptığım hata
+
+`CORS_ORIGIN` tanımsızsa varsayılan `*` idi. Üretimde reddetmeyi yazdım.
+
+**Sonra dağıtım dosyalarına baktım:** `docker-compose.yml`'da `NODE_ENV: production` **ve**
+`CORS_ORIGIN: "*"` yazıyordu. Yani bu haliyle sunucu kendini güncellediği an **açılmayacaktı** —
+site, kimse bir şey yapmadan düşecekti.
+
+*Bir güvenlik sıkılaştırması, uygulandığı gün hizmeti kesiyorsa yanlış uygulanmıştır.*
+
+Geçiş yolu ekledim: `*` yazılıysa ve sunucunun kendi adresi (`PUBLIC_BASE_URL`) biliniyorsa, kısıt
+ona daraltılıyor ve uyarı basılıyor. **Açık kapı kapanıyor, sunucu ayakta kalıyor.** Kendi adresi
+de bilinmiyorsa durulacak güvenli bir değer yok — orada hata doğru.
+
+Dağıtım dosyaları da tutarlı hale getirildi; test, oraya tekrar `*` yazılmasını engelliyor.
+
+### S-04 · Hiçbir şey yapmayan iki güvenlik ayarı
+
+`blockRooted` ve `sslPinning` tanımlıydı ama **mobil tarafta onları okuyan tek satır yoktu.**
+Hiçbir şey yapmayan bir güvenlik ayarı, yapıyormuş gibi görünür: "SSL pinning açık" sanan bir
+yönetici olmayan bir korumaya güvenir. **Yanlış güven, korumasızlıktan beterdir.**
+
+Kaldırıldı. Test, "uygulanmadan geri eklenmesini" engelliyor.
+
+Gerçek sertifika sabitleme, kendi alan adına geçildikten sonra ve **yedek pin'le birlikte**
+eklenecek — tek pin'le, sertifika yenilendiği gün bütün uygulamalar sunucuya bağlanamaz.
+
+### S-07 · Bağımlılık açığı taraması CI'da
+
+Sattığın kodda bilinen açıklı bir paket bulunması, alıcının ilk tarayacağı şeydir.
+
+`npm audit` eklendi: **yüksek ve kritik** seviye derlemeyi durduruyor, düşük/orta yalnızca özete
+yazılıyor. Her uyarıda derleme kırılırsa kimse bakmaz ve tarama anlamını yitirir.
+
+### Denetim durumu
+
+Açık kalan 🔴 kırmızı madde **kalmadı**. Kalanlar P2 ve bilinçli ertelenenler (Redis — tek sunucu
+olduğu sürece kazanç yok; mağaza ödemesi — mağaza hesabı açılmadan koda başlanmamalı).
+
+## v2.144.0 — Moderasyon kuyruğu (yayın engeli kalktı)
+
+Denetim S-06 için **"yayın engeli"** diyordu: Apple ve Google, kullanıcı içeriği barındıran
+uygulamalarda etkin moderasyon istiyor.
+
+### Bulduğum asıl boşluk: kanıt saklanmıyordu
+
+Kuyruğu yazmaya başlamadan önce mevcut şikâyet akışını okudum. `reports` tablosu şikâyet edilen
+mesajın **kimliğini** tutuyordu, içeriğini değil. Panel, metni canlı `room_messages` tablosundan
+JOIN ile çekiyordu.
+
+Yani kullanıcı mesajı silerse — ya da saklama temizliği süpürürse — moderatör ekranında şikâyet
+duruyor ama **neyin şikâyet edildiği görünmüyordu.**
+
+Bu, moderasyonu imkânsız kılar: göremediğin kanıta göre karar veremezsin. Üstelik kötü niyetli
+kullanıcı tam da bunu yapar — yaz, şikâyet edilince sil.
+
+Artık şikâyet anında içeriğin **anlık kopyası** alınıyor. Panelde silinmiş mesaj
+"**mesaj silinmiş — şikâyet anındaki kopya**" etiketiyle görünüyor. Kopya yalnızca şikâyet edilen
+tek öğeyi içeriyor, sohbetin tamamını değil: gereğinden fazlasını saklamak moderasyon ihtiyacını
+aşan bir veri birikimi olurdu. Kopya alınamazsa şikâyet yine kaydediliyor — eksik kanıtla bir
+şikâyet, hiç şikâyet olmamasından iyidir.
+
+### Kuyruk
+
+Şikâyetler ekranına **Kuyruk** sekmesi eklendi (ilk sekme: moderatör ekranı açtığında önce
+"ne yapmalıyım" sorusunun cevabını görsün). Açık şikâyetler **hedef kullanıcıya göre
+gruplanıyor** — karar kişi hakkındadır; aynı kişiyle ilgili sekiz şikâyet sekiz ayrı karar
+gerektirmez.
+
+### En önemli tasarım kararı: kaç KİŞİ şikâyet etti
+
+Risk puanı **ayrı şikâyetçi sayısına** dayanıyor, toplam şikâyet sayısına değil.
+
+Beş ayrı kullanıcının bir kez şikâyet etmesi ile bir kullanıcının beş kez şikâyet etmesi aynı şey
+değildir. İkincisi genellikle husumettir. Toplam sayıya göre sıralasaydık, **bir kişiyi hedef alan
+organize şikâyet kampanyası masum kullanıcıyı kuyruğun tepesine çıkarır ve cezalandırılmasına yol
+açardı.**
+
+Puan: ayrı şikâyetçi × 10 · ağır nedenler (çocuk güvenliği, müstehcen, taciz, şiddet, kendine
+zarar) × 25 · otomatik ihlal × 3 · bekleme süresi × 0,5 (**üst sınırlı** — aylarca bekleyen
+önemsiz bir şikâyet, yeni gelen ağır bir şikâyetin önüne geçmesin).
+
+### Karar
+
+Kullanıcı dosyası tek ekranda: açık şikâyetler + kanıt + otomatik ihlaller + geçmiş kararlar.
+Kararlar: sorun yok · uyarı · sohbet kısıtı · şikâyet edilen mesajları sil · odadan yasakla ·
+hesabı askıya al.
+
+- Karar, o kullanıcıyla ilgili **bütün açık şikâyetleri birlikte kapatıyor** — hiçbiri kuyrukta
+  unutulmasın diye.
+- **Gerekçe zorunlu** (sorun yok hariç): karar sonradan denetlenebilmeli.
+- "Sorun yok" da bir karar ve kaydediliyor: aynı kişi tekrar şikâyet edilirse bir sonraki
+  moderatör bunu görüyor.
+- Mesaj silme yalnızca **şikâyet edilen** mesajları siliyor, kullanıcının tüm geçmişini değil.
+
+### Yan bulgu: ban mantığı rotanın içinde gömülüydü
+
+Askıya alma, yönetim rotasının gövdesinde yazılıydı. Moderasyon kuyruğu da askıya alacağı için
+ikinci bir kopya çıkacaktı — ve kopyalar birbirinden ayrı düşer. Burada ayrı düşmenin bedeli
+somut: bir yol oturum iptalini unutursa **askıya alınan kullanıcı uygulamada açık kalmaya devam
+eder**; odadan atılmazsa konuşmaya devam eder. Yani ceza uygulanmamış olur.
+
+`modules/users/ban.service.js`'e çıkarıldı; iki yol da aynı servisi çağırıyor. Veritabanı
+değişikliği transaction içinde, yan etkiler (oturum iptali, bağlantı kesme, oda kapatma) commit
+sonrası — tersi olsaydı transaction geri alındığında kullanıcı atılmış ama ceza kaydı yazılmamış
+olurdu. Test bu sırayı da doğruluyor.
+
+**13 yeni test.** Kalan (P2): itiraz akışı, yüklenen görseller için içerik kontrolü.
+
+## v2.145.0 — Yük testi ve **sunucuyu açtırmayan üç hata**
+
+Yük testine başlamak için sunucuyu burada ayağa kaldırmayı denedim. Açılmadı. Çıkan şey yük
+testinden çok daha önemliydi.
+
+### Modül taşımasının açtığı üç kırık yol
+
+Modüllere ayırma (v2.133–134) sırasında dosyalar taşındı. Kod içindeki `import` ifadeleri
+güncellendi — ama **dize içinde yazan yollar güncellenmedi:**
+
+| Nerede | Ne olurdu |
+|---|---|
+| `backend/Dockerfile` → `node src/migration_runner.js` | **Kapsayıcı hiç açılmazdı.** Bir sonraki dağıtımda sunucu düşerdi, sebebi migration'da aranırdı. |
+| `room_game_page.routes.js` → `new URL('../pages/tek.html')` | Sunucu açılışta dururdu. |
+| `admin.shared.js` ve `system.routes.js` → `new URL('../../package.json')` | Sürüm okunamazdı. |
+| `package.json` → `"migrate": "src/migration_runner.js"` | Elle migration çalışmazdı. |
+
+**Üçü de üretimi durduracak hatalardı ve hiçbir kontrol yakalamadı:**
+
+- `imports.mjs` yalnızca ES `import` ifadelerine bakıyor, dizelerin içindeki yollara değil
+- Adres haritası kaynaktaki rotaları sayıyor, dosya varlığını denetlemiyor
+- Birim testleri sunucuyu açmıyor
+
+Kör nokta tam buradaydı: **kodun dışında ya da dize içinde yazan dosya yolları.**
+
+### Kalıcı çözüm
+
+`backend/tools/deploy_paths.mjs` — Dockerfile ve package.json'daki komut yollarını, kaynaktaki
+`new URL(...)` varlık yollarını tarar ve gerçekten var olduklarını doğrular. `npm run check`
+içine bağlandı, yani **her CI koşusunda**. Bozup denedim: Dockerfile'daki eski yolu geri
+koyduğumda hemen yakaladı.
+
+### Yük testi aracı
+
+`backend/tools/loadtest.mjs` — sıfır bağımlılık.
+
+```
+node tools/loadtest.mjs --url http://localhost:3000 --users 200 --duration 60
+```
+
+Gerçek akışı taklit eder: kayıt → oda listesi → odaya gir → mesaj oku → mesaj yaz → çık.
+Uç başına **p50/p95/p99** raporlar — ortalama değil, çünkü ortalama en yavaş %5'i gizler ve
+kullanıcıların şikâyet ettiği tam orasıdır.
+
+Kullanıcılar **rampayla** başlar: hepsini aynı anda başlatmak gerçekte olmayan bir ani yük
+yaratır ve ölçülen şey kapasite değil o ani yükün etkisi olur.
+
+**Üretime karşı çalıştırmayı reddeder.** Adres yerel/test gibi görünmüyorsa `--yes` ister:
+araç gerçek kullanıcı yaratıp gerçek mesaj yazıyor.
+
+### Statik tarama: yük altında ilk patlayacak uç
+
+Araç yazılırken büyüyen tablolardaki sınırsız sorguları taradım. En kritiği:
+
+**`GET /api/rooms/:id/members` üst sınırsızdı.** 2.000 dinleyicili bir odada her çağrıda 2.000
+satır dönüyordu — üstelik uygulama listeyi düzenli yeniliyor. Tek popüler yayın, sunucunun
+tamamını yavaşlatabilirdi.
+
+Üst sınır (varsayılan 300, en çok 500) ve `total` eklendi. **Kesme koltuktakileri etkilemiyor:**
+sıralama zaten koltuktakileri başa koyuyor, bu yüzden koltuk çizimi, "boş koltuk var mı" ve
+"çıkınca oda kapanır mı" hesapları olduğu gibi doğru kalıyor. Kesilen yalnızca dinleyici kuyruğu
+ve sayısı `total` ile dönüyor.
+
+Ayrıca `room_members_list_idx` eklendi: birincil anahtar filtreyi karşılıyordu ama **sıralamayı
+karşılamıyordu** — PostgreSQL bütün satırları okuyup sıralıyor, LIMIT'i ancak ondan sonra
+uyguluyordu. Dizin sorgudaki `ORDER BY` ile birebir aynı sütun sırasında; artık ilk 300 satır
+okunup duruluyor.
+
+### Aracın kendi hatası da düzeltildi
+
+Adres haritası test dosyalarını da tarıyordu. Yeni testim kaynak metnini doğrulamak için
+`router.get('/:roomId/members'` dizesini içeriyordu ve araç bunu **gerçek rota** sandı — sahte
+fark üretti. Test dosyaları artık taranmıyor. *Sahte fark üreten güvenlik ağına kimse bakmaz.*

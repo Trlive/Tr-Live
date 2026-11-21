@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { centsOf, coinsFor, usdSettings, settingsJson, beansText, CREDIT_TYPES } from '../src/services/usd_wallet.js';
-import { CONFIG_DEFAULTS, validateConfigPatch } from '../src/services/app_config.js';
+import { centsOf, coinsFor, usdSettings, settingsJson, beansText, CREDIT_TYPES } from '../src/modules/wallet/usd_wallet.service.js';
+import { CONFIG_DEFAULTS, validateConfigPatch } from '../src/modules/system/app_config.service.js';
 
 test('dolar cüzdanı: tutar doğrulama (yalnızca pozitif tam sent)', () => {
   assert.equal(centsOf(1000), 1000n);

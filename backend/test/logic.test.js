@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { bigAmount, uuid, positiveInt, text, httpsUrl, isUuid } from '../src/http.js';
-import { levelFromExp, expForLevel, levelInfo, levelFor, COIN_LEVEL_STEPS, familyLevelFor, familyCapacity, commissionOf, giftDisplayLevel } from '../src/levels.js';
-import { distributeGift } from '../src/gifts_logic.js';
-import { canManage } from '../src/room_permissions.js';
-import { currentPeriod, periodRange, isPeriod } from '../src/periods.js';
-import { publicUser, selfUser } from '../src/views.js';
+import { bigAmount, uuid, positiveInt, text, httpsUrl, isUuid } from '../src/shared/errors/http.js';
+import { levelFromExp, expForLevel, levelInfo, levelFor, COIN_LEVEL_STEPS, familyLevelFor, familyCapacity, commissionOf, giftDisplayLevel } from '../src/modules/users/levels.rules.js';
+import { distributeGift } from '../src/modules/gifts/gifts.rules.js';
+import { canManage } from '../src/modules/rooms/permissions.js';
+import { currentPeriod, periodRange, isPeriod } from '../src/shared/utils/periods.js';
+import { publicUser, selfUser } from '../src/shared/utils/views.js';
 
 const A = '11111111-1111-4111-8111-111111111111';
 const B = '22222222-2222-4222-8222-222222222222';
@@ -150,7 +150,7 @@ test('300 kademeli seviye eğrisi', () => {
 });
 
 test('yerleşik küfür filtresi hileleri yakalar, masum sözleri geçirir', async () => {
-  const { containsBanned } = await import('../src/text_safety.js');
+  const { containsBanned } = await import('../src/middleware/security/text_safety.js');
   for (const t of ['s1ktir git', 'a.m.k', 'siiiiktir', 'amına koyayım', 'orospu']) assert.equal(containsBanned(t, []), true, t);
   for (const t of ['selam nasılsın', 'sıkıntı var', 'pişmanlık', 'bitcoin', 'dickens', 'I got it', 'kitap']) assert.equal(containsBanned(t, []), false, t);
 });

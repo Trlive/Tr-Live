@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import PanelShell from "@/components/panel-shell";
-import { Loading } from "@/components/ui";
-import { AdminRoomDetail } from "@/components/admin/rooms";
+import PanelShell from "@/core/layout/panel-shell";
+import { Loading } from "@/shared/components/ui";
+import { AdminRoomDetail } from "@/modules/admin/rooms/rooms";
 
 export const metadata: Metadata = {
   title: "Oda Detayı",

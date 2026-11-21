@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mergeGiftEvents, createGiftCoalescer, createKeyedThrottle, BURST_WINDOW_MS, BUSY_WINDOW_MS, BUSY_EVENTS_PER_SEC } from '../src/gift_burst.js';
+import { mergeGiftEvents, createGiftCoalescer, createKeyedThrottle, BURST_WINDOW_MS, BUSY_WINDOW_MS, BUSY_EVENTS_PER_SEC } from '../src/modules/gifts/gift_burst.rules.js';
 
 // Sahte saat ve zamanlayıcı: süre elle ilerletilir.
 function clock() {

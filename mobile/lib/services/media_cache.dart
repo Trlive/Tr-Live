@@ -26,14 +26,22 @@ class MediaCache {
   }
 
   /// Dosya telefonda varsa onu, yoksa indirip kaydederek döndürür.
-  static Future<File> get(String url) {
+  /// [expectedBytes]: varlık listesinden (manifest) bilinen boyut. Sunucu `content-length`
+  /// göndermezse bu kullanılır; ikisi de yoksa boyut denetimi atlanır.
+  static Future<File> get(String url, {int? expectedBytes}) {
     return _inflight.putIfAbsent(url, () async {
       try {
         final dir = await _root();
         final f = File('${dir.path}/${_name(url)}');
-        if (await f.exists() && await f.length() > 0) {
-          f.setLastModified(DateTime.now()).catchError((_) => null);
-          return f;
+        if (await f.exists()) {
+          final len = await f.length();
+          // Beklenen boyut biliniyorsa uyuşmayan dosya (eski sürümden kalan yarım indirme)
+          // silinip yeniden indirilir.
+          if (len > 0 && (expectedBytes == null || len == expectedBytes)) {
+            f.setLastModified(DateTime.now()).catchError((_) => null);
+            return f;
+          }
+          await f.delete().catchError((_) => f);
         }
         // Dosya belleğe toplanmadan doğrudan diske akıtılır: hediye yağmurunda aynı anda inen büyük videolar
         // (her biri 5–20 MB) belleği doldurup uygulamayı kapatmasın.
@@ -43,6 +51,10 @@ class MediaCache {
           r.stream.listen((_) {}).cancel();
           throw Exception('indirilemedi (${r.statusCode})');
         }
+        // Sunucunun söylediği boyut: inen baytlarla karşılaştırılacak.
+        // CDN yönlendirmesi devreye girdiğinden beri bu daha da önemli — araya giren bir vekil
+        // sunucu gövdeyi erken kesip 200 döndürebiliyor.
+        final declared = int.tryParse(r.headers['content-length'] ?? '') ?? expectedBytes ?? -1;
         final sink = tmp.openWrite();
         var written = 0;
         try {
@@ -54,9 +66,12 @@ class MediaCache {
         } finally {
           await sink.close();
         }
-        if (written == 0) {
+        // Eksik inen dosya ATILIR. Eskiden yalnızca "sıfır bayt" durumu yakalanıyordu: bağlantı
+        // yarıda kesilip gövde düzgün kapanırsa yarım dosya kalıcı önbelleğe giriyor ve o hediye
+        // o telefonda bir daha ASLA düzgün oynamıyordu (dosya var sayıldığı için yeniden inmiyor).
+        if (written == 0 || (declared > 0 && written != declared)) {
           await tmp.delete().catchError((_) => tmp);
-          throw Exception('indirilemedi (boş dosya)');
+          throw Exception('indirilemedi (eksik dosya: $written/$declared)');
         }
         await tmp.rename(f.path);
         _trim(dir);

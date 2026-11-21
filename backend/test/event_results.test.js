@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { resultAnnouncements, EVENT_GROUPS } from '../src/services/weekly_events.js';
+import { resultAnnouncements, EVENT_GROUPS } from '../src/modules/events/weekly_events.service.js';
 
 test('haftalık sonuç duyurusu: etkinlik grubu başına kürsü verisi', async () => {
   const rows = [

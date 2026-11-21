@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import PanelLogin from "@/components/panel-login";
+import PanelLogin from "@/core/auth/panel-login";
 
 export const metadata: Metadata = {
   title: "Yönetim Paneli Girişi",

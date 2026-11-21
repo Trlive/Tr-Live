@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 delete process.env.DATABASE_URL;
-const rb = await import('../src/services/room_bans.js');
+const rb = await import('../src/modules/rooms/room_bans.service.js');
 
 const room = { id: 'r-1', owner_id: 'o-1', room_type: 'audio' };
 

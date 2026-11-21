@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import PanelShell from "@/components/panel-shell";
-import AdminRooms from "@/components/admin/rooms";
+import PanelShell from "@/core/layout/panel-shell";
+import AdminRooms from "@/modules/admin/rooms/rooms";
 
 export const metadata: Metadata = {
   title: "Odalar",

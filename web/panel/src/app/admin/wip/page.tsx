@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import PanelShell from "@/components/panel-shell";
-import AdminWip from "@/components/admin/wip";
+import PanelShell from "@/core/layout/panel-shell";
+import AdminWip from "@/modules/admin/system_monitor/wip";
 
 export const metadata: Metadata = {
   title: "WIP Mağazası",

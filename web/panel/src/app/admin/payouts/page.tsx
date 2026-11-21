@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import PanelShell from "@/components/panel-shell";
-import AdminPayouts from "@/components/admin/payouts";
+import PanelShell from "@/core/layout/panel-shell";
+import AdminPayouts from "@/modules/admin/withdrawals/payouts";
 
 export const metadata: Metadata = {
   title: "Maaş Dönemleri",

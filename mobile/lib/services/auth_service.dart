@@ -52,11 +52,25 @@ class AuthService {
     ErrorLog.flushSaved();
   }
 
-  static Future<void> login(String username, String password) async => _save(await Api.post('/api/auth/login', {
+  /// Giriş. [totpCode]: hesapta iki adımlı doğrulama açıksa gereken 6 haneli kod
+  /// (ya da kurtarma kodu).
+  ///
+  /// Kod gerekiyorsa sunucu `totp_required` döner; çağıran bunu [TotpRequired] olarak yakalar
+  /// ve kod alanını açar. Bu yanıt yalnızca **şifre doğruyken** gelir — yanlış şifrede gelseydi,
+  /// bir hesabın 2FA'sının açık olup olmadığı şifre bilmeden öğrenilebilirdi.
+  static Future<void> login(String username, String password, {String? totpCode}) async {
+    try {
+      _save(await Api.post('/api/auth/login', {
         'username': username,
         'password': password,
         'device': await DeviceInfo.collect(),
+        if (totpCode != null && totpCode.isNotEmpty) 'totpCode': totpCode,
       }));
+    } on ApiException catch (e) {
+      if (e.code == 'totp_required') throw TotpRequired();
+      rethrow;
+    }
+  }
 
   /// Telefon numarasıyla kayıt: numara + şifre + görünen ad. [idToken]: SMS doğrulaması açıksa Firebase kimlik token'ı.
   static Future<void> registerPhone(String phone, String password, String displayName, {String? idToken}) async => _save(await Api.post('/api/auth/register-phone', {
@@ -189,4 +203,13 @@ class AuthService {
     await prefs.remove(_refreshKey);
     await prefs.remove(_expKey);
   }
+}
+
+/// Hesapta iki adımlı doğrulama açık: giriş ekranı kod alanını açar.
+///
+/// Ayrı bir sınıf, çünkü bu bir hata değil akışın normal bir adımı: kullanıcıya kırmızı hata
+/// kutusu göstermek yerine kod istenir ve şifre alanı korunur.
+class TotpRequired implements Exception {
+  @override
+  String toString() => 'Doğrulama kodu gerekli.';
 }

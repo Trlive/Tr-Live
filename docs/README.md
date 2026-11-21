@@ -4,6 +4,7 @@ Bu klasör uygulamanın "önce doküman" kaynağıdır. İki tür belge var:
 
 | Belge | Ne anlatır | Nasıl güncellenir |
 |---|---|---|
+| [ARCHITECTURE_AUDIT.md](ARCHITECTURE_AUDIT.md) | **Mimari denetim (v2.130.0):** her alanın korunacak / düzeltilecek / geliştirilecek / eklenecek kararı, kanıtlı bulgular, sıralı yol haritası | Elle (madde kapandıkça) |
 | [MIMARI.md](MIMARI.md) | Sistem bileşenleri, istek akışı, gerçek zamanlı katman, dosya yapısı | Elle |
 | [VERITABANI.md](VERITABANI.md) | Ücretsiz veritabanı seçimi, Neon → Aiven geçişi, veritabanı ayarları | Elle |
 | [EKONOMI.md](EKONOMI.md) | Coin / Elmas akışı, hediye, bozdurma, bayi, ajans maaşı, şanslı çanta, şanslı hediye, WIP kademeleri | Elle |
