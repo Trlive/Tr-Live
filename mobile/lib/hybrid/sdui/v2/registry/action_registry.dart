@@ -4,7 +4,10 @@ import '../../../../screens/family_screen.dart';
 import '../../../../screens/leaderboard_screen.dart';
 import '../../../../screens/misc_screens.dart';
 import '../../../../screens/store_screens.dart';
+import '../../../../screens/messages_screen.dart';
 import '../../../../screens/support_screens.dart';
+import '../../../../screens/user_screens.dart';
+
 import '../../../../screens/usd_wallet_screen.dart';
 import '../../../../services/api.dart';
 import '../../../../widgets/external_webview.dart';
@@ -81,6 +84,9 @@ class SduiActions {
         final id = action['id'];
         if (id is String && context.mounted) await openActivity(context, id);
 
+      case 'openChat':
+        await _openChat(context, action['id']);
+
       case 'openUrl':
         await _openUrl(context, action);
 
@@ -92,6 +98,37 @@ class SduiActions {
 
       default:
         break; // noop ve tanınmayan tür: hiçbir şey olmaz
+    }
+  }
+
+  /// Sohbeti açar.
+  ///
+  /// Sohbet ekranı karşı tarafın adını, rengini, seviyesini ve avatarını ister; bunlar tek
+  /// bir dizeye sığmaz. Bu yüzden eylem yalnızca KİMLİK taşır, gerisi `/api/users/:id` ile
+  /// çekilir — profil ekranının "Mesaj" düğmesinin zaten yaptığı şeyin aynısı. Eksik bir
+  /// harita ile açsaydık sohbet başlığı boş görünürdü.
+  static Future<void> _openChat(BuildContext context, dynamic rawId) async {
+    final id = rawId is String ? rawId.trim() : '';
+    // Bağlanmamış şablon ({id} olduğu gibi kalmışsa) ya da boş kimlik: hiçbir şey yapma.
+    if (id.isEmpty || id.startsWith('{')) return;
+    try {
+      final p = mapOf((await Api.get('/api/users/$id'))['profile']) ?? const {};
+      if (!context.mounted) return;
+      await Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => ChatScreen(peer: {
+          'id': id,
+          'displayName': p['displayName'],
+          'avatarUrl': p['avatarUrl'],
+          'nameColor': mapOf(mapOf(p['wip'])?['features'])?['nameColor'],
+          'wipLevel': mapOf(p['wip'])?['level'],
+        }),
+      ));
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$e'.replaceFirst('Exception: ', ''))),
+        );
+      }
     }
   }
 
@@ -165,6 +202,9 @@ class SduiActions {
         'leaderboards' => const LeaderboardScreen(),
         'family' => const FamilyScreen(),
         'support' => SupportChatScreen(category: arg is String && arg.isNotEmpty ? arg : null),
+        // Bağlanmamış şablon ({id}) gelirse profil açılmaz: boş bir profil göstermektense
+        // hiçbir şey yapmamak doğru.
+        'profile' => (arg is String && arg.isNotEmpty && !arg.startsWith('{')) ? UserProfileScreen(userId: arg) : null,
         _ => null,
       };
 

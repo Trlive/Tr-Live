@@ -2273,3 +2273,170 @@ test('SDUI v2: taslak/yayın ayrımı, kademeli açılış, sürüm eşiği ve g
   status(await api('POST', `/api/admin/sdui2/screens/${S}/publish`, { token: U.a.token }), 403, 'kullanıcı yayınlayamaz');
   status(await api('PUT', `/api/admin/sdui2/screens/${S}/draft`, { token: U.a.token, body: { layout } }), 403, 'kullanıcı taslak kaydedemez');
 });
+
+test('ana bayi / alt bayi: aktarım Coin yaratmaz, yetki ve iki kat kuralı', { skip, timeout: 60000 }, async () => {
+  // İki bayi: biri ana, biri alt. Sahipleri ayrı kullanıcılar, çünkü /api/dealer/* uçları
+  // "bu kullanıcının bayisi" üzerinden çalışıyor.
+  const anaOwner = await register('anabayi');
+  const altOwner = await register('altbayi');
+  const yabanciOwner = await register('yabancibayi');
+
+  const mkDealer = async (name, ownerId) => {
+    const r = await api('POST', '/api/admin/dealers', { token: U.d.token, body: { name: `${name} ${Date.now()}`, ownerUserId: ownerId } });
+    status(r, 201);
+    return r.body.dealer.id;
+  };
+  const anaId = await mkDealer('E2E Ana', anaOwner.id);
+  const altId = await mkDealer('E2E Alt', altOwner.id);
+  const yabanciId = await mkDealer('E2E Yabanci', yabanciOwner.id);
+
+  // Ana bayiye stok.
+  ok(await api('POST', `/api/admin/dealers/${anaId}/coins`, {
+    token: U.d.token, body: { amount: '10000', description: 'e2e' }, headers: { 'Idempotency-Key': `e2e-sub-${Date.now()}` },
+  }));
+
+  // Bağ kurulmadan aktarım: alt bayi değil.
+  status(await api('POST', `/api/dealer/subs/${altId}/transfer`, { token: anaOwner.token, body: { coins: '100' } }), 403, 'bağ yokken aktarım olmaz');
+
+  // Yönetim alt bayiyi anaya bağlar.
+  ok(await api('POST', `/api/admin/dealers/${altId}/parent`, { token: U.d.token, body: { parentDealerId: anaId } }), 'ana bayi atanır');
+  status(await api('POST', `/api/admin/dealers/${altId}/parent`, { token: anaOwner.token, body: { parentDealerId: anaId } }), 403, 'bayi kendi kendine bağ kuramaz');
+
+  // İKİ KAT KURALI: alt bayi, başka bir bayiye ana bayi olamaz.
+  status(await api('POST', `/api/admin/dealers/${yabanciId}/parent`, { token: U.d.token, body: { parentDealerId: altId } }), 400, 'üç kat olmaz');
+  // Alt bayisi olan bayi, kendisi alt bayi yapılamaz.
+  status(await api('POST', `/api/admin/dealers/${anaId}/parent`, { token: U.d.token, body: { parentDealerId: yabanciId } }), 400, 'alt bayisi olan bayi alt bayi olamaz');
+
+  // Liste.
+  const subs = await api('GET', '/api/dealer/subs', { token: anaOwner.token });
+  ok(subs, 'alt bayi listesi');
+  assert.equal(subs.body.isSub, false);
+  assert.ok(subs.body.subs.some((x) => x.id === altId), 'alt bayi listede');
+
+  const totalBefore = (await sql(`SELECT SUM(coin_balance)::text AS t FROM dealer_accounts WHERE id = ANY($1)`, [[anaId, altId]])).rows[0].t;
+
+  // Aktarım.
+  const tr = await api('POST', `/api/dealer/subs/${altId}/transfer`, {
+    token: anaOwner.token, body: { coins: '2500' }, headers: { 'Idempotency-Key': `e2e-tr-${Date.now()}` },
+  });
+  ok(tr, 'aktarım');
+  assert.equal(tr.body.parentBalance, '7500');
+  assert.equal(tr.body.subBalance, '2500');
+
+  // EN ÖNEMLİSİ: toplam Coin değişmedi. Aktarım para yaratmıyor.
+  const totalAfter = (await sql(`SELECT SUM(coin_balance)::text AS t FROM dealer_accounts WHERE id = ANY($1)`, [[anaId, altId]])).rows[0].t;
+  assert.equal(totalAfter, totalBefore, 'aktarım toplam Coin miktarını değiştirmemeli');
+
+  // İki tarafın defterine de yazıldı.
+  const led = await sql(
+    `SELECT type, coin_amount::text AS c FROM dealer_transactions WHERE dealer_id = ANY($1) AND type LIKE 'sub_transfer%' ORDER BY type`,
+    [[anaId, altId]],
+  );
+  assert.deepEqual(led.rows.map((x) => `${x.type}:${x.c}`), ['sub_transfer_in:2500', 'sub_transfer_out:2500']);
+
+  // Bakiyeden fazlası ve sıfır reddedilir.
+  status(await api('POST', `/api/dealer/subs/${altId}/transfer`, { token: anaOwner.token, body: { coins: '99999' } }), 400, 'bakiyeden fazla');
+  status(await api('POST', `/api/dealer/subs/${altId}/transfer`, { token: anaOwner.token, body: { coins: '0' } }), 400, 'sıfır aktarım');
+
+  // Alt bayi kendi altına aktarım yapamaz ve alt bayi listesi boş gelir.
+  const subView = await api('GET', '/api/dealer/subs', { token: altOwner.token });
+  ok(subView);
+  assert.equal(subView.body.isSub, true, 'alt bayi kendini alt bayi olarak görmeli');
+  assert.deepEqual(subView.body.subs, [], 'alt bayinin alt bayisi olmaz');
+  status(await api('POST', `/api/dealer/subs/${anaId}/transfer`, { token: altOwner.token, body: { coins: '10' } }), 403, 'alt bayi aktarım yapamaz');
+
+  // Başka bir ana bayi, bu alt bayiye aktarım yapamaz.
+  ok(await api('POST', `/api/admin/dealers/${yabanciId}/coins`, {
+    token: U.d.token, body: { amount: '1000' }, headers: { 'Idempotency-Key': `e2e-y-${Date.now()}` },
+  }));
+  status(await api('POST', `/api/dealer/subs/${altId}/transfer`, { token: yabanciOwner.token, body: { coins: '10' } }), 403, 'başkasının alt bayisine aktarım olmaz');
+
+  // Bağ kaldırılır: alt bayi yeniden ana bayi olur.
+  ok(await api('POST', `/api/admin/dealers/${altId}/parent`, { token: U.d.token, body: { parentDealerId: null } }), 'bağ kaldırılır');
+  const after = await api('GET', '/api/dealer/subs', { token: altOwner.token });
+  assert.equal(after.body.isSub, false, 'bağ kalkınca ana bayi olur');
+});
+
+test('maaş aktarımı BİR KERE çalışır: ikinci çağrı kimseye iki kez para yazdırmaz', { skip, timeout: 60000 }, async () => {
+  // Sahibinin en sert şartı: "1–3 aktarımı bir kere çalışmalı. Sistem yeniden başlasa ya da
+  // işlem tekrarlansa bile yayıncıya iki defa dolar yazılmamalı." Burada bunu gerçek
+  // veritabanıyla sınıyoruz: aynı dönemi iki kez aktarmaya çalışıyoruz.
+  const host = await register('salaryonce');
+
+  // Telefon doğrulanmış olmalı: maaş ödemesinin kapısı bu (kimlik değil).
+  await sql(`UPDATE users SET phone = $2, phone_verified_at = NOW() WHERE id = $1`, [host.id, `+90555${Date.now() % 10000000}`]);
+
+  // Kapanmış bir dönem ve bekleyen bir maaş özeti kuruyoruz.
+  const pk = `e2e${Date.now() % 100000}`;
+  const per = await sql(
+    `INSERT INTO payout_periods(period_key, cycle, starts_at, ends_at) VALUES($1,'monthly', NOW() - INTERVAL '31 days', NOW() - INTERVAL '1 day') RETURNING id`,
+    [pk],
+  );
+  const periodId = per.rows[0].id;
+  await sql(
+    `INSERT INTO host_statements(period_id, user_id, salary_cents, status) VALUES($1,$2,$3,'pending')`,
+    [periodId, host.id, '12345'],
+  );
+
+  const cents = async () => (await sql(`SELECT usd_cents::text AS c FROM users WHERE id = $1`, [host.id])).rows[0].c;
+  assert.equal(await cents(), '0', 'başlangıçta sıfır');
+
+  // Birinci aktarım.
+  const first = await api('POST', `/api/admin/salary-transfers/${pk}`, { token: U.d.token });
+  ok(first, 'ilk aktarım');
+  assert.equal(first.body.paidCount, 1);
+  assert.equal(first.body.paidCents, '12345');
+  assert.equal(await cents(), '12345', 'maaş dolar bakiyesine geçti');
+
+  // İKİNCİ aktarım: hiçbir şey yapmamalı.
+  const second = await api('POST', `/api/admin/salary-transfers/${pk}`, { token: U.d.token });
+  ok(second, 'ikinci aktarım hata vermez');
+  assert.equal(second.body.already, true, 'ikinci çağrı "zaten yapıldı" demeli');
+  assert.equal(await cents(), '12345', 'BAKİYE DEĞİŞMEDİ — iki kez ödenmedi');
+
+  // Üçüncü, dördüncü… hâlâ aynı.
+  await api('POST', `/api/admin/salary-transfers/${pk}`, { token: U.d.token });
+  await api('POST', `/api/admin/salary-transfers/${pk}`, { token: U.d.token });
+  assert.equal(await cents(), '12345', 'tekrar tekrar çağırmak da bakiyeyi değiştirmiyor');
+
+  // Özet 'paid' oldu ve defterde TEK kayıt var.
+  const st = await sql(`SELECT status FROM host_statements WHERE period_id = $1 AND user_id = $2`, [periodId, host.id]);
+  assert.equal(st.rows[0].status, 'paid');
+  const ledger = await sql(`SELECT COUNT(*)::int AS n FROM usd_transactions WHERE user_id = $1 AND type = 'salary'`, [host.id]);
+  assert.equal(ledger.rows[0].n, 1, 'dolar defterinde tek maaş kaydı olmalı');
+
+  // Çalışma kaydı: panelde görünecek.
+  const runs = await api('GET', '/api/admin/salary-transfers', { token: U.d.token });
+  ok(runs);
+  const mine = runs.body.runs.find((r) => r.periodKey === pk);
+  assert.ok(mine, 'çalışma kaydı listelenir');
+  assert.equal(mine.paidCount, 1);
+  assert.equal(mine.trigger, 'manual');
+
+  // Yetki: yayıncı kendi maaşını aktaramaz.
+  status(await api('POST', `/api/admin/salary-transfers/${pk}`, { token: host.token }), 403, 'kullanıcı aktarım başlatamaz');
+  status(await api('GET', '/api/admin/salary-transfers', { token: host.token }), 403, 'kullanıcı kayıtları göremez');
+});
+
+test('telefonu doğrulanmamış yayıncının maaşı KAYBOLMAZ, bekler', { skip, timeout: 60000 }, async () => {
+  const host = await register('salarynophone');
+  // Telefon YOK: ödeme kapısı kapalı.
+  await sql(`UPDATE users SET phone = NULL, phone_verified_at = NULL WHERE id = $1`, [host.id]);
+
+  const pk = `e2ep${Date.now() % 100000}`;
+  const per = await sql(
+    `INSERT INTO payout_periods(period_key, cycle, starts_at, ends_at) VALUES($1,'monthly', NOW() - INTERVAL '31 days', NOW() - INTERVAL '1 day') RETURNING id`,
+    [pk],
+  );
+  await sql(`INSERT INTO host_statements(period_id, user_id, salary_cents, status) VALUES($1,$2,'5000','pending')`, [per.rows[0].id, host.id]);
+
+  const out = await api('POST', `/api/admin/salary-transfers/${pk}`, { token: U.d.token });
+  ok(out);
+  assert.equal(out.body.paidCount, 0, 'ödenmedi');
+  assert.equal(out.body.skippedCount, 1, 'atlandı olarak sayıldı');
+
+  const st = await sql(`SELECT status, salary_cents::text AS c FROM host_statements WHERE period_id = $1`, [per.rows[0].id]);
+  assert.equal(st.rows[0].status, 'pending', 'özet BEKLEMEDE kalmalı — maaş silinmedi');
+  assert.equal(st.rows[0].c, '5000', 'tutar korundu');
+  assert.equal((await sql(`SELECT usd_cents::text AS c FROM users WHERE id = $1`, [host.id])).rows[0].c, '0');
+});

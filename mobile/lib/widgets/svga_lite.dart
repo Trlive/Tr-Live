@@ -95,8 +95,14 @@ _SvgaData _inflateAndParse(Uint8List raw) => SvgaMovie._parseData(Uint8List.from
 
 class _SvgaSprite {
   final String key;
+  /// Bu katmanı maskeleyen katmanın anahtarı (SVGA `matteKey`). Boşsa maske yok.
+  ///
+  /// Maske, "şu katman yalnızca maskenin opak olduğu yerde görünsün" demek. Eskiden bu
+  /// alan hiç okunmuyordu ve maskelenecek katman MASKESİZ çiziliyordu: hediyede
+  /// gizlenmesi gereken parçalar olduğu gibi görünüyor, görsel tanınmaz hale geliyordu.
+  final String matteKey;
   final List<_SvgaFrame?> frames;
-  _SvgaSprite(this.key, this.frames);
+  _SvgaSprite(this.key, this.matteKey, this.frames);
 }
 
 /// Açılmış (görselleri çözülmüş) SVGA. Aynı dosyayı kullanan bütün oynatıcılar TEK kopyayı paylaşır: on beş koltukta
@@ -111,8 +117,25 @@ class SvgaMovie {
   final List<_SvgaSprite> sprites;
   final Map<String, ui.Image> images;
   final String _key;
+  /// Maske olarak KULLANILAN katman anahtarları. Bunlar kendi başına çizilmez.
+  final Set<String> matteKeys;
+
+  /// Anahtara göre katman: maskelenecek grubun maskesini bulmak için.
+  final Map<String, _SvgaSprite> spriteByKey;
+
   SvgaMovie(this.vw, this.vh, this.fps, this.frames, this.sprites, this.images, [this._key = ''])
-      : bytes = images.values.fold<int>(0, (a, i) => a + i.width * i.height * 4);
+      : bytes = images.values.fold<int>(0, (a, i) => a + i.width * i.height * 4),
+        // Hangi katmanların maske olduğu, `.matte` son ekine bakarak DEĞİL, gerçekten
+        // matteKey ile gösterilip gösterilmediklerine bakarak belirleniyor: son ek bir
+        // adlandırma geleneği, kural değil. Son eki olup kimse göstermiyorsa da maske
+        // sayıyoruz, çünkü eski oynatıcı onu atlıyordu ve çizmek görüntüyü bozardı.
+        matteKeys = {
+          for (final sp in sprites)
+            if (sp.matteKey.isNotEmpty) sp.matteKey,
+          for (final sp in sprites)
+            if (sp.key.endsWith('.matte')) sp.key,
+        },
+        spriteByKey = {for (final sp in sprites) sp.key: sp};
 
   Duration get duration => Duration(milliseconds: (frames * 1000 / (fps <= 0 ? 20 : fps)).round().clamp(100, 600000));
 
@@ -371,6 +394,7 @@ class SvgaMovie {
 
   static _SvgaSprite _parseSprite(_Reader r, int total) {
     var key = '';
+    var matte = '';
     final fr = <_SvgaFrame?>[];
     while (r.more) {
       final t = r.varint();
@@ -380,11 +404,14 @@ class SvgaMovie {
         key = r.str();
       } else if (f == 2 && w == 2) {
         fr.add(_parseFrame(r.sub()));
+      } else if (f == 3 && w == 2) {
+        // SpriteEntity.matteKey — bu katmanı maskeleyen katmanın anahtarı.
+        matte = r.str();
       } else {
         r.skip(w);
       }
     }
-    return _SvgaSprite(key, fr);
+    return _SvgaSprite(key, matte, fr);
   }
 
   static _SvgaFrame? _parseFrame(_Reader r) {
@@ -447,16 +474,65 @@ class _SvgaPainter extends CustomPainter {
     canvas.translate(dst.left, dst.top);
     canvas.scale(dst.width / movie.vw, dst.height / movie.vh);
     final paint = Paint()..filterQuality = FilterQuality.medium;
-    for (final s in movie.sprites) {
-      if (s.key.endsWith('.matte') || idx >= s.frames.length) continue;
+    final movieRect = Rect.fromLTWH(0, 0, movie.vw, movie.vh);
+
+    // Tek katman çizimi. blend verilirse maske uygulaması için kullanılır.
+    void drawSprite(_SvgaSprite s, {BlendMode? blend}) {
+      if (idx >= s.frames.length) return;
       final f = s.frames[idx];
       final img = movie.images[s.key];
-      if (f == null || img == null) continue;
+      if (f == null || img == null) return;
       canvas.save();
       canvas.transform(f.m4);
       paint.color = Color.fromRGBO(255, 255, 255, f.alpha.clamp(0.0, 1.0));
-      canvas.drawImageRect(img, Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble()), Rect.fromLTWH(0, 0, f.w, f.h), paint);
+      paint.blendMode = blend ?? BlendMode.srcOver;
+      canvas.drawImageRect(
+        img,
+        Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble()),
+        Rect.fromLTWH(0, 0, f.w, f.h),
+        paint,
+      );
+      paint.blendMode = BlendMode.srcOver;
       canvas.restore();
+    }
+
+    // MASKE (matte).
+    //
+    // SVGA'da bir katman `matteKey` taşıyorsa, o anahtarla eşleşen katman onun MASKESİDİR:
+    // katman yalnızca maskenin opak olduğu yerde görünür. Eskiden matteKey hiç okunmuyor,
+    // maske katmanı atlanıyor ve maskelenecek katman OLDUĞU GİBİ çiziliyordu — hediyede
+    // gizlenmesi gereken parçalar görünüyor, görsel tanınmaz hale geliyordu.
+    //
+    // Uygulama: maskelenecek katman(lar) bir ara katmana çizilir, sonra maske ÜSTÜNE
+    // `dstIn` ile çizilir. dstIn "hedefi yalnızca kaynağın alfası olduğu yerde tut"
+    // demek, yani tam olarak maskeleme.
+    //
+    // Aynı maskeyi paylaşan ARDIŞIK katmanlar tek grup olarak maskelenir: SVGA'da bir
+    // maske birden çok katmanı birlikte kırpabiliyor.
+    var i = 0;
+    while (i < movie.sprites.length) {
+      final s = movie.sprites[i];
+      // Maske olarak kullanılan katmanlar kendi başına çizilmez; grubun içinde çizilir.
+      if (movie.matteKeys.contains(s.key)) { i++; continue; }
+      final mk = s.matteKey;
+      if (mk.isEmpty) { drawSprite(s); i++; continue; }
+
+      final matte = movie.spriteByKey[mk];
+      if (matte == null) {
+        // Maske katmanı dosyada yok: maskesiz çizmek, hiç çizmemekten iyidir.
+        drawSprite(s);
+        i++;
+        continue;
+      }
+      canvas.saveLayer(movieRect, Paint());
+      var j = i;
+      while (j < movie.sprites.length && movie.sprites[j].matteKey == mk) {
+        drawSprite(movie.sprites[j]);
+        j++;
+      }
+      drawSprite(matte, blend: BlendMode.dstIn);
+      canvas.restore();
+      i = j;
     }
     canvas.restore();
   }

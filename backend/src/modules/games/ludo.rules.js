@@ -54,7 +54,7 @@ export function newGame(userIds, now = Date.now(), opts = {}) {
   const kills = {};
   for (const p of players) kills[p.seat] = 0;
   return {
-    players, tokens, turn: players[0].seat, dice: null, sixes: 0,
+    players, tokens, turn: players[0].seat, dice: null, pending: [], sixes: 0,
     winnerSeat: null, deadline: now + TURN_MS, log: [], moves: 0,
     mode: MODES.includes(opts.mode) ? opts.mode : 'classic', kills, frozen: [], seq: 1,
   };
@@ -88,6 +88,9 @@ function nextSeat(st, seat) {
 
 function endTurn(st, now, keep = false) {
   st.dice = null;
+  // Oynanmamış zar değerleri sıra geçerken DÜŞER. Aksi halde oyuncu bir sonraki turunda
+  // geçen turdan kalan zarı oynardı.
+  st.pending = [];
   if (!keep) {
     let next = nextSeat(st, st.turn);
     // Dondurulan (buz) oyuncu bir tur atlar.
@@ -118,31 +121,83 @@ function nearestAhead(st, seat, cell, protect) {
   return null;
 }
 
+/**
+ * Zar atar.
+ *
+ * ## 6 OYNATMAZ, BİRİKİR (sahibinin kuralı)
+ *
+ *     "Oyuncu 6 atarsa oynatmasın, tekrar zar çevirip 2 veya 3 sonucu birden oynasın."
+ *
+ * Eskiden 6 atan oyuncu hem 6 ile oynuyor hem bir zar hakkı daha kazanıyordu. Artık 6
+ * atıldığında taş oynatılmıyor: değer `st.pending` kuyruğuna yazılıp oyuncu tekrar atıyor.
+ * Kuyruk 6 olmayan bir değerle kapanıyor ve oyuncu birikenleri SIRAYLA oynuyor:
+ *
+ *     [6, 3]      → iki sonuç
+ *     [6, 6, 3]   → üç sonuç
+ *     [6, 6, 6]   → üç altı: hepsi düşer, sıra geçer (eski kural korundu)
+ *
+ * Değerler TOPLANMIYOR, tek tek oynanıyor. Toplasaydık (6+6+3=15) üsten taş çıkarmak
+ * imkânsız olurdu: `targetOf` üsten çıkış için tam 6 arıyor. Dört taşı da üste olan
+ * oyuncu 6 attığında hiç hamlesi kalmazdı, yani oyun kilitlenirdi.
+ *
+ * `st.dice` her zaman "şu an oynanabilir değer" (kuyruğun başı) demek; kuyruk doluyken
+ * null ise oyuncunun tekrar atması gerekiyor.
+ */
 export function roll(st0, seat, rng = Math.random, now = Date.now()) {
   const st = clone(st0);
   if (st.winnerSeat !== null) throw new Error('Oyun bitti');
   if (st.turn !== seat) throw new Error('Sıra sizde değil');
   if (st.dice !== null) throw new Error('Zar zaten atıldı');
+  if (!Array.isArray(st.pending)) st.pending = [];
   const dice = 1 + Math.floor(rng() * 6);
-  st.dice = dice;
   st.moves += 1;
   bump(st);
-  st.sixes = dice === 6 ? st.sixes + 1 : 0;
-  let skipped = false;
-  if (st.sixes >= 3) {
-    // Üst üste üç altı: hamle yok, sıra geçer.
-    skipped = true;
-    st.log.push({ seat, dice, event: 'three_sixes', n: st.seq });
-    endTurn(st, now);
-  } else if (!legalMoves(st, seat, dice).length) {
-    skipped = true;
+
+  if (dice === 6) {
+    st.sixes += 1;
+    if (st.sixes >= 3) {
+      // Üst üste üç altı: biriken değerlerin hepsi düşer, sıra geçer.
+      st.log.push({ seat, dice, event: 'three_sixes', n: st.seq });
+      endTurn(st, now);
+      st.log = st.log.slice(-20);
+      return { state: st, dice, skipped: true, rollAgain: false, pending: [], legal: [] };
+    }
+    // 6 biriktir ve tekrar at. Taş oynatılmıyor.
+    st.pending.push(6);
+    st.dice = null;
+    st.deadline = now + TURN_MS;
+    st.log.push({ seat, dice, event: 'six_again', n: st.seq });
+    st.log = st.log.slice(-20);
+    return { state: st, dice, skipped: false, rollAgain: true, pending: st.pending.slice(), legal: [] };
+  }
+
+  st.sixes = 0;
+  st.pending.push(dice);
+  // Kuyruğun başındaki oynanamayan değerler düşer: [6, 6, 2] gelip 6'larla hamle yoksa
+  // oyuncu 2'yi oynayabilsin. Hiçbiri oynanamıyorsa sıra geçer.
+  const dropped = dropUnplayable(st, seat);
+  if (!st.pending.length) {
     st.log.push({ seat, dice, event: 'no_move', n: st.seq });
     endTurn(st, now);
-  } else {
-    st.deadline = now + TURN_MS;
+    st.log = st.log.slice(-20);
+    return { state: st, dice, skipped: true, rollAgain: false, pending: [], legal: [] };
   }
+  st.dice = st.pending[0];
+  st.deadline = now + TURN_MS;
+  st.log.push({ seat, dice, event: 'roll', pending: st.pending.slice(), dropped, n: st.seq });
   st.log = st.log.slice(-20);
-  return { state: st, dice, skipped, legal: skipped ? [] : legalMoves(st, seat, dice) };
+  return { state: st, dice, skipped: false, rollAgain: false, pending: st.pending.slice(), legal: legalMoves(st, seat, st.dice) };
+}
+
+/** Kuyruğun başındaki, hiçbir taşla oynanamayan değerleri atar. Kaç tanesinin düştüğünü
+ *  döndürür; oynanabilir ilk değer başa gelir. */
+function dropUnplayable(st, seat) {
+  let dropped = 0;
+  while (st.pending.length && !legalMoves(st, seat, st.pending[0]).length) {
+    st.pending.shift();
+    dropped += 1;
+  }
+  return dropped;
 }
 
 export function move(st0, seat, token, now = Date.now()) {
@@ -208,12 +263,34 @@ export function move(st0, seat, token, now = Date.now()) {
   if (modeOf(st) === 'quick' ? finishedToken : st.tokens[seat].every((p) => p === FINISH)) {
     st.winnerSeat = seat;
     st.dice = null;
+    st.pending = [];
     st.deadline = null;
     return { state: st, captured, finished: true, extraTurn: false, won: true };
   }
-  const extra = dice === 6 || captured.length > 0 || finishedToken || bonus;
+  // Oynanan değer kuyruktan düşer.
+  //
+  // `dice === 6` ARTIK ekstra tur VERMİYOR: 6, atıldığı anda zaten tekrar atma hakkı
+  // kazandırdı ve kuyruğa yazıldı (bkz. roll). Burada da ekstra tur verseydik oyuncu her
+  // 6'da iki hak kazanır ve tur hiç bitmezdi.
+  if (!Array.isArray(st.pending)) st.pending = [];
+  if (st.pending.length) st.pending.shift();
+  // Kalan değerlerden oynanamayanlar düşer: [6, 6, 2] gelip ilk 6 oynandıktan sonra
+  // ikinci 6 ile hamle kalmamış olabilir.
+  dropUnplayable(st, seat);
+
+  if (st.pending.length) {
+    // Biriken zarlar bitmedi: sıra aynı oyuncuda, oynanacak değer kuyruğun başı.
+    st.dice = st.pending[0];
+    st.deadline = now + TURN_MS;
+    return {
+      state: st, captured, finished: finishedToken, extraTurn: true, won: false,
+      pending: st.pending.slice(),
+    };
+  }
+
+  const extra = captured.length > 0 || finishedToken || bonus;
   endTurn(st, now, extra);
-  return { state: st, captured, finished: finishedToken, extraTurn: extra, won: false };
+  return { state: st, captured, finished: finishedToken, extraTurn: extra, won: false, pending: [] };
 }
 
 // Zaman aşımı / AFK: sıradaki oyuncu için otomatik oynar. MAX_AUTO kez üst üste otomatik oynarsa oyundan atılır.
@@ -243,14 +320,24 @@ export function autoPlay(st0, rng = Math.random, now = Date.now()) {
   const pl = playerOf(st, seat);
   pl.auto += 1;
   if (pl.auto > MAX_AUTO) return { state: forfeit(st, pl.userId, now), forfeited: pl.userId };
-  if (st.dice === null) {
+  // 6 OYNATMIYOR, tekrar attırıyor: kuyruk 6 olmayan bir değerle kapanana kadar at.
+  // En çok üç atış olabilir (üçüncü 6 sırayı geçirir) ama döngüye güvenmek yerine sınır var.
+  //
+  // Bu döngü olmadan, zaman aşımına düşen oyuncu 6 attığında `st.dice` null kalıyor,
+  // pickAuto boş dönüyor ve oyuncu tekrar atmak yerine SIRASINI KAYBEDİYORDU.
+  for (let guard = 0; guard < 4 && st.dice === null && st.turn === seat && st.winnerSeat === null; guard++) {
     const r = roll(st, seat, rng, now);
     st = r.state;
     if (r.skipped || st.turn !== seat) return { state: st, forfeited: null };
   }
-  const pick = pickAuto(st, seat);
-  if (pick === null) { bump(st); endTurn(st, now); return { state: st, forfeited: null }; }
-  return { state: move(st, seat, pick, now).state, forfeited: null };
+  // Biriken zarların hepsi tek zaman aşımında oynanır; oyuncu her değer için ayrı ayrı
+  // zaman aşımına düşmesin.
+  for (let guard = 0; guard < 4 && st.dice !== null && st.turn === seat && st.winnerSeat === null; guard++) {
+    const pick = pickAuto(st, seat);
+    if (pick === null) { bump(st); endTurn(st, now); return { state: st, forfeited: null }; }
+    st = move(st, seat, pick, now).state;
+  }
+  return { state: st, forfeited: null };
 }
 
 // Oyuncu hamle yaptığında AFK sayacı sıfırlanır.

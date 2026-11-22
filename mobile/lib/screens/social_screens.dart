@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import '../hybrid/sdui/v2/sdui_screen_view.dart';
 import '../services/api.dart';
 import '../services/inbox_service.dart';
 import '../services/room_dock.dart';
@@ -37,6 +38,31 @@ class _FriendsScreenState extends State<FriendsScreen> {
     }
   }
 
+  /// Arkadaş listesinin YERLEŞİK sürümü — SDUI'nin geri düşme kademesi. Silinmez.
+  Widget _builtInFriends(BuildContext context) => AsyncBody<List<Map<String, dynamic>>>(
+        key: ValueKey('f$_version'),
+        load: () async => listOf((await Api.get('/api/friends'))['users']),
+        builder: (context, users, reload) => users.isEmpty
+            ? const Center(child: Padding(padding: EdgeInsets.all(24), child: Text('Henüz arkadaşın yok. Bir profile girip "Arkadaş ekle" diyebilirsin.', textAlign: TextAlign.center)))
+            : RefreshIndicator(
+                onRefresh: reload,
+                child: ListView(children: [
+                  for (final u in users)
+                    ListTile(
+                      leading: UserAvatar(user: u),
+                      title: UserName(user: u),
+                      subtitle: Text('@${u['username']}'),
+                      trailing: IconButton(
+                        tooltip: 'Mesaj',
+                        icon: const Icon(Icons.chat_bubble_outline, color: Pal.cyan),
+                        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ChatScreen(peer: u))),
+                      ),
+                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => UserProfileScreen(userId: u['id'] as String))),
+                    ),
+                ]),
+              ),
+      );
+
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
@@ -44,29 +70,11 @@ class _FriendsScreenState extends State<FriendsScreen> {
       child: Scaffold(
         appBar: AppBar(title: const Text('Arkadaşlar'), bottom: const TabBar(tabs: [Tab(text: 'Arkadaşlarım'), Tab(text: 'İstekler')])),
         body: TabBarView(children: [
-          AsyncBody<List<Map<String, dynamic>>>(
-            key: ValueKey('f$_version'),
-            load: () async => listOf((await Api.get('/api/friends'))['users']),
-            builder: (context, users, reload) => users.isEmpty
-                ? const Center(child: Padding(padding: EdgeInsets.all(24), child: Text('Henüz arkadaşın yok. Bir profile girip "Arkadaş ekle" diyebilirsin.', textAlign: TextAlign.center)))
-                : RefreshIndicator(
-                    onRefresh: reload,
-                    child: ListView(children: [
-                      for (final u in users)
-                        ListTile(
-                          leading: UserAvatar(user: u),
-                          title: UserName(user: u),
-                          subtitle: Text('@${u['username']}'),
-                          trailing: IconButton(
-                            tooltip: 'Mesaj',
-                            icon: const Icon(Icons.chat_bubble_outline, color: Pal.cyan),
-                            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ChatScreen(peer: u))),
-                          ),
-                          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => UserProfileScreen(userId: u['id'] as String))),
-                        ),
-                    ]),
-                  ),
-          ),
+          // SDUI v2: YALNIZCA arkadaş listesi sunucudan gelebilir. İstekler sekmesi
+          // (kabul/ret) yerel kalıyor — orası bir işlem akışı, görünüm değil.
+          // Yayın yoksa / sürüm yetmiyorsa / kademeli açılış dışındaysa aşağıdaki
+          // yerleşik liste çizilir ve o liste SİLİNMEDİ.
+          SduiScreenView(screenId: 'relations', fallback: _builtInFriends),
           AsyncBody<List<Map<String, dynamic>>>(
             key: ValueKey('r$_version'),
             load: () async => listOf((await Api.get('/api/friends/requests'))['requests']),

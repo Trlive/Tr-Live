@@ -96,9 +96,33 @@ export async function creditStatement(c, kind, row, adminId) {
  * Kimlik doğrulaması (KYC) onaylı olmayan yayıncının maaşı YATIRILMAZ; özet bekler (admin KYC'yi onaylayınca öder).
  * kinds: yalnızca bu türler (verilmezse hepsi).
  */
+/**
+ * Maaşın ödenebilmesi için kullanıcıda aranan koşul — SQL parçası, "u" takma adlı users ile.
+ *
+ * TEK YERDE olmasının sebebi: bu koşul iki ayrı sorguda kullanılıyor (cüzdana yatırma ve
+ * özeti "ödendi" işaretleme). İkisi ayrışırsa, koşulu birinde tutup diğerinde tutmayan bir
+ * yayıncının özeti "ödendi" olur ama parası hiç yatmaz — yani maaş sessizce kaybolur.
+ * Aynı metni iki yere yazmak bu hatayı davet ediyordu.
+ *
+ * Koşul: telefon bağlı ve doğrulanmış. Kimlik fotoğrafı istenmiyor (sahibinin kararı);
+ * geri kalan doğrulamayı ödemeyi yapacak aracı şirket belirleyecek.
+ */
+export const SALARY_PAYABLE_SQL = `u.phone IS NOT NULL AND u.phone_verified_at IS NOT NULL`;
+
 export async function creditPeriod(c, periodId, adminId, { kinds = null, note = 'Dolar cüzdanına yatırıldı' } = {}) {
   const sets = [
-    { kind: 'host', table: 'host_statements', type: 'salary', sql: `SELECT s.id, s.user_id, s.salary_cents AS cents FROM host_statements s JOIN users u ON u.id = s.user_id WHERE s.period_id = $1 AND s.status = 'pending' AND s.salary_cents > 0 AND u.kyc_status = 'approved'` },
+    // Maaş ödemesinin kapısı: TELEFON DOĞRULAMASI.
+    //
+    // Eskiden `u.kyc_status = 'approved'` idi, yani her yayıncı için yöneticinin kimlik
+    // onayı gerekiyordu. Sahibinin kararı: kimlik fotoğrafı istenmeyecek, telefon bağlamak
+    // yeterli; geri kalan doğrulamayı ödemeyi yapacak aracı şirket belirleyecek.
+    //
+    // `kyc_status` sütunu KALDIRILMADI: aracı şirketin ileride isteyebileceği doğrulama
+    // için yerinde duruyor. Burada yalnızca maaşın cüzdana geçme koşulu değişti.
+    //
+    // Telefonu doğrulanmamış yayıncının maaşı KAYBOLMUYOR: özet 'pending' kalıyor ve
+    // telefonunu doğruladıktan sonraki çalışmada ödeniyor.
+    { kind: 'host', table: 'host_statements', type: 'salary', sql: `SELECT s.id, s.user_id, s.salary_cents AS cents FROM host_statements s JOIN users u ON u.id = s.user_id WHERE s.period_id = $1 AND s.status = 'pending' AND s.salary_cents > 0 AND ${SALARY_PAYABLE_SQL}` },
     { kind: 'agency', table: 'agency_statements', type: 'agency_bonus', sql: `SELECT s.id, a.owner_id AS user_id, s.owner_cents AS cents FROM agency_statements s JOIN agencies a ON a.id = s.agency_id WHERE s.period_id = $1 AND s.status = 'pending' AND s.owner_cents > 0` },
     { kind: 'assistant', table: 'assistant_statements', type: 'assistant_share', sql: `SELECT s.id, s.user_id, s.amount_cents AS cents FROM assistant_statements s WHERE s.period_id = $1 AND s.status = 'pending' AND s.amount_cents > 0` },
     { kind: 'referral', table: 'referral_statements', type: 'referral_bonus', sql: `SELECT s.id, a.owner_id AS user_id, s.amount_cents AS cents FROM referral_statements s JOIN agencies a ON a.id = s.agency_id WHERE s.period_id = $1 AND s.status = 'pending' AND s.amount_cents > 0` },

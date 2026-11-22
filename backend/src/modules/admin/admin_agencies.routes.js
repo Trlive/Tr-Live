@@ -1,7 +1,7 @@
 // Yönetici paneli — ajans ve yayıncı.
 // Ortak yardımcılar ve import'lar: admin.shared.js
 import { Router } from 'express';
-import { DEFAULT_PAY_LEVELS, SETTING_COLUMNS, TRANSFER_SELECT, agencyDupError, agencyIdByCode, applyTransfer, cleanPublic, config, configJson, createAgency, ensureAgencyCode, fail, hub, loadConfig, logTransfer, notifyTransferResult, notifyUser, oneOf, positiveInt, query, requireSuperAdmin, savePayLevels, text, transferJson, tx, uuid, validateAgencyConfig, validateGrades, validatePayLevels } from './admin.shared.js';
+import { DEFAULT_PAY_LEVELS, SETTING_COLUMNS, TRANSFER_SELECT, agencyDupError, agencyIdByCode, auditStaff, applyTransfer, cleanPublic, config, configJson, createAgency, ensureAgencyCode, fail, hub, loadConfig, logTransfer, notifyTransferResult, notifyUser, oneOf, positiveInt, query, requireSuperAdmin, savePayLevels, text, transferJson, tx, uuid, validateAgencyConfig, validateGrades, validatePayLevels } from './admin.shared.js';
 
 export const router = Router();
 
@@ -145,6 +145,11 @@ router.put('/agency-config', requireSuperAdmin, async (req, res) => {
         if (v.settings[k] !== undefined) await c.query(`UPDATE agency_settings SET ${col} = $1, updated_at = NOW() WHERE id = 1`, [v.settings[k]]);
       }
     }
+    // Ağırlıklar JSONB: SETTING_COLUMNS döngüsünden geçmiyor, doğrulanıp ayrıca yazılıyor.
+    if (v.salaryWeights) {
+      await c.query(`UPDATE agency_settings SET salary_weights = $1, updated_at = NOW() WHERE id = 1`,
+        [JSON.stringify(v.salaryWeights)]);
+    }
     if (grades) {
       await c.query(`UPDATE agency_settings SET agency_grades = $1, updated_at = NOW() WHERE id = 1`,
         [JSON.stringify(grades.map((g) => ({ name: g.name, min: g.min.toString() })))]);
@@ -201,12 +206,24 @@ router.post('/agencies/:agencyId/commission-override', requireSuperAdmin, async 
   res.json({ ok: true, overrideBps: r.rows[0].commission_override_bps });
 });
 
+/// Yayıncının SÖZLEŞME kademesi: ağırlıklı maaş hesabının temel maaşı buradan gelir.
+///
+/// Üst sınır maaş tablosunun kendisinden okunuyor. Sabit 10 yazılmıştı; tablo ise 44
+/// kademeli, yani 11. kademeden yukarısı hiç atanamıyordu ve bu sütun maaş hesabında
+/// kullanılmadığı sürece kimsenin dikkatini çekmemişti.
 router.post('/broadcasters/:userId/contract', requireSuperAdmin, async (req, res) => {
   const userId = uuid(req.params.userId, 'Kullanıcı');
-  const tier = req.body?.tier === null ? null : positiveInt(req.body?.tier, 'Kademe', 10);
+  const cfg = await loadConfig();
+  const maxLevel = cfg.levels.reduce((a, l) => Math.max(a, l.level), 0) || 1;
+  const tier = req.body?.tier === null ? null : positiveInt(req.body?.tier, 'Kademe', maxLevel);
+  // Tabloda gerçekten var olan bir kademe olmalı: olmayan kademe, temel maaşı 0 yapardı.
+  if (tier !== null && !cfg.levels.some((l) => l.level === tier)) {
+    throw fail(`Maaş tablosunda ${tier}. kademe yok (1-${maxLevel}).`);
+  }
   const r = await query(`UPDATE broadcasters SET contract_tier = $2 WHERE user_id = $1 RETURNING user_id`, [userId, tier]);
   if (!r.rowCount) throw fail('Yayıncı bulunamadı.', 404);
-  res.json({ ok: true, tier });
+  await auditStaff(req, 'broadcaster_contract_tier', { userId, tier });
+  res.json({ ok: true, tier, maxLevel });
 });
 
 // ---------------- Transferler (platform incelemesi) ----------------

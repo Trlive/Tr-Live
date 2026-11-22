@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { api, fmtMoney, fmtNumber } from "@/core/api/api";
+import { useConfirm } from "@/shared/components/confirm";
 import { useApi } from "@/core/api/use-api";
 import { t } from "@/shared/utils/i18n";
 import { Badge, Empty, ErrorBox, Loading, Notice, inputCls } from "@/shared/components/ui";
@@ -65,6 +66,8 @@ type Assist = {
 };
 
 export function AgencyAssistants() {
+  // Uygulama içi WebView: tarayıcı kutusu sunucu adresini gösteriyor.
+  const { ask, confirmNode } = useConfirm();
   const ag = currentAgency();
   const { data, error, loading, reload } = useApi<Assist>(ag.id ? `/api/agency-center/${ag.id}/assistants` : null);
   const { busy, msg, run } = useRun(reload);
@@ -97,8 +100,8 @@ export function AgencyAssistants() {
                     type="button"
                     className={btnRed}
                     disabled={busy}
-                    onClick={() => {
-                      if (!window.confirm(t("Asistanlık sonlandırılsın mı?"))) return;
+                    onClick={async () => {
+                      if (!(await ask({ title: t("Asistanlık sonlandırılsın mı?"), okLabel: t("Sonlandır"), danger: true }))) return;
                       run(() => api(`/api/agency-center/${ag.id}/assistants/${a.id}/remove`, { method: "POST" }), t("Asistanlık sonlandırıldı."));
                     }}
                   >
@@ -149,6 +152,7 @@ export function AgencyAssistants() {
           <PickUser onPick={setWho} />
         )}
       </Section>
+      {confirmNode}
     </div>
   );
 }
@@ -291,19 +295,26 @@ export const transferStatus: Record<string, [string, "green" | "gold" | "red" | 
 };
 
 export function AgencyTransfers() {
+  const { ask, askText, confirmNode } = useConfirm();
   const ag = currentAgency();
   const { data, error, loading, reload } = useApi<{ transfers: Transfer[]; counts: { joined: number; left: number; pending: number } }>(ag.id ? `/api/agency-center/${ag.id}/transfers` : null);
   const { busy, msg, run } = useRun(reload);
   if (loading && !data) return <Loading label={t("Yükleniyor...")} />;
   if (error) return <ErrorBox message={error} onRetry={reload} />;
   if (!data) return null;
-  function decide(x: Transfer, approve: boolean) {
+  async function decide(x: Transfer, approve: boolean) {
     let note: string | null = null;
     if (!approve) {
-      const typed = window.prompt(t("Reddetme nedeni (isteğe bağlı):"));
+      // askText iptalde null döner; boş metin ("") geçerli, çünkü nedeni yazmak zorunlu değil.
+      const typed = await askText({
+        title: t("İstek reddedilsin mi?"),
+        input: { label: t("Reddetme nedeni (isteğe bağlı)"), optional: true, maxLength: 200 },
+        okLabel: t("Reddet"),
+        danger: true,
+      });
       if (typed === null) return;
       note = typed.trim().slice(0, 200) || null;
-    } else if (!window.confirm(t("Onaylıyor musunuz?"))) return;
+    } else if (!(await ask({ title: t("İstek onaylansın mı?"), okLabel: t("Onayla") }))) return;
     run(() => api(`/api/agency-transfers/${x.id}/respond`, { method: "POST", body: { approve, ...(note ? { note } : {}) } }), approve ? t("Onaylandı.") : t("Reddedildi."));
   }
   return (
@@ -325,10 +336,10 @@ export function AgencyTransfers() {
                   </p>
                   {x.canDecide && (
                     <div className="mt-2 flex gap-2">
-                      <button type="button" className={btnGreen} disabled={busy} onClick={() => decide(x, true)}>
+                      <button type="button" className={btnGreen} disabled={busy} onClick={() => void decide(x, true)}>
                         {t("Onayla")}
                       </button>
-                      <button type="button" className={btnRed} disabled={busy} onClick={() => decide(x, false)}>
+                      <button type="button" className={btnRed} disabled={busy} onClick={() => void decide(x, false)}>
                         {t("Reddet")}
                       </button>
                     </div>
@@ -339,6 +350,7 @@ export function AgencyTransfers() {
           </div>
         )}
       </Section>
+      {confirmNode}
     </div>
   );
 }

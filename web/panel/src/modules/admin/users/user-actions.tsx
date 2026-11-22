@@ -6,7 +6,8 @@ import { api, fmtNumber } from "@/core/api/api";
 import { useApi } from "@/core/api/use-api";
 import { Card, inputCls } from "@/shared/components/ui";
 import type { Detail } from "./user-detail";
-import { ActionMsg, Field, btnDanger, btnDangerOutline, btnGhost, btnOk, confirmTyped, mayAct, newKey, selectCls, useAction } from "@/shared/components/kit";
+import { ActionMsg, Field, btnDanger, btnDangerOutline, btnGhost, btnOk, mayAct, newKey, selectCls, useAction } from "@/shared/components/kit";
+import { confirmTyped } from "@/modules/admin/shared/confirm-typed";
 
 type Run = (label: string, fn: () => Promise<void | false>) => Promise<void>;
 

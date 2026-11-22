@@ -700,10 +700,10 @@ function maybeAutoDraw() {
   const gid = G.id, seq = G.seq;
   const go = (tries) => {
     if (!G || G.id !== gid || G.seq !== seq || !G.me || !G.me.canDraw || G.me.playable.length) return;
-    if (busy && tries < 6) { setTimeout(() => go(tries + 1), 400); return; }
+    if (busy && tries < 6) { setTimeout(() => go(tries + 1), 280); return; }
     drawCard();
   };
-  setTimeout(() => go(0), 1100);
+  setTimeout(() => go(0), 750);
 }
 
 function events() {
@@ -753,11 +753,11 @@ function animate(was) {
       for (let r = 0; r < per; r++) for (const seat of order) {
         const mine = me && me.seat === seat;
         const to = mine ? handRect() : seatRect(seat);
-        if (to) fly(backEl(), deckRect(), { x: to.x, y: to.y, w: mine ? to.w : Math.max(22, to.w * 0.8) }, { d: 380, delay: k * 55, r0: -10, r1: rnd(-15, 15), fade: !mine });
+        if (to) fly(backEl(), deckRect(), { x: to.x, y: to.y, w: mine ? to.w : Math.max(22, to.w * 0.8) }, { d: 260, delay: k * 36, r0: -10, r1: rnd(-15, 15), fade: !mine });
         k += 1;
       }
-      handDelay = 350;
-      pileDelay = k * 55 + 300;
+      handDelay = 240;
+      pileDelay = k * 36 + 200;
     }
     return;
   }
@@ -771,7 +771,7 @@ function animate(was) {
       if (from && to) {
         const rot = ((G.seq * 37) % 30) - 15;
         fly(cardEl(e.code), mine ? from : { x: from.x, y: from.y, w: Math.max(24, from.w * 0.8) }, to, { d: 440, r0: mine ? 0 : -20, r1: rot, lift: 30, arc: mine ? 0 : rnd(-30, 30) });
-        pileDelay = 400;
+        pileDelay = 280;
       }
       myPlayRect = null;
       const k = e.code[1];

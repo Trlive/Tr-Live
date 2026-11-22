@@ -1,4 +1,5 @@
 // Yönetici panelinden gelen ajans ayarlarının doğrulaması (saf fonksiyon).
+import { validateWeights } from '../wallet/salary_weights.rules.js';
 const fail = (m) => Object.assign(new Error(m), { status: 400 });
 
 function big(v, field) {
@@ -54,7 +55,24 @@ export function validateAgencyConfig(input) {
       if (!Number.isInteger(s[k]) || s[k] < min || s[k] > max) throw fail(msg);
       out.settings[k] = s[k];
     }
-    for (const k of ['requireGameHours', 'allowBalanceMethod']) {
+    // Ağırlıklı maaş hak edişi (v2.150.0).
+    if (s.salaryWeights !== undefined) {
+      // validateWeights toplamın 10000 olmasını da zorluyor: aksi halde kimse maaşının
+      // tamamını hak edemez ve bunu kimse fark etmez.
+      out.salaryWeights = validateWeights(s.salaryWeights);
+    }
+    for (const [k, label] of [['salaryTransferDayFrom', 'Aktarım başlangıç günü'], ['salaryTransferDayTo', 'Aktarım bitiş günü']]) {
+      if (s[k] === undefined) continue;
+      if (!Number.isInteger(s[k]) || s[k] < 1 || s[k] > 28) throw fail(`${label} 1-28 olmalı.`);
+      out.settings[k] = s[k];
+    }
+    // Pencere ters olamaz. Yalnızca biri gönderilmişse diğerini bilmediğimiz için burada
+    // karar vermiyoruz; veritabanındaki CHECK son sözü söylüyor.
+    if (out.settings.salaryTransferDayFrom !== undefined && out.settings.salaryTransferDayTo !== undefined
+        && out.settings.salaryTransferDayFrom > out.settings.salaryTransferDayTo) {
+      throw fail('Aktarım başlangıç günü, bitiş gününden büyük olamaz.');
+    }
+    for (const k of ['requireGameHours', 'allowBalanceMethod', 'salaryWeightedEnabled', 'salaryAutoTransfer']) {
       if (s[k] === undefined) continue;
       if (typeof s[k] !== 'boolean') throw fail(`${k} true/false olmalı.`);
       out.settings[k] = s[k];

@@ -56,8 +56,12 @@ for (const type of rendered) {
 }
 
 const known = casesOf(actions);
-for (const a of ['tab', 'openScreen', 'openActivity', 'openUrl', 'api', 'modal', 'refresh']) {
-  if (!known.has(a)) { console.log(`eylem "${a}": şemada var, uygulamada YOK`); bad++; }
+// Liste ŞEMADAN gelir, burada elle tutulmaz. Elle tutulsaydı şemaya eklenen yeni bir eylem
+// (ör. openChat) bu araca eklenmediği sürece denetlenmeden geçerdi — aracın görevi tam da
+// bunu yakalamak.
+for (const a of schema.ACTION_TYPES) {
+  if (a === 'noop') continue; // hiçbir şey yapmaz; çizicide dalı olması gerekmez
+  if (!known.has(a)) { console.log(`eylem "${a}": şemada var, uygulamada YOK → düğme sessizce çalışmaz`); bad++; }
 }
 const appActions = keysOf(actions);
 for (const name of Object.keys(schema.API_ACTIONS)) {
@@ -74,7 +78,8 @@ for (const name of schema.SOURCES) {
   }
 }
 
-const n = Object.keys(schema.COMPONENTS).length + Object.keys(schema.API_ACTIONS).length + schema.SOURCES.length;
+const n = Object.keys(schema.COMPONENTS).length + Object.keys(schema.API_ACTIONS).length
+  + schema.SOURCES.length + schema.ACTION_TYPES.length;
 console.log(bad
   ? `\n${bad} eşleşmeyen. Bunların her biri kullanıcıda BOŞ ya da TEPKİSİZ bir parça demektir.`
   : `şema ve uygulama aynı şeyleri biliyor (${n} tanım denetlendi)`);

@@ -172,7 +172,14 @@ class _GiftRibbonOverlayState extends State<GiftRibbonOverlay> {
     // Sıra çok uzamasın (art arda yüzlerce hediye): en fazla 30 tekrar bekler (düşük bellekli telefonda 12).
     final cap = FxLoad.tier == 0 ? 12 : 30;
     for (var i = 0; i < times && _anims.length < cap; i++) {
-      _anims.add({'url': url, 'format': (gift['animationFormat'] ?? '').toString(), 'sound': true});
+      // Hediyenin simgesi yedek olarak taşınıyor: animasyon açılamazsa ekran boş
+      // kalmasın, kullanıcı en azından ne gönderildiğini görsün.
+      _anims.add({
+        'url': url,
+        'format': (gift['animationFormat'] ?? '').toString(),
+        'icon': (gift['iconUrl'] ?? '').toString(),
+        'sound': true,
+      });
     }
     _pump();
   }
@@ -219,6 +226,7 @@ class _GiftRibbonOverlayState extends State<GiftRibbonOverlay> {
         child: AnimAsset(
           url: a['url'] as String,
           format: a['format'] as String,
+          fallbackUrl: a['icon'] as String?,
           key: ValueKey(seq),
           sound: a['sound'] == true,
           onDone: () => _animDone(seq),

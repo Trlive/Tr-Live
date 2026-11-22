@@ -21,6 +21,7 @@ import { startWeeklyEventsTicker } from './modules/events/weekly_events.service.
 import { startNotificationJanitor } from './modules/notifications/notify.service.js';
 import { router as dealersRouter, startDealerDeliveryTicker, shopAdminRouter as dealerShopAdminRouter } from './modules/dealers/dealers.routes.js';
 import { startTransferTicker } from './modules/agencies/agency_ops.service.js';
+import { startSalaryTransferTicker } from './modules/wallet/salary_transfer.service.js';
 import { startPrivacySweeper } from './modules/users/privacy.service.js';
 import { router as cpRouter, startRelationRefundTicker } from './modules/relations/cp.routes.js';
 import { startGuardianTicker } from './modules/users/guardian.service.js';
@@ -95,6 +96,10 @@ const alertTicker = setInterval(
   Math.max(Number(process.env.ALERT_INTERVAL_MIN) || 5, 1) * 60e3,
 );
 alertTicker.unref();
+// Ay başı maaş aktarımı: saatte bir bakar, ayın 1–3'ü arasındaysa ve ayar açıksa kapanmış
+// dönemlerin maaşını dolar bakiyesine geçirir. Bayrak KAPALI geldiği için varsayılan
+// kurulumda hiçbir şey yapmaz. "Bir kere" güvencesi servisin kendisinde (veritabanında).
+const salaryTicker = startSalaryTransferTicker(nonOverlapping);
 loadBans().then((n) => n && console.log(`${n} aktif IP yasağı yüklendi.`)).catch((e) => console.error('IP yasakları yüklenemedi:', e.message));
 promoteBootstrapAdmins().catch((e) => console.error('ADMIN_USERNAMES uygulanamadı:', e.message));
 seedThemeImages().then((n) => n && console.log(`${n} oda teması görseli yüklendi.`)).catch((e) => console.error('Tema görselleri yüklenemedi:', e.message));
@@ -131,6 +136,7 @@ async function shutdown(signal) {
   clearInterval(janitor);
   clearInterval(idemJanitor);
   clearInterval(banJanitor);
+  clearInterval(salaryTicker);
   const force = setTimeout(() => process.exit(1), 10000);
   force.unref();
   // Yeni istek alınmaz; süren istekler biter. Canlı bağlantılar (WebSocket) "yeniden başlıyor" koduyla kapatılır:

@@ -3,6 +3,7 @@
 import { PayTables, type PayLevel } from "@/modules/admin/games/pay-tables";
 import { useEffect, useState } from "react";
 import { Save, Settings } from "lucide-react";
+import SalaryWeights from "@/modules/admin/settings/salary-weights";
 import { api, API_BASE, fmtMoney, fmtNumber, getSession } from "@/core/api/api";
 import { useApi } from "@/core/api/use-api";
 import { Card, ErrorBox, Loading, PageHeader, inputCls, tableCls, tableWrap, tdCls, thCls } from "@/shared/components/ui";
@@ -77,7 +78,7 @@ const GROUPS: { title: string; note?: string; fields: FieldDef[] }[] = [
   },
 ];
 
-type TabKey = "app" | "agency" | "events";
+type TabKey = "app" | "agency" | "salary" | "events";
 
 export default function AdminSettings() {
   const isAdmin = getSession("admin")?.user.systemRole === "admin";
@@ -93,6 +94,7 @@ export default function AdminSettings() {
             tabs={[
               { key: "app", label: "Uygulama" },
               { key: "agency", label: "Ajans ve maaş" },
+              { key: "salary", label: "Maaş hak edişi" },
               { key: "events", label: "Haftalık etkinlikler" },
             ]}
             value={tab}
@@ -100,6 +102,7 @@ export default function AdminSettings() {
           />
           {tab === "app" && <AppConfig />}
           {tab === "agency" && <AgencyConfig />}
+          {tab === "salary" && <SalaryWeights />}
           {tab === "events" && <WeeklyEvents />}
         </>
       )}

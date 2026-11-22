@@ -6,6 +6,7 @@ import '../services/api.dart';
 import '../services/session.dart';
 import '../widgets/common.dart';
 import '../widgets/external_webview.dart';
+import 'dealer_subs_screen.dart';
 
 /// Coins Bayisi Merkezi (v2.124, Yoho "Coins bayim" akışı; uygulama renkleri):
 ///  · Merkez: satıştaki Coin, "Kendine yükle", "Kullanıcıya Coins Yükle", işletme verileri, araçlar.
@@ -75,7 +76,10 @@ class _DealerCenterScreenState extends State<DealerCenterScreen> {
   Future<Map<String, dynamic>> _load() async {
     final me = Api.get('/api/dealer/me');
     final st = Api.get('/api/dealer/stats').catchError((_) => <String, dynamic>{});
-    return {'me': await me, 'stats': await st};
+    // Alt bayi bölümü: eski sunucuda bu uç yok, o yüzden hatası yutuluyor — ekranın
+    // tamamı bir ek bölüm yüzünden açılmaz hale gelmesin.
+    final sub = Api.get('/api/dealer/subs').catchError((_) => <String, dynamic>{});
+    return {'me': await me, 'stats': await st, 'subs': await sub};
   }
 
   Future<void> _open(Widget page) async {
@@ -264,6 +268,29 @@ class _DealerCenterScreenState extends State<DealerCenterScreen> {
                   ]),
                 ]),
               ),
+              // Ana bayi / Alt bayi. Yalnızca ANA bayide görünür: alt bayinin kendi
+              // altında bayi olamaz (en fazla iki kat), boş bir bölüm göstermeyelim.
+              if ((mapOf(data['subs']) ?? const <String, dynamic>{})['isSub'] == false)
+                _panel(
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: () => _open(const DealerSubsScreen()),
+                    child: Row(children: [
+                      const Icon(Icons.account_tree_outlined, color: _goldHi),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text(tx('Alt Bayilerim'), style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w800)),
+                          Text(
+                            '${listOf((mapOf(data['subs']) ?? const <String, dynamic>{})['subs']).length} ${tx('bayi')}',
+                            style: const TextStyle(color: Colors.white54, fontSize: 12),
+                          ),
+                        ]),
+                      ),
+                      const Icon(Icons.chevron_right, color: Colors.white54),
+                    ]),
+                  ),
+                ),
             ]),
           );
         },

@@ -2,6 +2,7 @@
 
 import { useMemo, useState, type FormEvent } from "react";
 import { api, appMessage, fmtMoney, fmtNumber, inApp } from "@/core/api/api";
+import { useConfirm } from "@/shared/components/confirm";
 import { useApi } from "@/core/api/use-api";
 import { t } from "@/shared/utils/i18n";
 import { Badge, Empty, ErrorBox, Loading, Notice, inputCls } from "@/shared/components/ui";
@@ -18,6 +19,8 @@ type Filter = "all" | "live" | "new" | "risk" | "dropped";
 
 /** Yayıncılarım: her yayıncının bu dönemki yayın süresi, geçerli günü, elması, maaşı ve ajans primi; davet ve çıkarma. */
 export default function AgencyHosts() {
+  // Uygulama içi WebView: tarayıcı kutusu sunucu adresini gösteriyor, kullanılmıyor.
+  const { ask, confirmNode } = useConfirm();
   const ag = currentAgency();
   const { data, error, loading, reload } = useApi<HostsResp>(ag.id ? `/api/agency-center/${ag.id}/hosts` : null);
   const reqs = useApi<{ requests: Req[] }>(ag.id ? `/api/agencies/${ag.id}/requests` : null);
@@ -160,8 +163,12 @@ export default function AgencyHosts() {
                             type="button"
                             className={btnRed}
                             disabled={busy}
-                            onClick={() => {
-                              if (!window.confirm(t("{n} ajanstan çıkarılsın mı?", { n: h.displayName || h.username || "" }))) return;
+                            onClick={async () => {
+                              if (!(await ask({
+                                title: t("{n} ajanstan çıkarılsın mı?", { n: h.displayName || h.username || "" }),
+                                okLabel: t("Çıkar"),
+                                danger: true,
+                              }))) return;
                               act(() => api(`/api/agencies/${ag.id}/broadcasters/${h.id}/remove`, { method: "POST" }), t("Yayıncı ajanstan çıkarıldı."));
                             }}
                           >
@@ -180,6 +187,7 @@ export default function AgencyHosts() {
           </p>
         </Section>
       )}
+      {confirmNode}
     </div>
   );
 }

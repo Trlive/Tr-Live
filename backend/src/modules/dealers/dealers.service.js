@@ -76,3 +76,99 @@ export async function deliverScheduled(c, limit = 50) {
   }
   return out;
 }
+
+// ---------------------------------------------------------------------------
+// Ana bayi / Alt bayi
+// ---------------------------------------------------------------------------
+
+/**
+ * Ana bayiden alt bayiye Coin aktarır. Çağıran bir transaction ("c") içinde olmalıdır.
+ *
+ * Coin YARATILMAZ: ana bayiden düşer, alt bayiye eklenir. Toplam değişmez. İki tarafın
+ * defterine de yazılır (`sub_transfer_out` / `sub_transfer_in`) — mutabakat iki yönden de
+ * tutsun diye. Tek yöne yazsaydık alt bayinin bakiyesi "nereden geldi" sorusuna yanıtsız
+ * kalırdı.
+ *
+ * Satırlar KİLİTLENİR ve her zaman AYNI SIRADA (önce ana, sonra alt) kilitlenir: iki aktarım
+ * aynı anda ters yönde gelse bile kilit sırası aynı olduğu için karşılıklı kilitlenme
+ * (deadlock) oluşmaz.
+ */
+export async function transferToSub(c, { parentId, subId, coins, actorId, description }) {
+  if (parentId === subId) throw fail('Bayi kendine aktarım yapamaz.');
+  if (!(coins > 0n)) throw fail('Aktarılacak Coin 0 olamaz.');
+
+  const parent = (await c.query(
+    `SELECT id, name, coin_balance, parent_dealer_id FROM dealer_accounts WHERE id = $1 AND is_active = TRUE FOR UPDATE`,
+    [parentId],
+  )).rows[0];
+  if (!parent) throw fail('Ana bayi bulunamadı.', 404);
+  if (parent.parent_dealer_id) throw fail('Alt bayi, kendi altına aktarım yapamaz.', 403);
+
+  const sub = (await c.query(
+    `SELECT id, name, coin_balance, parent_dealer_id, owner_user_id FROM dealer_accounts WHERE id = $1 AND is_active = TRUE FOR UPDATE`,
+    [subId],
+  )).rows[0];
+  if (!sub) throw fail('Alt bayi bulunamadı.', 404);
+  // Yetki burada: yalnızca KENDİ alt bayisine aktarabilir. Aksi halde bir ana bayi
+  // başkasının alt bayisine Coin gönderip muhasebeyi karıştırabilirdi.
+  if (sub.parent_dealer_id !== parent.id) throw fail('Bu bayi sizin alt bayiniz değil.', 403);
+
+  const before = BigInt(parent.coin_balance);
+  if (before < coins) throw fail('Bakiyeniz yetersiz.');
+
+  await c.query(`UPDATE dealer_accounts SET coin_balance = coin_balance - $1 WHERE id = $2`, [coins.toString(), parent.id]);
+  await c.query(`UPDATE dealer_accounts SET coin_balance = coin_balance + $1 WHERE id = $2`, [coins.toString(), sub.id]);
+  const note = description || `Alt bayi aktarımı`;
+  await c.query(
+    `INSERT INTO dealer_transactions(dealer_id, admin_id, type, coin_amount, description)
+     VALUES($1,$2,'sub_transfer_out',$3,$4)`,
+    [parent.id, actorId, coins.toString(), `${note} → ${sub.name}`],
+  );
+  await c.query(
+    `INSERT INTO dealer_transactions(dealer_id, admin_id, type, coin_amount, description)
+     VALUES($1,$2,'sub_transfer_in',$3,$4)`,
+    [sub.id, actorId, coins.toString(), `${note} ← ${parent.name}`],
+  );
+  await c.query(
+    `INSERT INTO financial_audit_logs(admin_id, action, reference_type, reference_id, amount_coins, balance_before, balance_after, metadata)
+     VALUES($1,'dealer_sub_transfer','dealer',$2,$3,$4,$5,$6)`,
+    [actorId, parent.id, coins.toString(), before.toString(), (before - coins).toString(),
+      JSON.stringify({ subId: sub.id, subName: sub.name })],
+  );
+  return {
+    parentBalance: (before - coins).toString(),
+    subBalance: (BigInt(sub.coin_balance) + coins).toString(),
+    subOwnerId: sub.owner_user_id ?? null,
+  };
+}
+
+/**
+ * Bir bayiye ebeveyn atar ya da kaldırır (yalnızca yönetim).
+ *
+ * İki kat kuralı BURADA zorlanır:
+ *  · Aday ebeveynin kendisinin ebeveyni olmamalı (aksi halde üç kat olurdu).
+ *  · Ebeveyn atanacak bayinin kendi alt bayileri olmamalı (aynı sebep).
+ * Bu iki koşul birlikte hem derinliği ikiyle sınırlar hem de döngüyü imkânsız kılar.
+ */
+export async function setDealerParent(c, { dealerId, parentId }) {
+  const dealer = (await c.query(`SELECT id FROM dealer_accounts WHERE id = $1 FOR UPDATE`, [dealerId])).rows[0];
+  if (!dealer) throw fail('Bayi bulunamadı.', 404);
+
+  if (parentId === null) {
+    await c.query(`UPDATE dealer_accounts SET parent_dealer_id = NULL WHERE id = $1`, [dealerId]);
+    return { dealerId, parentId: null };
+  }
+  if (parentId === dealerId) throw fail('Bayi kendi ana bayisi olamaz.');
+
+  const parent = (await c.query(`SELECT id, parent_dealer_id FROM dealer_accounts WHERE id = $1`, [parentId])).rows[0];
+  if (!parent) throw fail('Ana bayi bulunamadı.', 404);
+  if (parent.parent_dealer_id) throw fail('Alt bayi, başka bir bayiye ana bayi olamaz (en fazla iki kat).');
+
+  const childCount = Number((await c.query(
+    `SELECT COUNT(*)::int AS n FROM dealer_accounts WHERE parent_dealer_id = $1`, [dealerId],
+  )).rows[0].n);
+  if (childCount > 0) throw fail('Bu bayinin alt bayileri var; alt bayi yapılamaz (en fazla iki kat).');
+
+  await c.query(`UPDATE dealer_accounts SET parent_dealer_id = $2 WHERE id = $1`, [dealerId, parentId]);
+  return { dealerId, parentId };
+}

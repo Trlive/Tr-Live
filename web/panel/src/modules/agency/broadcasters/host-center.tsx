@@ -7,6 +7,7 @@ import { t } from "@/shared/utils/i18n";
 import { Badge, Empty, ErrorBox, Loading, Notice } from "@/shared/components/ui";
 import { MemberRow, Section, Tile, btn, btnGreen, btnRed, dateText, durationText, periodText } from "@/modules/agency/shell/common";
 import { kindText, transferStatus } from "@/modules/agency/family/agency-team";
+import { useConfirm } from "@/shared/components/confirm";
 
 type Side = { seconds: number; validDays: number; diamonds: string; level: number | null; cents: string; shortfall?: boolean };
 type Progress = {
@@ -226,6 +227,9 @@ export function HostHome() {
 }
 
 function AgencyActions({ b, busy, run }: { b: NonNullable<Me["broadcaster"]>; busy: boolean; run: (fn: () => Promise<unknown>, ok: string) => void }) {
+  // Tarayıcının kendi onay kutusu DEĞİL: bu sayfa uygulama içinde WebView'de açılıyor ve
+  // window.confirm kutunun başlığında sunucu adresini gösteriyordu.
+  const { ask, confirmNode } = useConfirm();
   const tr = b.pendingTransfer;
   const rej = b.rejectedTransfer;
   return (
@@ -257,15 +261,24 @@ function AgencyActions({ b, busy, run }: { b: NonNullable<Me["broadcaster"]>; bu
           type="button"
           className={btnRed}
           disabled={busy}
-          onClick={() => {
-            if (!window.confirm(t("Ajanstan ayrılmak istediğine emin misin? Ajansın onayı gerekebilir."))) return;
-            run(() => api("/api/broadcaster/leave-agency", { method: "POST" }), t("Ayrılma isteğin gönderildi."));
+          onClick={async () => {
+            // Doğrudan ayrılma YOK: sunucu bir TALEP oluşturuyor, ajans onaylıyor (ya da
+            // bekleme süresi dolunca otomatik onaylanıyor). Etiket de bunu söylüyor.
+            const ok = await ask({
+              title: t("Ajanstan ayrılma talebi oluşturulsun mu?"),
+              body: t("Talebin ajansına iletilir. Ajans onaylayana kadar ajansta kalmaya devam edersin."),
+              okLabel: t("Talep oluştur"),
+              danger: true,
+            });
+            if (!ok) return;
+            run(() => api("/api/broadcaster/leave-agency", { method: "POST" }), t("Ayrılma talebin oluşturuldu."));
           }}
         >
-          {t("Ajanstan ayrıl")}
+          {t("Ajanstan ayrılma talebi oluştur")}
         </button>
       )}
       <HostTransfers />
+      {confirmNode}
     </Section>
   );
 }
@@ -289,7 +302,76 @@ function HostTransfers() {
 }
 
 // ---------------- Geçmiş dönemler ----------------
-type St = { id: string; periodKey: string; startsAt: string; endsAt: string; agencyName?: string; seconds: number; validDays: number; diamonds: string; tier: number | null; salaryCents: string; penaltyApplied?: boolean; status: string; paidAt?: string | null };
+type WeightPart = {
+  key: string; label: string; weightBps: number; earnedBps: number; met: boolean;
+  // Gün/saat koşulunda hangisinin eksik olduğu (yalnızca attendance parçasında).
+  daysOk?: boolean; hoursOk?: boolean;
+  completedDays?: number; requiredDays?: number; completedSeconds?: number; requiredSeconds?: number;
+};
+type Weighted = {
+  contractTier: number | null; baseCents: string; earnedBps: number; earnedCents: string;
+  required: { days: number; seconds: number; diamonds: string };
+  diamondTargetOk: boolean | null; parts: WeightPart[];
+  daysOk?: boolean; hoursOk?: boolean; attendanceOk?: boolean;
+};
+type St = { id: string; periodKey: string; startsAt: string; endsAt: string; agencyName?: string; seconds: number; validDays: number; diamonds: string; tier: number | null; salaryCents: string; penaltyApplied?: boolean; status: string; paidAt?: string | null;
+  weighted?: Weighted | null; salaryBasis?: string };
+
+/**
+ * Hak ediş kırılımı: hangi koşul ne kadarını kattı.
+ *
+ * Yayıncının "maaşım neden bu kadar" sorusunun yanıtı. Toplamı tek sayı olarak göstermek
+ * yetmiyordu: hangi koşulun ne kaybettirdiği görünmezse yayıncı neyi düzelteceğini bilmiyor.
+ */
+function EarnedBreakdown({ w, basis }: { w: Weighted; basis?: string }) {
+  const pct = (bps: number) => `${(bps / 100).toFixed(bps % 100 === 0 ? 0 : 1)}%`;
+  return (
+    <div className="mt-2 rounded-xl border border-[#30291e] bg-[#0f0f0f] p-3">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs text-gray-400">
+          {t("Hak ediş")}
+          {w.contractTier != null && <> · {t("Kademe {n}", { n: w.contractTier })}</>}
+        </span>
+        <span className="text-sm font-bold text-[#f2b92a]">{pct(w.earnedBps)}</span>
+      </div>
+      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[#2a2317]">
+        <div className="h-full rounded-full bg-[#f2b92a]" style={{ width: `${Math.min(100, w.earnedBps / 100)}%` }} />
+      </div>
+      <div className="mt-2 space-y-1">
+        {w.parts.map((p) => (
+          <div key={p.key}>
+            <div className="flex items-center justify-between gap-2 text-xs">
+              <span className={p.met ? "text-gray-300" : "text-[#d7b56d]"}>
+                {p.met ? "✓" : "✗"} {t(p.label)}
+              </span>
+              <span className={p.met ? "text-gray-400" : "text-[#d7b56d]"}>
+                {p.met ? pct(p.weightBps) : t("eksik — {n} kayıp", { n: pct(p.weightBps) })}
+              </span>
+            </div>
+            {/* Gün/saat koşulu tutmadıysa HANGİSİ eksik: yayıncı neyi düzelteceğini bilsin. */}
+            {!p.met && p.key === "attendance" && p.requiredDays !== undefined && (
+              <div className="ml-4 text-[11px] text-gray-500">
+                {p.daysOk === false && (
+                  <div>{t("Gün: {a} / {b}", { a: p.completedDays ?? 0, b: p.requiredDays })}</div>
+                )}
+                {p.hoursOk === false && p.requiredSeconds !== undefined && (
+                  <div>{t("Saat: {a} / {b}", { a: durationText(p.completedSeconds ?? 0), b: durationText(p.requiredSeconds) })}</div>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+      <p className="mt-2 text-[11px] text-gray-500">
+        {t("Koşul ya tutar ya tutmaz; eksik kalan koşul hiç puan katmaz.")}
+      </p>
+      {/* Bayrak kapalıyken bu hesap ödemeye esas DEĞİL: yayıncıyı yanıltmamak için yazıyoruz. */}
+      {basis !== "weighted" && (
+        <p className="mt-2 text-[11px] text-gray-500">{t("Bu hesap bilgi amaçlıdır; bu dönemin maaşı kademe tablosundan ödendi.")}</p>
+      )}
+    </div>
+  );
+}
 const stText: Record<string, [string, "green" | "gold" | "gray"]> = { paid: ["Ödendi", "green"], pending: ["Bekliyor", "gold"], void: ["İptal", "gray"] };
 
 export function HostStatements() {
@@ -316,6 +398,7 @@ export function HostStatements() {
               <span>{t("Seviye")}: {s.tier ?? "—"}</span>
             </div>
             <p className="mt-2 text-lg font-bold text-[#f2b92a]">{fmtMoney(s.salaryCents)}</p>
+            {s.weighted && <EarnedBreakdown w={s.weighted} basis={s.salaryBasis} />}
             {s.penaltyApplied && <p className="text-xs text-red-300">{t("Şart eksikliği kesintisi uygulandı.")}</p>}
             {s.paidAt && <p className="text-xs text-gray-500">{t("Ödeme: {d}", { d: dateText(s.paidAt, false) })}</p>}
           </div>

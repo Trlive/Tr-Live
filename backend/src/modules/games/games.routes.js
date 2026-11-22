@@ -147,7 +147,13 @@ router.post('/games/:id/roll', userLimit('game_move', 120, 60e3), async (req, re
     if (seat === null) throw fail('Bu oyunda değilsiniz.', 403);
     try { return ludo.roll(ludo.markActive(state, seat), seat); } catch (e) { throw fail(e.message, 409); }
   });
-  res.json({ dice: out.dice, skipped: out.skipped, legal: out.legal, game: await gameView(id, query, req.user.id) });
+  // rollAgain: 6 atıldı, taş oynatılmıyor — oyuncu tekrar atacak.
+  // pending: biriken değerler; istemci "bir 6 ve bir 3 oynayacaksın" diye gösteriyor.
+  res.json({
+    dice: out.dice, skipped: out.skipped, rollAgain: out.rollAgain === true,
+    pending: out.pending ?? [], legal: out.legal,
+    game: await gameView(id, query, req.user.id),
+  });
 });
 
 router.post('/games/:id/move', userLimit('game_move', 120, 60e3), async (req, res) => {
@@ -160,7 +166,11 @@ router.post('/games/:id/move', userLimit('game_move', 120, 60e3), async (req, re
     if (seat === null) throw fail('Bu oyunda değilsiniz.', 403);
     try { return ludo.move(ludo.markActive(state, seat), seat, token); } catch (e) { throw fail(e.message, 409); }
   });
-  res.json({ captured: out.captured, extraTurn: out.extraTurn, won: out.won, game: await gameView(id, query, req.user.id) });
+  res.json({
+    captured: out.captured, extraTurn: out.extraTurn, won: out.won,
+    pending: out.pending ?? [],
+    game: await gameView(id, query, req.user.id),
+  });
 });
 
 // ---------- TEK (kart oyunu) hamleleri ----------

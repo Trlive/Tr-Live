@@ -6,7 +6,7 @@
 import { Router } from 'express';
 import express from 'express';
 import { query, tx } from '../../infrastructure/database/database.js';
-import { creditPeriod, creditStatement, isWalletPeriod } from '../wallet/usd_wallet.service.js';
+import { SALARY_PAYABLE_SQL, creditPeriod, creditStatement, isWalletPeriod } from '../wallet/usd_wallet.service.js';
 import { requireAuth, requireStaff, requireSuperAdmin, hashPassword, passwordRules } from '../../middleware/authentication/auth.js';
 import { USERNAME_RE, normalizePhone } from '../auth/auth.routes.js';
 import { supportMayCall, banEnd, mayActOnUser } from '../agencies/staff.rules.js';
@@ -32,7 +32,7 @@ import { EVENT_KINDS, EVENT_TITLES, isStar, validateRewards, rewardsView, defaul
 import { cleanPublic } from '../../middleware/security/safe_text.js';
 import { WIP_MIN_LEVEL, WIP_MAX_LEVEL, MAX_LEVEL, expForLevel, levelFromExp, levelExp } from '../users/levels.rules.js';
 import { wipLabel } from '../system/wip.service.js';
-import { dealerSell } from '../dealers/dealers.service.js';
+import { dealerSell, setDealerParent } from '../dealers/dealers.service.js';
 import { approveTopupRequest, rejectTopupRequest, requestView as topupRequestView } from '../dealers/dealer_topup.service.js';
 import { hub } from '../../infrastructure/websocket/realtime.js';
 import { JACKPOT_OPEN } from '../gifts/lucky.rules.js';
@@ -276,6 +276,10 @@ export const SETTING_COLUMNS = {
   maxAssistants: 'max_assistants', maxAssistantBps: 'max_assistant_bps', referralBps: 'referral_bps', transferWaitHours: 'transfer_wait_hours',
   splitByRoomType: 'split_by_room_type', videoDailyCapMinutes: 'video_daily_cap_minutes', videoMinSessionMinutes: 'video_min_session_minutes',
   videoShortfallCutBps: 'video_shortfall_cut_bps',
+  // Ağırlıklı maaş hak edişi. salaryWeights JSONB olduğu için burada DEĞİL, ayrı
+  // doğrulamadan geçirilerek yazılıyor (validateWeights).
+  salaryWeightedEnabled: 'salary_weighted_enabled', salaryAutoTransfer: 'salary_auto_transfer',
+  salaryTransferDayFrom: 'salary_transfer_day_from', salaryTransferDayTo: 'salary_transfer_day_to',
 };
 
 // kind: 'audio' (sesli oda tablosu) | 'video' (görüntülü yayın tablosu).
@@ -348,4 +352,4 @@ export const DASH_SQL = `
 
 // Alt rota dosyaları bu modülden tek elden import eder: aynı paketi 11 yerde import etmek yerine
 // ortak kapı. Adlar bölmeden önceki ile birebir aynı.
-export { BADGES, CONFIG_DEFAULTS, DEFAULT_PAY_LEVELS, EVENT_KINDS, EVENT_TITLES, IMAGE_TYPES, JACKPOT_OPEN, MAX_LEVEL, MEDIA_MAX_BYTES, OWN_IMAGE_RE, Router, SECRET_MASK, SERVER_VERSION, SPECIAL_ID_RE, TRANSFER_SELECT, USERNAME_RE, WIP_MAX_LEVEL, WIP_MIN_LEVEL, agencyStatementJson, announceUserChange, applyPackZip, applyTransfer, approveTopupRequest, assetUrl, assistantStatementJson, banEnd, banIpPersist, bigAmount, budget, chargeBudget, cleanPublic, closePeriod, closeRoom, compareVersions, config, configJson, creditPeriod, creditStatement, dealerSell, defaultRules, deleteAccount, detectMedia, ensureAgencyCode, ensureVapc, equipIfNone, expForLevel, express, fail, fs, getConfig, ghostNow, grantBadge, grantSpecialId, hashPassword, hitLimit, hostStatementJson, httpsUrl, hub, idempotent, isStar, isWalletPeriod, hiddenTxTypes, invalidateHidden, leaveRoom, levelExp, levelFromExp, listBans, listBudgets, livekitHealth, loadConfig, logTransfer, mailOn, maskSecrets, mayActOnUser, mediaCacheStats, mimeFor, mountPanelRoutes, net, normalizeEmail, normalizePhone, notifyTransferResult, notifyUser, oneOf, os, packStatus, parsePeriodKey, passwordRules, periodKey, poolStats, positiveInt, prepareMp4, previousPeriod, query, reconcileStatus, redactSecrets, referralStatementJson, refreshGhost, rejectTopupRequest, removeAnimatedAvatar, removeUpload, requireAuth, requireStaff, requireSuperAdmin, revokeAllSessions, rewardsView, runReconciliation, saveConfig, saveUpload, securityStats, sendMail, supportMayCall, text, topupRequestView, transferJson, tx, unbanIp, userLimit, uuid, validateAgencyConfig, validateConfigPatch, validateGrades, validatePayLevels, validateRewards, wipLabel };
+export { BADGES, CONFIG_DEFAULTS, SALARY_PAYABLE_SQL, DEFAULT_PAY_LEVELS, EVENT_KINDS, EVENT_TITLES, IMAGE_TYPES, JACKPOT_OPEN, MAX_LEVEL, MEDIA_MAX_BYTES, OWN_IMAGE_RE, Router, SECRET_MASK, SERVER_VERSION, SPECIAL_ID_RE, TRANSFER_SELECT, USERNAME_RE, WIP_MAX_LEVEL, WIP_MIN_LEVEL, agencyStatementJson, announceUserChange, applyPackZip, applyTransfer, approveTopupRequest, assetUrl, assistantStatementJson, banEnd, banIpPersist, bigAmount, budget, chargeBudget, cleanPublic, closePeriod, closeRoom, compareVersions, config, configJson, creditPeriod, creditStatement, dealerSell, setDealerParent, defaultRules, deleteAccount, detectMedia, ensureAgencyCode, ensureVapc, equipIfNone, expForLevel, express, fail, fs, getConfig, ghostNow, grantBadge, grantSpecialId, hashPassword, hitLimit, hostStatementJson, httpsUrl, hub, idempotent, isStar, isWalletPeriod, hiddenTxTypes, invalidateHidden, leaveRoom, levelExp, levelFromExp, listBans, listBudgets, livekitHealth, loadConfig, logTransfer, mailOn, maskSecrets, mayActOnUser, mediaCacheStats, mimeFor, mountPanelRoutes, net, normalizeEmail, normalizePhone, notifyTransferResult, notifyUser, oneOf, os, packStatus, parsePeriodKey, passwordRules, periodKey, poolStats, positiveInt, prepareMp4, previousPeriod, query, reconcileStatus, redactSecrets, referralStatementJson, refreshGhost, rejectTopupRequest, removeAnimatedAvatar, removeUpload, requireAuth, requireStaff, requireSuperAdmin, revokeAllSessions, rewardsView, runReconciliation, saveConfig, saveUpload, securityStats, sendMail, supportMayCall, text, topupRequestView, transferJson, tx, unbanIp, userLimit, uuid, validateAgencyConfig, validateConfigPatch, validateGrades, validatePayLevels, validateRewards, wipLabel };

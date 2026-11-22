@@ -1,3 +1,160 @@
+## v2.152.0 — Hediye şeffaflığı: ölçtüm, sebebi buldum, düzelttim
+
+Sahibi: "hediyelerin transparan özelligi çok kötü, bazıları ne olduğu belli olmayacak kadar sıkıntılı."
+
+**Önce ölçtüm.** Yumuşak ışımalı, parçacıklı, %63'ü yarı saydam bir test hediyesi üretip mevcut işleme hattından geçirdim. İlk hipotezim yanlıştı: **webp kodlayıcı alfa'yı bozmuyor** (512→256 küçültmede alfa ortalama hatası 0,24/255). Sebep başka yerdeydi.
+
+### Asıl sebep: SVGA maskeleri hiç uygulanmıyordu
+`svga_lite.dart` oynatıcısı (benim yazdığım) `matteKey` alanını **hiç okumuyordu** — protobuf alan 3 atlanıyordu — ve maske katmanlarını çizim dışı bırakıyordu. Sonuç: maskelenmesi gereken katman **maskesiz** çiziliyordu, yani hediyede gizlenmesi gereken parçalar olduğu gibi görünüyordu. Tam olarak "ne olduğu belli olmuyor" demek.
+
+Artık maske uygulanıyor: maskelenecek katman(lar) bir ara katmana çizilip maske üstüne `BlendMode.dstIn` ile basılıyor. Aynı maskeyi paylaşan **ardışık** katmanlar tek grup olarak maskeleniyor (SVGA'da bir maske birden çok katmanı birlikte kırpabiliyor). Maske katmanları `.matte` son ekine bakarak değil, gerçekten `matteKey` ile gösterilip gösterilmediklerine bakarak belirleniyor — son ek bir adlandırma geleneği, kural değil.
+
+**Sunucu maskeleri bozmuyor, kanıtlandı.** SVGA yeniden yazıcısı (yüklenen dosyanın içindeki görselleri küçültür) sprite'ları ham bayt olarak geçiriyor. Bunu 4 testle kilitledim: biri ayrıştırıcıyı "sadeleştirmeye" kalkarsa test patlar. Görsel değiştirilse bile katman + matteKey korunuyor.
+
+### Ölçülen diğer iki düzeltme
+- **Alfa-güvenli ölçekleme webp'te yoktu** (PNG'de vardı). Premultiply edilmemiş alfa ile lanczos küçültmek, tam saydam piksellerin rengini yarı saydam kenara bulaştırıyor: hediyenin etrafında koyu halka. Ölçüm: yarı saydam bölgede RGB hatası **4,63 → 3,06 (%34 iyileşme)**, alfa hatası 0,24 → 0,15, dosya %19 büyüyor. q88 + sıkıştırma seviyesi 6 ölçülen en iyi denge. (`-pix_fmt bgra` denendi ve etkisiz: libwebp kayıplı modda her durumda yuva420p'ye çeviriyor.)
+- **Kalite merdiveni alfa'da zararlıydı.** Dosya sınırı aşılınca kalite 82'den 52'ye kadar iniyordu. Ölçüm: bu, dosyayı yalnızca **%9** küçültüyor — çünkü dosyanın çoğu alfa kanalı ve libwebp onu kayıplı pek sıkıştırmıyor — karşılığında bozulmayı %13 artırıyor. Yani gözle görülür kaliteyi neredeyse bedava harcıyordu. Alfa taşıyan biçimlerde (png, webp) merdiven artık kaliteyi sabit tutup **boyutu** düşürüyor. JPEG'de alfa yok, orada kalite merdiveni hâlâ doğru araç.
+
+### Animasyon hatasında ekran boş kalıyordu
+Hediye animasyonu açılamazsa `SizedBox.shrink()` dönüyordu: kullanıcı hediyeyi gönderiyor, coin'i gidiyor ve ekranda **hiçbir şey** görmüyordu. Artık hediyenin simgesi yedek olarak gösteriliyor. Simge de açılamazsa boş kalıyor; orada yapacak bir şey yok.
+
+### Hareketli WebP
+ffmpeg'in kendi webp çözücüsü animasyon (ANMF) parçalarını okumuyor — "image data not found". Sınırlar içindeki hareketli webp'ler zaten dokunulmadan geçiyor, sorun yok. Sınırı aşanlar otomatik küçültülemiyor; hata mesajı artık ne yapılacağını söylüyor (elle küçült ya da SVGA / alfa kanallı MP4 ver). Sunucuda küçültebilmek için `libwebp-tools` gerekiyor, backlog'a yazıldı.
+
+### Doğrulama
+427 birim testi (424 geçti, 3 atlandı; 4'ü yeni: SVGA maske koruması), 236 dosya, tüm araçlar temiz. Ölçümler ffmpeg 6.1.1 ve gerçek görsellerle yapıldı; sayılar `docs/BACKLOG.md`'de duruyor.
+
+## v2.151.0 — Ludo: zar sonucu görünüyor, 6 birikiyor; Ludo ve Tek hızlandı
+
+### Zar sonucu artık görünüyor
+Sahibinin şikayeti: "Ludoda atılan zar sonucu görünmüyor." Üç sebebi vardı ve üçü de düzeltildi:
+- Zarın köşesine, **sonraki atışa kadar duran** okunaklı bir sayı rozeti eklendi. 3B küp küçüktü ve döndükten sonra hangi yüzün üstte olduğunu okumak zordu.
+- Tek hamle varken otomatik oynama **900 ms'den 1250 ms'ye** çekildi. Zar 800 ms'de oturuyordu, yani taş zar durmadan oynanıyor ve göz tahtaya kaçtığı için sonuç okunmuyordu.
+- Zar **56 pxden 68 pxe** büyütüldü, küp derinliği arttı.
+
+### 6 oynatmıyor, birikiyor
+> "Misal bir 6 attı, hemen oynatma, 2. zar hakkını da çevirt; misal 3 geldi, bir 6 oynama bir 3 oynama hakkı olacak. 6+6+5 geldi diyelim, bunda da iki altı bir 5 oynayacak."
+
+- 6 atıldığında **taş oynatılmıyor**: değer kuyruğa yazılıyor ve oyuncu tekrar atıyor. Kuyruk 6 olmayan bir değerle kapanıyor ve biriken zarlar **tek tek, istediği taşa** oynanıyor.
+- Değerler **toplanmıyor**. Toplasaydık (6+6+3=15) üsten taş çıkarmak imkânsız olurdu — çıkış için tam 6 gerekiyor — ve dört taşı da üste olan oyuncu 6 attığında hiç hamlesi kalmazdı. Yani oyun kilitlenirdi.
+- Üst üste üç 6: biriken her şey düşer, sıra geçer, hiçbir taş oynanmaz (eski kural korundu).
+- 6 artık **ekstra tur vermiyor**: atıldığı anda zaten tekrar atma hakkı kazandırdı. İkinci kez ödül verseydik tur hiç bitmezdi.
+- Kuyruğun **başındaki** oynanamayan değerler düşüyor, arkadakiler düşmüyor: [6, 2] kuyruğunda 6 oynanıp taş çıktıktan sonra 2 oynanabilir hale geliyor. Baştan atmak oyuncunun hakkını yemek olurdu.
+- Biriken zarlar kontrol çubuğunda şerit olarak görünüyor; oynanacak olan vurgulu, oynanan üstü çizili. Durum metni "6 attın! Taş oynamaz, tekrar at" ve "2 zarın var: 6 + 3 — sırayla oyna" diyor. Dört dilde (tr/en/ar/hi) ve oyun içi kural metni de güncellendi.
+
+**Yol boyunca bulunan gerçek hata:** zaman aşımına düşen oyuncu için otomatik oynayan `autoPlay`, 6 attıktan sonra oynanacak değer bulamıyor ve oyuncu tekrar atmak yerine **sırasını kaybediyordu**. Artık kuyruk kapanana kadar atıyor ve biriken zarların hepsini tek zaman aşımında oynuyor.
+
+### Hız
+- **Ludo:** taş yürüyüşü 150 → 90 ms/kare (6 zarı 900 → 540 ms), zıplama 150 → 110 ms, taş geçişi 120 → 80 ms, zar oturması 0,80 → 0,60 s.
+- **Tek:** kart uçuşu 380 → 260 ms, dağıtım gecikmesi 55 → 36 ms/kart, otomatik çekme beklemesi 1100 → 750 ms, meşgul tekrar denemesi 400 → 280 ms.
+
+### Yeni güvenlik ağı: satır içi script derlemesi
+`webview_pages.mjs` artık sayfaların İÇİNDEKİ JavaScript'i de `node --check` ile denetliyor. ludo.html ve tek.html'de 760 ve 896 satır satır içi script var ve hiçbir araç onlara bakmıyordu: `npm run check` yalnızca `src/**/*.js` dosyalarını okuyor. Oradaki bir sözdizimi hatası sunucuyu hiç etkilemiyor, **oyun sessizce boş açılıyor** — oyuncu için "oyun açılmıyor" demek.
+
+İlk hâli üç yanlış alarm verdi: `.js` dosyalarının içinde HTML üretirken kullanılan scriptler sunucu tarafı `${...}` değişkeni taşıyor ve tek başına derlenemiyor. Onlar artık açıkça atlanıyor ve kaç tanesinin atlandığı yazılıyor. İki yönde de sınandı.
+
+### Doğrulama
+236 dosya, 423 birim testi (420 geçti, 3 atlandı; 11'i yeni: 6 birikmesi, sahibinin iki örneği, üç 6, kuyruk sırası, AFK 6, oynanamayan değer), 1009 import, 1167 SQL sorgusu, 6 WebView sayfası ve satır içi scriptleri.
+
+Ludo kural değişikliği mevcut oyunları bozmuyor: `pending` alanı olmayan eski durumlar da yürüyor (test ediliyor).
+
+## v2.150.1 — Maaş koşulları EŞİKLİ oldu (sahibinin düzeltmesi)
+
+> "21 gün 59 dk bile olsa maaşın yarısı yatacak!"
+
+v2.150.0'da bu koşulları **oranlı** kurmuştum: 22 günün 20'sini yapan yayıncı o koşulun payının %90'ını alıyordu. İstenen kural bu değil. Koşul ya tutar ya tutmaz:
+
+- **22 gün isteniyorsa 21 gün eksiktir.** 80 saat isteniyorsa 79 sa 59 dk eksiktir — tek saniye eksik bile eksiktir. Kaç eksik olduğu ödemeyi değiştirmiyor: 21 gün ile 10 gün aynı sonucu veriyor.
+- **Gün ve yayın saati TEK koşul.** Sahibi bu ikisini her seferinde birlikte söyledi ("gün ve yayın saati eksikse yarısı"), bu yüzden ayrı ağırlıkları yok. Ayrı olsaydı yalnızca günü eksik olana %75 ödenirdi — söylenen %50 değil.
+- Ağırlıklar: **devam 5000 + elmas 3000 + görev 2000**. Gün veya saat eksikse tam olarak maaşın yarısı yatıyor. %60 isteniyorsa devam ağırlığı 4000 yapılır; panel sonucu canlı yazıyor.
+- Hak ediş = sözleşme kademesinin maaşı × tutan koşulların ağırlık toplamı. 1. kademede 10,00 $ → yarısı 5,00 $; 44. kademede 100.724,00 $ → yarısı 50.362,00 $.
+
+**Kimseye yanlış ödeme yapılmadı:** ağırlıklı hesap hiç ödemeye esas olmadı (`salary_weighted_enabled` kapalı geldi, kapalı duruyor). Hatayı, ödeme açılmadan önce düzeltmiş olduk — "hesaplanan ama ödemeyen kat" yaklaşımının sebebi tam olarak bu.
+
+### Yapılanlar
+- `salary_weights.rules.js` eşikli hâle getirildi. Oran bilgisi KALDI ama yalnızca gösterim için: yayıncı "22 günün 21'ini yaptım" görüyor, ödemeyi `met` belirliyor.
+- Göç 111: ağırlık anahtarları `days`+`hours` → `attendance`. Elle değiştirilmiş eski ağırlıkları da çeviriyor (gün 2000 + saat 2000 → devam 4000), yani sahibinin kurduğu oran korunuyor. İki kez uygulanınca bozmuyor; gerçek PostgreSQL'de üç yönde de sınandı.
+- Kapanmış dönemlerin kırılımına **dokunulmadı**: o dönem o kurallarla hesaplanmıştı, geçmişi yeni kurala göre yazmak özetin belge olma niteliğini bozardı.
+- Yayıncı ekranı artık tutmayan koşulda **hangisinin** eksik olduğunu yazıyor ("Gün: 21 / 22" ya da "Saat: 79s 0dk / 80s 0dk") — yayıncı neyi düzelteceğini bilsin.
+- 29 birim testi yeniden yazıldı: 21 gün, 79 sa 59 dk, tek saniye eksik, tam sınırda tutma, tek koşul davranışı, %60 ayarı.
+
+### Doğrulama
+414 birim testi (411 geçti, 3 atlandı), 108 göç dosyasının tamamı sıfırdan gerçek PostgreSQL 16'ya uygulandı, sıfırdan kurulumda devam ağırlığı 5000 ve iki bayrak da kapalı.
+
+## v2.150.0 — Maaş motoru: kademeli hak ediş ve ay başı otomatik aktarım (ikisi de bayrak arkasında, kapalı)
+
+Sahibinin maaş tasarımı koda girdi. **Hiçbir şey henüz farklı ödemiyor:** yeni hesap her dönem kapanışında eski hesabın yanında yapılıp özete yazılıyor, ödemeyi hâlâ eski kademe hesabı belirliyor. İki sayı gerçek veri üzerinde karşılaştırıldıktan sonra panelden açılacak. Para davranışını bayraksız değiştirmek, yanlışı geri alınamaz hale getirirdi.
+
+### Hak ediş artık oranlı
+- Hesap: **hak edilen = sözleşme kademesinin maaşı × Σ(koşul ağırlığı × gerçekleşme oranı)**. Koşullar: geçerli gün, yayın saati, elmas hedefi, görev/etkinlik. Ağırlıklar panelden; toplamı 10000 olmak zorunda (olmazsa kimse maaşının tamamını hak edemez, bu yüzden kayıt reddediliyor).
+- Varsayılan: gün 2500 + saat 2500 + elmas 3000 + görev 2000. Gün ve saat birlikte tutmazsa **%50** kalıyor — tasarımdaki örneğin aynısı. Sahibi %60 isterse ikisini 2000'e indirmesi yeterli; panel girilen ağırlıkla sonucu **canlı** yazıyor.
+- **Kısmi gerçekleşme oranlı.** 22 günün 20'sini yapan yayıncı o koşulun payının %90'ını alıyor. Eskiden bir basamak aşağı düşüyor ya da hiç alamıyordu ve neden olduğunu göremiyordu.
+- Temel maaş `broadcasters.contract_tier`'dan geliyor. Bu sütun veritabanında **vardı ama maaş hesabında hiç kullanılmıyordu** — tasarımın "base_salary_beans"i tam olarak bu. Sözleşme kademesi atanmamış yayıncıda ağırlıklı hesap yapılmıyor: uydurma bir temel maaş üretmek, yanlış para ödemekten beter.
+- Kademe atama ucunun üst sınırı **10'du, tablo 44 kademeli**: 11 ve üstü hiç atanamıyordu. Sınır artık tablonun kendisinden okunuyor ve tabloda olmayan kademe reddediliyor.
+- Gerekli gün/saat/elmas, dönem özetine **dondurularak** yazılıyor: kademe tablosu sonra değişse bile geçmiş özetteki "22 günün 20'si" anlamını koruyor. Dönem yapılandırması ağırlıkları da donduruyor, yani ağırlık değişikliği yalnızca yeni dönemlere uygulanıyor.
+- Para matematiği tam sayı: ondalık yok, bölme tek yerde ve en sonda, yuvarlama aşağı. Koşul başına bölünseydi her koşulda yuvarlama hatası birikirdi — test bunu da sınıyor.
+
+### Ay başı otomatik aktarım
+- Kapanmış dönemlerin maaşı, ayın 1–3'ü arasında yayıncının dolar bakiyesine kendiliğinden geçiyor. **Talep yok:** ne yayıncı başvuruyor ne yönetici tuşa basıyor.
+- **"Bir kere" güvencesi üç kat:** tekil anahtarlı `salary_transfer_runs` satırı (aktarımla aynı transaction içinde, yani yarım kalan çalışma dönemi sonsuza kadar kilitlemiyor), `status='pending'` koşulu, danışma kilidi. Üçünden biri tek başına yeterdi; para işinde bu fazlalık değil. E2E aynı dönemi dört kez aktarmaya çalışıp bakiyenin değişmediğini doğruluyor.
+- Sunucu 1–3 arasında kapalı kalırsa o ay atlanmıyor: aktarılmamış kapanmış dönemler sonraki pencerede ödeniyor.
+- Pencere günleri panelden; aktarım kayıtları panelde (hangi dönem, otomatik mi elle mi, kaç yayıncı, kaç kişi atlandı).
+
+### Ödeme kapısı: kimlik yerine telefon
+- Maaşın cüzdana geçmesi için **telefon doğrulaması yeterli**; kimlik fotoğrafı istenmiyor. Geri kalan doğrulamayı ödemeyi yapacak aracı şirket belirleyecek. `kyc_status` kaldırılmadı, sağlayıcının ileride isteyebileceği doğrulama için yerinde.
+- Bu koşul **iki ayrı sorguda ayrı ayrı yazılıydı.** Ayrışsalar, koşulu birinde tutup diğerinde tutmayan bir yayıncının özeti "ödendi" olup parası hiç yatmayacaktı — maaş sessizce kaybolurdu. Tek kaynağa alındı (`SALARY_PAYABLE_SQL`).
+- Telefonu doğrulanmamış yayıncının maaşı **kaybolmuyor**: özet beklemede kalıyor ve doğruladıktan sonraki aktarımda ödeniyor. E2E bunu da sınıyor.
+
+### Elmas bozdurma ile çakışma (sahibinin mesajı ortaya çıkardı)
+Yöntem 2 (elmas bakiyesini maaşa çevirme) ile ağırlıklı hesap **birlikte çalışıyordu**: yayıncının elması düşülüyor, maaşı ise ağırlıklı tutardan ödeniyordu. Yani elmasını alıp karşılığını vermemiş olacaktık. İkisi artık birbirini dışlıyor — ağırlıklı hesapta maaş sözleşme kademesinden geliyor, elmasla "maaş satın almak" diye bir adım yok. Yayıncı elmasını tutuyor, gelirini ayrıca bozdurmaya devam ediyor.
+
+### Yeni güvenlik ağı: SQL yer tutucu sayımı
+`sql_params.mjs` — `host_statements` INSERT'ine 10 sütun eklerken 38 yer tutucuyu elle saymak zorunda kaldım. Bir eksik olsa PostgreSQL "bind message supplies 37 parameters, but prepared statement requires 38" diyecek ve bu **yalnızca dönem kapanışında**, yani ayda bir çalışan bir yolda ortaya çıkacaktı.
+
+Aracı yazarken **dört ayrı hata yaptım ve her birini kendi tuzağına düşürerek buldum:** ilk hâli 155 yanlış alarm verdi (VALUES içindeki düz değerleri yer tutucu saymıştı); dizi içindeki diziyi sıfır eleman saydı; şablon değişkeni içeren SQL'i statik sayamayacağını görmedi; ve en kötüsü — **sondaki virgül yüzünden, diziden bilerek bir değer sildiğimde "uyuşuyor" dedi.** Yani kurduğu tuzağa kendisi düştü. Şimdi 1167 sorguyu denetliyor, 227'sini "sayamıyorum" diye açıkça atlıyor ve iki yönde de sınandı.
+
+`singleton_methods.mjs` de genişletildi (`log` nesnesi eklendi) ve daraltıldı: yalnızca o adı gerçekten import eden, yerelde gölgelemeyen dosyalar. Bu sürümde `log(...)` diye çağırmıştım — `log` bir nesne, fonksiyon değil; çalışma anında TypeError olacaktı.
+
+### Doğrulama
+- 236 dosya, 410 birim testi (25'i yeni: hak ediş aritmetiği, ağırlık doğrulaması, aktarım penceresi), 1009 import, 835 e2e çağrısı / 530 adres, 1167 SQL sorgusu, 98 ortak nesne çağrısı.
+- **107 göç dosyasının tamamı sıfırdan gerçek PostgreSQL 16'ya uygulandı.** Yeni kısıtlar gerçekten reddediyor: %100'ü aşan hak ediş yazılamıyor, ters aktarım penceresi kurulamıyor, aynı dönem ikinci kez aktarılamıyor. Kodun dayandığı iki PostgreSQL davranışı (`ON CONFLICT DO NOTHING` çakışmada sıfır satır döndürür; geri alınan çalışma kilit satırı bırakmaz) ayrıca sınandı.
+
+### Hâlâ bayrak arkasında / yapılmadı
+- İki bayrak da kapalı. Önce bir dönem kapatıp iki sayıyı karşılaştır, sonra aç.
+- **Fasulye / USD ayrı defter yapılmadı** (sahibinin kararı: "kalsın, tasarımın o maddesini uygulama"). Fasulye ile dolar aynı bakiye, Coin'e çevrilip gönderilebiliyor.
+- Ödeme sağlayıcısı seçilmedi. Ajans sahibinin yayıncı maaşına müdahale edememesi ve geçmiş ayın kesinleşmiş maaşının değiştirilememesi henüz denetlenmedi — `docs/BACKLOG.md` §D.
+
+## v2.149.0 — Ana bayi / Alt bayi, uygulama içi onay kutuları, doğrulanmış hesap telefona bağlandı
+
+### Ana bayi / Alt bayi
+- Bayi yapısı artık iki katlı: `dealer_accounts.parent_dealer_id`. Alt bayinin kendi altında bayi **olamaz** (muhasebe okunabilir kalsın diye; kural hem uygulamada hem e2e'de sınanıyor).
+- Ana bayi, kendi stoğundan alt bayisine Coin aktarabiliyor. **Coin yaratılmıyor:** ana bayiden düşüp alt bayiye geçiyor, tek işlemde, iki tarafın defterine de yazılarak (`sub_transfer_out` / `sub_transfer_in`) ve mali denetim kaydıyla. Toplamın değişmediği hem birim testinde hem e2e'de doğrulanıyor.
+- Yalnızca KENDİ alt bayisine aktarım yapılabiliyor; kapalı bayiye, bakiyenin üstüne ve sıfır aktarıma izin yok. Aktarım `Idempotency-Key` ile korunuyor: ağ koparsa istek tekrarlansa bile ikinci defa aktarım olmuyor.
+- Bayi merkezinde "Alt Bayilerim": alt bayi listesi, bakiyeleri, satış toplamları ve aktarım kutusu. Alt bayi kendi ekranında neden boş olduğunu okuyor.
+- Panelde bayinin ana bayisi seçilebiliyor / bağ kaldırılabiliyor; liste ana ve alt bayiyi ayırt ediyor.
+
+### Ajans / Yayıncı Merkezi
+- **Tarayıcı uyarı kutuları kaldırıldı.** Bu sayfalar uygulama içinde WebView'de açılıyor; `window.confirm` Android'in kendi kutusunu açıyor ve kutunun başlığında **sunucunun adresi** yazıyordu. Yerine uygulama temasına uygun, adres göstermeyen sayfa içi kutu geldi (`useConfirm()`). Beş yerin hepsi değişti.
+- **"Ajanstan ayrıl" → "Ajanstan ayrılma talebi oluştur".** Sunucu zaten doğrudan çıkarmıyor, bir talep oluşturup ajansın onayını bekliyordu; etiket yanlış söylüyordu. Onay kutusu da ne olacağını yazıyor.
+- `confirmTyped` ("SİL" yazdırarak onay) paylaşılan kitten yönetim paneline taşındı: uygulama içi sayfalar o dosyayı import ediyordu.
+
+### Doğrulanmış hesap
+- **Oda içindeki "Doğrulanmış" rozeti kaldırıldı.**
+- Doğrulanmış hesap artık **telefon numarası bağlı** demek (eskiden kimlik fotoğrafının yönetimce onaylanması gerekiyordu). Boolean SQL'de hesaplanıyor; başka kullanıcının telefonu ya da doğrulama zamanı hiç taşınmıyor.
+- `kyc_status` **kaldırılmadı**: para çekme / maaş ödemesi kapısı olarak duruyor. Değişen yalnızca kullanıcıya gösterilen etiketin anlamı.
+
+### Yeni güvenlik ağları (üçü de kendi hatasıyla sınandı)
+- `singleton_methods.mjs` — **var olmayan yöntem çağrısı.** Bu sürümde `hub.toUser(...)` yazdım; öyle bir yöntem yok (doğrusu `sendToUser`). Sözdizimi doğru, import doğru, tanımsız ad yok — hiçbir araç görmüyordu. O uç çağrıldığında TypeError atıp kullanıcıya "Sunucu hatası" dönecekti. 113 çağrı denetleniyor.
+- `webview_dialogs.mjs` — uygulama içinde açılan panel sayfalarında tarayıcı kutusu. WebView giriş sayfalarından import zincirini izliyor, yani paylaşılan bir dosyaya eklenen kutu da yakalanıyor; benim gözden kaçırdığım `kit.tsx` içindeki kutuyu bu araç buldu. 21 dosya denetleniyor.
+- `dart_check.py` — **nullable yardımcıya koşulsuz indeksleme.** `mapOf(x)` null dönebiliyor; `mapOf(x)['k']` yazmak `flutter analyze`'da hata ve CI'da derlemeyi durduruyor. Bu sürümde dört yerde yazmıştım. Depoda sıfır yanlış alarm.
+
+### Doğrulama
+- 233 dosya, 385 birim testi (12'si yeni: ana/alt bayi kuralları, sahte istemciyle, PostgreSQL gerekmeden), 999 import, 827 e2e çağrısı / 528 adres, 74 router bağlaması, 113 ortak nesne çağrısı, 21 WebView panel dosyası, 6 WebView sayfası, 56 SDUI tanımı, Dart ön denetimi temiz.
+- **106 göç dosyasının tamamı gerçek PostgreSQL 16 üzerinde uygulandı** ve yeni kısıt (`dealer_not_own_parent`) gerçekten reddediyor. Değiştirilen paylaşımlı kullanıcı SELECT'i de gerçek veritabanında koşturuldu — bu sütun adı hatası bütün kullanıcı uçlarını birden bozardı. Yöntem `docs/MODULE_STANDARD.md`'ye yazıldı.
+
+### Duyurular — bilerek SDUI'ye taşınmadı
+Duyuru akışı türüne göre üç ayrı elle çizilmiş kart (ekip baloncuğu, etkinlik kartı, ödül kartı), içinde etkinlik kürsüsü, sohbet gibi en alta kaydırma ve canlı rozet sayacı. SDUI'nin `repeater` + `listItem` kalıbı bunları ifade edemiyor; zorlamak ekranı kötüleştirirdi. İçerik zaten dinamik: panelden girilen duyuru anında görünüyor. Gerçek iyileştirme ileride kanal listesinin sunucudan gelmesi — şu an team/event/reward Dart'ta sabit. `docs/BACKLOG.md`'ye yazıldı.
+
 ## v2.131.1 — P0 tamamlandı: test bütçesi 10M, amiral hediye doğrulaması, paket denetimi, yedek provası
 - **Test bütçesi 1M → 10M.** En pahalı hediye 5.000.000 Coin olacağı için tek gönderim bütçenin yarısını yiyordu.
 - **5.000.000 Coin'lik hediye uçtan uca doğrulandı:** fiyat tavanı (1 trilyon), seviye matematiği (5M → seviye 23; tavan 300. seviye ≈ 3,09 milyar), global şerit eşiği, defter kayıtları ve mobil gösterim ("5M"). E2E senaryosu eklendi: hediye oluşturma → test bütçesinden basım → gönderim → şerit → defter → mutabakat → bütçe sınırı denemesi.
@@ -4015,3 +4172,106 @@ Doğrulandı: 232 dosya · **366 birim testi** (2 yeni) · 999 import · 810 e2e
 
 **Doğrulanamadı:** `repeater`'ın gerçek veriyle nasıl çizildiği — ağ çağrısı gerektiriyor,
 ilk kez telefonda görülecek.
+
+## v2.148.4 — İlk gerçek veri bağlama: Bildirimler ekranı SDUI'ye bağlandı
+
+### Bağlanan ekran
+
+`NotificationsPage` (`/api/me/notifications`) artık düzenini sunucudan alabiliyor.
+Yerleşik Dart listesi **geri düşme kademesi olarak duruyor ve silinmedi**: yayın yoksa,
+uygulama sürümü yetmiyorsa ya da kullanıcı kademeli açılış diliminde değilse o çiziliyor.
+
+`107_sdui_inbox_layout.sql` referans düzeni taslak olarak yüklüyor — **yayın NULL, yani
+kullanıcı tarafında hiçbir şey değişmiyor.** Panelden "yayınla" denene kadar herkes bugünkü
+listeyi görüyor.
+
+Düzen, `repeater` ile **ilk gerçek veri bağlamasını** gösteriyor:
+
+```json
+{ "type": "repeater", "source": "inbox", "max": 50,
+  "emptyText": "Son 7 günde bildirimin yok.",
+  "children": [ { "type": "listItem", "title": "{title}", "subtitle": "{body}", "icon": "bell" } ] }
+```
+
+### Şablon bağlamanın sınırları sınandı
+
+`mobile/test/sdui_bind_test.dart` — 11 sınav. Önemlisi şu: **ifade, çağrı ve iç içe erişim
+bağlanmaz.** `{a.b}`, `{f()}`, `{a ? b : c}`, `{1}` olduğu gibi kalır, çalıştırılmaz.
+Şablon dili eklemek sunucuya uygulamanın içinde mantık çalıştırma yetkisi vermeye giden
+yoldur; SDUI'nin tüm güvenliği "sunucu yeni davranış üretemez" kuralına dayanıyor.
+
+Ayrıca: bilinmeyen alan **boş** olur (kullanıcıya süslü parantez gösterilmez), bozuk bir
+çocuk düğüm **atlanır ama kardeşlerini düşürmez**, şema sürümü uyuşmazsa ekran hiç
+çizilmez, okuma yardımcıları hiç atmaz.
+
+### Neden yalnızca bir ekran
+
+İki aday daha vardı ve ikisini de **bilerek bırakıyorum**:
+
+- **Arkadaşlar** iki sekmeli (`TabBarView`), liste sekme içinde anahtarlı yeniden kurulumla
+  çalışıyor.
+- **Bayi kataloğu** satın alma akışıyla iç içe.
+
+İkisi de "listeyi ayır, işlemi yerel bırak" cerrahisi istiyor. Üç ekranı aynı turda aceleye
+getirmek, bugün çalışan akışları bozma riski demekti; bir ekranı düzgün bitirmek daha doğru.
+`docs/SDUI_SCREEN_MAP.md` güncellendi.
+
+### Doğrulanan / doğrulanamayan
+
+Doğrulandı: 232 dosya · 366 birim testi (sunucu) · 999 import · 810 e2e adresi ·
+74 router bağlaması · 6 WebView sayfası · 47 şema/uygulama tanımı · Dart ön denetimi ·
+referans düzen şemadan geçiyor · değiştirilen ekranın parantez dengesi.
+
+**Doğrulanamadı:** `flutter test` burada çalışmıyor — 11 yeni Dart sınavı ilk kez CI'da
+koşacak. `repeater`'ın gerçek veriyle çizimi de ilk kez telefonda görülecek.
+
+## v2.148.5 — Arkadaş listesi bağlandı; liste satırı artık ikinci eylemi taşıyor
+
+### Bağlanan: arkadaş listesi (yalnızca liste)
+
+`FriendsScreen` iki sekmeli. **Sadece ilk sekme** (arkadaş listesi) SDUI'ye bağlandı;
+**istekler sekmesi yerel kaldı** — orası kabul/ret işlemi, görünüm değil. Yerleşik liste
+`_builtInFriends` olarak duruyor ve geri düşme kademesi.
+
+### Taşımak için eksik olan iki parça — taşımadan önce tamamlandı
+
+Listeyi olduğu gibi taşımak **mümkün değildi**, çünkü SDUI sürümü yerleşik sürümden kötü
+olurdu. İki eksik vardı ve ikisi de kapatıldı:
+
+**1. Satırın sağındaki ikinci düğme.** Yerleşik listede her satırın sağında "Mesaj"
+düğmesi var; `listItem` yalnızca tek bir eylem taşıyordu. `trailingIcon` + `trailingAction`
+eklendi. **Kural: SDUI sürümü yerleşik sürümden kötüyse yayınlanmamalı** — o yüzden
+bileşeni zenginleştirmek, özelliği kaybetmekten doğru.
+
+**2. Sohbeti açmak.** Sohbet ekranı karşı tarafın adını, rengini, seviyesini ve avatarını
+ister; bunlar tek bir dizeye sığmaz. Yeni `openChat` eylemi **yalnızca kimlik** taşır,
+gerisini uygulama `/api/users/:id` ile çeker — profil ekranındaki "Mesaj" düğmesinin zaten
+yaptığı şeyin aynısı. Eksik bir haritayla açsaydık sohbet başlığı boş görünürdü.
+
+### Şema iki kez kendi hatamı yakaladı
+
+Düzeni kaydetmeye çalışırken şema reddetti, ikisi de gerçek tasarım boşluğuydu:
+
+- **Kimlik alanları şablon kabul etmiyordu.** `{id}` reddediliyordu; yani `repeater`
+  içinde yalnızca SABİT kimlik yazılabilirdi, bu da listeyi anlamsız kılardı.
+- **Görsel alanı şablon kabul etmiyordu.** `{avatarUrl}` reddediliyordu; liste satırında
+  görsel ancak öğeden gelebilir.
+
+İkisi de artık `{alan}` biçimini kabul ediyor — **sadece o biçimi**: `{a.b}`, `{f()}`,
+`{1}` hâlâ reddediliyor, `file://` ve `javascript:` de öyle. Bağlanan değer bizim kendi
+API yanıtımızdan gelir, düzeni yazan kişiden değil.
+
+### Eşleşme aracı artık eylem listesini elle tutmuyor
+
+`sdui_parity.mjs` eylem türlerini **şemadan** okuyor (`ACTION_TYPES`). Elle tutulsaydı,
+şemaya eklenen `openChat` bu araca eklenmediği sürece denetlenmeden geçerdi — aracın görevi
+tam da bunu yakalamak. Kasten bozularak sınandı. 56 tanım denetleniyor.
+
+### Doğrulanan / doğrulanamayan
+
+Doğrulandı: 232 dosya · **370 birim testi** (4 yeni: kimlik/görsel şablonu, satır sonu
+eylemi, eylem kaynağı) · 999 import · 810 e2e adresi · 74 router bağlaması · 56 şema/uygulama
+tanımı · `FriendsScreen` parantez dengesi · referans düzen şemadan geçiyor.
+
+**Doğrulanamadı:** `flutter test` ve `flutter analyze` burada yok. `openChat`'in gerçek
+veriyle çalışması ilk kez telefonda görülecek.

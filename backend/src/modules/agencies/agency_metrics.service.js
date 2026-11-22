@@ -1,6 +1,7 @@
 // Ajans sistemi v2: dönem ölçümleri (toplu sorgular). Gün sınırları Türkiye saatine göredir (UTC+3).
 import { query } from '../../infrastructure/database/database.js';
 import { payLevelFromRow, DEFAULT_AGENCY_GRADES, evaluatePay, evaluateVideoPay, agencyPrim } from '../games/paytable.rules.js';
+import { validateWeights, DEFAULT_WEIGHTS } from '../wallet/salary_weights.rules.js';
 
 const DAY = 86400;
 const OFF = 10800; // +3 saat
@@ -10,6 +11,12 @@ export const dayStart = (idx) => new Date((idx * DAY - OFF) * 1000);
 export const dayKey = (idx) => new Date(idx * DAY * 1000).toISOString().slice(0, 10);
 
 /** Genel ayarlar + maaş tablosu. */
+/** Ayarlardaki ağırlıkları güvenle okur. Veritabanındaki bozuk bir JSON yüzünden dönem
+ *  kapanışının çökmesi, yanlış ağırlıkla hesaplamaktan da kötü olurdu: maaş hiç yazılmaz. */
+function safeWeights(v) {
+  try { return validateWeights(v ?? null); } catch { return { ...DEFAULT_WEIGHTS }; }
+}
+
 export async function loadPayConfig(run = query) {
   const s = (await run(`SELECT * FROM agency_settings WHERE id = 1`)).rows[0] ?? {};
   const levels = (await run(`SELECT * FROM host_pay_levels ORDER BY level`)).rows.map(payLevelFromRow);
@@ -30,6 +37,13 @@ export async function loadPayConfig(run = query) {
       splitByRoomType: s.split_by_room_type !== false,
       videoDailyCapMinutes: s.video_daily_cap_minutes ?? 0, videoMinSessionMinutes: s.video_min_session_minutes ?? 0,
       videoShortfallCutBps: s.video_shortfall_cut_bps ?? 0,
+      // Ağırlıklı maaş hak edişi (v2.150.0). Bozuk JSON yazılmış olsa bile maaş hesabı
+      // çökmesin diye doğrulamadan geçiriliyor; geçmezse varsayılana dönüyor.
+      salaryWeights: safeWeights(s.salary_weights),
+      salaryWeightedEnabled: s.salary_weighted_enabled === true,
+      salaryAutoTransfer: s.salary_auto_transfer === true,
+      salaryTransferDayFrom: s.salary_transfer_day_from ?? 1,
+      salaryTransferDayTo: s.salary_transfer_day_to ?? 3,
     },
     levels,
     videoLevels: videoRows.length ? videoRows : levels,

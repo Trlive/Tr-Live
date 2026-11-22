@@ -1,7 +1,8 @@
 // Yönetici paneli — resmi etkinlikler ve dönem kapatma.
 // Ortak yardımcılar ve import'lar: admin.shared.js
 import { Router } from 'express';
-import { STATEMENT_TABLES, agencyStatementJson, announceUserChange, assistantStatementJson, closePeriod, creditPeriod, creditStatement, fail, hostStatementJson, isWalletPeriod, loadConfig, notifyUser, oneOf, parsePeriodKey, periodKey, previousPeriod, query, referralStatementJson, requireSuperAdmin, text, tx, uuid } from './admin.shared.js';
+import { transferPeriod } from '../wallet/salary_transfer.service.js';
+import { SALARY_PAYABLE_SQL, STATEMENT_TABLES, agencyStatementJson, announceUserChange, assistantStatementJson, closePeriod, creditPeriod, creditStatement, fail, hostStatementJson, isWalletPeriod, loadConfig, notifyUser, oneOf, parsePeriodKey, periodKey, previousPeriod, query, referralStatementJson, requireSuperAdmin, text, tx, uuid } from './admin.shared.js';
 
 export const router = Router();
 
@@ -51,6 +52,35 @@ router.post('/payouts/close', requireSuperAdmin, async (req, res) => {
     const amount = `${(Number(BigInt(h.cents)) / 100).toFixed(2)} ${currency}`;
     notifyUser(h.userId, 'agency_salary', 'Maaş özetin hazır', `${out.periodKey} dönemi maaşın hesaplandı: ${amount}. Yayıncı Merkezi → Maaş özetlerim.`, {});
   }
+});
+
+// ---------------- Ay başı maaş aktarımı ----------------
+
+/// Aktarım çalışmalarının kaydı: hangi dönem, ne zaman, kaç kişiye, kaç kişi atlandı.
+///
+/// Panelde bunun görünmesi önemli: "aktarım yapıldı mı" sorusunun yanıtı burada ve
+/// atlananların sayısı, telefonunu doğrulamamış yayıncıları gösteriyor.
+router.get('/salary-transfers', requireSuperAdmin, async (req, res) => {
+  const r = await query(
+    `SELECT r.period_key, r.started_at, r.finished_at, r.trigger, r.paid_count, r.paid_cents, r.skipped_count,
+            u.username AS started_by_username
+       FROM salary_transfer_runs r LEFT JOIN users u ON u.id = r.started_by
+      ORDER BY r.started_at DESC LIMIT 50`,
+  );
+  res.json({ runs: r.rows.map((x) => ({
+    periodKey: x.period_key, startedAt: x.started_at, finishedAt: x.finished_at,
+    trigger: x.trigger, startedBy: x.started_by_username ?? null,
+    paidCount: x.paid_count, paidCents: String(x.paid_cents), skippedCount: x.skipped_count,
+  })) });
+});
+
+/// Aktarımı ELLE başlat (ayın 1–3 penceresini beklemeden).
+///
+/// "Bir kere" güvencesi burada da geçerli: aynı dönem ikinci kez başlatılırsa hiçbir şey
+/// yapılmaz ve `already: true` döner. Bu uca iki kez basmak kimseye iki kez para yazdırmaz.
+router.post('/salary-transfers/:periodKey', requireSuperAdmin, async (req, res) => {
+  const periodKey = text(req.params.periodKey, 'Dönem', { max: 16, required: true });
+  res.json(await transferPeriod({ periodKey, trigger: 'manual', actorId: req.user.id }));
 });
 
 router.get('/payouts', async (req, res) => {
@@ -152,12 +182,14 @@ router.post('/payouts/:id/pay-all', requireSuperAdmin, async (req, res) => {
   const note = text(req.body?.note, 'Not', { max: 200 });
   const t = STATEMENT_TABLES[kind];
   const out = await tx(async (c) => {
-    // Cüzdan döneminde tutarlar önce cüzdanlara yatırılır (KYC'siz yayıncılar atlanır); kalan sıfır tutarlı özetler aşağıda kapanır.
+    // Cüzdan döneminde tutarlar önce cüzdanlara yatırılır (telefonu doğrulanmamış yayıncılar atlanır,
+    // özetleri 'pending' kalır ve sonraki çalışmada ödenir); kalan sıfır tutarlı özetler aşağıda kapanır.
     const walletOut = (await isWalletPeriod(c, periodId)) ? await creditPeriod(c, periodId, req.user.id, { kinds: [kind], note: note || 'Dolar cüzdanına yatırıldı' }) : null;
     const r = kind === 'host'
       ? await c.query(
           `UPDATE host_statements h SET status = 'paid', paid_at = NOW(), paid_by = $2, pay_note = $3 FROM users u
-           WHERE h.period_id = $1 AND h.status = 'pending' AND u.id = h.user_id AND (h.salary_cents = 0 OR u.kyc_status = 'approved')
+           -- Koşul creditPeriod ile AYNI kaynaktan: ayrışırsa özet "ödendi" olur ama para yatmaz.
+           WHERE h.period_id = $1 AND h.status = 'pending' AND u.id = h.user_id AND (h.salary_cents = 0 OR (${SALARY_PAYABLE_SQL}))
            RETURNING h.id, h.salary_cents AS amount`, [periodId, req.user.id, note],
         )
       : await c.query(

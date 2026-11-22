@@ -316,6 +316,51 @@ for _f in sorted(files):
         if not [o for o in _uses.get(_name, []) if o != _pos]:
             problems.append(f'{_f}:{_i + 1}: "{_name}" metodu hiç kullanılmıyor — flutter analyze bunu hata sayar')
 
+# ---------------------------------------------------------------------------
+# Nullable dönen yardımcıya DOĞRUDAN indeksleme.
+#
+# `mapOf(x)` imzası `Map<String, dynamic>?` — null dönebilir. `mapOf(x)['k']` yazmak
+# flutter analyze'da hata: "The method '[]' can't be unconditionally invoked because the
+# receiver can be null." CI'da derleme durur. Bu araç null güvenliğini genel olarak
+# göremiyor ama bu KALIBI görebiliyor, çünkü hangi yardımcının nullable olduğu belli.
+#
+# Doğrusu: `mapOf(x)?['k']` ya da `(mapOf(x) ?? const <String, dynamic>{})['k']`.
+NULLABLE_HELPERS = ('mapOf',)
+
+for _f in files:
+    _src = strip(_f.read_text(encoding='utf-8'))
+    _lines = _src.split('\n')
+    for _i, _ln in enumerate(_lines):
+        for _h in NULLABLE_HELPERS:
+            _at = 0
+            while True:
+                _at = _ln.find(_h + '(', _at)
+                if _at < 0:
+                    break
+                # Ad bir başka adın kuyruğu olmasın (örn. "myMapOf(").
+                if _at > 0 and (_ln[_at - 1].isalnum() or _ln[_at - 1] in '_$.'):
+                    _at += 1
+                    continue
+                # Eşleşen kapanış parantezini bul.
+                _d, _j = 0, _at + len(_h)
+                while _j < len(_ln):
+                    if _ln[_j] == '(':
+                        _d += 1
+                    elif _ln[_j] == ')':
+                        _d -= 1
+                        if _d == 0:
+                            break
+                    _j += 1
+                if _j >= len(_ln):
+                    break  # parantez satıra sığmıyor: karar vermiyoruz
+                if _j + 1 < len(_ln) and _ln[_j + 1] == '[':
+                    problems.append(
+                        f'{_f}:{_i + 1}: "{_h}(...)[...]" — {_h} null dönebilir, '
+                        f"koşulsuz indeksleme flutter analyze'da HATA. "
+                        f"`{_h}(...)?[...]` ya da `({_h}(...) ?? const <String, dynamic>{{}})[...]` yaz"
+                    )
+                _at = _j + 1
+
 for x in sorted(set(problems)):
     print('  - ' + str(x).replace(str(LIB.parent) + '/', ''))
 

@@ -196,9 +196,18 @@ class _SduiRendererState extends State<SduiRenderer> {
               : Icon(SduiActions.icon(n.str('icon')), color: SduiActions.tone(n.str('tone'))),
           title: Text(n.str('title') ?? '', style: const TextStyle(fontSize: 14.5)),
           subtitle: n.str('subtitle') == null ? null : Text(n.str('subtitle')!, style: const TextStyle(fontSize: 12.5, color: Color(0x99FFFFFF))),
-          trailing: n.str('badge') == null
-              ? (actionOf(n) == null ? null : const Icon(Icons.chevron_right, size: 18))
-              : _badge(n.str('badge')!, n.str('tone')),
+          // Satır sonu: ayrı bir eylem (mesaj vb.) > rozet > ok işareti.
+          // Ayrı eylem olmadan listeyi SDUI'ye taşımak, satırdaki ikinci düğmeyi kaybetmek
+          // demekti; SDUI sürümü yerleşik sürümden kötü olamaz.
+          trailing: n.mapOf('trailingAction') != null
+              ? IconButton(
+                  icon: Icon(SduiActions.icon(n.str('trailingIcon'), fallback: Icons.more_horiz),
+                      size: 20, color: SduiActions.tone(n.str('tone'), fallback: const Color(0xFF7DD3FC))),
+                  onPressed: () => _run(n.mapOf('trailingAction')),
+                )
+              : n.str('badge') == null
+                  ? (actionOf(n) == null ? null : const Icon(Icons.chevron_right, size: 18))
+                  : _badge(n.str('badge')!, n.str('tone')),
           onTap: actionOf(n) == null ? null : () => _run(actionOf(n)),
         );
       case 'badge':

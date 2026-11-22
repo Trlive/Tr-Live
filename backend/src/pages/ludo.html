@@ -75,7 +75,7 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .it{position:absolute;width:6.6667%;height:6.6667%;display:flex;align-items:center;justify-content:center;pointer-events:none}
 .it span{display:flex;align-items:center;justify-content:center;width:86%;height:86%;border-radius:50%;font-size:var(--fs,14px);line-height:1;background:radial-gradient(circle at 35% 30%,#fff,#ffe6a8 70%);box-shadow:0 0 0 1.5px #c98a08,0 0 9px rgba(242,185,42,.95);animation:itf 1.8s ease-in-out infinite}
 @keyframes itf{50%{transform:translateY(-8%) scale(1.07)}}
-.tk{position:absolute;width:6.4%;height:6.4%;margin:-3.2% 0 0 -3.2%;padding:0;z-index:3;transition:left .12s linear,top .12s linear}
+.tk{position:absolute;width:6.4%;height:6.4%;margin:-3.2% 0 0 -3.2%;padding:0;z-index:3;transition:left .08s linear,top .08s linear}
 .tk .un{display:block;width:100%;height:100%;transform:rotate(var(--un,0deg))}
 .tk svg{display:block;width:100%;height:100%;overflow:visible;filter:drop-shadow(0 2px 2px rgba(0,0,0,.55))}
 .tk.ok{z-index:6}
@@ -87,15 +87,34 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .rp{position:absolute;width:6.4%;height:6.4%;margin:-3.2% 0 0 -3.2%;border-radius:50%;border:3px solid #fff;pointer-events:none;z-index:7}
 .pt{position:absolute;z-index:9;pointer-events:none;font-size:var(--fs2,22px);line-height:1;transform:translate(-50%,-50%)}
 #ctl{flex:none;width:100%;display:flex;align-items:center;justify-content:center;gap:16px;min-height:72px;padding:6px 12px}
-#dice{width:56px;height:56px;perspective:300px;padding:0;flex:none;border-radius:14px}
+#dice{width:68px;height:68px;perspective:360px;padding:0;flex:none;border-radius:16px;position:relative}
+/* Atılan sayı, zarın köşesinde okunaklı bir rozet olarak DURUYOR.
+   Sahibi "atılan zar sonucu görünmüyor" dedi: 3B küp küçük, hamle animasyonu başlayınca
+   göz tahtaya kayıyor ve sonuç okunamıyordu. Rozet sonraki atışa kadar kalıyor. */
+#dnum{position:absolute;right:-7px;bottom:-7px;min-width:26px;height:26px;padding:0 5px;border-radius:13px;
+  background:linear-gradient(145deg,#fff8e6,#f2b92a);color:#2a1c02;border:2px solid #7a4f06;
+  font:800 15px/22px system-ui,-apple-system,sans-serif;text-align:center;
+  box-shadow:0 2px 8px rgba(0,0,0,.55);z-index:4;opacity:0;transform:scale(.4);
+  transition:opacity .18s,transform .22s cubic-bezier(.2,1.6,.4,1)}
+#dnum.on{opacity:1;transform:scale(1)}
+#dnum.pop{animation:dpop .45s ease-out}
+@keyframes dpop{0%{transform:scale(1)}35%{transform:scale(1.45)}100%{transform:scale(1)}}
+/* Biriken zarlar: 6 atınca oynatılmıyor, kuyruğa yazılıyor. Oyuncu kaç ve hangi değeri
+   oynayacağını görmeli ("bir 6 ve bir 3"). */
+#dq{display:flex;align-items:center;gap:5px;flex:none}
+#dq i{width:24px;height:24px;border-radius:7px;background:linear-gradient(145deg,#fff,#ded0ad);
+  border:1.5px solid #8a5c07;color:#241a06;font:800 14px/21px system-ui,-apple-system,sans-serif;
+  text-align:center;font-style:normal;opacity:.45;transition:opacity .2s,transform .2s}
+#dq i.now{opacity:1;transform:scale(1.18);box-shadow:0 0 0 2px var(--gold),0 0 9px rgba(242,185,42,.7)}
+#dq i.done{opacity:.22;text-decoration:line-through}
 #dice .tilt{width:100%;height:100%;transform-style:preserve-3d;transform:rotateX(-22deg) rotateY(-26deg)}
-#dice .cube{position:relative;width:100%;height:100%;transform-style:preserve-3d;transition:transform .9s cubic-bezier(.15,.85,.25,1)}
+#dice .cube{position:relative;width:100%;height:100%;transform-style:preserve-3d;transition:transform .6s cubic-bezier(.15,.85,.25,1)}
 #dice .f{position:absolute;inset:0;border-radius:13px;background:linear-gradient(145deg,#fff,#e6dabb);border:2px solid var(--dc,#c98a08);display:grid;grid-template:repeat(3,1fr)/repeat(3,1fr);padding:7px;backface-visibility:hidden;box-shadow:inset 0 0 8px rgba(0,0,0,.18)}
 #dice .f b{width:100%;height:100%;border-radius:50%;background:radial-gradient(circle at 35% 30%,#555,#111 70%);transform:scale(.0)}
 #dice .f b.on{transform:scale(.82);background:radial-gradient(circle at 35% 30%,var(--dc,#e5483d),#2a0c08 130%)}
-#dice .f1{transform:translateZ(28px)}#dice .f6{transform:rotateY(180deg) translateZ(28px)}
-#dice .f2{transform:rotateY(90deg) translateZ(28px)}#dice .f5{transform:rotateY(-90deg) translateZ(28px)}
-#dice .f3{transform:rotateX(90deg) translateZ(28px)}#dice .f4{transform:rotateX(-90deg) translateZ(28px)}
+#dice .f1{transform:translateZ(34px)}#dice .f6{transform:rotateY(180deg) translateZ(34px)}
+#dice .f2{transform:rotateY(90deg) translateZ(34px)}#dice .f5{transform:rotateY(-90deg) translateZ(34px)}
+#dice .f3{transform:rotateX(90deg) translateZ(34px)}#dice .f4{transform:rotateX(-90deg) translateZ(34px)}
 #dice.can{animation:bob2 .9s ease-in-out infinite;filter:drop-shadow(0 0 10px var(--gold)) drop-shadow(0 0 4px var(--gold2))}
 @keyframes bob2{50%{transform:translateY(-6px)}}
 #dice .sh{position:absolute;left:10%;right:10%;bottom:-9px;height:8px;border-radius:50%;background:rgba(0,0,0,.4);filter:blur(3px)}
@@ -156,7 +175,7 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
   <div class="scr" id="board">
     <div id="pl"></div>
     <div id="bwrap"><div id="stage"><div id="bd"></div></div></div>
-    <div id="ctl"><button id="dice" aria-label="dice"><div class="tilt"><div class="cube" id="cube"></div></div><div class="sh"></div></button><div id="st"></div></div>
+    <div id="ctl"><button id="dice" aria-label="dice"><div class="tilt"><div class="cube" id="cube"></div></div><div class="sh"></div><span id="dnum"></span></button><div id="dq"></div><div id="st"></div></div>
   </div>
   <div id="turnb"></div>
 </div>
@@ -172,16 +191,16 @@ const app = $('app');
 const ROOM = app.dataset.room;
 const VER = app.dataset.ver || '';
 const LANGS = {
-tr: { tag: "ODA OYUNU", none: "Açık oyun yok", noneHint: "Oda yetkilisi oyun açınca burada görünecek.", other: "Odada başka bir oyun açık: {g}", open: "Oyun aç", pickMode: "Oyun modunu seç", classic: "Klasik", quick: "Seri", items: "Eşyalı", dClassic: "4 taşını da bitişe ulaştıran kazanır.", dQuick: "Tek taş yeter; ama önce bir rakip taşı kırmalısın.", dItems: "Klasik kurallar + kapı, füze, buz, bomba ve zar kareleri.", waitHost: "Oyun açıldı, oyuncuların katılması bekleniyor", waitJoined: "Katıldın, oyunun başlaması bekleniyor", waitJoin: "Oyun açıldı, katılmak için dokun!", count: "{n}/{m} kişi oyuna katıldı", join: "Katıl", leave: "Ayrıl", start: "Başla", closeGame: "Oyunu kapat", need2: "Başlamak için en az 2 oyuncu gerekir", roll: "Zar at", yourRoll: "Sıra sende: zar at", yourMove: "Oynatacağın taşı seç", turnOf: "Sıra: {n}", watching: "Oyunu izliyorsun", eCapture: "{n} bir taş kırdı!", eSix3: "{n} üç kez 6 attı, sıra geçti", eNoMove: "{n} için hamle yok", eFrozen: "{n} dondu, bir tur atladı", eBomb: "Bomba! {n} taşı üsse döndü", ePortal: "{n} kapıdan geçti", eRocket: "Füze! {n} bir taşı üsse yolladı", eIce: "{n} rakibini dondurdu", eDice: "{n} bir zar hakkı daha kazandı", eLeft: "{n} oyundan ayrıldı", eHome: "{n} bir taşını eve ulaştırdı!", yourTurnB: "Sıra sende!", over: "Oyun bitti", won: "Kazandı", close: "Kapat", again: "Tekrar oyna", cancelled: "Oyun kapatıldı", rules: "Oyun kuralları", ok: "Anladım", leaveQ: "Oyundan ayrılmak istiyor musun?", leaveHint: "Ayrılırsan taşların oyundan çıkar.", closeQ: "Oyun herkes için kapatılsın mı?", yes: "Evet", cancel: "Vazgeç", net: "Bağlantı sorunu, yeniden deneniyor…", err: "İşlem yapılamadı", appOnly: "Bu sayfa yalnızca uygulama içinde açılır.", loading: "Yükleniyor…", kills: "Kırma: {k}" },
-en: { tag: "ROOM GAME", none: "No open game", noneHint: "It will appear here when a room manager opens a game.", other: "Another game is open in this room: {g}", open: "Open game", pickMode: "Choose the game mode", classic: "Classic", quick: "Quick", items: "Items", dClassic: "Get all 4 tokens home to win.", dQuick: "One token is enough, but you must capture an opponent first.", dItems: "Classic rules + portal, rocket, ice, bomb and dice squares.", waitHost: "Game opened, waiting for players to join", waitJoined: "Joined, waiting for the game to start", waitJoin: "Game opened, tap to join!", count: "{n}/{m} players joined", join: "Join", leave: "Leave", start: "Start", closeGame: "Close game", need2: "At least 2 players are needed to start", roll: "Roll", yourRoll: "Your turn: roll the dice", yourMove: "Pick a token to move", turnOf: "Turn: {n}", watching: "You are watching", eCapture: "{n} captured a token!", eSix3: "{n} rolled three 6s, turn passed", eNoMove: "No move for {n}", eFrozen: "{n} is frozen and skipped a turn", eBomb: "Bomb! {n}'s token went back to base", ePortal: "{n} went through a portal", eRocket: "Rocket! {n} sent a token back to base", eIce: "{n} froze an opponent", eDice: "{n} won an extra roll", eLeft: "{n} left the game", eHome: "{n} brought a token home!", yourTurnB: "Your turn!", over: "Game over", won: "Winner", close: "Close", again: "Play again", cancelled: "The game was closed", rules: "Game rules", ok: "Got it", leaveQ: "Leave the game?", leaveHint: "Your tokens are removed from the game.", closeQ: "Close the game for everyone?", yes: "Yes", cancel: "Cancel", net: "Connection problem, retrying…", err: "Action failed", appOnly: "This page only opens inside the app.", loading: "Loading…", kills: "Captures: {k}" },
-ar: { tag: "لعبة الغرفة", none: "لا توجد لعبة مفتوحة", noneHint: "ستظهر هنا عندما يفتح مشرف الغرفة لعبة.", other: "توجد لعبة أخرى مفتوحة في الغرفة: {g}", open: "افتح لعبة", pickMode: "اختر نمط اللعب", classic: "كلاسيكي", quick: "سريع", items: "أدوات", dClassic: "من يوصل أحجاره الأربعة إلى النهاية يفوز.", dQuick: "حجر واحد يكفي، لكن عليك أولًا أكل حجر للخصم.", dItems: "القواعد الكلاسيكية + مربعات البوابة والصاروخ والجليد والقنبلة والنرد.", waitHost: "تم فتح اللعبة، بانتظار انضمام اللاعبين", waitJoined: "انضممت، بانتظار بدء اللعبة", waitJoin: "تم فتح اللعبة، اضغط للانضمام!", count: "انضم {n}/{m} لاعبين", join: "انضم", leave: "غادر", start: "ابدأ", closeGame: "إغلاق اللعبة", need2: "يلزم لاعبان على الأقل للبدء", roll: "ارمِ النرد", yourRoll: "دورك: ارمِ النرد", yourMove: "اختر الحجر الذي ستحركه", turnOf: "الدور: {n}", watching: "أنت تشاهد اللعبة", eCapture: "{n} أكل حجرًا!", eSix3: "{n} رمى 6 ثلاث مرات، انتقل الدور", eNoMove: "لا توجد حركة لـ {n}", eFrozen: "{n} تجمّد وفاته دور", eBomb: "قنبلة! عاد حجر {n} إلى القاعدة", ePortal: "{n} عبر البوابة", eRocket: "صاروخ! {n} أعاد حجرًا إلى القاعدة", eIce: "{n} جمّد خصمه", eDice: "{n} حصل على رمية إضافية", eLeft: "{n} غادر اللعبة", eHome: "{n} أوصل حجرًا إلى البيت!", yourTurnB: "دورك!", over: "انتهت اللعبة", won: "الفائز", close: "إغلاق", again: "العب مجددًا", cancelled: "تم إغلاق اللعبة", rules: "قواعد اللعبة", ok: "فهمت", leaveQ: "هل تريد مغادرة اللعبة؟", leaveHint: "ستُزال أحجارك من اللعبة.", closeQ: "إغلاق اللعبة للجميع؟", yes: "نعم", cancel: "إلغاء", net: "مشكلة في الاتصال، جارٍ إعادة المحاولة…", err: "تعذّر تنفيذ العملية", appOnly: "هذه الصفحة تفتح داخل التطبيق فقط.", loading: "جارٍ التحميل…", kills: "الأكل: {k}" },
-hi: { tag: "रूम गेम", none: "कोई खुला गेम नहीं", noneHint: "रूम मैनेजर गेम खोलेगा तो यहाँ दिखेगा।", other: "रूम में दूसरा गेम खुला है: {g}", open: "गेम खोलें", pickMode: "गेम मोड चुनें", classic: "क्लासिक", quick: "क्विक", items: "आइटम", dClassic: "जो चारों गोटियाँ घर पहुँचाए वह जीतता है।", dQuick: "एक गोटी काफ़ी है, पर पहले विरोधी की एक गोटी काटनी होगी।", dItems: "क्लासिक नियम + पोर्टल, रॉकेट, बर्फ़, बम और पासा वाले खाने।", waitHost: "गेम खुल गया, खिलाड़ियों के जुड़ने का इंतज़ार", waitJoined: "आप जुड़ गए, गेम शुरू होने का इंतज़ार", waitJoin: "गेम खुल गया, जुड़ने के लिए टैप करें!", count: "{n}/{m} खिलाड़ी जुड़े", join: "जुड़ें", leave: "छोड़ें", start: "शुरू करें", closeGame: "गेम बंद करें", need2: "शुरू करने के लिए कम से कम 2 खिलाड़ी चाहिए", roll: "पासा फेंकें", yourRoll: "आपकी बारी: पासा फेंकें", yourMove: "चलने वाली गोटी चुनें", turnOf: "बारी: {n}", watching: "आप गेम देख रहे हैं", eCapture: "{n} ने एक गोटी काटी!", eSix3: "{n} ने तीन बार 6 फेंका, बारी गई", eNoMove: "{n} के लिए कोई चाल नहीं", eFrozen: "{n} जम गए, एक बारी छूटी", eBomb: "बम! {n} की गोटी वापस अड्डे पर", ePortal: "{n} पोर्टल से गुज़रे", eRocket: "रॉकेट! {n} ने एक गोटी अड्डे पर भेजी", eIce: "{n} ने विरोधी को जमा दिया", eDice: "{n} को एक और पासा मिला", eLeft: "{n} ने गेम छोड़ा", eHome: "{n} ने एक गोटी घर पहुँचाई!", yourTurnB: "आपकी बारी!", over: "गेम समाप्त", won: "विजेता", close: "बंद करें", again: "फिर खेलें", cancelled: "गेम बंद कर दिया गया", rules: "गेम के नियम", ok: "समझ गया", leaveQ: "गेम छोड़ना चाहते हैं?", leaveHint: "आपकी गोटियाँ गेम से हट जाएँगी।", closeQ: "सबके लिए गेम बंद करें?", yes: "हाँ", cancel: "रद्द करें", net: "कनेक्शन समस्या, दोबारा कोशिश…", err: "कार्रवाई नहीं हो सकी", appOnly: "यह पेज सिर्फ़ ऐप के अंदर खुलता है।", loading: "लोड हो रहा है…", kills: "काट: {k}" },
+tr: { tag: "ODA OYUNU", none: "Açık oyun yok", noneHint: "Oda yetkilisi oyun açınca burada görünecek.", other: "Odada başka bir oyun açık: {g}", open: "Oyun aç", pickMode: "Oyun modunu seç", classic: "Klasik", quick: "Seri", items: "Eşyalı", dClassic: "4 taşını da bitişe ulaştıran kazanır.", dQuick: "Tek taş yeter; ama önce bir rakip taşı kırmalısın.", dItems: "Klasik kurallar + kapı, füze, buz, bomba ve zar kareleri.", waitHost: "Oyun açıldı, oyuncuların katılması bekleniyor", waitJoined: "Katıldın, oyunun başlaması bekleniyor", waitJoin: "Oyun açıldı, katılmak için dokun!", count: "{n}/{m} kişi oyuna katıldı", join: "Katıl", leave: "Ayrıl", start: "Başla", closeGame: "Oyunu kapat", need2: "Başlamak için en az 2 oyuncu gerekir", roll: "Zar at", yourRoll: "Sıra sende: zar at", sixAgain: "6 attın! Taş oynamaz, tekrar at", playQueue: "{n} zarın var: {d} — sırayla oyna", yourMove: "Oynatacağın taşı seç", turnOf: "Sıra: {n}", watching: "Oyunu izliyorsun", eCapture: "{n} bir taş kırdı!", eSix3: "{n} üç kez 6 attı, sıra geçti", eSixAgain: "{n} 6 attı, tekrar atıyor", eNoMove: "{n} için hamle yok", eFrozen: "{n} dondu, bir tur atladı", eBomb: "Bomba! {n} taşı üsse döndü", ePortal: "{n} kapıdan geçti", eRocket: "Füze! {n} bir taşı üsse yolladı", eIce: "{n} rakibini dondurdu", eDice: "{n} bir zar hakkı daha kazandı", eLeft: "{n} oyundan ayrıldı", eHome: "{n} bir taşını eve ulaştırdı!", yourTurnB: "Sıra sende!", over: "Oyun bitti", won: "Kazandı", close: "Kapat", again: "Tekrar oyna", cancelled: "Oyun kapatıldı", rules: "Oyun kuralları", ok: "Anladım", leaveQ: "Oyundan ayrılmak istiyor musun?", leaveHint: "Ayrılırsan taşların oyundan çıkar.", closeQ: "Oyun herkes için kapatılsın mı?", yes: "Evet", cancel: "Vazgeç", net: "Bağlantı sorunu, yeniden deneniyor…", err: "İşlem yapılamadı", appOnly: "Bu sayfa yalnızca uygulama içinde açılır.", loading: "Yükleniyor…", kills: "Kırma: {k}" },
+en: { tag: "ROOM GAME", none: "No open game", noneHint: "It will appear here when a room manager opens a game.", other: "Another game is open in this room: {g}", open: "Open game", pickMode: "Choose the game mode", classic: "Classic", quick: "Quick", items: "Items", dClassic: "Get all 4 tokens home to win.", dQuick: "One token is enough, but you must capture an opponent first.", dItems: "Classic rules + portal, rocket, ice, bomb and dice squares.", waitHost: "Game opened, waiting for players to join", waitJoined: "Joined, waiting for the game to start", waitJoin: "Game opened, tap to join!", count: "{n}/{m} players joined", join: "Join", leave: "Leave", start: "Start", closeGame: "Close game", need2: "At least 2 players are needed to start", roll: "Roll", yourRoll: "Your turn: roll the dice", sixAgain: "You rolled a 6! No move — roll again", playQueue: "You have {n} dice: {d} — play them in order", yourMove: "Pick a token to move", turnOf: "Turn: {n}", watching: "You are watching", eCapture: "{n} captured a token!", eSix3: "{n} rolled three 6s, turn passed", eSixAgain: "{n} rolled a 6 and rolls again", eNoMove: "No move for {n}", eFrozen: "{n} is frozen and skipped a turn", eBomb: "Bomb! {n}'s token went back to base", ePortal: "{n} went through a portal", eRocket: "Rocket! {n} sent a token back to base", eIce: "{n} froze an opponent", eDice: "{n} won an extra roll", eLeft: "{n} left the game", eHome: "{n} brought a token home!", yourTurnB: "Your turn!", over: "Game over", won: "Winner", close: "Close", again: "Play again", cancelled: "The game was closed", rules: "Game rules", ok: "Got it", leaveQ: "Leave the game?", leaveHint: "Your tokens are removed from the game.", closeQ: "Close the game for everyone?", yes: "Yes", cancel: "Cancel", net: "Connection problem, retrying…", err: "Action failed", appOnly: "This page only opens inside the app.", loading: "Loading…", kills: "Captures: {k}" },
+ar: { tag: "لعبة الغرفة", none: "لا توجد لعبة مفتوحة", noneHint: "ستظهر هنا عندما يفتح مشرف الغرفة لعبة.", other: "توجد لعبة أخرى مفتوحة في الغرفة: {g}", open: "افتح لعبة", pickMode: "اختر نمط اللعب", classic: "كلاسيكي", quick: "سريع", items: "أدوات", dClassic: "من يوصل أحجاره الأربعة إلى النهاية يفوز.", dQuick: "حجر واحد يكفي، لكن عليك أولًا أكل حجر للخصم.", dItems: "القواعد الكلاسيكية + مربعات البوابة والصاروخ والجليد والقنبلة والنرد.", waitHost: "تم فتح اللعبة، بانتظار انضمام اللاعبين", waitJoined: "انضممت، بانتظار بدء اللعبة", waitJoin: "تم فتح اللعبة، اضغط للانضمام!", count: "انضم {n}/{m} لاعبين", join: "انضم", leave: "غادر", start: "ابدأ", closeGame: "إغلاق اللعبة", need2: "يلزم لاعبان على الأقل للبدء", roll: "ارمِ النرد", yourRoll: "دورك: ارمِ النرد", sixAgain: "رميت 6! لا حركة — ارمِ مرة أخرى", playQueue: "لديك {n} نرد: {d} — العبها بالترتيب", yourMove: "اختر الحجر الذي ستحركه", turnOf: "الدور: {n}", watching: "أنت تشاهد اللعبة", eCapture: "{n} أكل حجرًا!", eSix3: "{n} رمى 6 ثلاث مرات، انتقل الدور", eSixAgain: "{n} رمى 6 ويرمي مرة أخرى", eNoMove: "لا توجد حركة لـ {n}", eFrozen: "{n} تجمّد وفاته دور", eBomb: "قنبلة! عاد حجر {n} إلى القاعدة", ePortal: "{n} عبر البوابة", eRocket: "صاروخ! {n} أعاد حجرًا إلى القاعدة", eIce: "{n} جمّد خصمه", eDice: "{n} حصل على رمية إضافية", eLeft: "{n} غادر اللعبة", eHome: "{n} أوصل حجرًا إلى البيت!", yourTurnB: "دورك!", over: "انتهت اللعبة", won: "الفائز", close: "إغلاق", again: "العب مجددًا", cancelled: "تم إغلاق اللعبة", rules: "قواعد اللعبة", ok: "فهمت", leaveQ: "هل تريد مغادرة اللعبة؟", leaveHint: "ستُزال أحجارك من اللعبة.", closeQ: "إغلاق اللعبة للجميع؟", yes: "نعم", cancel: "إلغاء", net: "مشكلة في الاتصال، جارٍ إعادة المحاولة…", err: "تعذّر تنفيذ العملية", appOnly: "هذه الصفحة تفتح داخل التطبيق فقط.", loading: "جارٍ التحميل…", kills: "الأكل: {k}" },
+hi: { tag: "रूम गेम", none: "कोई खुला गेम नहीं", noneHint: "रूम मैनेजर गेम खोलेगा तो यहाँ दिखेगा।", other: "रूम में दूसरा गेम खुला है: {g}", open: "गेम खोलें", pickMode: "गेम मोड चुनें", classic: "क्लासिक", quick: "क्विक", items: "आइटम", dClassic: "जो चारों गोटियाँ घर पहुँचाए वह जीतता है।", dQuick: "एक गोटी काफ़ी है, पर पहले विरोधी की एक गोटी काटनी होगी।", dItems: "क्लासिक नियम + पोर्टल, रॉकेट, बर्फ़, बम और पासा वाले खाने।", waitHost: "गेम खुल गया, खिलाड़ियों के जुड़ने का इंतज़ार", waitJoined: "आप जुड़ गए, गेम शुरू होने का इंतज़ार", waitJoin: "गेम खुल गया, जुड़ने के लिए टैप करें!", count: "{n}/{m} खिलाड़ी जुड़े", join: "जुड़ें", leave: "छोड़ें", start: "शुरू करें", closeGame: "गेम बंद करें", need2: "शुरू करने के लिए कम से कम 2 खिलाड़ी चाहिए", roll: "पासा फेंकें", yourRoll: "आपकी बारी: पासा फेंकें", sixAgain: "आपने 6 फेंका! चाल नहीं — फिर फेंकें", playQueue: "आपके पास {n} पासे हैं: {d} — क्रम से चलें", yourMove: "चलने वाली गोटी चुनें", turnOf: "बारी: {n}", watching: "आप गेम देख रहे हैं", eCapture: "{n} ने एक गोटी काटी!", eSix3: "{n} ने तीन बार 6 फेंका, बारी गई", eSixAgain: "{n} ने 6 फेंका, दोबारा फेंकेंगे", eNoMove: "{n} के लिए कोई चाल नहीं", eFrozen: "{n} जम गए, एक बारी छूटी", eBomb: "बम! {n} की गोटी वापस अड्डे पर", ePortal: "{n} पोर्टल से गुज़रे", eRocket: "रॉकेट! {n} ने एक गोटी अड्डे पर भेजी", eIce: "{n} ने विरोधी को जमा दिया", eDice: "{n} को एक और पासा मिला", eLeft: "{n} ने गेम छोड़ा", eHome: "{n} ने एक गोटी घर पहुँचाई!", yourTurnB: "आपकी बारी!", over: "गेम समाप्त", won: "विजेता", close: "बंद करें", again: "फिर खेलें", cancelled: "गेम बंद कर दिया गया", rules: "गेम के नियम", ok: "समझ गया", leaveQ: "गेम छोड़ना चाहते हैं?", leaveHint: "आपकी गोटियाँ गेम से हट जाएँगी।", closeQ: "सबके लिए गेम बंद करें?", yes: "हाँ", cancel: "रद्द करें", net: "कनेक्शन समस्या, दोबारा कोशिश…", err: "कार्रवाई नहीं हो सकी", appOnly: "यह पेज सिर्फ़ ऐप के अंदर खुलता है।", loading: "लोड हो रहा है…", kills: "काट: {k}" },
 };
 const RULES = {
-tr: [["Klasik", ["Zarda 6 gelince bir taşını başlangıç karesine çıkarırsın; 6 atan bir kez daha atar.", "Rakibin taşının üstüne gelirsen o taş üssüne döner ve bir zar hakkı daha kazanırsın.", "Yıldızlı kareler ve başlangıç kareleri güvenlidir; oradaki taş kırılmaz.", "Üst üste üç kez 6 atarsan sıran geçer.", "Bitişe tam sayı gerekir. 4 taşını da bitişe ilk ulaştıran kazanır.", "Her hamle için 30 saniyen var; üst üste 3 kez oynamayan oyundan düşer."]], ["Seri", ["Tek taşını bitişe ulaştırman yeter.", "Barikat: en az bir rakip taşı kırmadan taşların ev yoluna giremez; ana yolda bir tur daha döner."]], ["Eşyalı", ["Klasik kurallar geçerlidir; tahtada eşya kareleri vardır.", "🌀 Kapı: taşın 16 kare ilerideki yıldızlı kareye ışınlanır.", "🚀 Füze: ilerideki en yakın rakip taşı üssüne döner (güvenli karedeki taş korunur).", "❄️ Buz: ilerideki en yakın rakip taşının sahibi bir tur atlar.", "💣 Bomba: üstüne gelen taşın üssüne döner.", "🎲 Zar: bir zar hakkı daha kazanırsın."]]],
-en: [["Classic", ["Roll a 6 to bring a token to its start square; a 6 gives another roll.", "Land on an opponent token to send it back to base and win another roll.", "Star squares and start squares are safe; tokens there cannot be captured.", "Three 6s in a row end your turn.", "An exact roll is needed to finish. The first to bring all 4 tokens home wins.", "You have 30 seconds per move; missing 3 turns in a row removes you."]], ["Quick", ["Bringing one token home is enough.", "Barrier: until you capture an opponent token your tokens cannot enter the home lane; they go around again."]], ["Items", ["Classic rules apply; the board has item squares.", "🌀 Portal: your token jumps to the star square 16 squares ahead.", "🚀 Rocket: the nearest opponent token ahead goes back to base (tokens on safe squares are protected).", "❄️ Ice: the owner of the nearest opponent token ahead skips a turn.", "💣 Bomb: the token that lands on it goes back to base.", "🎲 Dice: you win another roll."]]],
-ar: [["كلاسيكي", ["عند رمي 6 تُخرج حجرًا إلى مربع البداية؛ ومن يرمي 6 يرمي مرة أخرى.", "إذا وقفت على حجر خصم يعود إلى قاعدته وتحصل على رمية إضافية.", "مربعات النجمة ومربعات البداية آمنة؛ لا يؤكل الحجر فيها.", "إذا رميت 6 ثلاث مرات متتالية ينتقل دورك.", "يلزم رقم مطابق للوصول. أول من يوصل أحجاره الأربعة يفوز.", "لديك 30 ثانية لكل حركة؛ من لا يلعب 3 مرات متتالية يخرج."]], ["سريع", ["يكفي إيصال حجر واحد إلى النهاية.", "الحاجز: لا تدخل أحجارك مسار البيت قبل أن تأكل حجرًا للخصم؛ تدور دورة أخرى."]], ["أدوات", ["تُطبَّق القواعد الكلاسيكية مع مربعات أدوات على اللوحة.", "🌀 البوابة: ينتقل حجرك إلى مربع النجمة بعد 16 مربعًا.", "🚀 الصاروخ: أقرب حجر للخصم أمامك يعود إلى قاعدته (الحجر في مربع آمن محمي).", "❄️ الجليد: صاحب أقرب حجر للخصم أمامك يفوته دور.", "💣 القنبلة: الحجر الذي يقف عليها يعود إلى قاعدته.", "🎲 النرد: تحصل على رمية إضافية."]]],
-hi: [["क्लासिक", ["6 आने पर एक गोटी शुरुआती खाने पर आती है; 6 पर एक और बार पासा।", "विरोधी की गोटी पर पहुँचें तो वह अड्डे पर लौटती है और आपको एक और पासा मिलता है।", "तारे वाले और शुरुआती खाने सुरक्षित हैं; वहाँ गोटी नहीं कटती।", "लगातार तीन बार 6 आने पर बारी चली जाती है।", "घर पहुँचने के लिए सटीक अंक चाहिए। जो चारों गोटियाँ पहले पहुँचाए वह जीतता है।", "हर चाल के लिए 30 सेकंड; लगातार 3 बार न खेलने पर खिलाड़ी बाहर।"]], ["क्विक", ["एक गोटी घर पहुँचाना काफ़ी है।", "बैरियर: विरोधी की गोटी काटे बिना आपकी गोटियाँ घर की गली में नहीं जा सकतीं; एक चक्कर और लगाती हैं।"]], ["आइटम", ["क्लासिक नियम लागू हैं; बोर्ड पर आइटम वाले खाने हैं।", "🌀 पोर्टल: गोटी 16 खाने आगे तारे वाले खाने पर पहुँचती है।", "🚀 रॉकेट: आगे की सबसे नज़दीकी विरोधी गोटी अड्डे पर लौटती है (सुरक्षित खाने की गोटी बची रहती है)।", "❄️ बर्फ़: आगे की सबसे नज़दीकी विरोधी गोटी के मालिक की एक बारी छूटती है।", "💣 बम: जो गोटी इस पर आए वह अड्डे पर लौटती है।", "🎲 पासा: एक और बार पासा।"]]],
+tr: [["Klasik", ["Zarda 6 gelince taş OYNAMAZ: 6 birikir ve tekrar atarsın. 6 olmayan bir sayı gelince biriken zarları sırayla oynarsın (örnek: 6 ve 3 → bir 6 bir 3; 6, 6 ve 5 → iki 6 bir 5).", "6 ile bir taşını başlangıç karesine çıkarırsın.", "Rakibin taşının üstüne gelirsen o taş üssüne döner ve bir zar hakkı daha kazanırsın.", "Yıldızlı kareler ve başlangıç kareleri güvenlidir; oradaki taş kırılmaz.", "Üst üste üç kez 6 atarsan sıran geçer.", "Bitişe tam sayı gerekir. 4 taşını da bitişe ilk ulaştıran kazanır.", "Her hamle için 30 saniyen var; üst üste 3 kez oynamayan oyundan düşer."]], ["Seri", ["Tek taşını bitişe ulaştırman yeter.", "Barikat: en az bir rakip taşı kırmadan taşların ev yoluna giremez; ana yolda bir tur daha döner."]], ["Eşyalı", ["Klasik kurallar geçerlidir; tahtada eşya kareleri vardır.", "🌀 Kapı: taşın 16 kare ilerideki yıldızlı kareye ışınlanır.", "🚀 Füze: ilerideki en yakın rakip taşı üssüne döner (güvenli karedeki taş korunur).", "❄️ Buz: ilerideki en yakın rakip taşının sahibi bir tur atlar.", "💣 Bomba: üstüne gelen taşın üssüne döner.", "🎲 Zar: bir zar hakkı daha kazanırsın."]]],
+en: [["Classic", ["A 6 does NOT move a token: it is banked and you roll again. When a non-6 comes up you play the banked dice one by one (e.g. 6 and 3 → one 6 and one 3; 6, 6 and 5 → two 6s and one 5).", "A 6 brings a token to its start square.", "Land on an opponent token to send it back to base and win another roll.", "Star squares and start squares are safe; tokens there cannot be captured.", "Three 6s in a row end your turn.", "An exact roll is needed to finish. The first to bring all 4 tokens home wins.", "You have 30 seconds per move; missing 3 turns in a row removes you."]], ["Quick", ["Bringing one token home is enough.", "Barrier: until you capture an opponent token your tokens cannot enter the home lane; they go around again."]], ["Items", ["Classic rules apply; the board has item squares.", "🌀 Portal: your token jumps to the star square 16 squares ahead.", "🚀 Rocket: the nearest opponent token ahead goes back to base (tokens on safe squares are protected).", "❄️ Ice: the owner of the nearest opponent token ahead skips a turn.", "💣 Bomb: the token that lands on it goes back to base.", "🎲 Dice: you win another roll."]]],
+ar: [["كلاسيكي", ["الرقم 6 لا يُحرّك حجرًا: يُحفظ وترمي مرة أخرى. وعند ظهور رقم غير 6 تلعب النرد المحفوظ واحدًا تلو الآخر (مثال: 6 و3 ← ستة واحدة وثلاثة واحدة؛ 6 و6 و5 ← ستّتان وخمسة).", "الرقم 6 يُخرج حجرًا إلى مربع البداية.", "إذا وقفت على حجر خصم يعود إلى قاعدته وتحصل على رمية إضافية.", "مربعات النجمة ومربعات البداية آمنة؛ لا يؤكل الحجر فيها.", "إذا رميت 6 ثلاث مرات متتالية ينتقل دورك.", "يلزم رقم مطابق للوصول. أول من يوصل أحجاره الأربعة يفوز.", "لديك 30 ثانية لكل حركة؛ من لا يلعب 3 مرات متتالية يخرج."]], ["سريع", ["يكفي إيصال حجر واحد إلى النهاية.", "الحاجز: لا تدخل أحجارك مسار البيت قبل أن تأكل حجرًا للخصم؛ تدور دورة أخرى."]], ["أدوات", ["تُطبَّق القواعد الكلاسيكية مع مربعات أدوات على اللوحة.", "🌀 البوابة: ينتقل حجرك إلى مربع النجمة بعد 16 مربعًا.", "🚀 الصاروخ: أقرب حجر للخصم أمامك يعود إلى قاعدته (الحجر في مربع آمن محمي).", "❄️ الجليد: صاحب أقرب حجر للخصم أمامك يفوته دور.", "💣 القنبلة: الحجر الذي يقف عليها يعود إلى قاعدته.", "🎲 النرد: تحصل على رمية إضافية."]]],
+hi: [["क्लासिक", ["6 से गोटी नहीं चलती: वह जमा हो जाती है और आप दोबारा पासा फेंकते हैं। जब 6 के अलावा कोई संख्या आती है, तब जमा पासे एक-एक करके चलते हैं (उदाहरण: 6 और 3 → एक 6 और एक 3; 6, 6 और 5 → दो 6 और एक 5)।", "6 से एक गोटी शुरुआती खाने पर आती है।", "विरोधी की गोटी पर पहुँचें तो वह अड्डे पर लौटती है और आपको एक और पासा मिलता है।", "तारे वाले और शुरुआती खाने सुरक्षित हैं; वहाँ गोटी नहीं कटती।", "लगातार तीन बार 6 आने पर बारी चली जाती है।", "घर पहुँचने के लिए सटीक अंक चाहिए। जो चारों गोटियाँ पहले पहुँचाए वह जीतता है।", "हर चाल के लिए 30 सेकंड; लगातार 3 बार न खेलने पर खिलाड़ी बाहर।"]], ["क्विक", ["एक गोटी घर पहुँचाना काफ़ी है।", "बैरियर: विरोधी की गोटी काटे बिना आपकी गोटियाँ घर की गली में नहीं जा सकतीं; एक चक्कर और लगाती हैं।"]], ["आइटम", ["क्लासिक नियम लागू हैं; बोर्ड पर आइटम वाले खाने हैं।", "🌀 पोर्टल: गोटी 16 खाने आगे तारे वाले खाने पर पहुँचती है।", "🚀 रॉकेट: आगे की सबसे नज़दीकी विरोधी गोटी अड्डे पर लौटती है (सुरक्षित खाने की गोटी बची रहती है)।", "❄️ बर्फ़: आगे की सबसे नज़दीकी विरोधी गोटी के मालिक की एक बारी छूटती है।", "💣 बम: जो गोटी इस पर आए वह अड्डे पर लौटती है।", "🎲 पासा: एक और बार पासा।"]]],
 };
 
 const LANG = LANGS[app.dataset.lang] ? app.dataset.lang : 'tr';
@@ -353,7 +372,7 @@ function diceTo(v, spins) {
   const ny = ty + 360 * (Math.ceil((dAy - ty) / 360) + spins + 1);
   dAx = nx; dAy = ny;
   const c = $('cube');
-  c.style.transition = 'transform ' + (0.55 + spins * 0.25) + 's cubic-bezier(.15,.85,.25,1)';
+  c.style.transition = 'transform ' + (0.42 + spins * 0.18) + 's cubic-bezier(.15,.85,.25,1)';
   c.style.transform = 'rotateX(' + nx + 'deg) rotateY(' + ny + 'deg)';
 }
 function diceSet(v) { // animasyonsuz
@@ -363,7 +382,7 @@ function diceSet(v) { // animasyonsuz
 }
 function diceSpin() { // sunucu yanıtı beklenirken
   dAx += 540; dAy += 720;
-  const c = $('cube'); c.style.transition = 'transform .9s linear'; c.style.transform = 'rotateX(' + dAx + 'deg) rotateY(' + dAy + 'deg)';
+  const c = $('cube'); c.style.transition = 'transform .6s linear'; c.style.transform = 'rotateX(' + dAx + 'deg) rotateY(' + dAy + 'deg)';
 }
 
 // ---------- durum ----------
@@ -594,7 +613,7 @@ function targetOf(seat, from, dice) {
   if (from <= 50 && to > 50 && G.mode === 'quick' && !((G.kills && G.kills[seat]) > 0)) return to >= 52 ? to - 52 : null;
   return to <= 56 ? to : null;
 }
-function hop(e) { const s = e.querySelector('svg'); if (s) s.animate([{ transform: 'translateY(0) scale(1)' }, { transform: 'translateY(-42%) scale(1.2)' }, { transform: 'translateY(0) scale(.92)' }, { transform: 'translateY(0) scale(1)' }], { duration: 150 }); }
+function hop(e) { const s = e.querySelector('svg'); if (s) s.animate([{ transform: 'translateY(0) scale(1)' }, { transform: 'translateY(-42%) scale(1.2)' }, { transform: 'translateY(0) scale(.92)' }, { transform: 'translateY(0) scale(1)' }], { duration: 110 }); }
 function renderTokens() {
   const bd = $('bd'), gen = ++walkGen;
   const me = G.me && G.me.joined ? G.me : null;
@@ -628,7 +647,7 @@ function renderTokens() {
       const stepper = () => {
         if (gen !== walkGen) return;
         cur += 1; shown[id] = cur; place(e, p.seat, cur, i, cur === pr ? stackOf[id] : null); hop(e);
-        if (cur < pr) setTimeout(stepper, 150);
+        if (cur < pr) setTimeout(stepper, 90);
         else { const c1 = center(p.seat, pr, i); ripple(c1[0], c1[1], COL[p.seat]); if (pr === 56) { burst(c1[0], c1[1], '#ffd54f', 24); confetti(50); } }
       };
       stepper();
@@ -656,23 +675,61 @@ function renderCtl() {
   const myTurn = !!(me && G.status === 'playing' && G.turnSeat === me.seat);
   const dice = $('dice'), st = $('st');
   const lastLog = (G.log || []).slice().reverse().find((e) => e.dice);
-  const rolled = G.dice != null ? G.dice : (lastLog ? lastLog.dice : null);
-  const roller = G.dice != null ? G.turnSeat : (lastLog ? lastLog.seat : G.turnSeat);
+  // Biriken zarlar: 6 atınca oynatılmıyor, kuyruğa yazılıyor. Kuyruğun başı oynanacak değer.
+  const pending = Array.isArray(G.pending) ? G.pending : [];
+  // Gösterilecek sayı: oynanacak değer varsa o, yoksa son atılan.
+  const rolled = G.dice != null ? G.dice : (pending.length ? pending[0] : (lastLog ? lastLog.dice : null));
+  const roller = G.dice != null || pending.length ? G.turnSeat : (lastLog ? lastLog.seat : G.turnSeat);
   dice.style.setProperty('--dc', COL[roller] || '#c98a08');
   if (rolled) {
-    // Zar yalnızca atış anında (yeni zar ya da "hamle yok" kaydı) döner; hamle sonrası aynı yüz kalır.
-    const fresh = (G.dice != null && G.seq !== lastRollSeq) || (lastLog && (lastLog.event === 'no_move' || lastLog.event === 'three_sixes') && lastLog.n > lastRollSeq);
+    // Zar yalnızca atış anında döner; hamle sonrası aynı yüz kalır.
+    const fresh = (G.dice != null && G.seq !== lastRollSeq)
+      || (lastLog && (lastLog.event === 'no_move' || lastLog.event === 'three_sixes' || lastLog.event === 'six_again') && lastLog.n > lastRollSeq);
     if (!diceReady) diceSet(rolled);
     else if (fresh) diceTo(rolled, 1);
     if (fresh || !diceReady) lastRollSeq = Math.max(G.seq, lastRollSeq);
     diceReady = true;
-  } else if (!diceReady) { diceSet(1); diceReady = true; }
+    showNum(rolled, fresh);
+  } else if (!diceReady) { diceSet(1); diceReady = true; hideNum(); }
+
+  // Kuyruk şeridi: oynanmış değerler üstü çizili, oynanacak olan vurgulu.
+  // Tek değer varsa şerit gösterilmiyor — rozet yeterli, ekran kalabalıklaşmasın.
+  const dq = $('dq');
+  dq.textContent = '';
+  if (pending.length > 1 || (pending.length === 1 && G.dice == null)) {
+    for (let i = 0; i < pending.length; i++) {
+      dq.appendChild(el('i', i === 0 && G.dice != null ? 'now' : '', String(pending[i])));
+    }
+  }
+
   dice.className = myTurn && G.dice == null ? 'can' : '';
   st.dir = RTL ? 'rtl' : 'ltr';
   st.className = myTurn ? 'me' : '';
   const cur = G.players.find((p) => p.seat === G.turnSeat);
-  st.textContent = G.status !== 'playing' ? '' : myTurn ? (G.dice == null ? t('yourRoll') : t('yourMove')) : me ? t('turnOf', { n: nameOf(cur) }) : t('watching') + ' · ' + t('turnOf', { n: nameOf(cur) });
+  let text = '';
+  if (G.status === 'playing') {
+    if (myTurn) {
+      // 6 atıldı ve oynanacak değer yok → tekrar atacak.
+      if (G.dice == null && pending.length) text = t('sixAgain');
+      else if (G.dice == null) text = t('yourRoll');
+      else if (pending.length > 1) text = t('playQueue', { n: pending.length, d: pending.join(' + ') });
+      else text = t('yourMove');
+    } else {
+      text = me ? t('turnOf', { n: nameOf(cur) }) : t('watching') + ' · ' + t('turnOf', { n: nameOf(cur) });
+    }
+  }
+  st.textContent = text;
 }
+
+/** Atılan sayıyı zarın köşesindeki rozette gösterir ve SONRAKİ ATIŞA KADAR tutar.
+ *  Sahibinin şikayeti buydu: küp dönüp duruyor ama sonucu okuyamıyorsun. */
+function showNum(v, pop) {
+  const n = $('dnum');
+  n.textContent = String(v);
+  n.classList.add('on');
+  if (pop) { n.classList.remove('pop'); void n.offsetWidth; n.classList.add('pop'); }
+}
+function hideNum() { const n = $('dnum'); n.classList.remove('on', 'pop'); n.textContent = ''; }
 async function rollDice() {
   const me = G && G.me && G.me.joined ? G.me : null;
   if (!me || busy || G.status !== 'playing' || G.turnSeat !== me.seat || G.dice != null) return;
@@ -681,8 +738,17 @@ async function rollDice() {
   diceSpin();
   post({ type: 'haptic' });
   const d = await act(() => api('POST', '/api/games/' + gid + '/roll'));
-  // Tek hamle varsa kendiliğinden oynanır (seçilecek bir şey yok).
-  if (d && !d.skipped && d.legal && d.legal.length === 1) setTimeout(() => moveToken(me.seat, d.legal[0]), 900);
+  if (!d) return;
+  // 6 geldi: taş oynamıyor, oyuncu tekrar atacak. Sonucu okuması için zarı bekletiyoruz.
+  if (d.rollAgain) { post({ type: 'haptic' }); return; }
+  // Tek hamle varsa kendiliğinden oynanır (seçilecek bir şey yok). Gecikme, zarın
+  // oturmasını VE sayının okunmasını bekliyor: sahibinin "zar sonucu görünmüyor"
+  // şikayetinin bir sebebi, tek hamlenin zar oturmadan oynanıp gözü tahtaya kaçırmasıydı.
+  // Biriken zar varken otomatik oynamıyoruz: hangi değeri hangi taşa vereceğini oyuncu seçer.
+  const queued = Array.isArray(d.pending) && d.pending.length > 1;
+  if (!d.skipped && !queued && d.legal && d.legal.length === 1) {
+    setTimeout(() => moveToken(me.seat, d.legal[0]), 1250);
+  }
 }
 function moveToken(seat, tok) {
   const me = G && G.me && G.me.joined ? G.me : null;
@@ -700,6 +766,9 @@ function events(was) {
   for (const e of G.log || []) {
     if (!(e.n > since)) continue;
     if (e.event === 'three_sixes') msgs.push(t('eSix3', { n: name(e.seat) }));
+    // 6 atan oyuncu taş oynatmıyor, tekrar atıyor. İzleyenler sıranın neden hâlâ onda
+    // olduğunu anlasın diye bildiriliyor.
+    else if (e.event === 'six_again') msgs.push(t('eSixAgain', { n: name(e.seat) }));
     else if (e.event === 'no_move') msgs.push(t('eNoMove', { n: name(e.seat) }));
     else if (e.event === 'frozen_skip') msgs.push(t('eFrozen', { n: name(e.seat) }));
     else if (e.event === 'forfeit') msgs.push(t('eLeft', { n: name(e.seat) }));
@@ -736,6 +805,7 @@ function render(was) {
   if (G && G.status === 'cancelled') { if (was && was.id === G.id && was.status !== 'cancelled') toast(t('cancelled')); G = null; }
   if (modalKind === 'result' && G) closeModal();
   prevTurnMine = false; diceReady = false; lastRollSeq = -1; builtFor = null;
+  hideNum(); $('dq').textContent = '';
   renderLobby();
 }
 setInterval(() => {

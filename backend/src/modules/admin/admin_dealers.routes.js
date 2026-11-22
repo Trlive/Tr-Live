@@ -1,19 +1,39 @@
 // Yönetici paneli — bayi işlemleri.
 // Ortak yardımcılar ve import'lar: admin.shared.js
 import { Router } from 'express';
-import { approveTopupRequest, assertUser, auditStaff, bigAmount, dealerSell, fail, idempotent, oneOf, query, rejectTopupRequest, requireSuperAdmin, text, topupRequestView, tx, uuid } from './admin.shared.js';
+import { approveTopupRequest, assertUser, auditStaff, bigAmount, dealerSell, fail, idempotent, oneOf, query, rejectTopupRequest, requireSuperAdmin, setDealerParent, text, topupRequestView, tx, uuid } from './admin.shared.js';
 
 export const router = Router();
 
 // ---------------- Bayi (yalnızca yönetici) ----------------
 router.get('/dealers', requireSuperAdmin, async (req, res) => {
   const r = await query(
-    `SELECT d.*, u.username AS owner_username FROM dealer_accounts d LEFT JOIN users u ON u.id = d.owner_user_id ORDER BY d.created_at DESC LIMIT 200`,
+    `SELECT d.*, u.username AS owner_username, p.name AS parent_name
+       FROM dealer_accounts d
+       LEFT JOIN users u ON u.id = d.owner_user_id
+       LEFT JOIN dealer_accounts p ON p.id = d.parent_dealer_id
+      ORDER BY d.created_at DESC LIMIT 200`,
   );
   res.json({ dealers: r.rows.map((d) => ({
     id: d.id, name: d.name, ownerUserId: d.owner_user_id, ownerUsername: d.owner_username,
     coinBalance: String(d.coin_balance), commissionBps: d.commission_bps, isActive: d.is_active,
+    // Ana bayi / alt bayi: parentDealerId doluysa bu bir ALT bayidir.
+    parentDealerId: d.parent_dealer_id, parentName: d.parent_name,
+    kind: d.parent_dealer_id ? 'sub' : 'main',
   })) });
+});
+
+/// Bir bayiyi alt bayi yapar ya da ana bayi konumuna döndürür.
+///
+/// `parentDealerId: null` → bağı kaldırır (bayi yeniden ana bayi olur).
+/// En fazla iki kat kuralı setDealerParent içinde zorlanır.
+router.post('/dealers/:dealerId/parent', requireSuperAdmin, async (req, res) => {
+  const dealerId = uuid(req.params.dealerId, 'Bayi');
+  const raw = req.body?.parentDealerId;
+  const parentId = raw === null || raw === undefined || raw === '' ? null : uuid(raw, 'Ana bayi');
+  const out = await tx((c) => setDealerParent(c, { dealerId, parentId }));
+  await auditStaff(req, 'dealer_set_parent', { dealerId, parentId });
+  res.json(out);
 });
 
 router.post('/dealers', requireSuperAdmin, async (req, res) => {

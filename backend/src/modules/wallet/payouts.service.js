@@ -7,10 +7,14 @@ import { evaluatePay, agencyPrim, payLevelJson } from '../games/paytable.rules.j
 import { grantLevelRewards } from '../agencies/agency_rewards.service.js';
 import { creditPeriod } from './usd_wallet.service.js';
 import { getConfig } from '../system/app_config.service.js';
+import { evaluateWeightedSalary, weightedJson } from './salary_weights.rules.js';
 
 export const loadConfig = loadPayConfig;
 
 export const configJson = (cfg) => ({
+  // settings zaten salaryWeights ve salaryWeightedEnabled'ı taşıyor; payout_periods.config
+  // bu nesneyi dondurduğu için kapanmış bir dönemin kuralları sonradan değişmiyor.
+  // Sahibinin şartı: "ağırlık değişikliği yalnızca YENİ dönemlere uygulanır."
   settings: cfg.settings,
   payLevels: cfg.levels.map(payLevelJson),
   videoPayLevels: (cfg.videoLevels ?? cfg.levels).map(payLevelJson),
@@ -69,6 +73,19 @@ export const hostStatementJson = (x) => ({
   method: x.pay_method ?? null, consumedDiamonds: String(x.consumed_diamonds ?? 0), rewards: x.rewards ?? {},
   baseSalaryCents: String(x.base_salary_cents), penaltyApplied: x.penalty_applied, salaryCents: String(x.salary_cents),
   eventsOk: x.events_ok, status: x.status, paidAt: x.paid_at, payNote: x.pay_note ?? null,
+  // Ağırlıklı hak ediş. earnedBps null ise o dönemde bu hesap yapılmadı (sözleşme kademesi
+  // atanmamış ya da dönem bu sürümden önce kapanmış) — 0 ile karıştırılmamalı.
+  weighted: x.earned_bps == null ? null : {
+    contractTier: x.contract_tier ?? null,
+    baseCents: String(x.base_tier_cents ?? 0),
+    earnedBps: x.earned_bps,
+    earnedCents: String(x.weighted_cents ?? 0),
+    required: { days: x.required_days ?? 0, seconds: Number(x.required_seconds ?? 0), diamonds: String(x.required_diamonds ?? 0) },
+    diamondTargetOk: x.diamond_target_ok,
+    parts: Array.isArray(x.weight_parts) ? x.weight_parts : [],
+  },
+  // Maaşı hangi hesap belirledi: 'weighted' ya da 'tier' (eski basamak hesabı).
+  salaryBasis: x.salary_basis ?? 'tier',
 });
 export const agencyStatementJson = (x) => ({
   id: x.id, periodKey: x.period_key, startsAt: x.starts_at, endsAt: x.ends_at, agencyId: x.agency_id, agencyName: x.agency_name,
@@ -113,7 +130,7 @@ export async function closePeriod({ adminId, periodKey, force = false }) {
 
     // ---- Yayıncılar ----
     const hosts = (await c.query(
-      `SELECT b.user_id, b.agency_id, b.approved_at, b.pay_method_pref FROM broadcasters b
+      `SELECT b.user_id, b.agency_id, b.approved_at, b.pay_method_pref, b.contract_tier FROM broadcasters b
        WHERE b.status = 'approved' AND b.agency_id IS NOT NULL ORDER BY b.user_id`,
     )).rows;
     const metrics = await hostPeriodMetrics(hosts, b.start, b.end, cfg.settings.validDayMinutes, run, videoRules(cfg.settings));
@@ -128,8 +145,34 @@ export async function closePeriod({ adminId, periodKey, force = false }) {
       const evOk = !cfg.settings.requireOfficialEvents || (ev.get(h.user_id) ?? 0) >= cfg.settings.minEventCount;
       // Sesli ve görüntülü ayrı hesaplanır (ayar açıksa); e.salaryCents iki tarafın toplamıdır.
       let e = evaluateHost(cfg, m, { pref: h.pay_method_pref, eventsOk: evOk, balance });
+
+      // ---- Ağırlıklı hak ediş (sahibinin maaş tasarımı) ----
+      //
+      // Temel maaş yayıncının SÖZLEŞME kademesinden geliyor; koşulları ne oranda
+      // tamamladıysa o oranda hak ediyor. Sözleşme kademesi yoksa null döner ve o yayıncı
+      // için ağırlıklı hesap yazılmaz (uydurma temel maaş üretmek yerine).
+      const tier = h.contract_tier == null ? null : cfg.levels.find((l) => l.level === h.contract_tier) ?? null;
+      const w = evaluateWeightedSalary({
+        tier,
+        metrics: { validDays: m.validDays, seconds: m.seconds, diamonds: m.diamonds },
+        eventsOk: evOk,
+        weights: cfg.settings.salaryWeights,
+      });
+
+      // Hangi hesap ÖDEMEYE esas: bayrak kapalıyken eski basamak hesabı ödüyor, ağırlıklı
+      // hesap yalnızca yazılıp gösteriliyor. Böylece sahibi iki sayıyı gerçek veri üzerinde
+      // karşılaştırdıktan sonra geçiş yapıyor. Ağırlıklı hesap yoksa (sözleşme kademesi
+      // atanmamış) bayrak açık olsa da eski hesap ödüyor: maaşsız bırakmak kabul edilemez.
+      const useWeighted = cfg.settings.salaryWeightedEnabled === true && w !== null;
+
+      // Yöntem 2 (elmas bakiyesini maaşa çevirme) YALNIZCA eski hesap öderken çalışır.
+      //
+      // Ağırlıklı hesapta maaş, sözleşme kademesinden geliyor; elmasla "maaş satın almak"
+      // diye bir adım yok. İkisi birlikte çalışsaydı yayıncının elması düşülür, maaşı ise
+      // ağırlıklı tutardan ödenirdi — yani elmasını alıp karşılığını vermemiş olurduk.
+      // Yayıncı elmasını tutar, gelirini ayrıca bozdurmaya devam edebilir.
       let consumed = 0n;
-      if (e.method === 2) {
+      if (!useWeighted && e.method === 2) {
         const r = await c.query(
           `UPDATE users SET diamonds = diamonds - $2, updated_at = NOW() WHERE id = $1 AND diamonds >= $2 RETURNING diamonds`,
           [h.user_id, e.consume.toString()],
@@ -146,19 +189,32 @@ export async function closePeriod({ adminId, periodKey, force = false }) {
       }
       const rewards = e.level ? await grantLevelRewards(c, h.user_id, e.level) : {};
       if (Object.keys(rewards).length) rewarded.push(h.user_id);
-      totalSalary += e.salaryCents;
+
+      const paidCents = useWeighted ? w.earnedCents : e.salaryCents;
+
+      totalSalary += paidCents;
       hostCount += 1;
-      if (e.salaryCents > 0n) paidHosts.push({ userId: h.user_id, cents: e.salaryCents });
+      if (paidCents > 0n) paidHosts.push({ userId: h.user_id, cents: paidCents });
       await c.query(
         `INSERT INTO host_statements(period_id, user_id, agency_id, seconds, diamonds, tier_level, base_salary_cents, penalty_applied, salary_cents, events_ok,
            valid_days, game_seconds, balance_diamonds, level1, level2, salary1_cents, salary2_cents, pay_method, consumed_diamonds, rewards,
-           audio_seconds, audio_diamonds, audio_cents, video_seconds, video_diamonds, video_level, video_cents, video_shortfall)
-         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28)`,
-        [p.id, h.user_id, h.agency_id, m.seconds, m.diamonds.toString(), e.level?.level ?? null, e.baseCents.toString(), e.penalty, e.salaryCents.toString(), evOk,
+           audio_seconds, audio_diamonds, audio_cents, video_seconds, video_diamonds, video_level, video_cents, video_shortfall,
+           contract_tier, base_tier_cents, required_days, required_seconds, required_diamonds, diamond_target_ok,
+           earned_bps, weighted_cents, weight_parts, salary_basis)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,
+           $29,$30,$31,$32,$33,$34,$35,$36,$37,$38)`,
+        [p.id, h.user_id, h.agency_id, m.seconds, m.diamonds.toString(), e.level?.level ?? null, e.baseCents.toString(), e.penalty, paidCents.toString(), evOk,
           m.validDays, m.gameSeconds, balance.toString(), e.level1?.level ?? null, e.level2?.level ?? null, e.salary1.toString(), e.salary2.toString(),
           e.method, consumed.toString(), JSON.stringify(rewards),
           e.split ? m.audio.seconds : m.seconds, (e.split ? m.audio.diamonds : m.diamonds).toString(), e.audioCents.toString(),
-          e.split ? m.video.seconds : 0, (e.split ? m.video.diamonds : 0n).toString(), e.video?.level?.level ?? null, e.videoCents.toString(), e.video?.shortfall === true],
+          e.split ? m.video.seconds : 0, (e.split ? m.video.diamonds : 0n).toString(), e.video?.level?.level ?? null, e.videoCents.toString(), e.video?.shortfall === true,
+          // Ağırlıklı hesap. Hepsi NULL olabilir: sözleşme kademesi atanmamış yayıncıda
+          // ağırlıklı hesap yapılmadı demek. 0 yazmak "hak etmedi" ile karışırdı.
+          h.contract_tier ?? null, w ? w.baseCents.toString() : null,
+          w ? w.required.days : null, w ? w.required.seconds : null, w ? w.required.diamonds.toString() : null,
+          w ? w.diamondTargetOk : null,
+          w ? w.earnedBps : null, w ? w.earnedCents.toString() : null, w ? JSON.stringify(w.parts) : null,
+          useWeighted ? 'weighted' : 'tier'],
       );
     }
 

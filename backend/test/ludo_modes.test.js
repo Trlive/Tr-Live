@@ -19,8 +19,13 @@ test('modlar: varsayılan klasik; bilinmeyen mod klasik sayılır; eski durum (m
   assert.equal(game('xyz').mode, 'classic');
   const old = game('classic'); delete old.mode; delete old.kills; delete old.frozen; delete old.seq;
   assert.equal(ludo.modeOf(old), 'classic');
-  const r = ludo.roll(old, 0, seq(6), T0);
-  const m = ludo.move(r.state, 0, 0, T0);
+  // 6 artık oynatmıyor, biriktiriyor: kuyruk 6 olmayan bir değerle kapanır.
+  // Eski durumda `pending` alanı hiç yok; kurallar bunu da taşımalı.
+  const rng = seq(6, 1);
+  let cur = ludo.roll(old, 0, rng, T0).state;
+  assert.equal(cur.dice, null, '6 oynanmıyor');
+  cur = ludo.roll(cur, 0, rng, T0).state;         // 1 → kuyruk kapandı: [6, 1]
+  const m = ludo.move(cur, 0, 0, T0);
   assert.equal(m.state.tokens[0][0], 0, 'eski durumla oyun sürer');
   assert.ok(m.state.seq > 0);
 });
@@ -163,7 +168,16 @@ test('rastgele oyunlar: üç modda da oyun biter ve taş konumları geçerlidir'
         const seat = st.turn;
         const r = ludo.roll(st, seat, rng, T0);
         st = r.state;
-        if (!r.skipped) st = ludo.move(st, seat, r.legal[Math.floor(rng() * r.legal.length)], T0).state;
+        // 6 geldi: taş oynatılmıyor, oyuncu tekrar atıyor.
+        if (r.rollAgain) continue;
+        if (!r.skipped) {
+          // Biriken zarların hepsi oynanır (en çok üç değer).
+          for (let g2 = 0; g2 < 4 && st.dice !== null && st.turn === seat && st.winnerSeat === null; g2++) {
+            const legal = ludo.legalMoves(st, seat, st.dice);
+            if (!legal.length) break;
+            st = ludo.move(st, seat, legal[Math.floor(rng() * legal.length)], T0).state;
+          }
+        }
         for (const p of st.players) assert.ok(st.tokens[p.seat].every((q) => Number.isInteger(q) && q >= -1 && q <= ludo.FINISH));
         assert.ok(st.winnerSeat !== null || st.players.some((p) => p.seat === st.turn));
       }

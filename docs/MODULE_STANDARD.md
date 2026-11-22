@@ -432,3 +432,96 @@ göndermek, son turlarda tam olarak yaptığımız hatadır.
 Doğru yol, dosyayı taşımak değil **durumu bir denetleyiciye (controller) çıkarmaktır**:
 oda durumu + olay işleme ayrı bir sınıfa alınır, ekran yalnızca çizer. Bu ayrı ve büyük
 bir iştir; `flutter analyze` çalıştırılabilen bir ortamda, adım adım yapılmalıdır.
+
+## Uygulama içinde açılan panel sayfaları
+
+Ajans Merkezi (`/yonetim/m/agency/`) ve Yayıncı Merkezi (`/yonetim/m/host/`) birer React
+panel sayfası ve uygulama onları WebView'de açıyor. Oradaki kurallar masaüstü panelinden
+FARKLI:
+
+- **`window.confirm` / `window.alert` / `window.prompt` YASAK.** Android'in kendi kutusu
+  açılıyor ve başlığında sunucunun adresi yazıyor:
+  `"https://130-61-222-48.sslip.io" adresindeki sayfada şunlar belirtiliyor:`
+  Kullanıcıya altyapı adresi gösterilmez. Yerine `shared/components/confirm.tsx` →
+  `useConfirm()`; `ask()` onay, `askText()` metin ister, `confirmNode` render edilir.
+- Bu sayfaların import ettiği **her** dosya aynı kurala tabi. `backend/tools/webview_dialogs.mjs`
+  giriş sayfalarından import zincirini izleyip denetliyor, yani paylaşılan bir dosyaya
+  eklenen kutu da yakalanıyor. `confirmTyped` bu yüzden `kit.tsx`'ten
+  `modules/admin/shared/confirm-typed.ts` dosyasına taşındı.
+- Masaüstü yönetim paneli bu kuralın dışında: adresi kullanıcı kendisi yazdı ve adres
+  çubuğunda görüyor.
+
+## Nullable yardımcılar
+
+`mapOf(x)` → `Map<String, dynamic>?`. `mapOf(x)['k']` yazmak `flutter analyze`'da **hata**
+("receiver can be null") ve CI'da derleme durur. Doğrusu `mapOf(x)?['k']` ya da
+`(mapOf(x) ?? const <String, dynamic>{})['k']`. `mobile/tools/dart_check.py` bu kalıbı
+denetliyor. `listOf(x)` nullable DEĞİL, `List<Map<String, dynamic>>` döner — elemanlarını
+tekrar `mapOf`'tan geçirmek gereksiz ve nullable yapar.
+
+## Ortak nesnelerin yöntemleri
+
+`hub.sendToUser(userId, payload)` — başka bir ad yok. `hub.toUser(...)` gibi var olmayan bir
+yöntem çağırmak sözdizimi olarak doğru, import olarak doğru, ama çalışma anında
+`TypeError: hub.toUser is not a function` atar ve kullanıcı "Sunucu hatası" görür.
+`backend/tools/singleton_methods.mjs` bu sınıfı denetliyor; yeni bir ortak nesne eklenirse
+`SINGLETONS` listesine eklenmeli.
+
+## Göçleri yayından önce GERÇEK PostgreSQL'de dene
+
+Bu ortamda npm paketleri taklit ama **PostgreSQL 16 gerçekten kurulu**. Yani SQL hatalarını
+CI'ı beklemeden görebiliyoruz:
+
+```sh
+su postgres -c "/usr/lib/postgresql/16/bin/pg_ctl -D /tmp/pg16 -l /tmp/pg.log -o '-k /tmp' start"
+export PATH=/usr/lib/postgresql/16/bin:$PATH
+psql -h /tmp -U postgres -q -c "DROP DATABASE IF EXISTS mig_test;" -c "CREATE DATABASE mig_test;"
+for f in $(ls backend/src/migrations/*.sql | sort -V); do
+  psql -h /tmp -U postgres -d mig_test -v ON_ERROR_STOP=1 -q -f "$f" || { echo "HATA $f"; break; }
+done
+```
+
+Veri dizini yoksa `initdb` (root olarak çalıştırılamaz, `su postgres` ile). `sort -V` şart:
+`sort` ile 105, 109'dan sonra gelir ve göçler yanlış sırada uygulanır.
+
+Aynı şekilde paylaşılan SQL metinleri de denenebilir — örneğin `USER_PUBLIC_COLUMNS`
+değiştirildiğinde, o SELECT'i `LIMIT 0` ile koşturmak sütun adı hatasını anında gösterir.
+Bu, her kullanıcı ucunu birden bozabilecek bir değişiklik olduğu için değerli.
+
+**Bilinen boşluk:** yalnızca ender yollarda (bazı yönetim raporları) kullanılan SQL metinleri
+e2e tarafından hiç çalıştırılmıyor; oradaki bir sütun hatası yalnızca o rapor açılınca
+görülür. Hepsini otomatik koşturan bir araç henüz yok.
+
+## Para hesabı yazarken
+
+- **Ondalık (float) yok.** Oranlar on binde (bps) tam sayı tutulur. `0.1 + 0.2 !== 0.3`
+  olduğu bir dilde maaş hesaplanmaz.
+- **Bölme tek yerde, en sonda.** Koşul başına bölünürse her koşulda yuvarlama hatası
+  birikir. `base × Σ(ağırlık × oran) / 10000²` biçiminde tek bölme yapılır.
+- **Yuvarlama aşağı.** Yukarı yuvarlamak, hak edilmemiş 1 senti ödemek ve defter
+  mutabakatında fark bırakmak olur.
+- **Saf fonksiyon.** Hesap, veritabanı ve istekten ayrı bir dosyada durur; girdi verilir,
+  sonuç döner. `salary_weights.rules.js` böyle: 25 testi veritabanı olmadan koşuyor.
+- **Hesaplanan ama ödemeyen kat.** Yeni bir hesap, eskisinin yanında çalışıp özete yazılır;
+  hangisinin ödediğine panelden kapatılabilir bir bayrak karar verir ve bayrak KAPALI gelir.
+  Böylece iki sayı gerçek veri üzerinde karşılaştırılabilir.
+- **Hedefler donar.** Kademe tablosu sonra değişse bile geçmiş özetteki "22 günün 20'si"
+  anlamını korumalı: gerekli gün/saat/elmas, özetin kendisine yazılır.
+- **Bir koşul iki yerde yazılmaz.** Maaşın ödenebilirlik koşulu iki sorguda ayrı ayrı
+  yazılıydı; ayrışsalar özet "ödendi" olup para yatmayacaktı. Tek kaynak: `SALARY_PAYABLE_SQL`.
+
+## "Bir kere çalışmalı" nasıl garanti edilir
+
+Kodla edilemez: sunucu iki örnekte çalışabilir, işlem yarıda kesilebilir, zamanlanmış iş iki
+kez tetiklenebilir. Güvence veritabanında olur. Maaş aktarımında üç kat var:
+
+1. **Tekil anahtarlı çalışma satırı.** `INSERT ... ON CONFLICT DO NOTHING RETURNING`:
+   çakışmada sıfır satır döner, iş hiç başlamaz. Satır işle AYNI transaction içinde eklenir
+   — iş geri alınırsa satır da gider, yani yarım kalan bir çalışma dönemi sonsuza kadar
+   kilitlemez.
+2. **Durum koşulu.** Yalnızca `status = 'pending'` satırlar ödenip `'paid'` yapılır; aynı
+   satır ikinci kez seçilemez.
+3. **Danışma kilidi** (`pg_advisory_xact_lock`): iki örnek aynı anda girmesin.
+
+Üçünden biri tek başına yeterdi. Para işinde, birinin varsayımı yanlış çıktığında diğerinin
+tutması fazlalık değildir.

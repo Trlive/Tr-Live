@@ -8,11 +8,14 @@ import { Badge, Card, Empty, ErrorBox, Loading, PageHeader, StatCard, inputCls, 
 import { ActionMsg, Field, Tabs, btnGhost, btnOk, btnDangerOutline, btnSmall, newKey, useAction } from "@/shared/components/kit";
 import { UserPicker, type AdminUser } from "@/modules/admin/users/user-picker";
 
-type Dealer = { id: string; name: string; ownerUserId: string | null; ownerUsername: string | null; coinBalance: string; commissionBps: number; isActive: boolean };
+type Dealer = { id: string; name: string; ownerUserId: string | null; ownerUsername: string | null; coinBalance: string; commissionBps: number; isActive: boolean;
+  // Ana bayi / Alt bayi. parentDealerId doluysa bu bir ALT bayidir. En fazla iki kat.
+  parentDealerId: string | null; parentName: string | null; kind: "main" | "sub" };
 type Tx = { id: string; type: string; coinAmount: string; description?: string | null; username?: string | null; adminUsername?: string | null; createdAt: string };
 type Req = { id: string; requestedCoins: string; packageCode: string; referenceNote?: string | null; status: string; reviewNote?: string | null; createdAt: string; reviewedAt?: string | null; dealerName?: string; username?: string };
 
-const txText: Record<string, string> = { sale: "Satış", admin_topup: "Talep onayı", credit: "Yönetici yüklemesi", usd_transfer: "Fasulye ile gelen" };
+const txText: Record<string, string> = { sale: "Satış", admin_topup: "Talep onayı", credit: "Yönetici yüklemesi", usd_transfer: "Fasulye ile gelen",
+  sub_transfer_out: "Alt bayiye aktarım", sub_transfer_in: "Ana bayiden gelen" };
 
 export default function AdminDealers() {
   const [tab, setTab] = useState<"dealers" | "requests" | "history">("dealers");
@@ -70,7 +73,7 @@ function DealerList() {
           ) : (
             <div className="space-y-3">
               {list.map((d) => (
-                <DealerRow key={d.id} d={d} open={open === d.id} onToggle={() => setOpen(open === d.id ? null : d.id)} onChanged={reload} />
+                <DealerRow key={d.id} d={d} all={list} open={open === d.id} onToggle={() => setOpen(open === d.id ? null : d.id)} onChanged={reload} />
               ))}
             </div>
           )}
@@ -121,25 +124,28 @@ function NewDealer({ onDone }: { onDone: () => void }) {
   );
 }
 
-function DealerRow({ d, open, onToggle, onChanged }: { d: Dealer; open: boolean; onToggle: () => void; onChanged: () => void }) {
+function DealerRow({ d, all, open, onToggle, onChanged }: { d: Dealer; all: Dealer[]; open: boolean; onToggle: () => void; onChanged: () => void }) {
   return (
     <div className="rounded-xl border border-[#30291e]">
       <button type="button" onClick={onToggle} className="flex w-full flex-wrap items-center gap-3 p-4 text-left">
         <div className="min-w-0 flex-1">
           <div className="font-semibold text-white">{d.name}</div>
-          <div className="text-xs text-gray-500">{d.ownerUsername ? `@${d.ownerUsername}` : "Sahibi yok"}</div>
+          <div className="text-xs text-gray-500">
+            {d.ownerUsername ? `@${d.ownerUsername}` : "Sahibi yok"}
+            {d.kind === "sub" && <span className="ml-2 text-[#d7b56d]">Alt bayi · {d.parentName ?? "?"}</span>}
+          </div>
         </div>
         <div className="text-right">
           <div className="font-semibold text-[#d7b56d]">{fmtNumber(d.coinBalance)} Coin</div>
           <Badge tone={d.isActive ? "green" : "red"}>{d.isActive ? "Aktif" : "Durduruldu"}</Badge>
         </div>
       </button>
-      {open && <DealerDetail d={d} onChanged={onChanged} />}
+      {open && <DealerDetail d={d} all={all} onChanged={onChanged} />}
     </div>
   );
 }
 
-function DealerDetail({ d, onChanged }: { d: Dealer; onChanged: () => void }) {
+function DealerDetail({ d, all, onChanged }: { d: Dealer; all: Dealer[]; onChanged: () => void }) {
   const tx = useApi<{ transactions: Tx[] }>(`/api/admin/dealers/${d.id}/transactions`);
   const { busy, msg, run } = useAction();
   const [amount, setAmount] = useState("");
@@ -173,6 +179,42 @@ function DealerDetail({ d, onChanged }: { d: Dealer; onChanged: () => void }) {
           >
             Yükle
           </button>
+        </div>
+        {/* Ana bayi / Alt bayi.
+            Seçenekler SUNUCUDAKİ kuralla aynı daraltmayı yapıyor: yalnızca kendi ebeveyni
+            olmayan (yani ana) bayiler, kendisi hariç. Bu bayinin alt bayileri varsa hiç
+            seçenek sunmuyoruz — sunucu da reddeder (en fazla iki kat). */}
+        <div className="space-y-3">
+          <Field
+            label="Ana bayi"
+            hint={
+              all.some((x) => x.parentDealerId === d.id)
+                ? "Bu bayinin alt bayileri var; kendisi alt bayi yapılamaz (en fazla iki kat)."
+                : "Boş bırakılırsa bu bayi ANA bayidir. Ana bayi, alt bayilerine kendi stoğundan Coin aktarabilir."
+            }
+          >
+            <select
+              className={inputCls}
+              value={d.parentDealerId ?? ""}
+              disabled={busy || all.some((x) => x.parentDealerId === d.id)}
+              onChange={(e) => {
+                const next = e.target.value || null;
+                void run(next ? "Ana bayi atandı." : "Ana bayi bağı kaldırıldı.", async () => {
+                  await api(`/api/admin/dealers/${d.id}/parent`, { method: "POST", body: { parentDealerId: next } });
+                  onChanged();
+                });
+              }}
+            >
+              <option value="">— Ana bayi (bağımsız) —</option>
+              {all
+                .filter((x) => x.id !== d.id && !x.parentDealerId)
+                .map((x) => (
+                  <option key={x.id} value={x.id}>
+                    {x.name}
+                  </option>
+                ))}
+            </select>
+          </Field>
         </div>
         <div className="space-y-3">
           <Field label="Bayi adı">

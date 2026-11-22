@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { Plus, RefreshCw, Save, Trash2 } from "lucide-react";
 import { api, fmtMoney } from "@/core/api/api";
 import { Card, inputCls, tableCls, tableWrap, tdCls, thCls } from "@/shared/components/ui";
-import { ActionMsg, Tabs, btnGhost, btnSmall, confirmTyped, useAction } from "@/shared/components/kit";
+import { ActionMsg, Tabs, btnGhost, btnSmall, useAction } from "@/shared/components/kit";
+import { confirmTyped } from "@/modules/admin/shared/confirm-typed";
 
 export type PayLevel = {
   level: number; days: number; hours: number; gameHours: number; diamonds: string;

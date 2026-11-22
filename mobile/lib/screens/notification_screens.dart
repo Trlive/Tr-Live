@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../hybrid/sdui/v2/sdui_screen_view.dart';
 import '../services/api.dart';
 import '../services/inbox_service.dart';
 import '../services/push_service.dart';
@@ -128,11 +129,19 @@ class _NotificationsPageState extends State<NotificationsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final items = _items;
     return Scaffold(
       backgroundColor: Pal.bg,
       appBar: AppBar(backgroundColor: Pal.bg, title: const Text('Bildirimler')),
-      body: _error != null && items == null
+      // SDUI v2: bu listenin düzeni sunucudan gelebilir (başlık, sıralama, boş durum
+      // metni APK çıkmadan değişir). Yayın yoksa, sürüm yetmiyorsa ya da kullanıcı
+      // kademeli açılış diliminde değilse AŞAĞIDAKİ yerleşik liste çizilir.
+      body: SduiScreenView(screenId: 'inbox', fallback: _builtIn),
+    );
+  }
+
+  Widget _builtIn(BuildContext context) {
+    final items = _items;
+    return _error != null && items == null
           ? LoadError(message: _error!, onRetry: _load)
           : items == null
               ? const Center(child: CircularProgressIndicator())
@@ -166,8 +175,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
                           );
                         },
                       ),
-                    ),
-    );
+                    );
   }
 }
 

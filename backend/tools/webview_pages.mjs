@@ -17,7 +17,9 @@
 //
 // BU ARACIN GÖREMEDİĞİ: sayfanın içeriğinin dar/alçak pencerede güzel durup durmadığı.
 // Yalnızca "ekranı doğru ölçüyor mu" sorusunu yanıtlar.
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync, writeFileSync, unlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { spawnSync } from 'node:child_process';
 import { join, relative } from 'node:path';
 
 const SRC = new URL('../src/', import.meta.url).pathname;
@@ -59,7 +61,47 @@ for (const f of files) {
 }
 
 if (!checked) { console.error('HATA: hiçbir HTML sayfası bulunamadı — araç bozuk.'); process.exit(2); }
+
+// ---------------------------------------------------------------------------
+// Satır içi JavaScript sözdizimi
+// ---------------------------------------------------------------------------
+//
+// Bu sayfaların içindeki script blokları 700-900 satır (ludo.html, tek.html) ve hiçbir
+// araç onlara bakmıyordu: `npm run check` yalnızca src/**/*.js dosyalarını denetliyor.
+// Oradaki bir sözdizimi hatası sunucuyu etkilemiyor, sayfa SESSİZCE boş açılıyor —
+// oyuncu için oyun "açılmıyor" demek.
+//
+// Bloklar geçici dosyaya yazılıp `node --check` ile denetleniyor. Modül olarak
+// denetlendiği için `import`/`export` da kabul edilir; tarayıcıda da öyle çalışıyorlar.
+let scripts = 0;
+let skipped = 0;
+for (const f of files) {
+  const rel = relative(SRC, f);
+  const src = readFileSync(f, 'utf8');
+  // src= taşıyan etiketler atlanıyor: içleri boş.
+  const blocks = [...src.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi)];
+  for (let i = 0; i < blocks.length; i++) {
+    // Sunucu tarafı şablon değişkeni (`${...}`) içeren script tek başına DERLENEMEZ:
+    // `.js` dosyalarının içinde HTML üretirken kullanılan bloklar böyle. İlk denememde
+    // bunlar üç yanlış alarm verdi. Atlananların sayısı sonda yazılıyor.
+    if (blocks[i][1].includes('${')) { skipped++; continue; }
+    scripts++;
+    const tmp = join(tmpdir(), `wv_${process.pid}_${scripts}.mjs`);
+    writeFileSync(tmp, blocks[i][1]);
+    const r = spawnSync(process.execPath, ['--check', tmp], { encoding: 'utf8' });
+    unlinkSync(tmp);
+    if (r.status !== 0) {
+      // node'un hata çıktısındaki asıl satırı göster.
+      const msg = (r.stderr || '').split('\n').find((l) => /SyntaxError|Error:/.test(l)) || 'sözdizimi hatası';
+      const line = src.slice(0, blocks[i].index).split('\n').length;
+      console.log(`${rel}:${line}: satır içi script ${i + 1} DERLENMİYOR → sayfa boş açılır\n    ${msg.trim()}`);
+      bad++;
+    }
+  }
+}
+
 console.log(bad
-  ? `\n${bad} eksik. Bu, sayfanın telefonda "ekran görünümünü kaybetmesi" demektir.`
-  : `WebView sayfaları ekranı doğru ölçüyor (${checked} sayfa denetlendi)`);
+  ? `\n${bad} eksik. Bu, sayfanın telefonda "ekran görünümünü kaybetmesi" ya da hiç açılmaması demektir.`
+  : `WebView sayfaları ekranı doğru ölçüyor ve satır içi scriptleri derleniyor (${checked} sayfa, ${scripts} script`
+    + `${skipped ? `, ${skipped} tanesi sunucu şablonu olduğu için atlandı` : ''})`);
 process.exit(bad ? 1 : 0);

@@ -75,6 +75,37 @@ process.stdout.write(rs.stdout || '');
 process.stderr.write(rs.stderr || '');
 if (rs.status !== 0) failed += 1;
 
+// SQL yer tutucuları ile verilen değerler tutuyor mu?
+//
+// host_statements INSERT'ine 10 sütun eklerken elle saymak zorunda kaldım. Bir eksik
+// olsaydı PostgreSQL "bind message supplies 37 parameters, but prepared statement requires
+// 38" diyecekti — ve bu yalnızca dönem kapanışında, yani ayda bir çalışan bir yolda
+// ortaya çıkacaktı.
+const sqp = spawnSync(process.execPath, [new URL('../tools/sql_params.mjs', import.meta.url).pathname], { encoding: 'utf8' });
+process.stdout.write(sqp.stdout || '');
+process.stderr.write(sqp.stderr || '');
+if (sqp.status !== 0) failed += 1;
+
+// Ortak nesnelerde olmayan yöntemi çağırmak.
+//
+// `hub.toUser(...)` yazdım; öyle bir yöntem yok, doğrusu `sendToUser`. Sözdizimi doğru,
+// import doğru, tanımsız ad yok — hiçbir araç görmedi. O uç çağrıldığında TypeError atıp
+// kullanıcıya "Sunucu hatası" dönecekti.
+const sm = spawnSync(process.execPath, [new URL('../tools/singleton_methods.mjs', import.meta.url).pathname], { encoding: 'utf8' });
+process.stdout.write(sm.stdout || '');
+process.stderr.write(sm.stderr || '');
+if (sm.status !== 0) failed += 1;
+
+// Uygulama içinde açılan panel sayfalarında tarayıcı kutusu var mı?
+//
+// Ajans/Yayıncı Merkezi birer panel sayfası ve uygulama onları WebView'de açıyor.
+// `window.confirm` orada Android'in kutusunu açıyor ve kutunun başlığında SUNUCU ADRESİ
+// yazıyor. Sahibi bunu ekranda gördü. Yerine useConfirm() var.
+const wd = spawnSync(process.execPath, [new URL('../tools/webview_dialogs.mjs', import.meta.url).pathname], { encoding: 'utf8' });
+process.stdout.write(wd.stdout || '');
+process.stderr.write(wd.stderr || '');
+if (wd.status !== 0) failed += 1;
+
 // WebView'e sunulan sayfalar ekranı doğru ölçüyor mu (doctype + viewport)?
 //
 // `tek.html` bunlarsız yazılmıştı: Android WebView sayfayı ~980px sanal ekrana çizip

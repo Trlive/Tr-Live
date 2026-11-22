@@ -232,14 +232,6 @@ export const btnSmall =
 export const selectCls =
   "rounded-xl border border-[#30291e] bg-[#171717] px-3 py-2.5 text-sm text-white outline-none focus:border-[#8c713d]";
 
-/** "SİL" yazdırarak kalıcı işlem onayı. Vazgeçilirse false, hatalı yazılırsa hata fırlatır. */
-export function confirmTyped(message: string, word = "SİL"): boolean {
-  const typed = window.prompt(`${message}\n\nOnay için ${word} yazın.`);
-  if (typed === null) return false;
-  if (typed.trim().toLocaleUpperCase("tr-TR") !== word) throw new Error("Onay metni hatalı; işlem yapılmadı.");
-  return true;
-}
-
 /** Uzun kimliğin kısa gösterimi (ilk 8 karakter). */
 export function shortId(id: string) {
   return id.slice(0, 8);

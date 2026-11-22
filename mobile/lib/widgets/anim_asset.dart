@@ -20,6 +20,13 @@ class AnimAsset extends StatefulWidget {
   final bool repeat;
   final VoidCallback? onDone;
   final String? format;
+
+  /// Animasyon açılamazsa gösterilecek durağan görsel (hediyenin simgesi).
+  ///
+  /// Bu olmadan, animasyon hata verdiğinde `SizedBox.shrink()` dönüyordu: kullanıcı
+  /// hediyeyi gönderiyor, coin'i gidiyor ve ekranda HİÇBİR ŞEY görmüyordu. Hediyenin
+  /// simgesini göstermek, hiç göstermemekten her zaman iyidir.
+  final String? fallbackUrl;
   /// Oynatılamazsa nedenini bildirir (ekranda gösterilir; sorun bulmak için).
   final ValueChanged<String>? onFail;
   /// true: dosya telefon belleğine indirilir (hediyeler). false: doğrudan internetten oynar (çerçeveler).
@@ -35,6 +42,7 @@ class AnimAsset extends StatefulWidget {
     this.repeat = false,
     this.onDone,
     this.format,
+    this.fallbackUrl,
     this.onFail,
     this.cache = true,
     this.sound = false,
@@ -227,8 +235,13 @@ class _AnimAssetState extends State<AnimAsset> {
   void _fail(String message) {
     if (_failed) return;
     _failed = true;
+    // Yedek görsel varsa gösterilebilsin diye yeniden çiziliyor. setState doğrudan
+    // çağrılamaz: _fail çoğu zaman bir errorBuilder'ın İÇİNDEN, yani çizim sırasında
+    // geliyor ve orada setState çağırmak Flutter'da hata.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) widget.onFail?.call(message);
+      if (!mounted) return;
+      widget.onFail?.call(message);
+      if ((widget.fallbackUrl ?? '').isNotEmpty) setState(() {});
     });
   }
 
@@ -252,7 +265,17 @@ class _AnimAssetState extends State<AnimAsset> {
 
   // Animasyon kendi katmanında çizilir: her karede çevresindeki ekran (koltuklar, sohbet, arka plan) yeniden çizilmez.
   @override
-  Widget build(BuildContext context) => RepaintBoundary(child: _player());
+  Widget build(BuildContext context) {
+    final fb = widget.fallbackUrl ?? '';
+    // Animasyon açılamadıysa hediyenin simgesini göster. Simge de açılamazsa boş kalır;
+    // orada yapacak bir şey yok.
+    if (_failed && fb.isNotEmpty) {
+      return RepaintBoundary(
+        child: NetImg(fb, fit: widget.fit, gaplessPlayback: true, errorBuilder: (_, __, ___) => const SizedBox.shrink()),
+      );
+    }
+    return RepaintBoundary(child: _player());
+  }
 
   Widget _player() {
     final w = widget;

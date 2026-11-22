@@ -226,3 +226,44 @@ test('her kaynağın bağlanabilir alanları tanımlı', async () => {
     assert.ok(SOURCE_SPECS[s].fields.includes('id'), `${s}: id alanı olmalı`);
   }
 });
+
+// ---- Şablon bağlama: kimlik ve görsel alanlarında ----
+//
+// Liste satırları kendi öğelerini açabilmeli. Kimlik bekleyen alanlar yalnızca gerçek UUID
+// kabul etseydi, `repeater` içinde yalnızca SABİT kimlik yazılabilirdi — bu da listeyi
+// anlamsız kılardı. Bu yüzden `{alan}` biçimi de kabul edilir, ama SADECE o biçim.
+test('kimlik alanları {alan} şablonunu kabul eder, uydurma kimliği etmez', () => {
+  const uuid = '3f2a1b4c-5d6e-4f7a-8b9c-0d1e2f3a4b5c';
+  assert.doesNotThrow(() => ok({ type: 'listItem', trailingAction: { type: 'openChat', id: '{id}' } }));
+  assert.doesNotThrow(() => ok({ type: 'listItem', trailingAction: { type: 'openChat', id: uuid } }));
+  assert.doesNotThrow(() => ok({ type: 'card', action: { type: 'openActivity', id: '{id}' } }));
+  bad({ type: 'listItem', trailingAction: { type: 'openChat', id: 'abc' } }, /kullanıcı kimliği/i);
+  // Şablonun içinde ifade olamaz: nokta, parantez, koşul — hiçbiri alan adı değildir.
+  bad({ type: 'listItem', trailingAction: { type: 'openChat', id: '{a.b}' } }, /kullanıcı kimliği/i);
+  bad({ type: 'card', action: { type: 'openActivity', id: '{f()}' } }, /etkinlik kimliği/i);
+});
+
+test('görsel alanı şablon kabul eder ama file:// kabul etmez', () => {
+  assert.doesNotThrow(() => ok({ type: 'listItem', image: '{avatarUrl}' }));
+  bad({ type: 'image', url: 'file:///etc/passwd' }, /görsel adresi/i);
+  bad({ type: 'image', url: 'javascript:alert(1)' }, /görsel adresi/i);
+});
+
+test('satır sonu eylemi: SDUI sürümü yerleşikten kötü olmamalı', () => {
+  // Yerleşik arkadaş listesinde satırın sağında "Mesaj" düğmesi vardı. trailingAction
+  // olmasaydı SDUI'ye taşımak o düğmeyi kaybetmek olurdu.
+  const out = ok({
+    type: 'listItem', title: '{displayName}',
+    action: { type: 'openScreen', screen: 'profile', arg: '{id}' },
+    trailingIcon: 'chat', trailingAction: { type: 'openChat', id: '{id}' },
+  });
+  assert.equal(out.root.trailingIcon, 'chat');
+  assert.equal(out.root.trailingAction.type, 'openChat');
+  assert.equal(out.root.action.screen, 'profile');
+});
+
+test('eylem türleri tek kaynaktan ve hepsi doğrulanabilir', async () => {
+  const { ACTION_TYPES } = await import('../src/modules/sdui/v2/sdui_v2.schema.js');
+  assert.ok(ACTION_TYPES.includes('openChat'));
+  bad({ type: 'notice', text: 'x', action: { type: 'calistir' } }, /bilinmeyen eylem/i);
+});

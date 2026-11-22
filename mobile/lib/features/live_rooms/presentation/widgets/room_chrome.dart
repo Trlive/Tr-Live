@@ -39,24 +39,12 @@ Widget badgeRow(Map<String, dynamic>? u, {double h = 16}) {
     LevelPill(level: u?['coinLevel'] ?? 1, send: true, height: h),
     if (gift > 1) LevelPill(level: gift, send: false, height: h),
     if (cp != null && cp >= 1) CpLevelPill(level: cp, height: h),
-    if (u?['verified'] == true)
-      Container(
-        height: h,
-        padding: const EdgeInsets.symmetric(horizontal: 5),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(h / 2),
-          gradient: const LinearGradient(colors: [Color(0xFF1E3A8A), Color(0xFF3B82F6)]),
-          border: Border.all(color: const Color(0xFFFFD54F), width: 0.7),
-        ),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(Icons.verified, size: h * 0.7, color: const Color(0xFFFFD54F)),
-          const SizedBox(width: 2),
-          Text(tx('Doğrulanmış'), style: TextStyle(fontSize: h * 0.56, height: 1.0, fontWeight: FontWeight.w800, fontStyle: FontStyle.italic, color: Colors.white)),
-        ]),
-      ),
+    // "Doğrulanmış" rozeti BİLEREK YOK: oda içinde gösterilmiyor (sahibinin kararı).
+    // Rozet odadaki isim satırını şişiriyor ve kimin doğrulanmış olduğu oda içinde bir işe
+    // yaramıyor. Doğrulama durumu profilde duruyor. badgeRow yalnızca oda ekranından
+    // çağrıldığı için burada kaldırmak = odadan kaldırmak.
   ];
-  // WIP, seviye, CP ve doğrulama kutucukları aynı yükseklikte (h) ve eşit aralıkla.
+  // WIP, seviye ve CP kutucukları aynı yükseklikte (h) ve eşit aralıkla.
   return Wrap(spacing: 4, runSpacing: 3, crossAxisAlignment: WrapCrossAlignment.center, children: items);
 }
 

@@ -88,6 +88,10 @@ async function gameViewBase(gameId, run, viewerId) {
     turnSeat,
     turnUserId: st && turnSeat !== null ? st.players.find((p) => p.seat === turnSeat)?.userId ?? null : null,
     dice: st ? st.dice : null,
+    // Biriken zar değerleri: 6 atınca taş oynatılmıyor, değer kuyruğa yazılıp tekrar
+    // atılıyor. İstemci bu kuyruğu gösteriyor ("bir 6 ve bir 3 oynayacaksın").
+    // Kuyruğun BAŞI oynanacak değer, yani dice === pending[0].
+    pending: st && Array.isArray(st.pending) ? st.pending.slice() : [],
     legal: st && g.status === 'playing' && st.dice !== null ? ludo.legalMoves(st, st.turn, st.dice) : [],
     tokens: st ? st.tokens : null,
     deadlineMs: st?.deadline ?? null,

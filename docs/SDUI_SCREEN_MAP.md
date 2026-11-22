@@ -9,7 +9,9 @@ hiç açılmayacak ekranlar üretmek demekti; bu yüzden önce eşleştirildi.
 | Etkinlik listesi | **Ayrı ekran değil** — etkinlikler zaten sunucudan geliyor (`/api/activities`), kart olarak çiziliyor ve WebView'de açılıyor | zaten dinamik | `repeater` ile kart listesi |
 | Etkinlik detayı | WebView (etkinliğin kendi sayfası) | zaten dinamik | SDUI'ye gerek yok |
 | **`event_screen.dart`** | Mevsimsel etkinlik SANATI (tema görseli, hafta tarihleri, kral/kraliçe) | 869 satır, görsel ağırlıklı | **SDUI'ye UYGUN DEĞİL** — tasarımın kendisi ekran |
+| Bildirimler | `notification_screens.dart` → `NotificationsPage` | ✅ **bağlandı (v2.148.4)** — `repeater` ile ilk gerçek veri bağlama | SDUI |
 | Duyuru / gelen kutusu | `inbox_screens.dart` → `OfficialChannelScreen` | 990 satır, 10 durumlu sınıf, kaydırma konumu + rozet sıfırlama | **kısmi**: duyuru listesi SDUI, sohbet akışı yerel |
+| Arkadaşlar | `social_screens.dart` → `FriendsScreen` | ✅ **liste bağlandı (v2.148.5)** — istekler sekmesi yerel | kısmi |
 | İlişkiler | `relations_screens.dart` → `RelationListScreen` | 917 satır, 16 durumlu sınıf | **kısmi**: liste SDUI, yakınlık/istek akışları yerel |
 | Aile merkezi | `family_screen.dart` | 1490 satır, 24 durumlu sınıf | **kısmi**: tanıtım/kurallar SDUI, üyelik işlemleri yerel |
 | Ajans merkezi | `income_screens.dart` | 424 satır | **uygun**: bilgi ve rapor görünümü |
@@ -33,7 +35,10 @@ Ekranı tümden taşımaya çalışmak, bugün çalışan akışları bozmak olu
 
 ## Sıra
 
-1. Veri gelen listeler (`repeater` ile): ilişkiler · duyurular · bayi kataloğu
+1. ~~Bildirimler~~ ✅ · ~~Arkadaş listesi~~ ✅ · sonra duyurular · bayi kataloğu
+
+   **Not:** Arkadaşlar ekranı iki sekmeli (`TabBarView`), bayi kataloğu satın alma akışıyla
+   iç içe. İkisi de "listeyi ayır, işlemi yerel bırak" cerrahisi istiyor; aceleye gelmez.
 2. Bilgi ekranları: ajans merkezi · profil bölümleri
 3. Form: ajans/bayi başvurusu
 4. Kısmi: aile tanıtımı · ayarlar bilgi satırları

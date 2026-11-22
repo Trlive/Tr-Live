@@ -6,7 +6,11 @@ export const HIDDEN_NAME = 'Gizli Kullanıcı';
 
 // "u" takma adlı users tablosu ile kullanılır.
 export const USER_PUBLIC_COLUMNS = `u.id, u.username, u.public_id, u.display_name, u.avatar_url, u.is_hidden, u.hidden_alias, u.wip_hidden,
-  u.coin_level, u.gift_level, u.created_at AS u_created_at, u.kyc_status AS u_kyc_status, uw.level AS wip_level, wt.features AS wip_features,
+  u.coin_level, u.gift_level, u.created_at AS u_created_at,
+  -- Doğrulanmış hesap = telefon bağlı. Boolean SQL'de hesaplanıyor: başka kullanıcının
+  -- telefon numarası ya da doğrulama zamanı satırda hiç taşınmasın.
+  (u.phone IS NOT NULL AND u.phone_verified_at IS NOT NULL) AS u_phone_verified,
+  uw.level AS wip_level, wt.features AS wip_features,
   (SELECT COALESCE(fr.image_url, fi.metadata->>'assetUrl') FROM inventory_items fi
      LEFT JOIN frames fr ON fr.id::text = fi.item_key
     WHERE fi.user_id = u.id AND fi.item_type = 'frame' AND fi.is_active = TRUE
@@ -89,9 +93,18 @@ export function publicUser(row, viewerId = null, { alias = false, reveal = false
     // CP: odada yan yana oturunca kalp efekti için (yalnızca onaylı CP ilişkisi).
     cpPartnerId: row.cp_exp != null ? row.cp_partner_id : null,
     cpLevel: row.cp_exp != null ? cpLevelFor(row.cp_exp) : null,
-    // Sohbette "yakın zamanda kayıt oldu" kartı (son 3 gün) ve "Doğrulanmış" rozeti.
+    // Sohbette "yakın zamanda kayıt oldu" kartı (son 3 gün).
     isNew: row.u_created_at ? Date.now() - new Date(row.u_created_at).getTime() < 3 * 86400e3 : false,
-    verified: row.u_kyc_status === 'approved',
+    // Doğrulanmış hesap = TELEFON NUMARASI BAĞLI.
+    //
+    // Eskiden `kyc_status === 'approved'` idi, yani kimlik fotoğrafının yönetimce
+    // onaylanması gerekiyordu. Sahibinin kararı: kimlik fotoğrafı istenmeyecek, telefon
+    // bağlamak yeterli.
+    //
+    // DİKKAT: `kyc_status` KALDIRILMADI ve bu alan onun yerine geçmiyor. kyc_status, para
+    // çekme / maaş ödemesi kapısı olarak duruyor (admin_events.routes.js). Burada değişen
+    // yalnızca kullanıcıya gösterilen "Doğrulanmış" etiketinin ne anlama geldiği.
+    verified: row.u_phone_verified === true,
   };
 }
 

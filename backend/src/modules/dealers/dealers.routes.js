@@ -4,7 +4,7 @@ import { requireAuth, requireSuperAdmin } from '../../middleware/authentication/
 import { userLimit } from '../../middleware/security/firewall.js';
 import { fail, bigAmount, text, uuid } from '../../shared/errors/http.js';
 import crypto from 'node:crypto';
-import { dealerSell, deliverScheduled } from './dealers.service.js';
+import { dealerSell, deliverScheduled, transferToSub } from './dealers.service.js';
 import { createTopupRequest, requestView, packageView, loadPackages, methodView, fillPayUrl } from './dealer_topup.service.js';
 import { idempotent } from '../../middleware/validation/idempotency.js';
 import { hub } from '../../infrastructure/websocket/realtime.js';
@@ -132,6 +132,57 @@ router.post('/self', userLimit('dealer_self', 30, 3600e3), idempotent('dealer_se
 });
 
 // İşlem geçmişi (Yoho "Yeniden Şarj Geçmişi"): tarih aralığı + tür (all / in = Coin satın alma / out = Coin satışı), sayfalı.
+// ---- Ana bayi / Alt bayi ----
+/** Bir ana bayinin alt bayileri: bakiye ve satış özeti.
+ *  Salt okunur olduğu için servis katmanında değil burada: dealers.service.js yalnızca
+ *  transaction içinde çalışan para hareketlerini tutuyor ve veritabanı sürücüsüne
+ *  bağımlı olmadığı için testlerde sahte istemciyle sınanabiliyor. */
+/** Bir ana bayinin alt bayileri: bakiye ve satış özeti. */
+async function subDealers(dealerId) {
+  const r = await query(
+    `SELECT d.id, d.name, d.coin_balance, d.is_active, u.username AS owner,
+            COALESCE(s.sold, 0) AS sold, COALESCE(s.sales, 0) AS sales
+       FROM dealer_accounts d
+       LEFT JOIN users u ON u.id = d.owner_user_id
+       LEFT JOIN LATERAL (
+         SELECT SUM(coin_amount)::text AS sold, COUNT(*)::int AS sales
+           FROM dealer_transactions WHERE dealer_id = d.id AND type = 'sale'
+       ) s ON TRUE
+      WHERE d.parent_dealer_id = $1
+      ORDER BY d.name`,
+    [dealerId],
+  );
+  return r.rows.map((x) => ({
+    id: x.id, name: x.name, owner: x.owner, active: x.is_active,
+    coinBalance: String(x.coin_balance), soldCoins: String(x.sold ?? 0), saleCount: x.sales ?? 0,
+  }));
+}
+
+
+/// Alt bayilerim: bakiye ve satış özeti.
+router.get('/subs', async (req, res) => {
+  const d = await myDealer(req.user.id);
+  // Alt bayinin kendi alt bayisi olamaz (en fazla iki kat); boş liste doğru yanıttır.
+  res.json({ isSub: !!d.parent_dealer_id, subs: d.parent_dealer_id ? [] : await subDealers(d.id) });
+});
+
+/// Alt bayiye Coin aktar.
+///
+/// `idempotent`: ağ koptuğunda uygulama isteği tekrarlayabilir. Para hareketinde tekrar,
+/// iki kez aktarım demektir; aynı anahtarla gelen ikinci istek ilkinin sonucunu döndürür.
+router.post('/subs/:subId/transfer', userLimit('dealer_sub_transfer', 60, 3600e3), idempotent('dealer_sub_transfer'), async (req, res) => {
+  const d = await myDealer(req.user.id);
+  const subId = uuid(req.params.subId, 'Alt bayi');
+  const coins = bigAmount(req.body?.coins, 'Coin');
+  const out = await tx((c) => transferToSub(c, {
+    parentId: d.id, subId, coins, actorId: req.user.id,
+    description: text(req.body?.description, 'Açıklama', { max: 120, optional: true }) || undefined,
+  }));
+  // Alt bayinin sahibi açıksa bakiyesini anında görsün.
+  if (out.subOwnerId) hub.sendToUser(out.subOwnerId, { type: 'dealer_balance', coinBalance: out.subBalance });
+  res.json(out);
+});
+
 router.get('/transactions', async (req, res) => {
   const d = await myDealer(req.user.id);
   const day = (v) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);

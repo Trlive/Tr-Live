@@ -39,7 +39,11 @@ export const LIMITS = { depth: 12, nodes: 400, children: 60, text: 2000, label: 
 
 /// Uygulamanın bağımsız açabildiği ekranlar. v1 ile aynı gerekçe: oda (ses/görüntü), giriş ve
 /// para HAREKETİ burada yok. `wallet` yalnızca bakiye ekranıdır; parayı sunucu kesinleştirir.
-export const OPEN_SCREENS = ['store', 'wallet', 'usd_wallet', 'leaderboards', 'family', 'settings', 'help', 'events', 'inbox', 'relations', 'agency', 'dealer', 'support'];
+export const OPEN_SCREENS = ['store', 'wallet', 'usd_wallet', 'leaderboards', 'family', 'settings', 'help', 'events', 'inbox', 'relations', 'agency', 'dealer', 'support', 'profile'];
+
+/// Eylem türlerinin TEK kaynağı. Hem doğrulayıcı hem `tools/sdui_parity.mjs` bunu okur;
+/// iki yere yazılsaydı biri eskir ve araç eksik denetlerdi.
+export const ACTION_TYPES = ['noop', 'tab', 'openScreen', 'openActivity', 'openUrl', 'openChat', 'api', 'modal', 'refresh'];
 
 export const TAB_TARGETS = ['voice', 'feed', 'video', 'messages', 'profile'];
 
@@ -90,7 +94,10 @@ export const COMPONENTS = {
 
   // ---- Liste ----
   list: { children: true, props: { gap: 'int' } },
-  listItem: { children: false, props: { title: 'label', subtitle: 'label', image: 'asset', icon: 'icon', badge: 'label', tone: 'tone', action: 'action' } },
+  // `trailingIcon` + `trailingAction`: satırın sağ ucunda AYRI bir eylem (mesaj, kaldır…).
+  // Bunsuz, listeyi SDUI'ye taşımak satırdaki ikinci düğmeyi kaybetmek demekti; SDUI sürümü
+  // yerleşik sürümden kötü olamaz, yoksa yayınlanmamalı.
+  listItem: { children: false, props: { title: 'label', subtitle: 'label', image: 'asset', icon: 'icon', badge: 'label', tone: 'tone', action: 'action', trailingIcon: 'icon', trailingAction: 'action' } },
   avatarRow: { children: false, props: { source: 'source', max: 'int', action: 'action' } },
   badge: { children: false, props: { text: 'label', tone: 'tone' } },
   emptyState: { children: false, props: { text: 'label', icon: 'icon' } },
@@ -171,6 +178,11 @@ const str = (v, field, max) => {
 
 const ASSET_RE = /^(\/media\/[0-9a-f-]{36}(\.s\d{3})?\.[a-z0-9]{2,5}|https:\/\/[^\s"'<>]{4,400})$/i;
 const NAME_RE = /^[a-zA-Z][a-zA-Z0-9_]{0,39}$/;
+/// `repeater` içindeki şablon yer tutucusu: {alan}. Kimlik bekleyen alanlar da bunu kabul
+/// etmeli, yoksa listedeki satırlar kendi öğelerini açamaz — yalnızca sabit kimlik
+/// yazılabilirdi ki bu listeyi anlamsız kılar. Bağlama anında gerçek değere dönüşür;
+/// dönüşmezse uygulama tarafında kimlik boş kalır ve eylem sessizce çalışmaz.
+const BIND_RE = /^\{[A-Za-z_][A-Za-z0-9_]*\}$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function readAction(a, field) {
@@ -192,7 +204,7 @@ function readAction(a, field) {
     }
     case 'openActivity': {
       const id = str(a.id, `${field}.id`, 40);
-      if (!UUID_RE.test(id)) throw fail(`${field}: etkinlik kimliği geçersiz.`);
+      if (!UUID_RE.test(id) && !BIND_RE.test(id)) throw fail(`${field}: etkinlik kimliği geçersiz.`);
       return { type, id };
     }
     case 'openUrl': {
@@ -201,6 +213,14 @@ function readAction(a, field) {
       const url = str(a.url, `${field}.url`, 400);
       if (!/^https:\/\//i.test(url)) throw fail(`${field}: adres https ile başlamalı.`);
       return { type, url, external: a.external === true };
+    }
+    case 'openChat': {
+      // Sohbet ekranı karşı tarafın adını, rengini ve avatarını ister; bunlar tek bir
+      // dizeye sığmaz. Bu yüzden eylem yalnızca KULLANICI KİMLİĞİ taşır, gerisini
+      // uygulama `/api/users/:id` ile çeker — profil ekranının zaten yaptığı şey.
+      const id = str(a.id ?? a.arg, `${field}.id`, 40);
+      if (!UUID_RE.test(id) && !BIND_RE.test(id)) throw fail(`${field}: kullanıcı kimliği geçersiz.`);
+      return { type, id };
     }
     case 'api': {
       // Serbest adres YOK. Yalnızca ad; uca eşlemeyi sunucu bilir.
@@ -257,7 +277,11 @@ function readProp(kind, value, field) {
     }
     case 'asset': {
       const s = str(value, field, 400);
-      if (s && !ASSET_RE.test(s)) throw fail(`${field}: görsel adresi geçersiz (yüklenmiş görsel ya da https).`);
+      // Şablon ({avatarUrl}) da kabul edilir: liste satırlarında görsel ancak öğeden
+      // gelebilir. Bağlanan değer bizim kendi API yanıtımızdan gelir, düzeni yazan
+      // kişiden değil. Uygulama yine de yalnızca http(s) yükler; başka bir şey gelirse
+      // hata görseli çizilir, istek atılmaz.
+      if (s && !ASSET_RE.test(s) && !BIND_RE.test(s)) throw fail(`${field}: görsel adresi geçersiz (yüklenmiş görsel, https ya da {alan}).`);
       return s || null;
     }
     case 'source': {

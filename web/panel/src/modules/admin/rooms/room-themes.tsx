@@ -5,7 +5,8 @@ import { Palette } from "lucide-react";
 import { api, apiUpload, absoluteUrl, fmtDate, fmtNumber } from "@/core/api/api";
 import { useApi } from "@/core/api/use-api";
 import { Badge, Card, Empty, ErrorBox, Loading, PageHeader, inputCls } from "@/shared/components/ui";
-import { ActionMsg, Field, Tabs, btnDangerOutline, btnGhost, btnOk, btnSmall, confirmTyped, selectCls, useAction } from "@/shared/components/kit";
+import { ActionMsg, Field, Tabs, btnDangerOutline, btnGhost, btnOk, btnSmall, selectCls, useAction } from "@/shared/components/kit";
+import { confirmTyped } from "@/modules/admin/shared/confirm-typed";
 import { UserPicker, type AdminUser } from "@/modules/admin/users/user-picker";
 
 type Theme = { key: string; label: string; colors: string[]; imageUrl: string | null; thumbUrl: string | null; effect: string; priceCoins: string; free: boolean; durationDays: number; sortOrder: number; active: boolean; inUse: number };
