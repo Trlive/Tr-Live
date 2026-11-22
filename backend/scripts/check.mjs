@@ -75,6 +75,27 @@ process.stdout.write(rs.stdout || '');
 process.stderr.write(rs.stderr || '');
 if (rs.status !== 0) failed += 1;
 
+// İş akışlarının kullandığı dosyalar depoda duruyor mu?
+//
+// zip_ile_guncelle.yml, yüklenen zip'i açmadan önce .git ve .github dışındaki HER ŞEYİ
+// siliyor. Yani zip'te olmayan dosya depodan kalkıyor. iOS kurulum betiği
+// (mobile/native/ios/setup_ios.py) böyle kayboldu ve iOS derlemesi aylarca
+// "No such file or directory" ile düştü.
+const wf = spawnSync(process.execPath, [new URL('../tools/workflow_files.mjs', import.meta.url).pathname], { encoding: 'utf8' });
+process.stdout.write(wf.stdout || '');
+process.stderr.write(wf.stderr || '');
+if (wf.status !== 0) failed += 1;
+
+// Fonksiyonlar doğru sayıda argümanla mı çağrılıyor?
+//
+// `auditStaff(c, adminId, userId, action, meta)` beş argüman alıyor; ben iki yerde üç
+// argümanla çağırdım. `req` yanlış yere oturdu ve uç 500 döndürdü. JavaScript eksik
+// argümanı undefined yapıp devam ettiği için hata yalnızca o satır çalışınca çıktı.
+const ac = spawnSync(process.execPath, [new URL('../tools/arg_count.mjs', import.meta.url).pathname], { encoding: 'utf8' });
+process.stdout.write(ac.stdout || '');
+process.stderr.write(ac.stderr || '');
+if (ac.status !== 0) failed += 1;
+
 // SQL yer tutucuları ile verilen değerler tutuyor mu?
 //
 // host_statements INSERT'ine 10 sütun eklerken elle saymak zorunda kaldım. Bir eksik

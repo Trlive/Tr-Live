@@ -1,3 +1,80 @@
+## v2.152.3 — iOS en düşük sürüm 15.0 (derleme denemeden düzeltildi)
+
+`setup_ios.py` en düşük iOS sürümünü 14.0 yapıyordu. Bu hâliyle derleme `pod install`
+aşamasında düşerdi: `firebase_core 4.15.2`, Firebase iOS SDK 12'yi kullanıyor ve o sürüm
+en az **iOS 15** istiyor ("Specs satisfying the Firebase/CoreOnly dependency were found,
+but they required a higher minimum deployment target").
+
+Betik hem Podfile'ın `platform :ios` satırını hem Xcode projesinin
+`IPHONEOS_DEPLOYMENT_TARGET` değerini tek sabitten ayarlıyor, bu yüzden tek satır yetti.
+iOS 15, iPhone 6s ve sonrasını kapsıyor.
+
+Gizli depoda Mac dakikası 10 kat sayıldığı için bu, derleme denenmeden önce düzeltildi.
+
+## v2.152.2 — Kaybolan iOS dosyaları geri geldi, kaybın sebebi kapatıldı
+
+### iOS kodu silinmişti — nasıl olduğunu buldum
+`zip_ile_guncelle.yml`, yüklenen zip'i açmadan ÖNCE şunu yapıyor:
+
+    find . -mindepth 1 -maxdepth 1 ! -name '.git' ! -name '.github' -exec rm -rf {} +
+    cp -a "$T/." .
+
+Yani **zip'te olmayan her dosya depodan siliniyor.** Bendeki çalışma kopyasında
+`mobile/native/ios/` bir noktada kaybolmuş; sonraki her yükleme onu depodan da sildi.
+İş akışı dosyaları `.github` korunduğu için yerinde kaldı — bu yüzden `ios_build.yml`
+çalışmaya devam etti ama çağırdığı betik yoktu ve iş
+"can't open file '.../mobile/native/ios/setup_ios.py'" ile düştü.
+
+iOS yalnızca elle çalıştırıldığı için kayıp aylarca fark edilmedi.
+
+**Geri konulanlar** (v2.93.0 zip'inden, iş akışı sahibinin gönderdiği güncel sürümden):
+- `mobile/native/ios/setup_ios.py`
+- `mobile/native/ios/AppIcon.appiconset/` (Contents.json + icon-1024.png)
+- `.github/workflows/ios_build.yml` (Xcode 26 seçimi olan yeni sürüm)
+- `docs/IPHONE.md`
+
+Depo ile v2.93.0 arasındaki tüm fark tarandı; iOS dışında kaybolan başka dosya yok
+(eksik görünenlerin hepsi kasıtlı: `backend/src/*.js` düz yapıdan `modules/` yapısına
+taşındı, yönetim/ajans ekranları web paneline geçti, iki yetim dosya silinmişti).
+
+### Yeni güvenlik ağı: iş akışı dosyaları
+`workflow_files.mjs` — iş akışlarının kullandığı dosya yollarını okuyup depoda var mı diye
+bakıyor. Böyle bir kayıp bir daha sessizce olmaz, yayın öncesi denetimde patlar.
+İlk sürümü dört yanlış alarm verdi (`working-directory: ${{ env.APP_DIR }}` çalışma anında
+hesaplanıyor; `widget_test.dart`'ın yokluğu iş akışının kendi `rm -f`'i yüzünden normal).
+İkisi de çözüldü: depoda sıfır yanlış alarm, `setup_ios.py` gizlendiğinde yakalıyor.
+
+### Zip'in yüklenmemesi benim dosyamla ilgili değil
+`zip_ile_guncelle` işi 3 saniyede, iş hiç başlamadan şu hatayla düştü:
+"Son ödeme işlemlerinizde başarısızlık yaşanması veya harcama limitinizin artırılması
+gerektiği için işlem başlatılamadı."
+
+Bu GitHub Actions faturalandırma hatası — GitHub ayarlarındaki "Fatura ve planlar"
+bölümünden çözülür. Not: `ios_build.yml` `macos-15` üzerinde çalışıyor ve gizli depoda
+**Mac dakikası 10 kat** sayılıyor; iOS derlemeleri dakikayı hızla tüketir.
+
+## v2.152.1 — CI'ı kıran iki hatam ve onları kaçıran araçların düzeltilmesi
+
+İki hata da benim ve ikisini de tam o iş için yazdığım araçlar kaçırdı. Önce hataları düzelttim, sonra araçların NEDEN kaçırdığını bulup kapattım.
+
+### 1. `showSnack` diye bir fonksiyon yok (APK ve Mobil işleri durdu)
+`dealer_subs_screen.dart:75`'te `showSnack(...)` yazmıştım; projede öyle bir fonksiyon yok, doğrusu `toast(...)`. Uydurduğum bir ad.
+
+**Aracım neden kaçırdı:** `dart_check.py` yalnızca BÜYÜK harfle başlayan tip adlarına bakıyordu ve yalnızca "projede tanımlı ama import edilmemiş" olanları bildiriyordu. Hiçbir yerde tanımlı olmayan, küçük harfle başlayan bir ad tasarım gereği görünmezdi.
+
+Bunun yanlış alarmsız yapılabileceğini **ölçerek** doğruladım: depodaki 1373 farklı çıplak çağrıdan yalnızca 17'si projede tanımsız ve 10'u Flutter'ın kendi fonksiyonu. Artık küçük harfli çağrılar da denetleniyor. Araç yazarken üç kendi hatamı buldum — en önemlisi: tanım kalıbındaki "tip" kısmı yalnızca boşluktan oluşabiliyordu, yani satır başındaki HER çağrı tanım sanılıyordu ve araç tam da yakalaması gereken adı "tanımlı" sayıp geçiyordu. Şimdi depoda sıfır yanlış alarm veriyor ve `showSnack`'i yakalıyor.
+
+### 2. `auditStaff` beş argüman alıyor, ben üç verdim (e2e durdu)
+`admin_dealers.routes.js` ve `admin_agencies.routes.js`'te `auditStaff(req, action, meta)` yazmıştım. İmza `auditStaff(c, adminId, userId, action, meta)`. `req` veritabanı istemcisinin yerine oturdu ve `c.query is not a function` ile uç 500 döndü.
+
+**Yeni araç:** `arg_count.mjs` — proje içi fonksiyonların çağrılarında argüman sayısını denetliyor. İlk sürümü dört yanlış alarm verdi (JavaScript'te son argümanı atlamak yaygın ve kasıtlı: `promoteBootstrapAdmins(username)` gövdesinde `username === undefined` durumunu zaten ele alıyor). Kuralı daralttım: **yalnızca iki ve daha fazla eksik** argüman bildiriliyor. Bu kuralla depoda sıfır yanlış alarm var ve benim hatam yakalanıyor (5 bekleniyor, 3 verilmiş).
+
+### 3. `build-ios` benim değil
+`mobile/native/ios/setup_ios.py` **bu depoda hiç yok** ve iOS iş akışı dosyası da repoda bulunmuyor (`.github/workflows/` içinde yalnızca apk, backend, db, figma, mobile, zip var). Bu iş GitHub'da ayrıca tanımlanmış ve eksik bir dosyayı arıyor; benim bu sürümlerdeki değişikliklerimle ilgisi yok — iOS tarafına hiç dokunmadım. Dosyanın aslı sizde varsa gönderin, ekleyeyim.
+
+### Doğrulama
+427 birim testi, 237 dosya, 999 argüman denetimi, 1167 SQL sorgusu, 108 göç gerçek PostgreSQL'de. İki yeni denetim de iki yönde sınandı: hatayı geri koyunca yakalıyor, düzeltince susuyor.
+
 ## v2.152.0 — Hediye şeffaflığı: ölçtüm, sebebi buldum, düzelttim
 
 Sahibi: "hediyelerin transparan özelligi çok kötü, bazıları ne olduğu belli olmayacak kadar sıkıntılı."

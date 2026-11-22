@@ -225,6 +225,110 @@ for p in files:
             problems.append(f'{p}:{line}: "{nm}" kullanılıyor ama import edilmemiş '
                             f'(tanımı: {owners[0].relative_to(LIB.parent)})')
 
+# ---------------------------------------------------------------------------
+# Tanımsız FONKSİYON çağrısı (küçük harfle başlayan çıplak çağrılar)
+# ---------------------------------------------------------------------------
+#
+# NEDEN: `showSnack(context, ...)` yazdım. Öyle bir fonksiyon YOK — doğrusu `toast`.
+# Yukarıdaki tanımsız-ad denetimi yalnızca BÜYÜK harfle başlayan tip adlarına bakıyordu,
+# üstelik yalnızca "projede tanımlı ama import edilmemiş" olanları bildiriyordu. Hiçbir
+# yerde tanımlı olmayan bir ad, tasarım gereği görünmezdi. CI'da `flutter analyze` yakaladı
+# ve APK derlemesi durdu.
+#
+# Bunun yanlış alarmsız yapılabileceğini ÖLÇEREK doğruladım: depodaki 1373 farklı çıplak
+# çağrıdan yalnızca 17'si projede tanımsız ve bunların 10'u Flutter/Dart'ın kendi
+# fonksiyonu. Geri kalan 7'si tarayıcının kaçırdığı yerel kapanış/parametre adları.
+#
+# BU DENETİMİN GÖREMEDİĞİ: nesne üzerinden çağrılar (`x.foo()`), paketlerden gelen ve
+# aşağıdaki listede olmayan üst düzey fonksiyonlar (yeni biri kullanılırsa listeye eklenir).
+
+# Dart/Flutter'ın üst düzey fonksiyonları. Proje dışından gelirler, tanımları depoda yoktur.
+SDK_FUNCS = {
+    'applyBoxFit', 'axisDirectionToAxis', 'compute', 'createTicker', 'jsonDecode', 'jsonEncode',
+    'min', 'max', 'showDatePicker', 'showTimePicker', 'showLicensePage', 'showDialog',
+    'showModalBottomSheet', 'showMenu', 'showAboutDialog', 'showSearch', 'runApp', 'debugPrint',
+    'test', 'group', 'expect', 'setUp', 'tearDown', 'testWidgets', 'identical', 'lerpDouble',
+    # flutter_test eşleştiricileri
+    'equals', 'greaterThan', 'lessThan', 'isNot', 'contains', 'isTrue', 'isFalse', 'isNull',
+    'closeTo', 'anyOf', 'allOf', 'throwsA', 'predicate', 'same', 'inInclusiveRange',
+    'precacheImage', 'decodeImageFromList', 'scheduleMicrotask', 'unawaited', 'base64Encode',
+    'base64Decode', 'utf8', 'sqrt', 'pow', 'sin', 'cos', 'tan', 'atan2', 'exp', 'log',
+}
+
+_DEF_PATTERNS = [
+    # yöntem / üst düzey fonksiyon:  "Tip ad("  ya da "void ad("
+    # Tip kısmı EN AZ BİR gerçek simge içermeli.
+    #
+    # İlk sürümde tip sınıfı `\s` içeriyordu ve `\s*` sıfır karakter de eşleşebildiği için
+    # satır başındaki HER çağrı ("    showSnack(") tanım sanılıyordu: girinti boşlukları
+    # "tip" yerine geçiyordu. Bu yüzden araç, tam da yakalaması gereken uydurma fonksiyon
+    # adını "tanımlı" sayıp sessizce geçiyordu.
+    re.compile(r'(?:^|\n)[ \t]*(?:@\w+\s*)*(?:static\s+|external\s+|abstract\s+)*'
+               r'[\w<>,\[\]\?]+[\w<>,\[\]\?\s]*?\s+([a-z_][\w]*)\s*\('),
+    # kapanış / değişken:  "final ad =", "var ad =", "const ad ="
+    re.compile(r'\b(?:var|final|const|late)\s+(?:[\w<>,\[\]\?]+\s+)?([a-z_][\w]*)\s*='),
+    # adlandırılmış parametre olarak verilen kapanış:  "ad: (" 
+    re.compile(r'\b([a-z_][\w]*)\s*:\s*\('),
+    # parametre listesindeki adlar:  "(Tip ad", ", Tip ad", "{Tip ad", "required Tip ad"
+    re.compile(r'[(,{]\s*(?:required\s+)?(?:final\s+)?[\w<>,\[\]\?]+\s+([a-z_][\w]*)\s*[,){=]'),
+    # alan:  "this.ad"
+    re.compile(r'\bthis\.([a-z_][\w]*)'),
+    # Gövdesi olan fonksiyon tanımı: satır `{` ya da `=>` ile bitiyor.
+    #
+    # Bu, PARANTEZLİ dönüş tiplerini yakalamak için gerekli:
+    #   (String, Color, int) securityLevel(Map<String, dynamic> p) {
+    #   static ({String title, String artist}) parseName(String fileName) {
+    #   Future<({int added, int skipped, String? error})> addTracksToRoom(...) async {
+    # Bunlarda dönüş tipi parantez içeriyor, bu yüzden "Tip ad(" kalıbı tutmuyordu.
+    # `[^=;]*?` atamaları dışarıda tutuyor (`final x = foo(...) ...` tanım değildir).
+    re.compile(r'(?m)^\s*(?!if\b|for\b|while\b|switch\b|catch\b|return\b|await\b)'
+               r'[^=;\n]*\b([a-z_][\w]*)\s*\([^;\n]*\)\s*(?:async\s*\*?\s*)?(?:\{|=>)'),
+    # Virgül / parantez / süslü parantez ÖNÜNDE geçen her ad.
+    #
+    # Bu kasıtlı olarak GENİŞ: parametre adlarını (`ValueChanged<String> onSel)`,
+    # `Future<void> Function() job)`) ve kapanışları yakalamak için. Çağrı argümanlarını
+    # da "tanımlı" sayıyor; bu bir MİSS üretir ama YANLIŞ ALARM üretmez. Yanlış alarm
+    # veren araç, hiç araç olmamasından kötüdür — eksik yakalayan ise yine de değerlidir.
+    #
+    # Aranan hata buradan kaçamaz: uydurulmuş bir fonksiyon adı yalnızca `ad(` biçiminde
+    # geçer, hiçbir zaman `ad,` ya da `ad)` biçiminde geçmez.
+    re.compile(r'\b([a-z_][\w]*)\s*[,)}\]]'),
+]
+
+_known_funcs = set(SDK_FUNCS)
+for _f in files:
+    _src = strip(_f.read_text(encoding='utf-8'))
+    for _re in _DEF_PATTERNS:
+        for _m in _re.finditer(_src):
+            _known_funcs.add(_m.group(1))
+
+_KEYWORDS = {
+    'if', 'for', 'while', 'switch', 'catch', 'return', 'await', 'assert', 'print', 'super',
+    'this', 'new', 'case', 'do', 'else', 'in', 'is', 'as', 'set', 'get', 'void', 'final',
+    'const', 'var', 'rethrow', 'throw', 'yield', 'typedef', 'extends', 'with', 'on', 'when',
+    # Değiştiriciler: "static ({...}) parseName(" satırında "static (" çağrı sanılıyordu.
+    'static', 'external', 'abstract', 'factory', 'operator', 'late', 'required', 'covariant',
+    # Üst sınıftan MİRAS ALINAN yöntemler. Çıplak çağrılırlar ve tanımları Flutter'da
+    # olduğu için depoda görünmezler. Bu araç sınıf hiyerarşisini izlemiyor; miras alınan
+    # yeni bir yöntem kullanılırsa buraya eklenmesi gerekir (görünür bir yanlış alarmla).
+    'notifyListeners', 'setState', 'markNeedsBuild', 'didChangeDependencies', 'deactivate',
+    'initState', 'dispose', 'createState', 'build', 'didUpdateWidget', 'reassemble',
+}
+_CALL_RE = re.compile(r'(?:^|[^.\w$\'"])([a-z][\w]*)\s*\(', re.M)
+
+for _f in files:
+    _raw = _f.read_text(encoding='utf-8')
+    _src = strip(_raw)
+    for _m in _CALL_RE.finditer(_src):
+        _n = _m.group(1)
+        if _n in _KEYWORDS or _n in _known_funcs:
+            continue
+        _line = _src[:_m.start()].count('\n') + 1
+        problems.append(
+            f'{_f}:{_line}: "{_n}(...)" diye bir fonksiyon YOK (ne projede ne de bilinen '
+            f'Dart/Flutter işlevlerinde) → flutter analyze HATA verir, APK derlenmez'
+        )
+
 # ---- Hiçbir yerden çağrılmayan dosyalar ----
 #
 # `flutter analyze` kullanılmayan IMPORT'u görür, kullanılmayan DOSYAYI görmez.

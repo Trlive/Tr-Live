@@ -222,7 +222,7 @@ router.post('/broadcasters/:userId/contract', requireSuperAdmin, async (req, res
   }
   const r = await query(`UPDATE broadcasters SET contract_tier = $2 WHERE user_id = $1 RETURNING user_id`, [userId, tier]);
   if (!r.rowCount) throw fail('Yayıncı bulunamadı.', 404);
-  await auditStaff(req, 'broadcaster_contract_tier', { userId, tier });
+  await auditStaff({ query }, req.user.id, userId, 'broadcaster_contract_tier', { tier });
   res.json({ ok: true, tier, maxLevel });
 });
 

@@ -32,7 +32,7 @@ router.post('/dealers/:dealerId/parent', requireSuperAdmin, async (req, res) => 
   const raw = req.body?.parentDealerId;
   const parentId = raw === null || raw === undefined || raw === '' ? null : uuid(raw, 'Ana bayi');
   const out = await tx((c) => setDealerParent(c, { dealerId, parentId }));
-  await auditStaff(req, 'dealer_set_parent', { dealerId, parentId });
+  await auditStaff({ query }, req.user.id, null, 'dealer_set_parent', { dealerId, parentId });
   res.json(out);
 });
 

@@ -72,7 +72,7 @@ class _DealerSubsScreenState extends State<DealerSubsScreen> {
     final r = await guard(context, () => Api.postOnce('/api/dealer/subs/${sub['id']}/transfer', {'coins': amount}));
     if (r == null || !mounted) return;
     setState(() => _v++);
-    showSnack(context, tx('Aktarıldı.'));
+    toast(context, tx('Aktarıldı.'));
   }
 
   @override
