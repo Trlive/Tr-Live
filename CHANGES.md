@@ -1,3 +1,17 @@
+## v2.156.1 — Web paneli: sade menü, hızlı arama, sayfa yolu, bekleyen işler (yönetim, ajans, bayi)
+
+- **Menü işe göre yeniden gruplandı** (yönetim: Genel · Bekleyen işler · Kullanıcı ve oda · Para · Mağaza ve hediye ·
+  Etkinlik ve duyuru · Uygulama ve sistem). Eskiden "Ekonomi" altında oda temaları, içerik yükleme, medya bütçesi de
+  vardı; ekran düzenleri ile oyun paketleri "Sistem"e dağılmıştı. Ajans: Ajans · Ekip. Bayi: Satış · Rapor · Entegrasyon.
+- **Gruplar açılır-kapanır** (tercih tarayıcıda saklanır; açık sayfanın grubu her zaman açık, kapalı grupta bekleyen iş
+  sayısı başlıkta görünür).
+- **Hızlı arama (Ctrl+K / ⌘K ya da menüdeki "Sayfa ara"):** sayfa adı, grup ya da iş kelimesiyle (ör. "ban", "maaş",
+  "paytr", "kyc") sayfaya atlar; ↑↓ ve Enter ile kullanılır, son açılan sayfalar en üstte. Türkçe karakterden bağımsız.
+- **Üst çubuk:** sabit "Yönetim Paneli" yazısı yerine sayfa yolu (Panel / Grup / Sayfa); yönetimde bekleyen işler
+  (Destek, Şikâyetler, Kimlik Onayları, Ajanslar) tek tıkla açılan rozetler olarak.
+- Kullanıcı kartı ve çıkış menünün altına alındı (menüye yer kaldı); menü 288 → 256 px.
+- Sayfaların içeriği değişmedi; yalnızca panel çerçevesi (`core/layout/panel-shell.tsx`).
+
 ## v2.156.0 — Kabuk uygulama: 5 ekrana panelden yönetilen içerik alanı (SDUI)
 
 - Önceden SDUI'ye 12 ekrandan 3'ü bağlıydı (Yardım, Bildirimler, İlişkiler). Kalan ekranlar (Aile, Bayi, Etkinlik,
