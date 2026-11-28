@@ -1,6 +1,6 @@
 # TR LIVE YAYINCI SÖZLEŞMESİ
 
-**Sözleşme No:** YAY-[otomatik] · **Sürüm:** 1.1 · **Metin özeti (SHA-256):** [sistem tarafından] · **Yürürlük:** Madde 19'daki kurulma anı
+**Sözleşme No:** YAY-[otomatik] · **Sürüm:** 1.2 · **Metin özeti (SHA-256):** [sistem tarafından] · **Yürürlük:** Madde 20'deki kurulma anı
 
 > Köşeli parantezli `[KARAR: …]` notları imzaya açılmadan önce doldurulmalı ve silinmelidir. Bu metin bir taslaktır; yürürlüğe
 > girmeden önce avukat ve mali müşavir incelemesinden geçirilmelidir.
@@ -9,7 +9,7 @@
 
 **1.1. Platform işletmecisi ("TR LIVE")**
 Ticari marka: TR LIVE · Hukuki unvan: [●] · Vergi No / MERSİS: [●] · Adres: [●] · E-posta: [●] · KEP: [●]
-`[KARAR: Uygulamadaki gizlilik metni işletmeciyi "TR Live LLC (ABD)" gösteriyor. Sözleşmenin tarafı ABD şirketi mi, Türkiye'de bir şirket mi? Uygulanacak hukuk, vergi kesintisi ve KVKK temsilcisi bu karara bağlıdır. Gizlilik metni ile bu sözleşmedeki unvan aynı olmalıdır.]`
+`[KARAR: Sözleşmenin tarafı olacak şirket henüz belli değil (uygulamadaki gizlilik metni "TR Live LLC (ABD)" diyor). Uygulanacak hukuk, vergi kesintisi ve KVKK temsilcisi bu karara bağlıdır; gizlilik metni ile aynı olmalıdır.]`
 
 **1.2. Yayıncı**
 Adı Soyadı: [●] · T.C. / Yabancı Kimlik No: [●] · Doğum tarihi: [●] · TR LIVE Kullanıcı ID: [●] · Adres: [●] · E-posta: [●] · Cep telefonu (doğrulanmış): [●]
@@ -55,7 +55,7 @@ kabul ve taahhüt eder.
 
 6.2. Kazanç; dönem içinde alınan Diamond, aktif yayın günü, yayın süresi, görevler ve politikada ilan edilen diğer ölçütlere göre hesaplanır. Ölçütlerden biri eksik kalırsa politikada ilan edilen oranda kısmi ödeme yapılabilir.
 
-6.3. **Kendine hediye kuralı.** `[KARAR: Sistem bugün şöyle çalışıyor: sesli odada yayıncının kendine gönderdiği hediye maaşa ve kotaya sayılıyor; görüntülü odada kendine hediye gönderilemiyor. Bu kural sözleşmeye açıkça yazılmazsa, Madde 7'deki "yapay performans" yasağıyla çelişir ve geri alma işlemleri itiraza açık hâle gelir. Ya kural burada açıkça kabul edilmeli ya da sistemde kapatılmalıdır.]` Taslak hüküm: "Sesli odada yayıncının kendi Coin'i ile kendisine gönderdiği hediyeler, Kazanç ve Ödeme Politikası'nda belirtilen sınırlar içinde kazanç hesabına dahil edilir. Görüntülü odada kendine hediye gönderilemez."
+6.3. **Kendine hediye kuralı.** Sesli odada yayıncının kendi Coin'i ile kendisine gönderdiği hediyeler kazanç hesabına sınırlı olarak dahil edilir: bir dönemde kazanca sayılan kendine hediye, o dönemde kazanca sayılan toplam Diamond'ın en çok %20'si olabilir; başka kullanıcılardan hediye alınmayan dönemde kendine hediye kazanca sayılmaz. Görüntülü odada kendine hediye gönderilemez. Bu sınır içinde kalan kendine hediye Madde 7'deki yapay kazanç sayılmaz.
 
 6.4. **Avans.** TR LIVE, dönem içinde oluşmuş hak ediş üzerinden avans ödeyebilir. Avans; dönem kapanışındaki kesin hak edişten mahsup edilir. Kesin hak ediş ödenen avanstan düşük çıkarsa aradaki fark, Madde 8'deki usulle sonraki kazançlardan mahsup edilebilir veya iadesi istenebilir.
 
@@ -159,12 +159,12 @@ TR LIVE markası, logosu, yazılımı, tasarımları, veri tabanları ve diğer 
 
 19.2. Görevli ve yetkili mahkeme, emredici hükümler saklı kalmak üzere kanuna göre belirlenir. Yayıncı tacir değilse yetki sözleşmesi yapılamayacağından ayrı bir yetkili mahkeme seçilmemiştir (HMK md. 17). Taraflar arasındaki ilişkinin iş ilişkisi niteliği taşıdığının tespiti hâlinde iş mahkemeleri ve zorunlu arabuluculuk hükümleri uygulanır.
 
-## MADDE 20 – KURULMA, İMZA VE SÜRÜM
+## MADDE 20 – KURULMA, ONAY VE SÜRÜM
 
-20.1. Sözleşme, Ek-İmza Usulü'nde belirtilen yöntemle elektronik ortamda kurulur. Kurulma anı, yöntemin tamamlandığı ve sistem kaydına geçtiği andır.
+20.1. Sözleşme elektronik ortamda kurulur: yayıncı metni uygulamada sonuna kadar görüntüler, onay kutusunu işaretler ve doğrulanmış telefonuna gönderilen tek kullanımlık kodu girer. Kurulma anı, kodun doğrulanıp onayın sistem kaydına geçtiği andır.
 
-20.2. Yayıncı, imzaladığı metnin değiştirilemez kopyasını (PDF) her zaman uygulamadan indirebilir.
+20.2. TR LIVE; metnin sürümünü ve özetini (SHA-256), onay zamanını, IP adresini, cihaz bilgisini, doğrulanmış telefon numarasını ve kod doğrulama kaydını değiştirilemez şekilde saklar. Yayıncı, onayladığı metnin bu bilgileri içeren PDF kopyasını uygulamadan her zaman indirebilir.
 
-20.3. Sözleşmenin yeni sürümü yeniden onay veya imza ile yürürlüğe girer; önceki sürümle doğmuş haklar saklıdır.
+20.3. Sözleşmenin yeni sürümü yeniden onay ile yürürlüğe girer; önceki sürümle doğmuş haklar saklıdır.
 
-**Ekler:** Kazanç ve Ödeme Politikası · Topluluk Kuralları · Gizlilik ve Aydınlatma Metni · İmza Usulü
+**Ekler:** Kazanç ve Ödeme Politikası · Topluluk Kuralları · Gizlilik ve Aydınlatma Metni

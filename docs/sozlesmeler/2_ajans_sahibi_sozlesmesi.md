@@ -1,6 +1,6 @@
 # TR LIVE AJANS SAHİBİ VE YAYINCI YÖNETİMİ SÖZLEŞMESİ
 
-**Sözleşme No:** AJS-[otomatik] · **Sürüm:** 1.1 · **Metin özeti (SHA-256):** [sistem tarafından] · **Yürürlük:** Madde 18'deki kurulma anı
+**Sözleşme No:** AJS-[otomatik] · **Sürüm:** 1.2 · **Metin özeti (SHA-256):** [sistem tarafından] · **Yürürlük:** Madde 18'deki kurulma anı
 
 > `[KARAR: …]` notları imzaya açılmadan önce doldurulmalı ve silinmelidir. Bu metin bir taslaktır; avukat ve mali müşavir incelemesinden
 > geçirilmelidir.
@@ -47,7 +47,7 @@ kabul eder.
 
 6.1. Ajans primi, Ajans Komisyon Politikası'ndaki seviye tablosuna ve ajansa özel tanımlanmış orana göre hesaplanır. Ajans primi yayıncının kazancından düşülmez; TR LIVE tarafından ayrıca ödenir. `[KARAR: Sistemdeki işleyişle (ajans primi ayrı ödeniyor) uyumlu yazıldı; farklıysa düzeltin.]`
 
-6.2. Yayıncının kendisine gönderdiği hediyelerin ajans primine dahil olup olmadığı Politikada açıkça belirtilir. `[KARAR: Sesli odada kendine hediyenin maaşa sayılması kararı ajans primi için de geçerli mi? Sistemde ajans primi hesabında aynı kural (salary_rules) kullanılıyor.]`
+6.2. Yayıncının sesli odada kendisine gönderdiği hediyeler ajans primine, Yayıncı Sözleşmesi Madde 6.3'teki sınırla (dönemde sayılan toplamın en çok %20'si) dahil edilir.
 
 6.3. Politika değişiklikleri en az 15 gün önce bildirilir ve ileriye dönük uygulanır. Kesinleşmiş primler geriye dönük azaltılamaz. Değişikliği kabul etmeyen ajans sahibi, sözleşmeyi bildirim süresi beklemeden feshedebilir.
 
@@ -125,8 +125,12 @@ Mücbir sebep, sorumluluğun sınırı (TBK md. 115 saklı), devir yasağı, bil
 
 17.4. Tacirler arasında, TR LIVE'in usulüne uygun tutulmuş elektronik kayıtları, aksi ispat edilebilmek kaydıyla delil niteliğindedir (HMK md. 193).
 
-## MADDE 18 – KURULMA, İMZA VE SÜRÜM
+## MADDE 18 – KURULMA, ONAY VE SÜRÜM
 
-Sözleşme, Ek-İmza Usulü'ndeki yöntemle kurulur. İmzalı metnin değiştirilemez PDF kopyası ajans panelinden indirilebilir. Yeni sürüm yeniden imza ile yürürlüğe girer; önceki sürümle doğmuş haklar saklıdır.
+18.1. Sözleşme elektronik ortamda kurulur: ajans sahibi metni uygulamada ya da panelde sonuna kadar görüntüler, onay kutusunu işaretler ve doğrulanmış telefonuna gönderilen tek kullanımlık kodu girer. Kurulma anı, kodun doğrulanıp onayın sistem kaydına geçtiği andır.
 
-**Ekler:** Ajans Komisyon Politikası · Yetki Tablosu (asistan ve referans ajans) · Veri İşleme Sözleşmesi · İmza Usulü
+18.2. TR LIVE; metnin sürümünü ve özetini (SHA-256), onay zamanını, IP adresini, cihaz bilgisini, doğrulanmış telefon numarasını ve kod doğrulama kaydını değiştirilemez şekilde saklar. Ajans sahibi, onayladığı metnin bu bilgileri içeren PDF kopyasını panelden her zaman indirebilir.
+
+18.3. Sözleşmenin yeni sürümü yeniden onay ile yürürlüğe girer; önceki sürümle doğmuş haklar saklıdır.
+
+**Ekler:** Ajans Komisyon Politikası · Yetki Tablosu (asistan ve referans ajans) · Veri İşleme Sözleşmesi

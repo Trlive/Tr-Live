@@ -1,8 +1,21 @@
-# Sözleşmeler: yapılan düzeltmeler, açık kararlar, imza usulü
+# Sözleşmeler: yapılan düzeltmeler, kararlar, imza usulü
 
-Bu klasördeki üç metin (sürüm 1.1), sahibin gönderdiği 1.0 taslaklarının düzeltilmiş hâlidir. **Hukuki görüş değildir**; yürürlüğe
-girmeden önce bir avukat ve bir mali müşavir tarafından incelenmelidir. Metinlerdeki `[KARAR: …]` notları imzaya açılmadan önce
-doldurulmalı ve silinmelidir.
+## Sahibin kararları (sürüm 1.2)
+
+| Konu | Karar | Metne / sisteme etkisi |
+|---|---|---|
+| İmza usulü | **Herkese uygulama içi onay** (metni sonuna kadar görüntüleme + onay kutusu + SMS kodu) | Üç sözleşmede son madde buna göre yazıldı. Sistemde sözleşme onay modülü kurulacak (sürüm, SHA-256, IP, cihaz, telefon, kod kaydı, PDF). |
+| Bayilik modeli | **Toptan alım-satım (bugünkü model):** bayi TR LIVE'den toptan Coin alır, kendi adına müşteriye satar, Coin'i müşterinin ID'sine yükler, kazancı alış-satış farkıdır | Bayilik sözleşmesi bu modele göre baştan yazıldı. Bayi müşteriye karşı satıcıdır (fatura/fiş, tüketici hakları, ters ibraz riski). Play kuralı: bayi uygulama içinde satış reklamı, fiyat, IBAN, iletişim paylaşamaz. |
+| Sözleşmenin tarafı olan şirket | **Henüz belli değil** | Alan boş; sistemde ayar olarak tutulacak. |
+| Kendine hediye | **Sınırla** | Dönemde sayılan toplam Diamond'ın en çok %20'si (başkalarından gelenin dörtte biri). Sistemde uygulandı (v2.152.20): maaş, avans, ajans primi ve yayıncı ekranı aynı kuralı kullanıyor. Sözleşmede Yayıncı 6.3 ve Ajans 6.2. |
+
+## Kalan açık kararlar (metinlerde `[KARAR: …]`)
+
+- Bayilik: azami perakende fiyat uygulanacak mı; hacim primi olacak mı (oran, ödeme şekli); fesihte kalan stoğun satış süresi ve iade kesintisi; bölge bayisi seviyesi eklenecek mi (sistem bugün 2 seviye).
+- Yayıncı: GVK 20/B istisnası (mali müşavir); KVKK md. 9 yurt dışı aktarım işlemleri (avukat).
+- Tüm metinler: tacir taraflar için yetkili mahkeme şehri.
+
+---
 
 ## Üç metinde ortak düzeltmeler
 
