@@ -1,0 +1,49 @@
+name: Eski çalışmaları sil
+
+# Actions sekmesinde birikmiş eski iş akışı çalışmalarını (ve yapıtlarını) siler. Yalnızca elle çalışır:
+# Actions → "Eski çalışmaları sil" → Run workflow. Varsayılan: son 7 gün kalır.
+on:
+  workflow_dispatch:
+    inputs:
+      gun:
+        description: "Son kaç günün çalışmaları kalsın"
+        required: false
+        default: "7"
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  sil:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GUN: ${{ github.event.inputs.gun }}
+    steps:
+      - name: Eski çalışmaları listele ve sil
+        shell: bash
+        run: |
+          set -euo pipefail
+          GUN="${GUN:-7}"
+          [[ "$GUN" =~ ^[0-9]{1,3}$ ]] || { echo "Gün sayısı geçersiz: $GUN"; exit 1; }
+          CUTOFF=$(date -u -d "$GUN days ago" +%Y-%m-%dT%H:%M:%SZ)
+          echo "Şu tarihten önceki çalışmalar silinecek: $CUTOFF"
+          # Önce tüm kimlikler toplanır, sonra silinir (silerken sayfalama kaymasın).
+          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs?per_page=100&created=<$CUTOFF" \
+            --jq '.workflow_runs[] | select(.status == "completed") | .id' > ids.txt
+          TOPLAM=$(wc -l < ids.txt)
+          echo "Silinecek çalışma: $TOPLAM"
+          N=0; HATA=0
+          while read -r id; do
+            [ -n "$id" ] || continue
+            [ "$id" = "$GITHUB_RUN_ID" ] && continue
+            if gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/runs/$id" >/dev/null 2>&1; then
+              N=$((N + 1))
+            else
+              HATA=$((HATA + 1))
+            fi
+            [ $((N % 100)) -eq 0 ] && [ "$N" -gt 0 ] && echo "$N / $TOPLAM silindi"
+          done < ids.txt
+          echo "Bitti: $N çalışma silindi, $HATA silinemedi."
