@@ -1,3 +1,43 @@
+## v2.152.17 — Bağımsız inceleme turu: gerçek veritabanında doğrulama, iki üretim hatası, yayın izni sunucuda, para döngüsü koruması
+
+Bu sürüm v2.152.4–v2.152.16 arasındaki değişikliklerin bağımsız incelemesidir. İlk kez **gerçek PostgreSQL 16** kuruldu: 118 migration'ın tamamı
+sıfırdan çalıştırıldı ve uçtan uca testler gerçek veritabanına karşı koşturuldu. Ayrıca **Flutter SDK** ile `flutter analyze` ve `flutter test`,
+web paneli için `tsc` ve `next build` ilk kez gerçekten çalıştırıldı.
+
+**Bulunan ve düzeltilen hatalar**
+- **Mobil girişte 8 karakter kuralı (v2.152.x'te geldi):** kural yalnızca kayıtta değil girişte de uygulanıyordu; şifresini eski kuralla (6–7 karakter)
+  koymuş her kullanıcı yeni sürümde giriş yapamazdı. Artık yalnızca kayıtta (sunucu girişte zaten uzunluk denetlemiyordu).
+- **Alt bayi listesi her açılışta "Sunucu hatası" (eskiden beri):** `COALESCE(metin, 0)` PostgreSQL'de tür hatası. Birim testleri sahte veritabanıyla
+  çalıştığı için hiç görünmemişti; gerçek veritabanında yakalandı.
+- **Görüntülü odada hediye paneli yayıncının kendisini seçiyordu:** v2.152.5 kuralı (görüntülüde kendine hediye yok) yüzünden varsayılan alıcı kendisi
+  olunca gönderim reddediliyordu. Mobil artık görüntülü odada kişinin kendisini alıcı listesinde göstermiyor; eski sürümlerin "eşit/rastgele" modunda
+  sunucu göndereni havuzdan çıkarıyor.
+- **e2e testleri sahip kararlarıyla çelişiyordu:** v2.152.5 (sesli odada kendine hediye maaşa sayılır, görüntülüde gönderilemez) ve v2.152.14
+  (basit maaş kuralı, "Maaş 2" sütunu) sonrası 3 test eski davranışı bekliyordu. Kararlara göre güncellendi; gerçek veritabanında 52/52.
+
+**Yeni korumalar**
+- **Para döngüsü koruması:** sesli odada kendine hediye maaşa sayıldığı için, Fasulye→Coin (ya da bayi) kuru maaş tablosunun en cömert seviyesinden
+  yüksek olursa "Coin al → kendine hediye → maaş" turu kâr ederdi. Varsayılanlarda döngü zararına (1$ = 4.000 Coin; tablo 1$ için en az 10.638 elmas
+  ister). Artık kur ve maaş tablosu bu sınırı aşacak şekilde kaydedilemez (`salaryLoopError`, panelde 400 ve açıklama). **Platform dışındaki bayi
+  satış fiyatı bu korumanın dışındadır:** bayiler 1$'a 10.638 Coin'den fazlasını satarsa döngü yine kârlıdır.
+- **Yayın izni sunucuda (rapor K-04):** tek kural (`rooms/publish_policy.rules.js`): koltukta olmayan yayın yapamaz; susturulmuş koltuk sesli odada
+  yayın yapamaz, görüntülüde yalnızca kamera açabilir. Kural LiveKit anahtarına, koltuğa oturmaya ve koltuk susturmaya uygulanıyor; **koltuk susturma
+  eskiden yalnızca istemcide uygulanıyordu.** Yeni `/livekit/webhook` ucu (imza doğrulamalı): odanın üyesi olmayan katılımcıyı çıkarır, kurala aykırı
+  yayını keser. `livekit.yaml`'a webhook ayarı eklendi; **ilk dağıtımda ses sunucusu bir kez yeniden başlar** (açık odalarda ses birkaç saniye kesilir).
+- **Oyun paketi (rapor K-02, ara adım):** paket yüklemek ve "tam erişim" vermek 2FA'sı açık yöneticiden, o anki kodla kabul edilir; panelde kod alanı.
+  **Yönetici hesabınızda 2FA açık değilse paket yükleyemezsiniz** — önce açın. Paketi ayrı süreçte çalıştırmak eklenti sözleşmesini değiştirdiği için yapılmadı.
+- **WebSocket dizinleri (rapor Y-01):** oda, kullanıcı, çevrimiçi izleyici ve IP dizinleri; yayınlar artık tüm bağlantıları dolaşmıyor. Gerçek
+  WebSocket istemcileriyle 5 test.
+- **TURN sertifikası yenilenince** ses sunucusu gece 04'te yeniden başlatılır (eskiden yalnızca bir güncelleme uygulanınca; uzun süre güncelleme
+  gelmezse TURN 90. günde sessizce bozulurdu).
+
+**Diğer:** avans servisindeki "ayar kapalı gelir" yorumları düzeltildi (migration 116 ile varsayılan açık). Panel `tsconfig` hedefi ES2020 (5 tür hatası).
+`mobile/pubspec.lock` ve `web/panel/package-lock.json` eklendi.
+
+**Sınama:** backend 515 birim testi; gerçek PostgreSQL 16'da 52/52 uçtan uca; `flutter analyze` 0 hata / 0 uyarı; `flutter test` 65/65; panel `tsc` 0 hata, `next build` başarılı.
+**Denenemeyenler:** gerçek cihazda ses/görüntü, LiveKit webhook'unun canlı ses sunucusundan gelişi, TURN. İlk dağıtımdan sonra: sunucu günlüğünde
+`livekit_webhook_failed` olmamalı; bir koltuğu susturup susturulan kişinin sesinin gerçekten kesildiğini deneyin.
+
 ## v2.152.16 — Medya depolama (rapor O-03): taşıma tamamlanıyor, silinen dosyanın R2 nesnesi de siliniyor
 
 Mevcut R2 taşıma altyapısı (taşıyıcı, doğrulama, CDN yönlendirmesi) korundu; eksikler kapatıldı. Yükleme noktalarına DOKUNULMADI (yükleme önce veritabanına yazılır, taşıma arka planda yapılır:
