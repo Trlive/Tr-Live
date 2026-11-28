@@ -13,6 +13,7 @@ import '../widgets/app_theme.dart';
 import '../widgets/common.dart';
 import 'edit_profile_screen.dart';
 import 'legal_screens.dart';
+import 'contract_screen.dart';
 import 'misc_screens.dart';
 import 'support_screens.dart';
 import 'wip_screen.dart';
@@ -367,6 +368,7 @@ class _AccountSecurityScreenState extends State<AccountSecurityScreen> {
           _row(Icons.edit_outlined, _cBlue, tx('Profili düzenle'), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const EditProfileScreen()))),
           _row(Icons.lock_reset_rounded, _cOrange, hasPassword ? tx('Şifre değiştir') : tx('Şifre belirle'), onTap: widget.onChangePassword),
           _row(Icons.devices_rounded, _cSky, tx('Oturumlarım'), value: tx('Cihazlar'), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SessionsScreen()))),
+          _row(Icons.description_outlined, _cSky, tx('Sözleşmelerim'), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MyContractsScreen()))),
         ]),
         _group([
           // Önce neler silinir / saklanır bilgisi, sonra onay.

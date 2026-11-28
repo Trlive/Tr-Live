@@ -27,6 +27,7 @@ import 'feed_screen.dart';
 import 'go_live_screen.dart';
 import 'leaderboard_screen.dart';
 import 'legal_screens.dart';
+import 'contract_screen.dart';
 import 'profile_setup_screen.dart';
 import '../widgets/daily_checkin.dart';
 import 'messages_screen.dart';
@@ -52,7 +53,11 @@ class _HomeScreenState extends State<HomeScreen> {
   void _checkTerms() {
     if (!mounted) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) TermsGate.check(context);
+      if (!mounted) return;
+      TermsGate.check(context);
+      // Kullanım sözleşmesi onaylıysa: yayıncı / ajans / bayi sözleşmesi onay bekliyor mu (bir kez sorulur).
+      final me = Session.me.value;
+      if (me != null && !TermsGate.needed(me)) ContractGate.check(context);
     });
   }
 

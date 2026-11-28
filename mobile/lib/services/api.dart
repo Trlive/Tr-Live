@@ -68,6 +68,9 @@ class Api {
   /// Sunucu zorunlu güncelleme istediğinde (HTTP 426).
   static void Function(String message, String? url)? onUpdateRequired;
 
+  /// Sunucu bir sözleşmenin onaylanmasını istediğinde (HTTP 428, code: contract_required): main.dart sözleşme ekranını açar.
+  static void Function(String kind)? onContractRequired;
+
   static Future<bool>? _refreshing;
 
   static Map<String, String> _headers([String contentType = 'application/json']) => {
@@ -208,6 +211,9 @@ class Api {
     if (r.statusCode == 426) {
       final url = data is Map && data['updateUrl'] is String ? data['updateUrl'] as String : null;
       onUpdateRequired?.call(message, url);
+    }
+    if (r.statusCode == 428 && errCode == 'contract_required' && data is Map && data['kind'] is String) {
+      onContractRequired?.call(data['kind'] as String);
     }
     throw ApiException(message, r.statusCode, errCode);
   }
