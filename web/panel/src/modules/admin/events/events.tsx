@@ -20,7 +20,7 @@ export default function AdminEvents() {
   const [tab, setTab] = useState<"weekly" | "official" | "checkin">("weekly");
   return (
     <div>
-      <PageHeader icon={<CalendarDays size={18} />} kicker="Etkinlik" title="Etkinlikler ve Ödüller" description="Haftalık sıralama etkinlikleri, resmi etkinlik yoklaması ve günlük giriş ödülü." />
+      <PageHeader icon={<CalendarDays size={18} />} kicker="Etkinlik ve duyuru" title="Etkinlikler ve Ödüller" description="Haftalık sıralama etkinlikleri, resmi etkinlik yoklaması ve günlük giriş ödülü." />
       <Tabs
         tabs={[
           { key: "weekly", label: "Haftalık etkinlikler" },

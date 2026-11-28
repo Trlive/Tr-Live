@@ -61,7 +61,7 @@ export default function AdminUpload() {
   const [tab, setTab] = useState<"gift" | "frame" | "effect" | "store" | "pack" | "icons">("gift");
   return (
     <div>
-      <PageHeader icon={<Upload size={18} />} kicker="Katalog" title="İçerik Yükle" description="Hediye, çerçeve, giriş efekti, mağaza ürünü ve hazır paket yükleme. Düzenleme ve gizleme Katalog sayfasında." />
+      <PageHeader icon={<Upload size={18} />} kicker="Mağaza ve hediye" title="İçerik Yükle" description="Hediye, çerçeve, giriş efekti, mağaza ürünü ve hazır paket yükleme. Düzenleme ve gizleme Katalog sayfasında." />
       <Tabs
         tabs={[
           { key: "gift", label: "Hediye" },

@@ -86,6 +86,13 @@ function body(req) {
 }
 
 // ---- Eski veritabanını aktarma: istek dosyası yazılır, aktarmayı sunucu (import.sh) yapar ----
+// Sürüyor mu: istek bekliyor ya da kayıt "Bitti." ile bitmemiş. 3 saattir yazılmamış kayıt yarıda kalmıştır (düğme kilitli kalmasın).
+const loadtesting = () => {
+  if (fs.existsSync(`${STATE}/loadtest-request`)) return true;
+  const log = readText(`${STATE}/loadtest.log`);
+  if (!log.trim() || /Bitti\.\s*$/.test(log)) return false;
+  try { return Date.now() - fs.statSync(`${STATE}/loadtest.log`).mtimeMs < 3 * 3600e3; } catch { return false; }
+};
 const importing = () => readText(`${STATE}/import.log`).trim() !== '' && !/Bitti\.\s*$/.test(readText(`${STATE}/import.log`));
 
 // ---- Web panel giriş bağlantıları (v2.153.1) ----
@@ -129,7 +136,7 @@ async function page(msg = '') {
 body{margin:0;background:#0b1220;color:#e5e7eb;font-family:system-ui,sans-serif;font-size:15px}
 main{max-width:640px;margin:0 auto;padding:16px}h1{font-size:22px}h2{font-size:17px;margin:0 0 10px}
 section{background:#111a2e;border:1px solid #1f2a44;border-radius:14px;padding:14px;margin:14px 0}
-label{display:block;margin:10px 0 4px;color:#9ca3af;font-size:13px}input{display:block;width:100%;box-sizing:border-box;margin-top:4px;padding:11px;border-radius:10px;border:1px solid #334155;background:#0b1220;color:#fff;font-size:15px}
+label{display:block;margin:10px 0 4px;color:#9ca3af;font-size:13px}select{display:block;width:100%;margin-top:4px;padding:11px;border-radius:10px;border:1px solid #334155;background:#0b1220;color:#fff;font-size:15px}input{display:block;width:100%;box-sizing:border-box;margin-top:4px;padding:11px;border-radius:10px;border:1px solid #334155;background:#0b1220;color:#fff;font-size:15px}
 button{margin-top:12px;width:100%;padding:13px;border:0;border-radius:12px;background:#22d3ee;color:#06202a;font-weight:800;font-size:15px}
 button.red{background:#f43f5e;color:#fff}pre{white-space:pre-wrap;background:#0b1220;padding:10px;border-radius:10px;font-size:12px;max-height:260px;overflow:auto}
 .ok{background:#14532d;padding:10px;border-radius:10px}code{background:#0b1220;padding:2px 6px;border-radius:6px;word-break:break-all}
@@ -154,6 +161,18 @@ ${gatesSection(d)}
 <label>Onay için AKTAR yazın<input name="confirm" autocomplete="off"></label>
 <button class="red" ${importing() ? 'disabled' : ''}>${importing() ? 'Aktarılıyor…' : 'Verileri aktar'}</button></form>
 <pre>${tail('import.log', 40) || 'Henüz aktarma yapılmadı.'}</pre></section>
+
+<section><h2>Ses/görüntü yük testi (bir oda kaç kişiyi kaldırır)</h2>
+<p>Sahte konuşmacı ve dinleyicilerle tek bir odayı kademe kademe doldurur (25, 50, 100, 200 … dinleyici). LiveKit zorlanınca
+(işlemci %85, hata ya da ses kaybı) durur ve sonucu yazar. Test süresince <b>gerçek odalarda ses takılabilir</b>: kullanıcı yokken
+çalıştırın. Sahte dinleyiciler de bu sunucuda çalıştığı için gerçek kapasite sonuçtan yüksektir. 1000 dinleyiciye kadar
+yaklaşık 15-20 dakika sürer; bu sayfayı arada yenileyin.</p>
+<form method="post" action="/panel/loadtest">
+<label>Oda türü<select name="mode"><option value="audio">Sesli oda</option><option value="video">Görüntülü oda</option></select></label>
+<label>Konuşmacı sayısı (koltuk, 1-20)<input name="pubs" value="10" inputmode="numeric"></label>
+<label>En çok dinleyici (10-5000)<input name="max" value="1000" inputmode="numeric"></label>
+<button ${loadtesting() ? 'disabled' : ''}>${loadtesting() ? 'Test sürüyor…' : 'Yük testini başlat'}</button></form>
+<pre>${tail('loadtest.log', 40) || 'Henüz yük testi yapılmadı.'}</pre></section>
 
 <section><h2>Ses sunucusu testi</h2>
 <p>5 dakikada bir kendiliğinden yenilenir. ❌ olan satır varsa ekran görüntüsünü gönderin.</p>
@@ -207,6 +226,15 @@ async function handle(req, res) {
     try { fs.unlinkSync(`${ENV_DIR}/gates.env`); } catch { /* zaten yok */ }
     touch('apply');
     return back('Yeni bağlantılar üretiliyor. 1-2 dakika sonra bu sayfayı yenileyin.');
+  }
+  if (url.pathname === '/panel/loadtest') {
+    if (loadtesting()) return back('Yük testi zaten sürüyor.');
+    const mode = f.get('mode') === 'video' ? 'video' : 'audio';
+    const pubs = Math.min(20, Math.max(1, Number.parseInt(String(f.get('pubs') ?? '10'), 10) || 10));
+    const max = Math.min(5000, Math.max(10, Number.parseInt(String(f.get('max') ?? '1000'), 10) || 1000));
+    fs.writeFileSync(`${STATE}/loadtest.log`, `[${new Date().toLocaleTimeString('tr-TR')}] İstek alındı, birkaç saniye içinde başlar…\n`);
+    fs.writeFileSync(`${STATE}/loadtest-request`, `${mode} ${pubs} ${max}\n`);
+    return back('Yük testi başladı. Birkaç dakika sonra sayfayı yenileyin.');
   }
   if (url.pathname === '/panel/import') {
     const old = String(f.get('old') ?? '').trim();

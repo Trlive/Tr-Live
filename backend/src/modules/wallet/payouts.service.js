@@ -164,6 +164,8 @@ export async function closePeriod({ adminId, periodKey, force = false }) {
   if (b.end > new Date() && !force) throw fail('Bu dönem henüz bitmedi.', 409);
   return tx(async (c) => {
     const run = (t, p) => c.query(t, p);
+    // Dönem kapanışı tüm yayıncıların ay verisini tarar: genel 30 sn sorgu sınırı bu işlemde 10 dk (yalnızca bu işlem için).
+    await c.query(`SET LOCAL statement_timeout = '10min'`);
     await c.query(`SELECT pg_advisory_xact_lock(hashtext('payout_close'))`);
     if ((await c.query(`SELECT 1 FROM payout_periods WHERE period_key = $1`, [b.key])).rowCount) throw fail('Bu dönem zaten kapatılmış.', 409);
     // Aylık ve haftalık dönemler karışırsa aynı hediyeler/mikrofon süresi iki kez ödenmesin: zaman aralığı çakışması reddedilir.

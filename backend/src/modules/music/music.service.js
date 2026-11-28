@@ -6,18 +6,18 @@ import { hub } from '../../infrastructure/websocket/realtime.js';
 import { positionAt, hasEnded } from './music.rules.js';
 import { nonOverlapping } from '../../infrastructure/queue/ticker.js';
 
-const trackOf = (r) => ({ id: r.track_id ?? r.id, title: r.title, artist: r.artist, url: r.url, coverUrl: r.cover_url, durationMs: r.duration_ms });
+const trackOf = (r) => ({ id: r.track_id ?? r.id, title: r.title, artist: r.artist, url: r.url, coverUrl: r.cover_url, durationMs: r.duration_ms, gainDb: r.gain_db ?? null });
 const ELAPSED = `(EXTRACT(EPOCH FROM (NOW() - rm.updated_at)) * 1000)::bigint`;
 
 // İstemciler "positionMs" ve "serverTime" ile senkronize olur: şimdiki konum = positionMs + (yerelSaat - alındığıAn).
 export async function musicState(roomId, run = query) {
   const st = (await run(
-    `SELECT rm.status, rm.position_ms, ${ELAPSED} AS elapsed_ms, rm.track_id, rm.controlled_by, rm.volume, t.title, t.artist, t.url, t.cover_url, t.duration_ms
+    `SELECT rm.status, rm.position_ms, ${ELAPSED} AS elapsed_ms, rm.track_id, rm.controlled_by, rm.volume, t.title, t.artist, t.url, t.cover_url, t.duration_ms, t.gain_db
      FROM room_music rm LEFT JOIN music_tracks t ON t.id = rm.track_id WHERE rm.room_id = $1`,
     [roomId],
   )).rows[0];
   const queue = (await run(
-    `SELECT q.id, q.added_by, t.id AS track_id, t.title, t.artist, t.url, t.cover_url, t.duration_ms
+    `SELECT q.id, q.added_by, t.id AS track_id, t.title, t.artist, t.url, t.cover_url, t.duration_ms, t.gain_db
      FROM room_music_queue q JOIN music_tracks t ON t.id = q.track_id WHERE q.room_id = $1 ORDER BY q.created_at LIMIT 50`,
     [roomId],
   )).rows;

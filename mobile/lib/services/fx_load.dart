@@ -28,6 +28,18 @@ class FxLoad {
       final m = RegExp(r'MemTotal:\s+(\d+)\s*kB').firstMatch(text);
       if (m != null) _totalMb = int.parse(m.group(1)!) ~/ 1024;
     } catch (_) {/* okunamadı: varsayılan sınıf */}
+    applyImageCacheLimit();
+  }
+
+  /// Resim önbelleğinin bayt üst sınırı: düşük bellekli telefonda küçük (animasyonlarla birlikte sistemin uygulamayı
+  /// kapatmasını önler), güçlü telefonda daha büyük (aynı görseller yeniden çözülmez). Orta sınıf Flutter varsayılanı (100 MB).
+  static int get imageCacheBytes => _pick(48, 100, 160) * 1024 * 1024;
+
+  /// Önbellek sınırını cihaz sınıfına göre uygular (bellek okunduktan sonra; okunamazsa orta sınıf = varsayılan).
+  static void applyImageCacheLimit() {
+    try {
+      PaintingBinding.instance.imageCache.maximumSizeBytes = imageCacheBytes;
+    } catch (_) {/* henüz kurulmadıysa yoksay */}
   }
 
   /// Testler için: toplam belleği (MB) elle verir.

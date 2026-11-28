@@ -12,7 +12,11 @@ import { db, closeDb } from './database.js';
 const dir = new URL('../../migrations/', import.meta.url).pathname;
 const LOCK_ID = 727001; // aynı anda iki süreç migration çalıştırmasın
 
+// Migration'larda sorgu süre sınırı yok: büyük tabloya indeks/sütun eklemek 30 sn'yi aşabilir (bkz. database.js).
+process.env.DB_STATEMENT_TIMEOUT_MS = '0';
+process.env.DB_IDLE_TX_TIMEOUT_MS = '0';
 const client = await db().connect();
+client.on('error', (e) => console.error('Migration bağlantısı koptu:', e.message));
 let failed = false;
 try {
   await client.query('SELECT pg_advisory_lock($1)', [LOCK_ID]);

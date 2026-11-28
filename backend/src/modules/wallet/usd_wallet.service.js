@@ -67,7 +67,29 @@ async function move(c, { userId, cents, type, refType = null, refId = null, note
   return after;
 }
 export const creditUsd = (c, o) => { if (BigInt(o.cents) <= 0n) throw fail('Tutar geçersiz.'); return move(c, o); };
-export const debitUsd = (c, o) => { if (BigInt(o.cents) <= 0n) throw fail('Tutar geçersiz.'); return move(c, { ...o, cents: -BigInt(o.cents) }); };
+// Hesaptan DIŞARI çıkan Fasulye (rapor F-05): başkasına Coin gönderme, bayiye gönderim, admine çekim talebi. Kendine Coin'e
+// çevirmek sayılmaz (para hesaptan çıkmaz). Ele geçirilen bir hesabın bakiyesi tek seferde boşaltılamasın diye 24 saatlik toplam
+// sınırlıdır (ayar usdDailyOutCents; 0 = kapalı). move() kullanıcı satırını kilitlediği için aynı anda gelen iki istek sırayla sayılır.
+export const USD_OUT_TYPES = ['coin_send', 'dealer_transfer', 'withdraw_request'];
+export async function debitUsd(c, o) {
+  if (BigInt(o.cents) <= 0n) throw fail('Tutar geçersiz.');
+  const after = await move(c, { ...o, cents: -BigInt(o.cents) });
+  if (USD_OUT_TYPES.includes(o.type)) {
+    const limit = BigInt((await getConfig()).usdDailyOutCents ?? 0);
+    if (limit > 0n) {
+      const used = BigInt((await c.query(
+        `SELECT COALESCE(-SUM(amount_cents), 0)::text AS c FROM usd_transactions
+         WHERE user_id = $1 AND type = ANY($2::text[]) AND created_at > NOW() - INTERVAL '24 hours'`,
+        [o.userId, USD_OUT_TYPES],
+      )).rows[0].c);
+      if (used > limit) {
+        const left = limit - (used - BigInt(o.cents));
+        throw fail(`24 saatlik gönderim sınırı ${beansText(limit)} Fasulye. Bu işlemle aşılıyor; kalan: ${beansText(left > 0n ? left : 0n)} Fasulye.`, 429);
+      }
+    }
+  }
+  return after;
+}
 
 // Özet türü → tablo, defter türü, tutar sütunu ve alıcı (owner: ajans sahibi).
 const STATEMENTS = {

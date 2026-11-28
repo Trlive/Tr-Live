@@ -25,7 +25,7 @@ export default function AdminUsd() {
   const t = ov.data?.totals;
   return (
     <div>
-      <PageHeader icon={<Wallet size={18} />} kicker="Ekonomi" title="Fasulye Cüzdanı" description="1 Fasulye = 1 $. Yönetime gönderilen çekim talepleri, elle düzeltme ve ayarlar." />
+      <PageHeader icon={<Wallet size={18} />} kicker="Para" title="Fasulye Cüzdanı" description="1 Fasulye = 1 $. Yönetime gönderilen çekim talepleri, elle düzeltme ve ayarlar." />
       {t && (
         <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard label="Cüzdanlardaki toplam" value={bean(t.walletCents)} tone="gold" />
@@ -59,6 +59,7 @@ export default function AdminUsd() {
             { key: "usdCoinsPerUsd", label: "Coin'e çevirmede 1 Fasulye", type: "int", suffix: "Coin" },
             { key: "usdCoinsPerUsdOthers", label: "Başkasına Coin gönderirken 1 Fasulye (0 = aynı kur)", type: "int", suffix: "Coin" },
             { key: "usdExchangeMinCents", label: "Coin'e çevirme alt sınırı", type: "int", scale: 100, suffix: "Fasulye" },
+            { key: "usdDailyOutCents", label: "24 saatte en çok dışarı gönderim (başkasına Coin + bayiye + çekim; 0 = sınırsız)", type: "int", scale: 100, suffix: "Fasulye" },
           ]}
           onSaved={ov.reload}
         />

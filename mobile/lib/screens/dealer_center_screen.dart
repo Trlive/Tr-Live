@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../hybrid/sdui/v2/sdui_screen_view.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -171,6 +172,7 @@ class _DealerCenterScreenState extends State<DealerCenterScreen> {
           return RefreshIndicator(
             onRefresh: reload,
             child: ListView(padding: const EdgeInsets.only(top: 8, bottom: 24), children: [
+              SduiScreenView.slot('dealer'), // panelden kampanya/duyuru (yayın yoksa görünmez)
               // Satışa sunulan Coin (stok).
               Container(
                 margin: const EdgeInsets.fromLTRB(14, 0, 14, 12),

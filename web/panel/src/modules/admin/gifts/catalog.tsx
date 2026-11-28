@@ -33,7 +33,7 @@ export default function AdminCatalog() {
   const [q, setQ] = useState("");
   return (
     <div>
-      <PageHeader icon={<Gift size={18} />} kicker="Ekonomi" title="Katalog" description="Hediyeler, mağaza ürünleri ve çerçeveler: fiyat, ad, sekme ve satış durumu. Yeni görsel yükleme uygulamadaki yönetim panelinden yapılır." />
+      <PageHeader icon={<Gift size={18} />} kicker="Mağaza ve hediye" title="Katalog" description="Hediyeler, mağaza ürünleri ve çerçeveler: fiyat, ad, sekme ve satış durumu. Yeni hediye / ürün görseli: Mağaza ve hediye → İçerik Yükle." />
       <Tabs
         tabs={[
           { key: "gifts", label: `Hediyeler${catalog.data ? ` (${catalog.data.gifts.length})` : ""}` },

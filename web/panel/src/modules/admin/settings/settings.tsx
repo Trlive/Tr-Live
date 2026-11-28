@@ -45,7 +45,7 @@ const GROUPS: { title: string; note?: string; fields: FieldDef[] }[] = [
   },
   {
     title: "Coin satış kanalları",
-    note: "Kart (PayTR) ve USDT için gizli anahtarlar sunucunun .env dosyasındadır (PAYTR_MERCHANT_ID / PAYTR_MERCHANT_KEY / PAYTR_MERCHANT_SALT, USDT_TRC20_ADDRESS, TRONGRID_API_KEY, PUBLIC_BASE_URL); burada yalnızca aç/kapa. Anahtarı olmayan yöntem açık olsa da görünmez. Durum ve sipariş listesi: Ekonomi → Ödemeler.",
+    note: "Kart (PayTR) ve USDT için gizli anahtarlar sunucunun .env dosyasındadır (PAYTR_MERCHANT_ID / PAYTR_MERCHANT_KEY / PAYTR_MERCHANT_SALT, USDT_TRC20_ADDRESS, TRONGRID_API_KEY, PUBLIC_BASE_URL); burada yalnızca aç/kapa. Anahtarı olmayan yöntem açık olsa da görünmez. Sipariş listesi ve kurulum durumu bu sayfanın diğer sekmelerinde.",
     fields: [
       { key: "payPaytrEnabled", label: "Kart ile ödeme (PayTR) — onaylanınca Coin otomatik", kind: "bool" },
       { key: "payUsdtEnabled", label: "USDT (TRC20) — zincirde görülünce Coin otomatik", kind: "bool" },
@@ -78,27 +78,19 @@ const GROUPS: { title: string; note?: string; fields: FieldDef[] }[] = [
       { key: "maxMuteMinutes", label: "En uzun kısıt (dakika)", hint: "1-10080", kind: "int" },
     ],
   },
-  {
-    title: "Şanslı hediye",
-    note: "Geri dönüş (RTP) + alıcı payı en fazla %95 olabilir. Baz puan: 7000 = %70.",
-    fields: [
-      { key: "luckyEnabled", label: "Şanslı hediye açık", kind: "bool" },
-      { key: "luckyRtpBps", label: "Gönderene ortalama geri dönüş (baz puan)", hint: "0-9000", kind: "int" },
-      { key: "luckyReceiverBps", label: "Alıcıya geçen Elmas payı (baz puan)", hint: "0-5000", kind: "int" },
-      { key: "luckyMaxWin", label: "Tek gönderimde en fazla kazanç (Coin)", kind: "int" },
-      { key: "luckyAnnounceMultiplier", label: "Herkese duyurulan en düşük çarpan", hint: "10-500", kind: "int" },
-    ],
-  },
 ];
 
-type TabKey = "app" | "agency" | "salary" | "events";
+type TabKey = "app" | "agency";
+
+/** Ayarlar sayfasında gösterilen bölümler; diğerleri kendi sayfalarında (AppConfig only=...). */
+const SETTINGS_GROUPS = ["Uygulama sürümü ve güncelleme", "Odalar", "Ses", "WebView güvenliği"];
 
 export default function AdminSettings() {
   const isAdmin = getSession("admin")?.user.systemRole === "admin";
   const [tab, setTab] = useState<TabKey>("app");
   return (
     <div>
-      <PageHeader icon={<Settings size={18} />} kicker="Güvenli yapılandırma" title="Ayarlar" description="Uygulama, moderasyon, şanslı hediye, ajans ve haftalık etkinlik ayarları. Tüm değişiklikler işlem kaydına yazılır." />
+      <PageHeader icon={<Settings size={18} />} kicker="Uygulama ve sistem" title="Ayarlar" description="Uygulama sürümü, oda, ses, WebView ve ajans/maaş ayarları. Ödeme, moderasyon, şanslı hediye, medya deposu ve haftalık etkinlik ayarları kendi sayfalarındadır. Tüm değişiklikler işlem kaydına yazılır." />
       {!isAdmin ? (
         <ErrorBox message="Ayarlar yalnızca yöneticiye açıktır." />
       ) : (
@@ -107,23 +99,26 @@ export default function AdminSettings() {
             tabs={[
               { key: "app", label: "Uygulama" },
               { key: "agency", label: "Ajans ve maaş" },
-              { key: "salary", label: "Maaş hak edişi" },
-              { key: "events", label: "Haftalık etkinlikler" },
             ]}
             value={tab}
             onChange={setTab}
           />
-          {tab === "app" && <AppConfig />}
-          {tab === "agency" && <AgencyConfig />}
-          {tab === "salary" && <SalaryWeights />}
-          {tab === "events" && <WeeklyEvents />}
+          {tab === "app" && <AppConfig only={SETTINGS_GROUPS} />}
+          {tab === "agency" && (
+            <div className="space-y-6">
+              <AgencyConfig />
+              <SalaryWeights />
+            </div>
+          )}
         </>
       )}
     </div>
   );
 }
 
-function AppConfig() {
+/** Uygulama ayarlarından seçilen bölümler (başlıkla). Kaydet yalnızca bu bölümlerin değişen alanlarını gönderir. */
+export function AppConfig({ only }: { only: string[] }) {
+  const groups = GROUPS.filter((g) => only.includes(g.title));
   const { data, error, loading, reload } = useApi<{ config: Config; defaults: Config }>("/api/admin/app-config");
   const [form, setForm] = useState<Config>({});
   const { busy, msg, run } = useAction();
@@ -139,7 +134,7 @@ function AppConfig() {
   const save = () =>
     run("Ayarlar kaydedildi.", async () => {
       const patch: Config = {};
-      for (const g of GROUPS)
+      for (const g of groups)
         for (const f of g.fields) {
           const before = data.config[f.key];
           let v = form[f.key];
@@ -158,8 +153,8 @@ function AppConfig() {
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-6 xl:grid-cols-2">
-        {GROUPS.map((g) => (
+      <div className={groups.length > 1 ? "grid gap-6 xl:grid-cols-2" : "grid gap-6"}>
+        {groups.map((g) => (
           <Card key={g.title} title={g.title} subtitle={g.note}>
             <div className="space-y-4">
               {g.fields.map((f) =>
@@ -295,43 +290,5 @@ function AgencyConfig() {
         <p className="text-xs text-gray-500">Ajans dereceleri: {data.config.agencyGrades.map((g) => `${g.name} (${fmtNumber(g.min)}+)`).join(" · ")}</p>
       )}
     </div>
-  );
-}
-
-type WeeklyEvent = { kind: string; title: string; enabled: boolean; isStar: boolean; gift: { id: string; name: string } | null; rules: string };
-
-function WeeklyEvents() {
-  const { data, error, loading, reload } = useApi<{ events: WeeklyEvent[] }>("/api/admin/weekly-events");
-  const { busy, msg, run } = useAction();
-  if (loading && !data) return <Loading />;
-  if (error) return <ErrorBox message={error} onRetry={reload} />;
-  if (!data) return null;
-  return (
-    <Card title="Haftalık etkinlikler" subtitle="Ödül, hediye ve kuralları Etkinlikler sayfasından düzenleyin">
-      <ActionMsg msg={msg} />
-      <ul className="mt-2 grid gap-2 md:grid-cols-2">
-        {data.events.map((e) => (
-          <li key={e.kind} className="flex items-center justify-between gap-3 rounded-xl border border-[#262117] bg-[#141210] px-4 py-3">
-            <span className="min-w-0">
-              <span className="block font-medium text-white">{e.title}</span>
-              <span className="block text-xs text-gray-500">{e.isStar ? `Yıldız hediyesi: ${e.gift?.name ?? "seçilmedi"}` : e.kind}</span>
-            </span>
-            <button
-              type="button"
-              disabled={busy}
-              className={btnSmall}
-              onClick={() =>
-                run(e.enabled ? `${e.title} kapatıldı.` : `${e.title} açıldı.`, async () => {
-                  await api(`/api/admin/weekly-events/${e.kind}`, { method: "PUT", body: { enabled: !e.enabled } });
-                  reload();
-                })
-              }
-            >
-              {e.enabled ? "Açık · kapat" : "Kapalı · aç"}
-            </button>
-          </li>
-        ))}
-      </ul>
-    </Card>
   );
 }

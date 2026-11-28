@@ -1,15 +1,11 @@
-import type { Metadata } from "next";
-import PanelShell from "@/core/layout/panel-shell";
-import SduiEditor from "@/modules/admin/sdui/sdui";
-
-export const metadata: Metadata = {
-  title: "Ana Ekran Düzeni",
-};
-
+"use client";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+// Eski adres: "Ana ekran sekmeleri" artık Ekran Düzenleri sayfasının bir sekmesi.
 export default function Page() {
-  return (
-    <PanelShell panel="admin">
-      <SduiEditor />
-    </PanelShell>
-  );
+  const router = useRouter();
+  useEffect(() => {
+    router.replace("/admin/screens");
+  }, [router]);
+  return null;
 }

@@ -2821,6 +2821,72 @@ test('web panel bağlantıları: yönetim bağlantısı yalnızca süper yöneti
   assert.ok(n >= 1, 'bakış denetim kaydına yazılır');
 });
 
+test('Fasulye 24 saatlik dışarı gönderim sınırı (F-05): başkasına / bayiye / çekim toplamı; kendine çevirme serbest', { skip, timeout: 30000 }, async () => {
+  const a = await register('dislimit');
+  const b = await register('dislimitb');
+  await sql(`UPDATE users SET usd_cents = 10000 WHERE id = $1`, [a.id]);
+  ok(await api('PUT', '/api/admin/app-config', { token: U.d.token, body: { usdDailyOutCents: 1500 } }));
+  const send = (cents) => api('POST', '/api/usd/coin-exchanges', { token: a.token, body: { amountCents: cents, targetUserId: b.id }, headers: { 'Idempotency-Key': crypto0.randomUUID() } });
+  ok(await send(1000), 'sınır içinde');
+  const over = await send(1000);
+  status(over, 429, 'sınır aşılır');
+  assert.match(over.body.message, /kalan: 5 Fasulye/);
+  assert.equal((await sql(`SELECT usd_cents::text AS c FROM users WHERE id = $1`, [a.id])).rows[0].c, '9000', 'reddedilen gönderim bakiyeden düşmedi');
+  ok(await api('POST', '/api/usd/coin-exchanges', { token: a.token, body: { amountCents: 5000 }, headers: { 'Idempotency-Key': crypto0.randomUUID() } }), 'kendine çevirme sınıra sayılmaz');
+  assert.equal((await sql(`SELECT usd_cents::text AS c FROM users WHERE id = $1`, [a.id])).rows[0].c, '4000');
+  ok(await send(500), 'kalan 5 Fasulye gönderilebilir');
+  ok(await api('PUT', '/api/admin/app-config', { token: U.d.token, body: { usdDailyOutCents: 500000 } }));
+});
+
+test('izin matrisi (K-03): her /api/admin ucu misafire 401, normal kullanıcıya 403', { skip, timeout: 180000 }, async () => {
+  // Uçlar KAYNAKTAN çıkarılır: app.js'teki /api/admin bağlamaları + bağlı yönlendiricinin dosyasındaki tanımlar (genel yönetim
+  // yönlendiricisinin alt dosyaları dahil). Yeni eklenen ve korumasız kalan bir yönetim ucu bu testi kırar.
+  const src = (p) => fs.readFileSync(path.join(dir, 'src', p), 'utf8');
+  const app = src('app.js');
+  const imports = new Map(); // yerel ad -> { file, exportName }
+  for (const m of app.matchAll(/import \{([^}]+)\} from '\.\/([^']+)';/g)) {
+    for (const part of m[1].split(',')) {
+      const [exp, local] = part.trim().split(/\s+as\s+/);
+      if (exp) imports.set((local ?? exp).trim(), { file: m[2], exportName: exp.trim() });
+    }
+  }
+  const routesOf = (file, exportName) => {
+    const s = src(file);
+    const out = [];
+    for (const m of s.matchAll(new RegExp(`\\b${exportName}\\.(get|post|put|patch|delete)\\(\\s*'([^']+)'`, 'g'))) out.push([m[1].toUpperCase(), m[2]]);
+    return { s, out };
+  };
+  const targets = [];
+  for (const m of app.matchAll(/app\.use\('(\/api\/admin[^']*)',\s*(\w+)\)/g)) {
+    const imp = imports.get(m[2]);
+    assert.ok(imp, `içe aktarım bulunamadı: ${m[2]}`);
+    const { s, out } = routesOf(imp.file, imp.exportName);
+    for (const [meth, p] of out) targets.push([meth, m[1] + (p === '/' ? '' : p)]);
+    // Genel yönetim yönlendiricisi alt dosyaları router.use(xRouter) ile bağlar.
+    for (const u of s.matchAll(/^router\.use\((\w+Router)\);/gm)) {
+      const im = [...s.matchAll(/import \{([^}]+)\} from '\.\/([^']+)';/g)]
+        .map((x) => ({ names: x[1].split(',').map((y) => y.trim().split(/\s+as\s+/)), file: x[2] }))
+        .find((x) => x.names.some((n) => (n[1] ?? n[0]) === u[1]));
+      if (!im) continue;
+      const pair = im.names.find((n) => (n[1] ?? n[0]) === u[1]);
+      const subFile = path.join(path.dirname(imp.file), im.file);
+      for (const [meth, p] of routesOf(subFile, pair[0]).out) targets.push([meth, m[1] + p]);
+    }
+  }
+  assert.ok(targets.length > 150, `yalnızca ${targets.length} yönetim ucu bulundu; ayrıştırma bozulmuş olabilir`);
+  const uuid0 = '00000000-0000-4000-8000-000000000000';
+  const open = [];
+  for (const [meth, p0] of targets) {
+    const p = p0.replace(/:[A-Za-z_]+/g, uuid0);
+    const anon = await api(meth, p, { body: meth === 'GET' ? undefined : {} });
+    if (anon.status !== 401) open.push(`${meth} ${p0} misafir → ${anon.status}`);
+    const user = await api(meth, p, { token: U.a.token, body: meth === 'GET' ? undefined : {} });
+    if (user.status !== 403) open.push(`${meth} ${p0} normal kullanıcı → ${user.status}`);
+  }
+  assert.deepEqual(open, [], `korumasız yönetim ucu:\n${open.join('\n')}`);
+  console.log(`izin matrisi: ${targets.length} yönetim ucu × 2 rol denetlendi`);
+});
+
 // EN SONDA: yayımlanan sözleşmeler silinemez ve ödeme/panel kapılarını açar; önceki testleri etkilemesin.
 test('sözleşme: yayımlama, işlemle birlikte kabul (ajans), panelde tek dokunuş, değiştirilemez kayıt, kapılar', { skip, timeout: 60000 }, async () => {
   const host = await register('soz_y');

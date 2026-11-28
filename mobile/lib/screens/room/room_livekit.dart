@@ -146,14 +146,16 @@ extension _RoomLivekit on _RoomScreenState {
         // kendiliğinden açar; burada elle verilirse o sürümde tersine döner.
         defaultAudioPublishOptions: lk.AudioPublishOptions(encoding: lk.AudioEncoding(maxBitrate: saver ? 32000 : 64000), dtx: true),
         // Kamera 540p (varsayılan 720p): güzellik filtresi her kareyi telefonda işlediği için 720p orta sınıf telefonda
-        // kare düşürür; 540p'de görüntü akıcı kalır. Şarj tüketimi modunda 360p (daha az ısınma ve şarj).
+        // kare düşürür; 540p'de görüntü akıcı kalır. Canlı yayında güçlü telefonda (FxLoad.tier 2) 720p (Mico gibi). Şarj modunda 360p.
         defaultCameraCaptureOptions: lk.CameraCaptureOptions(
-          params: saver ? lk.VideoParametersPresets.h360_169 : lk.VideoParametersPresets.h540_169,
+          params: saver
+              ? lk.VideoParametersPresets.h360_169
+              : (_isLive && FxLoad.tier == 2 ? lk.VideoParametersPresets.h720_169 : lk.VideoParametersPresets.h540_169),
         ),
         // Canlı (tek yayıncı, tam ekran) yayında aynı çözünürlükte daha yüksek bit hızı: hareketli görüntüde bulanıklık
         // ve kareleşme azalır. İzleyicinin interneti zayıfsa sunucu düşük katmanı gönderir (simulcast + dynacast).
         defaultVideoPublishOptions: _isLive && !saver
-            ? lk.VideoPublishOptions(videoEncoding: lk.VideoEncoding(maxBitrate: 1300 * 1000, maxFramerate: 25))
+            ? lk.VideoPublishOptions(videoEncoding: lk.VideoEncoding(maxBitrate: (FxLoad.tier == 2 ? 2000 : 1300) * 1000, maxFramerate: 25))
             : lk.VideoPublishOptions(),
       ));
       final created = room;
@@ -168,10 +170,23 @@ extension _RoomLivekit on _RoomScreenState {
       // Abonelik olayı izin kendisini verir: susturma artık ilk örnek çalmadan uygulanır.
       listener.on<lk.TrackSubscribedEvent>((e) {
         if (e.track is! lk.AudioTrack) return;
-        if (!_roomMuted && !CallGuard.instance.inCall.value) return;
+        if (!_roomMuted && !CallGuard.instance.inCall.value && !RoomAudio.systemSilent.value && !_localMuted.contains(e.participant.identity)) return;
         try {
           e.track.mediaStreamTrack.enabled = false;
         } catch (_) {/* iz o anda kapanmış */}
+      });
+      // Konuşma varken oda müziği ve hediye sesleri kısılır (RoomAudio.speaking).
+      listener.on<lk.ActiveSpeakersChangedEvent>((e) {
+        if (gen == _lkGen) RoomAudio.setSpeaking(e.speakers.isNotEmpty);
+      });
+      // Kendi bağlantımız zayıfladı: YoHo / Mico gibi kullanıcı uyarılır (sesi takılıyorsa sebebi bilsin). Dakikada en çok bir.
+      listener.on<lk.ParticipantConnectionQualityUpdatedEvent>((e) {
+        if (gen != _lkGen || !mounted || e.participant is! lk.LocalParticipant) return;
+        if (e.connectionQuality != lk.ConnectionQuality.poor && e.connectionQuality != lk.ConnectionQuality.lost) return;
+        final now = DateTime.now();
+        if (_weakNetAt != null && now.difference(_weakNetAt!) < const Duration(minutes: 1)) return;
+        _weakNetAt = now;
+        toast(context, tx('İnternet bağlantınız zayıf; ses/görüntü takılabilir.'), error: true);
       });
       _lkListener = listener;
       await created.connect(url, token);

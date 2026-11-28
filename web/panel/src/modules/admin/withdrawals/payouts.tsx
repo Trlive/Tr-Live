@@ -41,7 +41,7 @@ export default function AdminPayouts() {
   const [force, setForce] = useState(false);
   return (
     <div>
-      <PageHeader icon={<Banknote size={18} />} kicker="Ödemeler" title="Maaş dönemleri" description="Dönem kapatın; yayıncı maaşlarını, ajans primlerini, asistan paylarını ve davet primlerini ödendi olarak işaretleyin." />
+      <PageHeader icon={<Banknote size={18} />} kicker="Para" title="Maaş dönemleri" description="Dönem kapatın; yayıncı maaşlarını, ajans primlerini, asistan paylarını ve davet primlerini ödendi olarak işaretleyin." />
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
         <Card title="Dönemler" subtitle="Bir döneme tıklayınca kişi kişi özetler açılır">
           {loading && !data && <Loading />}

@@ -983,4 +983,9 @@ const kEn = <String, String>{
   'Şarj için': 'Top up for',
   'Gümüş': 'Silver',
   'Gümüş bakiyen': 'Your Silver',
+  'Bu kişinin sesi kapatıldı (yalnızca sizde).': 'This person is muted (only for you).',
+  'Bu kişinin sesi açıldı.': 'This person is unmuted.',
+  'Sesini kapat (bende)': 'Mute for me',
+  'Sesini aç (bende)': 'Unmute for me',
+  'İnternet bağlantınız zayıf; ses/görüntü takılabilir.': 'Your connection is weak; audio/video may stutter.',
 };

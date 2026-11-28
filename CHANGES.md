@@ -1,3 +1,151 @@
+## v2.156.3 — Sunucu panelinde ses/görüntü yük testi (bir oda kaç kişiyi kaldırır)
+
+- Sunucu paneli (`/panel`) → **"Ses/görüntü yük testi"**: oda türü (sesli/görüntülü), konuşmacı sayısı ve en çok dinleyici
+  seçilir. Test LiveKit'in resmi aracıyla (`lk load-test`, ilk çalıştırmada kurulur) tek bir odayı 25 → 50 → 100 → 200 →
+  300 → 500 → 750 → 1000 … dinleyiciyle doldurur; her kademede LiveKit'in işlemci (ortalama/tepe), bellek, hata ve ses
+  kaybını yazar. İşlemci %85'e, hata ya da %2 kayba ulaşınca durur; sonucu ve durma sebebini panelde gösterir.
+- Ölçüm aynı sunucuda yapılır (sahte dinleyiciler de bu makinenin işlemcisini kullanır): sonuç gerçek kapasitenin ALTINDA
+  kalır, aracın işlemci payı ayrı sütunda. Başlamadan önce 1 konuşmacı + 2 dinleyiciyle ön deneme yapılır; bağlanamazsa
+  ham çıktıyı yazıp durur.
+- Test odasının adı UUID değil: uygulamanın LiveKit kuralları (üye olmayanı odadan at) test katılımcılarına dokunmaz.
+- `deploy/oracle/loadtest.sh` + systemd `trlive-loadtest.path` (her güncellemede kurulur, eski sunuculara da gelir).
+
+## v2.156.2 — Web paneli: sayfa sayfa sadeleştirme (tekrarlar kaldırıldı, ayarlar ait olduğu sayfaya)
+
+- **Tekrarlar kaldırıldı:** "Şanslı hediye" ayarları hem Ayarlar'da hem Şanslı Havuzlar'da vardı (Ayarlar'dan çıktı;
+  Şanslı Havuzlar'da büyük ödül payıyla birlikte duruyor). "Haftalık etkinlikler" aç/kapa hem Ayarlar'da hem
+  Etkinlikler'de vardı (Ayarlar'dan çıktı).
+- **Ayarlar ait olduğu sayfaya taşındı:**
+  - Coin satış kanalları (PayTR/USDT/havale/web yükleme aç-kapa, kur, havale bilgisi) → Ödemeler → "Satış kanalları".
+  - Otomatik moderasyon (bağlantı/telefon engeli, ihlal sınırları) → Şikâyetler → "Otomatik ihlaller" (listenin üstünde).
+  - Medya deposu (Cloudflare R2) → Medya Bütçesi (en altta).
+  - Bayi teşvikleri (aylık kademe, kampanya) Ödemeler'den → Bayi Mağazası (paketlerle birlikte; eski usul ödeme
+    bağlantıları en alta).
+- **Ayarlar sayfası** iki sekmeye indi: Uygulama (sürüm, oda, ses, WebView) · Ajans ve maaş (genel ajans ayarları +
+  maaş hak edişi aynı sekmede).
+- **Ekran düzenleri tek sayfa:** "Ana Ekran Düzeni" ve "Ekran Düzenleri" menüde iki ayrı kalemdi; artık tek sayfada
+  iki sekme (Uygulama ekranları · Ana ekran sekmeleri). Eski adres yeni sayfaya yönlenir.
+- Sayfa üst başlıkları menü gruplarıyla aynı (eskiden "Ekonomi", "Sistem", "Topluluk" gibi artık olmayan adlar).
+  Katalog sayfası yanlış yönlendiriyordu ("görsel yükleme uygulamadan"); artık İçerik Yükle sayfasını gösteriyor.
+- Ödemeler sekmeleri diğer sayfalarla aynı sekme bileşenini kullanıyor. Hızlı aramaya taşınan ayarların kelimeleri eklendi
+  (ör. "r2", "teşvik", "satış kanalı", "küfür").
+- Ajans ve bayi panellerinde tekrar bulunmadı (bayi "Stok Satın Al" otomatik ödeme kapalıyken eski talep formunu
+  gösteriyor; bu bilerek).
+
+## v2.156.1 — Web paneli: sade menü, hızlı arama, sayfa yolu, bekleyen işler (yönetim, ajans, bayi)
+
+- **Menü işe göre yeniden gruplandı** (yönetim: Genel · Bekleyen işler · Kullanıcı ve oda · Para · Mağaza ve hediye ·
+  Etkinlik ve duyuru · Uygulama ve sistem). Eskiden "Ekonomi" altında oda temaları, içerik yükleme, medya bütçesi de
+  vardı; ekran düzenleri ile oyun paketleri "Sistem"e dağılmıştı. Ajans: Ajans · Ekip. Bayi: Satış · Rapor · Entegrasyon.
+- **Gruplar açılır-kapanır** (tercih tarayıcıda saklanır; açık sayfanın grubu her zaman açık, kapalı grupta bekleyen iş
+  sayısı başlıkta görünür).
+- **Hızlı arama (Ctrl+K / ⌘K ya da menüdeki "Sayfa ara"):** sayfa adı, grup ya da iş kelimesiyle (ör. "ban", "maaş",
+  "paytr", "kyc") sayfaya atlar; ↑↓ ve Enter ile kullanılır, son açılan sayfalar en üstte. Türkçe karakterden bağımsız.
+- **Üst çubuk:** sabit "Yönetim Paneli" yazısı yerine sayfa yolu (Panel / Grup / Sayfa); yönetimde bekleyen işler
+  (Destek, Şikâyetler, Kimlik Onayları, Ajanslar) tek tıkla açılan rozetler olarak.
+- Kullanıcı kartı ve çıkış menünün altına alındı (menüye yer kaldı); menü 288 → 256 px.
+- Sayfaların içeriği değişmedi; yalnızca panel çerçevesi (`core/layout/panel-shell.tsx`).
+
+## v2.156.0 — Kabuk uygulama: 5 ekrana panelden yönetilen içerik alanı (SDUI)
+
+- Önceden SDUI'ye 12 ekrandan 3'ü bağlıydı (Yardım, Bildirimler, İlişkiler). Kalan ekranlar (Aile, Bayi, Etkinlik,
+  Ayarlar, Profil) çok etkileşimli; tamamen sunucudan çizmek onları bozardı (duyurularda verilen kararla aynı gerekçe).
+- Bunun yerine bu 5 ekrana **gömülü içerik alanı** eklendi (`SduiScreenView.slot`): panelden yayınlanan düzen ekranın
+  içinde bir bölüm olarak çizilir (duyuru, banner, kart, düğme, liste — mevcut bileşenlerin hepsi). Kaydırma ve
+  yenileme ekranındır; kök "scroll" ise iç içe kaydırıcı açılmaz.
+  - Etkinlik: üst blok altı · Aile: arama kutusu üstü (aileye üye olmayan) · Bayi Merkezi: en üst · Ayarlar: en üst ·
+    Profil: menü üstü.
+- **Kullanıcı tarafında hiçbir şey değişmez:** bu ekranların taslakları boş, yayın yok; panelden yayınlanana kadar alan
+  görünmez. Kademeli açılış, geri alma ve sürüm koruması diğer SDUI ekranlarıyla aynı.
+- Panelde ekran adları neyin bağlı olduğunu söylüyor ("— üst alan" / "henüz bağlı değil"). Ajans Merkezi uygulamada
+  değil web panelinde olduğu için bağlanmadı; Etkinlik detayı, Kampanya ve Başvuru formu henüz bağlı değil.
+
+## v2.155.7 — Ses dengesi (YoHo) ve canlı yayın görüntüsü (Mico) iyileştirmeleri
+
+**Hediye sesi / müzik konuşmanın üstüne çıkıyordu**
+- Konuşma algılanınca oda müziği yaklaşık yarıya (≈ -6 dB) yumuşakça (~300 ms) iner, konuşma bitince ~0,9 sn sonra
+  geri çıkar (cümle aralarında inip çıkmaz). Hediye/araç sesleri normalde %60, konuşma varken %30 düzeyde çalar.
+- **Şarkılar arası ses farkı:** yüklenen her şarkının ses yüksekliği sunucuda ölçülür (ffmpeg, EBU R128) ve kazancı
+  `music_tracks.gain_db`'ye yazılır (göç 124). Uygulama şarkıyı bu kazançla çalar: yüksek kaydedilmiş şarkılar
+  kısılır, hiçbir şarkı yükseltilmez (bozulma olmaz). Ölçülmemiş şarkı ortalama düzeyde (-4 dB) çalar. Ölçüm arka
+  planda yapılır, bitince odaya yeni durum gönderilir.
+
+**Konuşmacılar arası ses farkı**
+- Otomatik ses düzeyi (AGC) artık her zaman açık (YoHo/Agora varsayılanı). Eskiden gürültü engelleme açıkken
+  kapalıydı: kısık konuşanlar çok kısık, yüksek konuşanlar çok yüksek duyuluyordu.
+
+**Yeni (YoHo'daki gibi)**
+- Kullanıcı kartı → "Sesini kapat (bende)": koltuktaki bir kişinin sesi yalnızca bu telefonda kapanır.
+- Kendi internetin zayıflayınca uyarı (dakikada en çok bir).
+
+**Canlı yayın görüntüsü (Mico)**
+- Güçlü telefonlarda canlı yayın kamerası 720p ve 2 Mbps (önceden herkes 540p, 1,3 Mbps). Orta/düşük telefonlar
+  540p'de kalır (güzellik filtresiyle kare düşmesin); zayıf izleyiciye sunucu düşük katmanı gönderir (simulcast).
+
+## v2.155.6 — Oda sesi: telefonun sesi sonuna kadar kısılınca tamamen susar; oda değişiminde ses üst üste binmez
+
+- **Sorun:** Odada ses (yankı giderme ve Bluetooth için) Android'in "görüşme" kanalından çalıyor. Android bu kanalı
+  çoğu telefonda sıfıra indirmiyor: ses tuşuyla en alta inince bile konuşmalar duyuluyordu.
+- **Çözüm:** Uygulama görüşme ses seviyesini izliyor (yeni yerel kanal `trlive/call_volume`, Bluetooth görüşme
+  bağlantısı dahil). En alt seviyeye gelince konuşmalar, oda müziği, hediye/araç sesleri ve video PK sesi uygulama
+  tarafından tamamen kapatılıyor; bir kademe açınca geri geliyor.
+- **Oda değişimi:** Eski odadan çıkarken bağlantının kopması bir-iki saniye sürebiliyor; bu sırada eski odanın
+  konuşmaları yeni odanın sesinin üstüne biniyordu. Artık çıkış anında eski odanın sesleri hemen kapatılıyor.
+- Yalnızca Android (yeni APK gerekir). iPhone'da bu kısım ayrı yerel kod ister, yapılmadı.
+
+## v2.155.5 — Resim önbelleği cihaza göre (sağlamlık sıralaması, 3. madde)
+
+- Flutter resim önbelleğinin üst sınırı artık cihazın belleğine göre ayarlanıyor: düşük bellekli telefonda 48 MB,
+  orta sınıfta 100 MB (Flutter varsayılanı), yüksek sınıfta 160 MB. Kalabalık odalarda (çok avatar, hediye, çerçeve)
+  düşük bellekli telefonların bellek yetersizliğinden kapanması azalır.
+- Test: `fx_load_test.dart` (3 cihaz sınıfı).
+
+## v2.155.4 — Fasulye dışarı gönderim sınırı (F-05, sağlamlık sıralamasında 2. madde)
+
+**Ek: izin matrisi testi (K-03).**
+- Test, `app.js`'teki her `/api/admin…` bağlamasını ve bağlı yönlendiricilerin kaynak dosyalarını okuyarak yönetim uçlarını çıkarıyor:
+  bugün 209 uç, genel yönetim yönlendiricisinin alt dosyaları dahil.
+- Her uca gerçek istek atılıyor: misafir 401, normal kullanıcı 403 almalı. Bugün açık uç yok.
+- Yeni eklenen ve korumasız kalan bir yönetim ucu bu testi kırar.
+- **Kör nokta:** yardımcı admin (support) ile süper yönetici arasındaki ayrımı denetlemez.
+
+
+- **Sorun:** ele geçirilen bir yayıncı hesabının Fasulyesi tek seferde başka hesaba Coin olarak ya da bayiye gönderilebiliyordu.
+- **Kural:** başkasına Coin gönderme + bayiye gönderim + admine çekim talebi toplamı son 24 saatte ayarlanan sınırı aşamaz.
+  - Ayar `usdDailyOutCents`: varsayılan 5.000 Fasulye; panelde Fasulye Cüzdanı; 0 = kapalı.
+  - Kendine Coin'e çevirme sayılmaz (para hesaptan çıkmaz).
+- **Uygulama yeri:** sınır defter yazımının içinde (`debitUsd`), kullanıcı satırı kilitliyken sayılıyor. Aynı anda gelen iki istek sırayla sayılır;
+  aşan işlem geri alınır, bakiye düşmez. Hata mesajı kalan tutarı söyler (429).
+- **Sınama:** e2e 58/58. Yeni test:
+  - sınır içi gönderim geçiyor;
+  - aşan reddediliyor ve bakiye düşmüyor;
+  - kendine çevirme serbest;
+  - kalan tutar gönderilebiliyor.
+
+  Ayrıca birim 551, `check` 0, panel `tsc` 0.
+
+## v2.155.3 — Donma koruması: veritabanı süre sınırları (sağlamlık sıralamasında 1. madde)
+
+**Sorun:** veritabanında sorgu ve açık işlem süre sınırı yoktu. Takılan tek bir sorgu ya da yarıda bırakılmış bir işlem, havuzdaki 20 bağlantıyı
+ve tuttuğu kilitleri süresiz tutabilirdi. Sonuç: bütün uygulama donar (odalar, hediyeler, girişler).
+
+- **Sorgu sınırı** `DB_STATEMENT_TIMEOUT_MS` (varsayılan 30 sn): aşan sorgu iptal edilir (57014), istek anlaşılır bir hata alır, bağlantı serbest kalır.
+- **Açık işlem sınırı** `DB_IDLE_TX_TIMEOUT_MS` (varsayılan 60 sn): BEGIN'den sonra sorgusuz bekleyen işlem kapatılır; kilitler ve bağlantı bırakılır.
+- **Uzun işlere istisna:** yalnızca o işlem için `SET LOCAL statement_timeout = '10min'`:
+  - dönem kapanışı;
+  - mutabakatın iki tam tablo taraması.
+- **Göçler:** migration çalıştırıcısında iki sınır da kapalı (büyük indeks oluşturmak 30 sn'yi aşabilir).
+- **Bulunan çökme:** sınır testinde, veritabanı işlem bağlantısını kapattığında Node sürecinin ÇÖKTÜĞÜ görüldü. Havuzdan alınmış bağlantıda
+  `error` dinleyicisi yoktu. Bu, ağ kopması ya da veritabanı yeniden başlatılması sırasında da olabilirdi. `tx()` artık dinleyici takıyor;
+  işlem normal bir hatayla geri dönüyor, bozuk bağlantı havuza geri konmuyor.
+- **Sınama:** gerçek PostgreSQL'de:
+  1. takılan sorgu 1,1 sn'de iptal;
+  2. SET LOCAL istisnası geçiyor;
+  3. askıda kalan işlem kapatılıyor ve süreç çökmüyor;
+  4. havuz sağlam.
+
+  Ayrıca `check` 0, birim 551, e2e 57/57.
+
 ## v2.155.2 — Panel giriş bağlantısı boş sayfa açıyordu
 
 - Caddy'de `redir /yonetim/admin/login/ 302` satırı: ilk argüman `/` ile başladığı için Caddy onu YÖNLENDİRME HEDEFİ değil EŞLEŞME KOŞULU sayıyordu.

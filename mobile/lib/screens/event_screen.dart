@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../hybrid/sdui/v2/sdui_screen_view.dart';
 import 'package:flutter/material.dart';
 import '../services/api.dart';
 import '../widgets/anim_asset.dart';
@@ -221,6 +222,7 @@ class _EventScreenState extends State<EventScreen> {
           onRefresh: _load,
           child: ListView(padding: EdgeInsets.only(bottom: 110 * k + MediaQuery.paddingOf(context).bottom), children: [
             _heroBlock(k, list),
+            SduiScreenView.slot('events'), // panelden duyuru/banner (yayın yoksa görünmez)
             SizedBox(height: 8 * k),
             Center(child: _countdown(k, end)),
             SizedBox(height: 12 * k),

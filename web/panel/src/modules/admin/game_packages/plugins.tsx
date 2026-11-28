@@ -32,7 +32,7 @@ export default function AdminPlugins() {
 
   return (
     <div>
-      <PageHeader icon={<PartyPopper size={18} />} kicker="Sistem" title="Oyun Paketleri" description="Oyunlar ana kodda bulunmaz. Oyun paketini (zip) buradan yükleyin; sunucu saklar, çalıştırır ve etkinlik kartını ekler. Yeni zip yüklemek oyunu günceller." />
+      <PageHeader icon={<PartyPopper size={18} />} kicker="Etkinlik ve duyuru" title="Oyun Paketleri" description="Oyunlar ana kodda bulunmaz. Oyun paketini (zip) buradan yükleyin; sunucu saklar, çalıştırır ve etkinlik kartını ekler. Yeni zip yüklemek oyunu günceller." />
       <Card title="Paket yükle">
         <p className="mb-3 rounded border border-[#5a3c1e] bg-[#2a1d0e] p-2 text-xs leading-relaxed text-[#e8c88a]">
           <b>Dikkat:</b> Oyun paketinin sunucu kodu, uygulamanın kendi sürecinde ve kendi yetkisiyle çalışır —

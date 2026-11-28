@@ -32,7 +32,17 @@ class SduiScreenView extends StatefulWidget {
 
   final void Function(String target)? onTab;
 
-  const SduiScreenView({super.key, required this.screenId, required this.fallback, this.onTab});
+  /// Gömülü içerik alanı: ekranın tamamı değil, yerleşik ekranın İÇİNDE (genelde en üstte) bir bölüm.
+  /// Kaydırma ve yenileme yerleşik ekranındır; burada kaydırıcı açılmaz (iç içe kaydırma hatası olmasın).
+  /// Yayın yoksa hiçbir şey çizilmez. Karmaşık ekranlar (Aile, Ajans, Bayi, Etkinlik, Ayarlar, Profil) bu
+  /// yolla panelden duyuru / banner / kart / buton alır; ekranın kendisi uygulamada kalır.
+  final bool embedded;
+
+  const SduiScreenView({super.key, required this.screenId, required this.fallback, this.onTab, this.embedded = false});
+
+  /// Yerleşik ekranın içine konan, yayın yoksa görünmeyen içerik alanı.
+  static Widget slot(String screenId) => SduiScreenView(screenId: screenId, fallback: _none, embedded: true);
+  static Widget _none(BuildContext _) => const SizedBox.shrink();
 
   @override
   State<SduiScreenView> createState() => _SduiScreenViewState();
@@ -101,6 +111,11 @@ class _SduiScreenViewState extends State<SduiScreenView> {
       // Yükleniyor çarkı GÖSTERİLMEZ — ekranın sunucudan gelip gelmediği kullanıcıyı
       // ilgilendirmez; bekletmek, yerleşik ekran hazırken anlamsız gecikme olurdu.
       return widget.fallback(context);
+    }
+    if (widget.embedded) {
+      // Kök "scroll" ise kaydırıcı açılmaz, çocukları düz sütun olarak çizilir.
+      final root = doc.root.type == 'scroll' ? SduiNode(type: 'column', props: doc.root.props, children: doc.root.children) : doc.root;
+      return SduiRenderer(root: root, onRefresh: _load, onTab: widget.onTab);
     }
     final body = SduiRenderer(root: doc.root, onRefresh: _load, onTab: widget.onTab);
     return RefreshIndicator(

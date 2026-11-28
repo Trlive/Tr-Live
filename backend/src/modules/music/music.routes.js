@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { config } from '../../config.js';
+import { analyzeTrack } from './loudness.service.js';
 import { query, tx } from '../../infrastructure/database/database.js';
 import { requireAuth } from '../../middleware/authentication/auth.js';
 import { fail, uuid } from '../../shared/errors/http.js';
@@ -14,7 +15,7 @@ import { musicState, broadcastMusic, advanceQueue } from './music.service.js';
 export const router = Router();
 router.use(requireAuth);
 
-const trackJson = (t) => ({ id: t.id, title: t.title, artist: t.artist, url: t.url, coverUrl: t.cover_url, durationMs: t.duration_ms });
+const trackJson = (t) => ({ id: t.id, title: t.title, artist: t.artist, url: t.url, coverUrl: t.cover_url, durationMs: t.duration_ms, gainDb: t.gain_db ?? null });
 const ELAPSED = `(EXTRACT(EPOCH FROM (NOW() - updated_at)) * 1000)::bigint`;
 
 async function context(roomId, userId) {
@@ -45,7 +46,7 @@ async function djGuard(roomId, userId, role, { ownerMayStop = false } = {}) {
 router.get('/music/tracks', async (req, res) => {
   const q = String(req.query.q ?? '').trim().toLowerCase();
   const r = await query(
-    `SELECT id, title, artist, url, cover_url, duration_ms FROM music_tracks
+    `SELECT id, title, artist, url, cover_url, duration_ms, gain_db FROM music_tracks
      WHERE is_active = TRUE AND is_temp = FALSE AND ($1 = '' OR lower(title) LIKE $2 ESCAPE '\\' OR lower(COALESCE(artist, '')) LIKE $2 ESCAPE '\\')
      ORDER BY title LIMIT 50`,
     [q, `%${q.replace(/[\\%_]/g, (m) => `\\${m}`)}%`],
@@ -140,9 +141,11 @@ router.post('/rooms/:roomId/music/upload',
     const t = (await query(
       `INSERT INTO music_tracks(title, artist, url, duration_ms, license_note, created_by, is_temp, owner_room_id, expires_at, size_bytes)
        VALUES($1,$2,$3,$4,'Kullanıcı cihazından (geçici)',$5,TRUE,$6, NOW() + make_interval(hours => $7::int), $8)
-       RETURNING id, title, artist, url, cover_url, duration_ms`,
+       RETURNING id, title, artist, url, cover_url, duration_ms, gain_db`,
       [title, artist, `/uploads/music/${name}`, durationMs, req.user.id, roomId, TEMP_TRACK_TTL_HOURS, buf.length],
     )).rows[0];
+    // Ses yüksekliği arka planda ölçülür (yanıtı bekletmez); bitince odadakiler parçanın kazancını alır.
+    analyzeTrack(t.id, t.url).then((g) => (g === null ? null : broadcastMusic(roomId))).catch(() => {});
     res.status(201).json({ track: trackJson(t) });
   });
 
@@ -156,7 +159,7 @@ router.post('/rooms/:roomId/music/reuse', userLimit('music_reuse', 120, 10 * 60e
   const title = String(req.body?.title ?? '').replace(/[\u0000-\u001f]/g, '').trim().slice(0, 120) || 'Adsız parça';
   if (!Number.isFinite(size) || size <= 0 || !Number.isFinite(dur) || dur <= 0) throw fail('Geçersiz şarkı bilgisi.');
   const t = (await query(
-    `SELECT id, title, artist, url, cover_url, duration_ms FROM music_tracks
+    `SELECT id, title, artist, url, cover_url, duration_ms, gain_db FROM music_tracks
      WHERE is_temp AND is_active = TRUE AND created_by = $1 AND owner_room_id = $2 AND size_bytes = $3 AND duration_ms = $4 AND title = $5
        AND expires_at > NOW() + INTERVAL '10 minutes'
      ORDER BY created_at DESC LIMIT 1`,
@@ -169,6 +172,7 @@ router.post('/rooms/:roomId/music/reuse', userLimit('music_reuse', 120, 10 * 60e
     throw fail('Şarkı daha önce yüklenmemiş.', 404);
   }
   await keepTemp(query, t.id);
+  if (t.gain_db === null) analyzeTrack(t.id, t.url).then((g) => (g === null ? null : broadcastMusic(roomId))).catch(() => {});
   res.json({ track: trackJson(t) });
 });
 

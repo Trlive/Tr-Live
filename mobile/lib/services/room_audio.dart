@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 
 /// Odadaki **tüm** sesin tek sahibi.
 ///
@@ -43,6 +44,54 @@ class RoomAudio {
   /// Sunucudan gelen ayar (panel → Uygulama ayarları). Oda açılmadan önce yazılır.
   static bool enabled = true;
 
+  /// Telefonun ses seviyesi en altta mı (oda açıkken). Odada ses görüşme kanalından çalar ve Android bu kanalı çoğu
+  /// telefonda sıfıra indirmez (en düşük seviye hâlâ duyulur). Kullanıcı sesi sonuna kadar kısınca konuşmalar, oda
+  /// müziği ve hediye sesleri uygulama tarafından tamamen susturulur; bir kademe açınca geri gelir.
+  static final ValueNotifier<bool> systemSilent = ValueNotifier<bool>(false);
+  static StreamSubscription<dynamic>? _volSub;
+  static const _volume = EventChannel('trlive/call_volume');
+
+  static void _watchVolume(bool on) {
+    if (!on) {
+      _volSub?.cancel();
+      _volSub = null;
+      systemSilent.value = false;
+      return;
+    }
+    if (_volSub != null || kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
+    try {
+      _volSub = _volume.receiveBroadcastStream().listen((v) => systemSilent.value = v == true, onError: (_) {});
+    } catch (_) {/* eski APK: kanal yok */}
+  }
+
+  /// Odada şu an biri konuşuyor mu (ses sunucusunun "konuşanlar" bildirimi). Konuşma varken oda müziği ve hediye
+  /// sesleri otomatik kısılır (konuşmanın üstüne çıkmasın); konuşma bitince [_duckHold] kadar sonra geri açılır
+  /// (cümle aralarındaki kısa sessizliklerde müzik inip çıkıp "pompalamasın").
+  static final ValueNotifier<bool> speaking = ValueNotifier<bool>(false);
+  static Timer? _duckTimer;
+  static const _duckHold = Duration(milliseconds: 900);
+
+  static void setSpeaking(bool v) {
+    if (v) {
+      _duckTimer?.cancel();
+      _duckTimer = null;
+      speaking.value = true;
+      return;
+    }
+    if (!speaking.value || _duckTimer != null) return;
+    _duckTimer = Timer(_duckHold, () {
+      _duckTimer = null;
+      speaking.value = false;
+    });
+  }
+
+  /// Konuşma varken müzik bu oranda çalar (yaklaşık -6 dB).
+  static const musicDuck = 0.5;
+
+  /// Hediye / araç sesi düzeyi: normalde ve konuşma varken. Hediye videolarının sesi çoğu zaman çok yüksek
+  /// kaydedilmiş; tam düzeyde çalınca konuşmaları bastırıyordu.
+  static double get effectVolume => speaking.value ? 0.3 : 0.6;
+
   static int _rooms = 0;
   static AudioSession? _session;
 
@@ -52,6 +101,7 @@ class RoomAudio {
   /// Oda değiştirirken yeni oda, eskisi kapanmadan açılabilir: sayaçla korunur.
   static Future<void> enter() async {
     _rooms++;
+    _watchVolume(true);
     if (_rooms > 1 && voicePath.value == enabled) return; // zaten doğru moddayız
     await _configure(enabled);
   }
@@ -61,6 +111,10 @@ class RoomAudio {
   static Future<void> leave() async {
     if (_rooms > 0) _rooms--;
     if (_rooms > 0) return;
+    _watchVolume(false);
+    _duckTimer?.cancel();
+    _duckTimer = null;
+    speaking.value = false;
     await _configure(false);
     try {
       await (await _ensure()).setActive(false);

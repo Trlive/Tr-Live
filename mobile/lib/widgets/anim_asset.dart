@@ -8,6 +8,7 @@ import '../services/call_guard.dart';
 import '../services/effect_prefs.dart';
 import '../services/fx_load.dart';
 import '../services/media_cache.dart';
+import '../services/room_audio.dart';
 import 'common.dart' show kFrameScale, frameScaleOf;
 import 'net_image.dart';
 import 'svga_lite.dart';
@@ -118,6 +119,9 @@ class _AnimAssetState extends State<AnimAsset> {
     }
   }
 
+  /// Konuşma başlayınca / bitince hediye sesi kısılır / eski düzeyine döner.
+  void _onSpeaking() => _audio?.setVolume(RoomAudio.effectVolume).catchError((_) {});
+
   /// Arama başlayınca çalan hediye / araç sesi hemen susar.
   void _onCall() {
     if (!_soundAllowed) _audio?.pause().catchError((_) {});
@@ -128,6 +132,8 @@ class _AnimAssetState extends State<AnimAsset> {
     super.initState();
     CallGuard.instance.inCall.addListener(_onCall);
     EffectPrefs.roomMuted.addListener(_onCall);
+    RoomAudio.systemSilent.addListener(_onCall);
+    RoomAudio.speaking.addListener(_onSpeaking);
     EffectPrefs.version.addListener(_onCall);
     _claimMp4();
     if (_mp4Denied) return;
@@ -172,6 +178,8 @@ class _AnimAssetState extends State<AnimAsset> {
   void dispose() {
     CallGuard.instance.inCall.removeListener(_onCall);
     EffectPrefs.roomMuted.removeListener(_onCall);
+    RoomAudio.systemSilent.removeListener(_onCall);
+    RoomAudio.speaking.removeListener(_onSpeaking);
     EffectPrefs.version.removeListener(_onCall);
     _doneTimer?.cancel();
     _releaseMp4();
@@ -191,7 +199,7 @@ class _AnimAssetState extends State<AnimAsset> {
     _playSound();
   }
 
-  bool get _soundAllowed => !(EffectPrefs.giftSound == false || EffectPrefs.roomMuted.value || CallGuard.instance.inCall.value);
+  bool get _soundAllowed => !(EffectPrefs.giftSound == false || EffectPrefs.roomMuted.value || CallGuard.instance.inCall.value || RoomAudio.systemSilent.value);
 
   /// Sesi önceden yükler (dosya açılır); görüntü ile birlikte [_playSound] ile başlatılır → ses geriden gelmez.
   Future<void> _prepareSound(String? path) async {
@@ -201,6 +209,7 @@ class _AnimAssetState extends State<AnimAsset> {
     if (!FxLoad.acquireSound()) return;
     _soundSlot = true;
     final p = _audio = AudioPlayer();
+    p.setVolume(RoomAudio.effectVolume).catchError((_) {});
     try {
       if (path != null) {
         await p.setFilePath(path);

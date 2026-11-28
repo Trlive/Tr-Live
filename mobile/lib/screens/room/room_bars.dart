@@ -475,16 +475,26 @@ extension _RoomBars on _RoomScreenState {
   void _applyRoomSound() {
     final room = _lk;
     if (room == null) return;
-    final on = !_roomMuted && !CallGuard.instance.inCall.value;
+    // Telefonun sesi sonuna kadar kısıldıysa da (RoomAudio.systemSilent) konuşmalar tamamen susar.
+    final on = !_roomMuted && !CallGuard.instance.inCall.value && !RoomAudio.systemSilent.value;
     for (final p in room.remoteParticipants.values) {
       for (final pub in p.audioTrackPublications) {
         // Aboneliği bitmiş yayının izi bırakılmıştır; ona dokunmak "MediaStreamTrack has been disposed" hatası verir.
         if (!pub.subscribed) continue;
         try {
-          pub.track?.mediaStreamTrack.enabled = on;
+          pub.track?.mediaStreamTrack.enabled = on && !_localMuted.contains(p.identity);
         } catch (_) {/* iz henüz hazır değil */}
       }
     }
+  }
+
+  /// Bir kişinin sesini yalnızca bu telefonda kapatır / açar.
+  void _toggleLocalMute(String userId) {
+    final muted = !_localMuted.remove(userId);
+    if (muted) _localMuted.add(userId);
+    _applyRoomSound();
+    _set(() {});
+    toast(context, muted ? tx('Bu kişinin sesi kapatıldı (yalnızca sizde).') : tx('Bu kişinin sesi açıldı.'));
   }
 
   /// PK sonucu: koltuktaki kazananlara gülen (1), kaybedenlere ağlayan emoji ~6 sn (beraberlikte yok).

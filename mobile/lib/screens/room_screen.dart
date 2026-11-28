@@ -183,6 +183,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   bool _chatMuted = false;
   bool _inputOpen = false;
   bool _roomMuted = false;
+  /// Yalnızca bu telefonda sesi kapatılan kişiler (YoHo'daki "sesini kapat": karşı taraf bilmez, odadan çıkınca sıfırlanır).
+  final Set<String> _localMuted = {};
+  DateTime? _weakNetAt; // "internetiniz zayıf" uyarısı en çok dakikada bir
 
   // Oda içi sayı tahtası (kullanıcı → alınan toplam Coin) ve PK durumu
   final Map<String, String> _scores = {};
@@ -234,6 +237,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     RoomDock.exitHandler = _onBack;
     // Telefon araması gelince oda sesi ve mikrofon kapanır, bitince açılır.
     CallGuard.instance.inCall.addListener(_onPhoneCall);
+    RoomAudio.systemSilent.addListener(_applyRoomSound);
     CallGuard.instance.start();
     WidgetsBinding.instance.addObserver(this);
     FxLoad.pressure.addListener(_onMemoryPressure);
@@ -345,6 +349,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     _fxTick.dispose();
     _headsTimer?.cancel();
     CallGuard.instance.inCall.removeListener(_onPhoneCall);
+    RoomAudio.systemSilent.removeListener(_applyRoomSound);
     CallGuard.instance.stop();
     HeadsetAudio.instance.stop();
     RoomAudio.leave();
@@ -380,6 +385,16 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     if (room != null) {
       room.removeListener(_onLkChanged);
       _disposeLkListener();
+      // Bağlantı kopması bir-iki saniye sürebilir; bu sırada eski odanın konuşmaları yeni odanın sesinin üstüne
+      // binmesin diye uzak sesler hemen kapatılır.
+      for (final p in room.remoteParticipants.values) {
+        for (final pub in p.audioTrackPublications) {
+          if (!pub.subscribed) continue;
+          try {
+            pub.track?.mediaStreamTrack.enabled = false;
+          } catch (_) {/* iz zaten kapanmış */}
+        }
+      }
       room.disconnect().whenComplete(() => room.dispose()).catchError((_) {});
     }
     super.dispose();
@@ -704,7 +719,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   // ---------- LiveKit ----------
   void _onLkChanged() {
-    if (_roomMuted || CallGuard.instance.inCall.value) _applyRoomSound();
+    if (_roomMuted || CallGuard.instance.inCall.value || RoomAudio.systemSilent.value || _localMuted.isNotEmpty) _applyRoomSound();
     final r = _lk;
     // Arka plandayken yeni açılan kameralar da indirilmez.
     if (_videoPaused && r != null) _unsubscribeRemoteVideo(r);
@@ -795,7 +810,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   static lk.AudioCaptureOptions get _audioOptions => lk.AudioCaptureOptions(
         noiseSuppression: noiseCancel,
         echoCancellation: true,
-        autoGainControl: !noiseCancel,
+        // Otomatik ses düzeyi her zaman açık (YoHo / Agora'nın varsayılanı): kısık ve yüksek konuşan mikrofonlar aynı
+        // düzeye getirilir. Eskiden gürültü engelleme açıkken (varsayılan) kapalıydı; konuşmacıların sesleri arasında
+        // büyük fark oluyor, kısık konuşan hediye/müzik sesinin altında kalıyordu.
+        autoGainControl: true,
         highPassFilter: noiseCancel,
         // Konuşma odaklı işleme (Yoho gibi): klavye/tık sesi bastırma ve iPhone ses izolasyonu gürültü engellemeyle birlikte açılır.
         typingNoiseDetection: noiseCancel,
@@ -889,7 +907,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       roomId: widget.roomId,
                       hostVideo: _pkHostVideo(),
                       canManage: _myRole == 'owner',
-                      muted: _roomMuted || CallGuard.instance.inCall.value,
+                      muted: _roomMuted || CallGuard.instance.inCall.value || RoomAudio.systemSilent.value,
                       paused: _videoPaused || RoomDock.minimized.value,
                     )
                   else if (_pk != null)
