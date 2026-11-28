@@ -137,6 +137,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   int _lkRetries = 0; // ses bağlantısı koparsa artan bekleme ile yeniden bağlanılır
   Timer? _lkRetryTimer; // ses bağlantısını yeniden deneme zamanlayıcısı (tek; üst üste binmez)
   Timer? _beatRetry; // ağ hatasında "oda açık" sinyalinin erken tekrarı
+  // Soket yeniden bağlanınca durum, oda aboneliği onaylandıktan SONRA yeniden alınır; olay boşluğunda da (en çok 5 sn'de bir).
+  bool _resyncAfterSubscribe = false;
+  Timer? _resyncFallback;
+  Timer? _gapTimer;
+  DateTime _gapAt = DateTime.fromMillisecondsSinceEpoch(0);
+  int? _snapSeq; // üye listesi abonelikten önce alındıysa o anki oda olay numarası (ilk giriş yarışı)
   int _lkGen = 0; // ses bağlantısı kuşağı: eski bağlantının geç gelen olayı yenisini etkilemesin
   lk.ConnectionState? _lkPrevState; // SDK'nın kendi yeniden bağlanmasını fark etmek için
   bool? _lkCanPublish; // son görülen yayın izni (izin sonradan gelirse mikrofon o an açılır)
@@ -316,6 +322,21 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     _syncPublish();
   }
 
+  /// Olay boşluğu sonrası toparlama: ardışık boşluklar tek yeniden almaya birleşir (en çok 5 sn'de bir).
+  void _resyncAfterGap() {
+    final since = DateTime.now().difference(_gapAt);
+    if (since >= const Duration(seconds: 5)) {
+      _gapAt = DateTime.now();
+      _resync();
+    } else {
+      _gapTimer ??= Timer(const Duration(seconds: 5) - since, () {
+        _gapTimer = null;
+        _gapAt = DateTime.now();
+        _resync();
+      });
+    }
+  }
+
   /// Bağlantı koptuktan / uygulama arka plandan döndükten sonra kaçırılan olayları telafi eder:
   /// koltuklar, üyeler, sohbet, puanlar, PK, çantalar ve müzik sunucudan yeniden alınır.
   Future<void> _resync() async {
@@ -358,6 +379,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     EffectPrefs.roomMuted.value = false;
     _beat?.cancel();
     _beatRetry?.cancel();
+    _resyncFallback?.cancel();
+    _gapTimer?.cancel();
     _lkRetryTimer?.cancel();
     _lkGen++; // süren bağlanma denemesi / geç gelen kopma olayı bu ekranı artık etkilemesin
     _lkTick?.cancel();
@@ -600,8 +623,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _loadMembers() async {
+    final subscribedBefore = SocketService.instance.isSubscribedTo(widget.roomId);
     final r = await Api.get('/api/rooms/${widget.roomId}/members');
     if (!mounted) return;
+    // Anlık görüntü abonelik onayından ÖNCE alındıysa, onaydaki numarayla karşılaştırılacak (aradaki olaylar kaçmış olabilir).
+    final snap = (r['seq'] as num?)?.toInt();
+    _snapSeq = !subscribedBefore && snap != null ? snap : null;
     final list = listOf(r['members']);
     setState(() => _members = list);
     if (!_joined || _closing) return;
@@ -792,7 +819,36 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   void _onEvent(Map<String, dynamic> e) {
     final type = e['type'];
     if (type == 'connected') {
-      _resync(); // soket yeniden bağlandı: arada kaçan olayları telafi et
+      // Soket yeniden bağlandı: arada kaçan olaylar telafi edilir. Durum, oda aboneliği onaylandıktan SONRA (room_subscribed) alınır:
+      // önce REST, sonra abonelik olsaydı ikisi arasında olan olaylar ne anlık görüntüde ne soketten gelirdi.
+      // Onay gelmezse 10 sn sonra yine de alınır.
+      _resyncAfterSubscribe = true;
+      _resyncFallback?.cancel();
+      _resyncFallback = Timer(const Duration(seconds: 10), () {
+        if (!_resyncAfterSubscribe) return;
+        _resyncAfterSubscribe = false;
+        _resync();
+      });
+      return;
+    }
+    if (type == 'room_subscribed' && e['roomId'] == widget.roomId) {
+      final snap = _snapSeq;
+      _snapSeq = null; // tek seferlik karşılaştırma
+      if (_resyncAfterSubscribe) {
+        _resyncAfterSubscribe = false;
+        _resyncFallback?.cancel();
+        _resync();
+      } else if (snap != null && e['seq'] is num && (e['seq'] as num).toInt() > snap) {
+        // İlk girişte üye listesi REST ile alındıktan sonra, abonelik onaylanmadan önce oda olayı oldu: bize gelmedi.
+        ErrorLog.add('Bağlantı · olay boşluğu', 'abonelik öncesi $snap→${e['seq']}');
+        _resyncAfterGap();
+      }
+      return;
+    }
+    // Sunucu oda olaylarına sıra numarası verir; araya numara girdiyse bir olay kaçmıştır → oda durumu yeniden alınır.
+    if (type == 'room_gap' && e['roomId'] == widget.roomId) {
+      ErrorLog.add('Bağlantı · olay boşluğu', '${e['from']}→${e['to']}');
+      _resyncAfterGap();
       return;
     }
     if (type == 'socket_closed') {

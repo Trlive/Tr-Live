@@ -1,3 +1,37 @@
+## v2.154.1 — Oda olaylarında sıra numarası (rapor O-04): diğer sohbette yapılan iş alındı, gözden geçirildi, genişletildi
+
+Kaynak: diğer sohbette hazırlanan `TR-Live-v2_152_17.zip` (temel 2.152.16). Fark yalnızca O-04 dosyalarıydı. Bugünkü koda (2.154.0) taşındı:
+- sunucuda `room_seq.js` ve hub değişikliği, bugünkü oda indeksli hub'a uyarlandı;
+- mobilde `socket_service.dart` ve `room_screen.dart` yamaları çakışmasız uygulandı;
+- testleri `room_seq.test.js` ve `realtime_seq.test.js`.
+
+**Zipten gelen (korundu):**
+- Durum değiştiren oda olaylarına artan `seq` vuruluyor; yalnızca görsel olaylar numarasız.
+- Abonelik onayı o anki numarayı taşıyor.
+- İstemci boşluk görürse (41 → 43) durumu yeniden alıyor; ardışık boşluklar 5 sn'de bir birleşiyor.
+- Yeniden bağlanınca durum, abonelik onaylandıktan SONRA alınıyor (önceki yarış kapandı); onay gelmezse 10 sn sonra yine alınıyor.
+
+**Bu sürümde düzeltilen / eklenen:**
+1. **İlk girişteki yarış da kapandı.**
+   - Sorun: zipteki çözüm yalnızca yeniden bağlanmayı kapsıyordu. Odaya ilk girişte de üye listesi REST ile abonelikten önce alınıyordu;
+     aradaki koltuk/rol değişikliği kayboluyordu.
+   - Çözüm: `/api/rooms/:id/members` yanıtı artık `seq` taşıyor. Numara veritabanı okumasından ÖNCE alınıyor; böylece okuma sırasında olan olay
+     "kaçmış" sayılıyor, en kötü durumda gereksiz bir yeniden yükleme oluyor.
+   - Abonelik onayındaki numara bundan büyükse uygulama durumu yeniden alıyor. Karşılaştırma tek seferlik ve yalnızca anlık görüntü abonelikten
+     önce alındıysa yapılıyor.
+2. **Kalp atışı boşluğu gizliyordu.** Uygulama her 60 sn'de aboneliği yeniliyor; zipteki kod her onayda takibi sunucunun numarasına
+   sıfırlıyordu, aradaki bir kaybı örtebiliyordu. Artık zaten takipteyken gelen onaydaki numara bizimkinden büyükse bu da "boşluk" sayılıyor.
+3. **Sayaç sızıntısı.** Zipte sayaç yalnızca "boş odaya yayın yapılırsa" siliniyordu; son kişi çıkıp oda sessizleşince bellekte kalıyordu.
+   Artık odanın son abonesi çıktığı anda siliniyor (oda kapanışı dahil). Abonesiz odaya yayın numara tüketmiyor.
+4. `hub.roomSeq(roomId)` (REST için) ve `SocketService.isSubscribedTo(roomId)` eklendi.
+
+**Sınama:**
+- backend 551 birim. Zipin 9 testi bugünkü hub üzerinde geçti; yeni 2 test: son abone çıkınca sayaç silinir ve abonesiz yayın numara
+  tüketmez / kalp atışı yinelemesinde onay aynı numarayı taşır. `ws` paketi bu ortamda var; testler gerçekten çalıştı.
+- gerçek PostgreSQL'de 56/56 e2e.
+- Bu ortamda Flutter var ve Dart DERLENDİ: `flutter analyze` 0 hata/0 uyarı, `flutter test` 71/71.
+- Önerilen elle deneme: odada uçak modu aç-kapa, başka cihazdan koltuk değiştirme; tanı kaydında "Bağlantı · olay boşluğu" satırı görünür.
+
 ## v2.154.0 — Bayi API'si, ayrı Coin yükleme sitesi, "başkası için" Fasulye kuru
 
 **YoHo karşılaştırması (sahibin videolarından):**
