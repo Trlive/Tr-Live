@@ -2740,7 +2740,7 @@ test('bayi API v1: anahtar, yükleme, tekrar güvenliği, IP, günlük sınır, 
 
   const call = (method, p, body, k = key) => api(method, `/dealer-api/v1${p}`, { body, headers: { Authorization: `Bearer ${k}`, 'X-App-Version': '' } });
   status(await api('GET', '/dealer-api/v1/me'), 401);
-  status(await call('GET', '/me', undefined, `${key.slice(0, -1)}Z`), 401, 'yanlış anahtar');
+  status(await call('GET', '/me', undefined, `${key.slice(0, -1)}${key.endsWith('Z') ? 'Y' : 'Z'}`), 401, 'yanlış anahtar');
   const me = await call('GET', '/me');
   ok(me);
   assert.equal(me.body.balance, '1000000');

@@ -9,7 +9,7 @@ test('API anahtarı: biçim, önek, yalnızca özet saklanır', () => {
   assert.equal(k.hash.length, 64);
   assert.notEqual(k.hash, k.key);
   assert.equal(keyMatches(k.key, k.hash), true);
-  assert.equal(keyMatches(`${k.key.slice(0, -1)}x`, k.hash), false);
+  assert.equal(keyMatches(`${k.key.slice(0, -1)}${k.key.endsWith('x') ? 'y' : 'x'}`, k.hash), false);
   assert.equal(keyMatches(k.key, 'zz'), false);
   assert.notEqual(newApiKey().key, k.key);
 });
