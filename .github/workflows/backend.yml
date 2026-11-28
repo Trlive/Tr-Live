@@ -22,9 +22,35 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
-      - run: npm install
+      - run: npm ci
       - run: npm run check
       - run: npm test
+
+      # Bağımlılık güvenlik taraması (denetim S-07).
+      #
+      # Sattığın kodda bilinen açıklı bir paket bulunması, alıcının ilk tarayacağı şeydir.
+      # Yüksek ve kritik seviye açıklar derlemeyi DURDURUR; düşük/orta seviye yalnızca
+      # özete yazılır — her uyarıda derleme kırılırsa kimse bakmaz ve tarama anlamını yitirir.
+      - name: Bağımlılık açıkları (yüksek ve üstü derlemeyi durdurur)
+        if: matrix.node == 22
+        shell: bash
+        run: |
+          npm audit --json > audit.json || true
+          node -e '
+            const a = JSON.parse(require("fs").readFileSync("audit.json","utf8"));
+            const v = a.metadata?.vulnerabilities ?? {};
+            const bad = (v.high ?? 0) + (v.critical ?? 0);
+            const meh = (v.low ?? 0) + (v.moderate ?? 0);
+            console.log(`kritik ${v.critical ?? 0}, yüksek ${v.high ?? 0}, orta ${v.moderate ?? 0}, düşük ${v.low ?? 0}`);
+            const fs = require("fs");
+            const sum = process.env.GITHUB_STEP_SUMMARY;
+            if (sum) fs.appendFileSync(sum, `### Bağımlılık taraması\nkritik ${v.critical ?? 0} · yüksek ${v.high ?? 0} · orta ${v.moderate ?? 0} · düşük ${v.low ?? 0}\n`);
+            if (bad > 0) {
+              console.error(`::error::${bad} yüksek/kritik açık var. "npm audit fix" ile giderin.`);
+              process.exit(1);
+            }
+            if (meh > 0) console.log(`::warning::${meh} düşük/orta seviye açık var (derleme durmadı).`);
+          '
 
   e2e:
     # Gerçek PostgreSQL + gerçek sunucu süreci ile uçtan uca testler (SQL doğrulaması burada yapılır)
@@ -35,7 +61,7 @@ jobs:
         working-directory: backend
     services:
       postgres:
-        image: postgres:16
+        image: postgres:18  # üretimle (deploy/oracle/compose.yml) aynı sürüm
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -52,7 +78,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: npm install
+      - run: npm ci
       - run: npm run test:e2e
         env:
           TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/trlive_test
