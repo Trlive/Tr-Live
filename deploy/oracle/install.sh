@@ -158,7 +158,9 @@ TRUST_PROXY='1'
 CORS_ORIGIN='https://${DOMAIN}'
 PUBLIC_BASE_URL='https://${DOMAIN}'
 UPLOAD_DIR='/app/uploads'
-# Ajans ve bayi giriş bağlantıları: yönetim panelinde "bağlantıyı kopyala" için (yönetim bağlantısı burada YOK; yalnızca sunucu panelinde).
+# Ajans ve bayi giriş bağlantıları: yönetim panelinde "bağlantıyı kopyala" için. Yönetim bağlantısı YALNIZCA giriş yapmış süper
+# yöneticiye (uygulamada Ayarlar → Web yönetim paneli) verilir: sunucu paneli şifresi unutulursa web paneline erişim kesilmesin.
+PANEL_LINK_ADMIN='https://${DOMAIN}/${GATE_ADMIN}'
 PANEL_LINK_AGENCY='https://${DOMAIN}/${GATE_AGENCY}'
 PANEL_LINK_DEALER='https://${DOMAIN}/${GATE_DEALER}'
 EOF
@@ -213,19 +215,19 @@ $HOSTS {
   handle @gate_admin {
     header +Set-Cookie "trg_a=${GATE_ADMIN}; Path=/yonetim/admin; Max-Age=31536000; Secure; HttpOnly; SameSite=Lax"
     header Cache-Control "no-store"
-    redir /yonetim/admin/login/ 302
+    redir * /yonetim/admin/login/ 302
   }
   @gate_agency path /${GATE_AGENCY} /${GATE_AGENCY}/
   handle @gate_agency {
     header +Set-Cookie "trg_g=${GATE_AGENCY}; Path=/yonetim/agency; Max-Age=31536000; Secure; HttpOnly; SameSite=Lax"
     header Cache-Control "no-store"
-    redir /yonetim/agency/login/ 302
+    redir * /yonetim/agency/login/ 302
   }
   @gate_dealer path /${GATE_DEALER} /${GATE_DEALER}/
   handle @gate_dealer {
     header +Set-Cookie "trg_d=${GATE_DEALER}; Path=/yonetim/dealer; Max-Age=31536000; Secure; HttpOnly; SameSite=Lax"
     header Cache-Control "no-store"
-    redir /yonetim/dealer/login/ 302
+    redir * /yonetim/dealer/login/ 302
   }
   @no_admin {
     path /yonetim/admin /yonetim/admin/*

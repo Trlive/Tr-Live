@@ -138,6 +138,39 @@ for p in files:
     names = set(TOP.findall(s)) | set(TOP_FN.findall(s)) | set(TOP_VAR.findall(s))
     defines[p] = names
 
+# ---- Kütüphane = ana dosya + `part` dosyaları (v2.155.0, oda ekranı bölündü: rapor O-01) ----
+# Dart'ta `part of` dosyası ayrı bir dosya DEĞİL, ana dosyanın parçasıdır: import'larını ana dosyadan alır,
+# özel (_) adları ortaktır. Denetimler dosya bazlı kalsaydı ana dosyadaki import "kullanılmıyor", part'taki ad
+# "import edilmemiş", part'ta tanımlı özel metot "hiç kullanılmıyor", part dosyası "ölü" görünürdü (yüzlerce sahte bulgu).
+_PART_OF = re.compile(r"^part of '([^']+)';", re.M)
+_PART = re.compile(r"^part '([^']+)';", re.M)
+root_of = {}      # part dosyası -> ana dosya
+parts_of = {}     # ana dosya -> [part dosyaları]
+for p in files:
+    _m = _PART_OF.search(p.read_text(encoding='utf-8'))
+    if _m:
+        _r = (p.parent / _m.group(1)).resolve()
+        root_of[p] = _r
+        parts_of.setdefault(_r, []).append(p)
+for _r, _ps in parts_of.items():
+    _declared = {(_r.parent / x).resolve() for x in _PART.findall(_r.read_text(encoding='utf-8'))} if _r.exists() else set()
+    for _p in _ps:
+        if _p.resolve() not in _declared:
+            problems.append(f'{_p}: "part of" ana dosyası bu dosyayı `part` olarak bildirmiyor ({_r.name})')
+
+
+def lib_files(p):
+    """Dosyanın ait olduğu kütüphanenin tüm dosyaları (ana dosya önce)."""
+    r = root_of.get(p, p)
+    return [r] + parts_of.get(r, [])
+
+
+def lib_defines(p):
+    out = set()
+    for f in lib_files(p):
+        out |= defines.get(f, set())
+    return out
+
 IMPORT = re.compile(r"^import\s+'([^']+)'(?:\s+as\s+(\w+))?(?:\s+show\s+([^;]+))?;", re.M)
 EXPORT = re.compile(r"^export\s+'([^']+)'(?:\s+show\s+([^;]+))?;", re.M)
 
@@ -169,8 +202,23 @@ def exported(path, seen=None):
     return names
 
 for p in files:
+    if p in root_of:
+        continue  # part dosyası: ana dosyasıyla birlikte (aşağıda) denetlenir
     raw = p.read_text(encoding='utf-8')
-    code = strip(raw)
+    # Kütüphanenin tüm dosyaları tek gövde: import'lar ana dosyada, kullanımlar part'larda olabilir.
+    _chunks = [strip(f.read_text(encoding='utf-8')) for f in lib_files(p)]
+    code = '\n'.join(_chunks)
+    _spans = []  # (başlangıç satırı, dosya): birleşik gövdedeki satırı gerçek dosya/satıra çevirmek için
+    _ln = 1
+    for f, ch in zip(lib_files(p), _chunks):
+        _spans.append((_ln, f))
+        _ln += ch.count('\n') + 1
+
+    def _where(line):
+        for st, f in reversed(_spans):
+            if line >= st:
+                return f, line - st + 1
+        return p, line
     body = IMPORT.sub('', code)  # import satırları kullanım sayılmaz
 
     imported = {}   # ad -> import yolu
@@ -211,7 +259,7 @@ for p in files:
             problems.append(f'{p}: kullanılmayan import → {spec}')
 
     # 2) Tanımsız ad: büyük harfle başlayan tip adı kullanılıyor ama ne burada ne import'ta var.
-    local = defines[p]
+    local = lib_defines(p)
     known = set(imported) | local
     for m in re.finditer(r'\b([A-Z][A-Za-z0-9_]{2,})\b\s*(?=\.|\()', body):
         nm = m.group(1)
@@ -219,10 +267,10 @@ for p in files:
             continue
         # Flutter/Dart çekirdeği ve paketlerden gelenler bilinemez: yalnızca PROJE içinde
         # tanımlı ama bu dosyaya import EDİLMEMİŞ adları bildiririz. Böylece yanlış alarm olmaz.
-        owners = [f for f, ns in defines.items() if nm in ns and f != p]
+        owners = [f for f, ns in defines.items() if nm in ns and f not in lib_files(p)]
         if owners:
-            line = body[:m.start()].count('\n') + 1
-            problems.append(f'{p}:{line}: "{nm}" kullanılıyor ama import edilmemiş '
+            _wf, line = _where(body[:m.start()].count('\n') + 1)
+            problems.append(f'{_wf}:{line}: "{nm}" kullanılıyor ama import edilmemiş '
                             f'(tanımı: {owners[0].relative_to(LIB.parent)})')
 
 # ---------------------------------------------------------------------------
@@ -348,7 +396,8 @@ for _f in files:
             _imported.add(Path(_os.path.normpath(_d / _spec)).resolve())
 for _f in sorted(files):
     # Test dosyalarını kimse import etmez; onlar ölü değildir.
-    if _f.name == 'main.dart' or str(TEST) in str(_f) or _f.resolve() in _imported:
+    _root = root_of.get(_f, _f)
+    if _root.name == 'main.dart' or str(TEST) in str(_f) or _root.resolve() in _imported:
         continue
     _n = len(_f.read_text(encoding='utf-8').split('\n'))
     problems.append(f'{_f}: hiçbir yerden çağrılmıyor ({_n} satır) — ölü dosya')
@@ -366,8 +415,14 @@ for _f in sorted(files):
 # katastrofik geri izlemeye girip aracı KİLİTLİYORDU — denetim hiç bitmiyordu.
 _FIELD = re.compile(r'^[ \t]{2,}(?:(?:static|late|final|const|covariant)[ \t]+)*'
                     r'(?:[A-Za-z_][\w<>,?\[\]]*[ \t]+)?(_[A-Za-z]\w*)[ \t]*(?:=(?![=>])|;)')
+def _lib_other_code(_f):
+    """Aynı kütüphanenin DİĞER dosyaları (özel adlar ortak: part'ta tanımlı alan ana dosyada okunabilir)."""
+    return '\n'.join(strip_keep_interp(x.read_text(encoding='utf-8')) for x in lib_files(_f) if x != _f)
+
+
 for _f in sorted(files):
     _code = strip_keep_interp(_f.read_text(encoding='utf-8'))
+    _other = _lib_other_code(_f)
     _lines = _code.split('\n')
     # Okuma sayımı için tüm adların konumlarını BİR KEZ çıkar (alan başına dosya taramak yerine).
     _uses = {}
@@ -392,6 +447,12 @@ for _f in sorted(files):
             if re.match(r'[ \t]*=(?![=>])', _code[_u.end():_u.end() + 3]):
                 continue
             _reads += 1
+        if _reads == 0 and _other:
+            # Kütüphanenin diğer dosyalarında atama sol tarafı OLMAYAN bir geçiş = okuma.
+            for _u in re.finditer(r'(?<![\w])' + re.escape(_name) + r'(?![\w])', _other):
+                if not re.match(r'[ \t]*=(?![=>])', _other[_u.end():_u.end() + 3]):
+                    _reads += 1
+                    break
         if _reads == 0:
             problems.append(f'{_f}:{_i + 1}: "{_name}" alanı hiç OKUNMUYOR (yalnızca yazılıyor) — flutter analyze bunu hata sayar')
 
@@ -404,6 +465,7 @@ _METHOD = re.compile(r'^[ \t]*(?:(?:static|final|const|external|@override)[ \t]+
                      r'(?:[A-Za-z_][\w<>,?\[\]]*[ \t]+)?(_[A-Za-z]\w*)(?:<[^<>]*>)?[ \t]*\(')
 for _f in sorted(files):
     _code = strip_keep_interp(_f.read_text(encoding='utf-8'))
+    _other_names = set(re.findall(r'(?<![\w])(_[A-Za-z]\w*)(?![\w])', _lib_other_code(_f)))
     _lines = _code.split('\n')
     _uses = {}
     for _u in re.finditer(r'(?<![\w])(_[A-Za-z]\w*)(?![\w])', _code):
@@ -417,7 +479,7 @@ for _f in sorted(files):
             continue
         _name = _m.group(1)
         _pos = sum(len(x) + 1 for x in _lines[:_i]) + _m.start(1)
-        if not [o for o in _uses.get(_name, []) if o != _pos]:
+        if not [o for o in _uses.get(_name, []) if o != _pos] and _name not in _other_names:
             problems.append(f'{_f}:{_i + 1}: "{_name}" metodu hiç kullanılmıyor — flutter analyze bunu hata sayar')
 
 # ---------------------------------------------------------------------------

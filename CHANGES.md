@@ -1,3 +1,66 @@
+## v2.155.2 — Panel giriş bağlantısı boş sayfa açıyordu
+
+- Caddy'de `redir /yonetim/admin/login/ 302` satırı: ilk argüman `/` ile başladığı için Caddy onu YÖNLENDİRME HEDEFİ değil EŞLEŞME KOŞULU sayıyordu.
+  Sonuç: yönlendirme hiç çalışmıyor, gizli bağlantı boş sayfa açıyordu (izin çerezi yine de bırakılıyordu).
+- Düzeltme: `redir * /yonetim/<panel>/login/ 302`: `*` her isteği eşler, hedef açık. Üç panel için de.
+- Geçici yol (bu sürüm sunucuya gelene kadar): gizli bağlantıyı bir kez açtıktan sonra aynı tarayıcıda `/yonetim/admin/login/`
+  (ajans: `/yonetim/agency/login/`, bayi: `/yonetim/dealer/login/`) açılır.
+
+## v2.155.1 — Web yönetim paneli bağlantısı uygulamada da (sunucu paneli şifresi gerekmeden)
+
+- **Sorun:** v2.153.1'den beri web panelleri gizli bağlantıyla açılıyor. Yönetim bağlantısı yalnızca şifreli sunucu panelinde (`/panel`)
+  görünüyordu. O şifre unutulursa yönetici web paneline erişimi kaybediyordu; eski `/yonetim/admin` adresi artık "bulunamadı" veriyor.
+- **Çözüm:** uygulamada **Ayarlar → Web yönetim paneli**, yalnızca süper yönetici hesabında görünür. Bağlantıyı gösterir; **Kopyala** ya da
+  **Tarayıcıda aç** seçilebilir. Tarayıcıda bir kez açılınca o tarayıcı panele 1 yıl girer.
+- **Sunucu:**
+  - Ayrı uç `GET /api/admin/panel-links/admin`, yalnızca süper yönetici. Her bakış denetim kaydına yazılır (`panel_link_admin_view`).
+  - Yönetim panelindeki ajans/bayi kopyalama kutusu yönetim bağlantısını bilerek göstermiyor (ekran paylaşımında görünmesin).
+  - `install.sh` bağlantıyı `PANEL_LINK_ADMIN` olarak sunucu ortamına yazıyor.
+- **Sınama:** e2e 57/57. Yeni test: süper yönetici alır, normal kullanıcı 403, kopyalama kutusunda görünmez, denetim kaydı yazılır.
+  Ayrıca birim testleri 551, `check` 0, `flutter analyze` 0 hata / 0 uyarı, `flutter test` 71/71, Dart ön denetimi temiz.
+
+## v2.155.0 — Oda ekranı bölündü (rapor O-01), davranış değişikliği yok
+
+`mobile/lib/screens/room_screen.dart` 5.202 satırdı; neredeyse tamamı tek bir `_RoomScreenState` sınıfıydı. Artık ana dosya 1.043 satır, geri
+kalanı konu konu 8 `part` dosyasında (`lib/screens/room/`). Her dosya aynı sınıf üzerinde bir `extension`:
+
+| Dosya | Satır | İçerik |
+|---|---|---|
+| `room_screen.dart` | 1.043 | alanlar, yaşam döngüsü (initState / dispose / build), giriş-çıkış, kalp atışı, toparlama, dinleyiciler |
+| `room/room_events.dart` | 372 | soket olaylarının ekrana uygulanması |
+| `room/room_livekit.dart` | 372 | ses/görüntü bağlantısı, yayın izni, kamera, gürültü engelleme |
+| `room/room_mic.dart` | 521 | mikrofon, koltuk istekleri, konuk daveti, koltuk kilitle/sustur |
+| `room/room_admin.dart` | 441 | oda bilgisi/düzenleme, şifre, tema, araçlar, ayarlar |
+| `room/room_chat.dart` | 525 | sohbet: geçmiş, gönderme, temizleme, kartlar, yazı çubuğu |
+| `room/room_members.dart` | 515 | üye kartı, rol, susturma, şikâyet, yetkili yaptırımları |
+| `room/room_stage.dart` | 708 | koltuk ızgarası, koltuk kutusu, görüntülü hücreler, canlı sahne |
+| `room/room_bars.dart` | 746 | üst başlık, alt çubuk, menüler, emoji, hediye/şanslı efektleri |
+
+**Davranışın değişmediğinin güvencesi:**
+- **Taşıma bir betikle yapıldı**, elle kopyalama yok. Betik sınıf üyelerini Dart sözdizimine göre ayırıyor (dizgi, `${}` ve yorum içindeki
+  parantezler sayılmıyor).
+- **Satır satır karşılaştırma: 0 satır kayıp, 0 satır değişiklik.** Eklenenler yalnızca yapısal: `part` satırları, extension başlıkları,
+  kapanış parantezleri. Bilinçli iki fark:
+  - `setState(` → `_set(`: `setState` korumalı üyedir, extension'dan çağrılamaz; `_set` tek satırlık köprü.
+  - Extension içinden sınıfın statik üyelerine sınıf adıyla erişim (`_RoomScreenState.kCryEmoji` gibi, 9 yer).
+- **Dart inceliği:** extension yönteminin her referansı (tear-off) yeni bir nesnedir. `addListener`/`removeListener` ile eklenip çıkarılan
+  yöntemler extension'a taşınsaydı çıkarma sessizce başarısız olur, dinleyici sızardı. Bu yüzden `_onLkChanged`, `_onPhoneCall`,
+  `_onMemoryPressure`, `_onChatScroll` sınıfta bırakıldı.
+- **Lint aynı:** `flutter analyze` 0 hata / 0 uyarı. Bilgi notları bölme öncesi ve sonrası tür ve sayıca aynı. `flutter test` 71/71.
+
+**Dart ön denetimi (`mobile/tools/dart_check.py`) `part` dosyalarını tanıyor:**
+- Önceden dosya bazlıydı. Part dosyalarını yüzlerce sahte bulguyla "ölü dosya", "import edilmemiş ad", "hiç kullanılmayan metot" sayıyordu.
+- Artık ana dosya ile part'ları tek kütüphane olarak denetliyor ve bulguyu gerçek dosya/satırda gösteriyor.
+- Gerçek hataları hâlâ yakaladığı, kasıtlı eklenen kullanılmayan metot ve import edilmemiş sınıfla denendi.
+- `part of` bildirip ana dosyada `part` satırı olmayan dosya için yeni bir uyarı eklendi.
+
+**Gerçek cihazda denenmedi.** Kod satırları birebir aynı olduğu için davranış değişikliği beklenmiyor. Yine de bir odaya girip şunları dene:
+- koltuğa çık-in,
+- sohbet yaz,
+- hediye gönder,
+- üye kartını aç,
+- oda ayarlarını aç.
+
 ## v2.154.3 — Sunucu güncellemesi yarıda kalıyordu (kurulum betiği düzeltmesi)
 
 - **Belirti:** 2.153.x / 2.154.x GitHub'a girdi, CI yeşildi, ama sunucu 2.152.18'de kaldı.

@@ -27,6 +27,7 @@ const env = {
   UPLOAD_DIR: fs.mkdtempSync(path.join(os.tmpdir(), 'trlive-up-')),
   PAYTR_MERCHANT_ID: '100', PAYTR_MERCHANT_KEY: 'e2e-paytr-key', PAYTR_MERCHANT_SALT: 'e2e-paytr-salt', PAYTR_TEST_MODE: '1',
   USDT_TRC20_ADDRESS: 'TQn9Y2khEsLJW1ChVWFMSMeRDow5KcbLSE', PUBLIC_BASE_URL: `http://127.0.0.1:${PORT}`,
+  PANEL_LINK_ADMIN: 'https://e2e.example/AdminGate0123456789abcdefABCDEF', PANEL_LINK_DEALER: 'https://e2e.example/DealerGate0123456789abcdefAB',
 };
 
 let server; let pool;
@@ -2806,6 +2807,18 @@ test('bayi API v1: anahtar, yükleme, tekrar güvenliği, IP, günlük sınır, 
   assert.equal((await api('GET', '/api/usd/me', { token: owner.token })).body.settings.sendCoinsPerUsd, '4400');
   status(await api('PUT', '/api/admin/app-config', { token: U.d.token, body: { usdCoinsPerUsdOthers: 50000 } }), 400, 'para döngüsü koruması');
   ok(await api('PUT', '/api/admin/app-config', { token: U.d.token, body: { usdCoinsPerUsdOthers: 0 } }));
+});
+
+test('web panel bağlantıları: yönetim bağlantısı yalnızca süper yöneticiye, ayrı uçtan ve denetim kaydıyla', { skip, timeout: 30000 }, async () => {
+  const r = await api('GET', '/api/admin/panel-links/admin', { token: U.d.token });
+  ok(r);
+  assert.equal(r.body.admin, 'https://e2e.example/AdminGate0123456789abcdefABCDEF');
+  const links = await api('GET', '/api/admin/panel-links', { token: U.d.token });
+  assert.equal(links.body.dealer, 'https://e2e.example/DealerGate0123456789abcdefAB');
+  assert.equal(JSON.stringify(links.body).includes('AdminGate'), false, 'kopyalama kutusu yönetim bağlantısını göstermez');
+  status(await api('GET', '/api/admin/panel-links/admin', { token: U.a.token }), 403, 'normal kullanıcı alamaz');
+  const n = (await sql(`SELECT COUNT(*)::int AS n FROM financial_audit_logs WHERE action = 'panel_link_admin_view' AND admin_id = $1`, [U.d.id])).rows[0].n;
+  assert.ok(n >= 1, 'bakış denetim kaydına yazılır');
 });
 
 // EN SONDA: yayımlanan sözleşmeler silinemez ve ödeme/panel kapılarını açar; önceki testleri etkilemesin.
