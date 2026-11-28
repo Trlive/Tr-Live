@@ -2821,6 +2821,23 @@ test('web panel bağlantıları: yönetim bağlantısı yalnızca süper yöneti
   assert.ok(n >= 1, 'bakış denetim kaydına yazılır');
 });
 
+test('Fasulye 24 saatlik dışarı gönderim sınırı (F-05): başkasına / bayiye / çekim toplamı; kendine çevirme serbest', { skip, timeout: 30000 }, async () => {
+  const a = await register('dislimit');
+  const b = await register('dislimitb');
+  await sql(`UPDATE users SET usd_cents = 10000 WHERE id = $1`, [a.id]);
+  ok(await api('PUT', '/api/admin/app-config', { token: U.d.token, body: { usdDailyOutCents: 1500 } }));
+  const send = (cents) => api('POST', '/api/usd/coin-exchanges', { token: a.token, body: { amountCents: cents, targetUserId: b.id }, headers: { 'Idempotency-Key': crypto0.randomUUID() } });
+  ok(await send(1000), 'sınır içinde');
+  const over = await send(1000);
+  status(over, 429, 'sınır aşılır');
+  assert.match(over.body.message, /kalan: 5 Fasulye/);
+  assert.equal((await sql(`SELECT usd_cents::text AS c FROM users WHERE id = $1`, [a.id])).rows[0].c, '9000', 'reddedilen gönderim bakiyeden düşmedi');
+  ok(await api('POST', '/api/usd/coin-exchanges', { token: a.token, body: { amountCents: 5000 }, headers: { 'Idempotency-Key': crypto0.randomUUID() } }), 'kendine çevirme sınıra sayılmaz');
+  assert.equal((await sql(`SELECT usd_cents::text AS c FROM users WHERE id = $1`, [a.id])).rows[0].c, '4000');
+  ok(await send(500), 'kalan 5 Fasulye gönderilebilir');
+  ok(await api('PUT', '/api/admin/app-config', { token: U.d.token, body: { usdDailyOutCents: 500000 } }));
+});
+
 // EN SONDA: yayımlanan sözleşmeler silinemez ve ödeme/panel kapılarını açar; önceki testleri etkilemesin.
 test('sözleşme: yayımlama, işlemle birlikte kabul (ajans), panelde tek dokunuş, değiştirilemez kayıt, kapılar', { skip, timeout: 60000 }, async () => {
   const host = await register('soz_y');

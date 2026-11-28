@@ -100,6 +100,8 @@ export const CONFIG_DEFAULTS = Object.freeze({
   // Fasulye → başka kullanıcıya Coin gönderme kuru (YoHo "Diğerleri için"). 0 = kendine çevirmeyle aynı kur.
   usdCoinsPerUsdOthers: 0,
   usdExchangeMinCents: 100,
+  // 24 saatte hesaptan dışarı çıkabilecek en çok Fasulye (başkasına Coin, bayiye, admine çekim). Sent: 500000 = 5.000 Fasulye. 0 = kapalı.
+  usdDailyOutCents: 500000,
   // Coin satış kanalları (v2.153.0). Gizli anahtarlar ortam değişkeninde (PAYTR_*, USDT_TRC20_ADDRESS, TRONGRID_API_KEY);
   // burada yalnızca açık/kapalı ve gizli olmayan değerler. Anahtarı tanımlı olmayan yöntem açık olsa da görünmez.
   payPaytrEnabled: false, // kart (PayTR): ödeme onaylanınca Coin otomatik yazılır
@@ -216,7 +218,7 @@ export function validateConfigPatch(body) {
         luckyRtpBps: [0, 9000], luckyJackpotShareBps: [0, 8000], luckyReceiverBps: [0, 5000], luckyMaxWin: [1, 1000000000], luckyAnnounceMultiplier: [10, 1000],
         flyTextCoins: [0, 1000000], ludoEntrySilver: [0, 100000000], tekEntrySilver: [0, 100000000], checkinItemDays: [1, 90], smtpPort: [1, 65535],
         usdWithdrawMinCents: [100, 100000000], usdDealerMinCents: [100, 100000000], usdDealerCoinsPerUsd: [1, 100000000],
-        usdCoinsPerUsd: [1, 100000000], usdExchangeMinCents: [1, 100000000], payUsdtRateKurus: [100, 100000000], usdCoinsPerUsdOthers: [0, 100000000], payOrderTtlMin: [5, 1440],
+        usdCoinsPerUsd: [1, 100000000], usdExchangeMinCents: [1, 100000000], payUsdtRateKurus: [100, 100000000], usdCoinsPerUsdOthers: [0, 100000000], usdDailyOutCents: [0, 100000000000], payOrderTtlMin: [5, 1440],
         mediaMp4MaxWidth: [180, 1080], mediaMp4MaxHeight: [180, 1920], mediaMp4MaxFps: [10, 30], mediaMp4MaxKb: [256, 40960],
         mediaSvgaMaxKb: [256, 40960], mediaSvgaMaxSide: [128, 2048], mediaSvgaMaxDecodedMb: [8, 256],
         mediaImageMaxSide: [128, 2048], mediaImageMaxKb: [64, 20480], mediaSmallMaxSide: [128, 1024], mediaIconMaxSide: [64, 1024],

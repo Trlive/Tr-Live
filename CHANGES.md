@@ -1,3 +1,19 @@
+## v2.155.4 — Fasulye dışarı gönderim sınırı (F-05, sağlamlık sıralamasında 2. madde)
+
+- **Sorun:** ele geçirilen bir yayıncı hesabının Fasulyesi tek seferde başka hesaba Coin olarak ya da bayiye gönderilebiliyordu.
+- **Kural:** başkasına Coin gönderme + bayiye gönderim + admine çekim talebi toplamı son 24 saatte ayarlanan sınırı aşamaz.
+  - Ayar `usdDailyOutCents`: varsayılan 5.000 Fasulye; panelde Fasulye Cüzdanı; 0 = kapalı.
+  - Kendine Coin'e çevirme sayılmaz (para hesaptan çıkmaz).
+- **Uygulama yeri:** sınır defter yazımının içinde (`debitUsd`), kullanıcı satırı kilitliyken sayılıyor. Aynı anda gelen iki istek sırayla sayılır;
+  aşan işlem geri alınır, bakiye düşmez. Hata mesajı kalan tutarı söyler (429).
+- **Sınama:** e2e 58/58. Yeni test:
+  - sınır içi gönderim geçiyor;
+  - aşan reddediliyor ve bakiye düşmüyor;
+  - kendine çevirme serbest;
+  - kalan tutar gönderilebiliyor.
+
+  Ayrıca birim 551, `check` 0, panel `tsc` 0.
+
 ## v2.155.3 — Donma koruması: veritabanı süre sınırları (sağlamlık sıralamasında 1. madde)
 
 **Sorun:** veritabanında sorgu ve açık işlem süre sınırı yoktu. Takılan tek bir sorgu ya da yarıda bırakılmış bir işlem, havuzdaki 20 bağlantıyı
