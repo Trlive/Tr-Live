@@ -1,3 +1,15 @@
+## v2.154.2 — CI düzeltmesi (davranış değişikliği yok)
+
+- **`npm run check` (Backend iş akışı) kırmızıydı:** deponun adres denetimi iç içe yönlendiriciyi (`router.use('/v1', v1)`) izlemediği için
+  e2e'deki `GET /dealer-api/v1/me` çağrısını "ADRES YOK" sayıyordu. Bayi API uçları aynı yönlendiricide tam yollarıyla (`/v1/...`) tanımlandı;
+  uçlar ve davranış aynı.
+- **Ara sıra kırılan test:** "yanlış anahtar" denemesi anahtarın son harfini sabit bir harfle değiştiriyordu. Anahtar zaten o harfle bitince
+  (yaklaşık 56'da 1) "yanlış" anahtar doğrusuyla aynı oluyordu. e2e ve birim testi her zaman farklı harf seçiyor. Güvenlik açığı değil;
+  anahtar karşılaştırması doğruydu.
+- Zip paketleme düzeltildi: dosyalar zipin kökünde ("Zip ile güncelle" iş akışı `mobile/pubspec.yaml`'ı kökte bekliyor).
+
+**Sınama:** `npm run check` 0; backend 551 birim; gerçek PostgreSQL'de 56/56 e2e.
+
 ## v2.154.1 — Oda olaylarında sıra numarası (rapor O-04): diğer sohbette yapılan iş alındı, gözden geçirildi, genişletildi
 
 Kaynak: diğer sohbette hazırlanan `TR-Live-v2_152_17.zip` (temel 2.152.16). Fark yalnızca O-04 dosyalarıydı. Bugünkü koda (2.154.0) taşındı:

@@ -22,13 +22,12 @@ router.get('/docs', (req, res) => {
   res.type('html').send(renderDealerApiDocs());
 });
 
-const v1 = Router();
-router.use('/v1', v1);
+// Tüm /v1 uçları aynı yönlendiricide, tam yollarıyla (deponun adres denetimi iç içe yönlendirici izlemez).
 
 // API yanıtları her zaman JSON; hata biçimi: { error: { code, message } }.
 const err = (res, status, code, message) => res.status(status).json({ error: { code, message } });
 
-v1.use(async (req, res, next) => {
+router.use('/v1', async (req, res, next) => {
   try {
     res.set('Cache-Control', 'no-store');
     const b = parseBearer(req.get('authorization'));
@@ -49,7 +48,7 @@ v1.use(async (req, res, next) => {
     next();
   } catch (e) { next(e); }
 });
-v1.use(userLimit('dealer_api', 120, 60e3));
+router.use('/v1', userLimit('dealer_api', 120, 60e3));
 
 async function findUser(publicId) {
   const id = String(publicId ?? '').trim();
@@ -67,17 +66,17 @@ async function orderJson(row) {
   return { clientOrderId: row.client_order_id, userId: u?.public_id ?? null, coins: String(row.coins), status: st, deliverAt: t?.deliver_at ?? null, createdAt: row.created_at };
 }
 
-v1.get('/me', async (req, res) => {
+router.get('/v1/me', async (req, res) => {
   const d = (await query(`SELECT name, coin_balance FROM dealer_accounts WHERE id = $1`, [req.apiKey.dealer_id])).rows[0];
   const used = (await query(`SELECT COALESCE(SUM(coins), 0)::text AS c FROM dealer_api_orders WHERE key_id = $1 AND created_at > NOW() - INTERVAL '24 hours'`, [req.apiKey.id])).rows[0].c;
   res.json({ dealer: { name: d.name }, balance: String(d.coin_balance), key: { prefix: req.apiKey.prefix, dailyLimit: String(req.apiKey.daily_limit), usedLast24h: used } });
 });
 
-v1.get('/users/:userId', async (req, res) => {
+router.get('/v1/users/:userId', async (req, res) => {
   res.json({ user: userJson(await findUser(req.params.userId)) });
 });
 
-v1.post('/recharges', async (req, res) => {
+router.post('/v1/recharges', async (req, res) => {
   const b = req.body ?? {};
   const orderId = String(b.clientOrderId ?? '');
   if (!CLIENT_ORDER_RE.test(orderId)) throw fail('clientOrderId: 1-64 karakter (harf, rakam, - _). Her yükleme için sizin sisteminizdeki benzersiz numara.', 400);
@@ -121,21 +120,21 @@ v1.post('/recharges', async (req, res) => {
   res.status(out.replay ? 200 : 201).json({ recharge: await orderJson(out.row), balance: String(d.coin_balance), replay: out.replay });
 });
 
-v1.get('/recharges/:clientOrderId', async (req, res) => {
+router.get('/v1/recharges/:clientOrderId', async (req, res) => {
   const row = (await query(`SELECT * FROM dealer_api_orders WHERE dealer_id = $1 AND client_order_id = $2`, [req.apiKey.dealer_id, String(req.params.clientOrderId)])).rows[0];
   if (!row) return err(res, 404, 'not_found', 'Bu clientOrderId ile yükleme yok.');
   res.json({ recharge: await orderJson(row) });
 });
 
 /** "5 dakika sonra" (delayMinutes: 5) yüklemeyi teslimden önce iptal eder; Coin stoğa döner. */
-v1.post('/recharges/:clientOrderId/cancel', async (req, res) => {
+router.post('/v1/recharges/:clientOrderId/cancel', async (req, res) => {
   const row = (await query(`SELECT * FROM dealer_api_orders WHERE dealer_id = $1 AND client_order_id = $2`, [req.apiKey.dealer_id, String(req.params.clientOrderId)])).rows[0];
   if (!row || !row.transaction_id) return err(res, 404, 'not_found', 'Bu clientOrderId ile yükleme yok.');
   const out = await tx((c) => cancelScheduled(c, { dealerId: req.apiKey.dealer_id, transactionId: row.transaction_id, actorId: req.apiKey.owner_user_id ?? null }));
   res.json({ recharge: await orderJson(row), balance: out.dealerBalance });
 });
 
-v1.get('/recharges', async (req, res) => {
+router.get('/v1/recharges', async (req, res) => {
   const limit = Math.max(1, Math.min(Number.parseInt(String(req.query.limit ?? '50'), 10) || 50, 200));
   const r = await query(`SELECT * FROM dealer_api_orders WHERE dealer_id = $1 ORDER BY created_at DESC LIMIT $2`, [req.apiKey.dealer_id, limit]);
   res.json({ recharges: await Promise.all(r.rows.map(orderJson)) });
