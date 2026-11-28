@@ -564,7 +564,8 @@ test('ajans/yayıncı: başvuru, kod, onay, katılma, hedef/maaş, komisyon kade
   // Yalnızca yayıncı onayından SONRAKİ süre ve hediyeler sayılır: önceki hediyeler (Tüm Oda testi) onaydan önceye, onay 4 saat öncesine alınır.
   await sql(`UPDATE gift_transactions SET created_at = NOW() - INTERVAL '5 hours' WHERE receiver_id = $1`, [U.f.id]);
   await sql(`UPDATE broadcasters SET approved_at = NOW() - INTERVAL '4 hours' WHERE user_id = $1`, [U.f.id]);
-  // A (oda sahibi) F'ye hediye: 200 Diamond. F kendine hediye (SESLİ oda): sahibinin kararıyla maaşa ve kotaya SAYILIR (v2.152.5).
+  // A (oda sahibi) F'ye hediye: 200 Diamond. F kendine hediye 200 (SESLİ oda): maaşa SINIRLI sayılır (v2.152.20): sayılan toplamın
+  // en çok %20'si = başkalarından gelenin dörtte biri → 50. Toplam 250.
   ok(await api('POST', `/api/rooms/${roomId}/gifts/send`, { token: U.a.token, body: { giftId: heart.id, quantity: 4, distribution: 'single', recipientId: U.f.id } }));
   ok(await api('POST', `/api/rooms/${roomId}/gifts/send`, { token: U.f.token, body: { giftId: heart.id, quantity: 4, distribution: 'single', recipientId: U.f.id } }));
   const tagged = await sql(`SELECT COUNT(*)::int AS n FROM gift_transactions WHERE receiver_id=$1 AND receiver_agency_id=$2`, [U.f.id, agencyId]);
@@ -575,16 +576,32 @@ test('ajans/yayıncı: başvuru, kod, onay, katılma, hedef/maaş, komisyon kade
   const dash = await api('GET', `/api/agencies/${agencyId}/dashboard`, { token: U.e.token });
   ok(dash);
   assert.equal(dash.body.broadcasters.length, 1);
-  assert.equal(dash.body.broadcasters[0].diamonds, '400', 'sesli odada kendine hediye kazanca dahil');
+  assert.equal(dash.body.broadcasters[0].diamonds, '250', 'kendine hediye %20 sınırıyla (200 → 50)');
   assert.ok(dash.body.broadcasters[0].seconds >= 7200);
-  assert.equal(dash.body.totals.teamDiamonds, '400');
-  assert.equal(dash.body.totals.estimatedCommissionCents, '300', '400 ≥ 100 (ve < 1000) → 1. seviyenin ajans primi');
+  assert.equal(dash.body.totals.teamDiamonds, '250');
+  assert.equal(dash.body.totals.estimatedCommissionCents, '300', '250 ≥ 100 (ve < 1000) → 1. seviyenin ajans primi');
   assert.equal(dash.body.broadcasters[0].tier, 1);
   assert.equal(dash.body.broadcasters[0].estimatedCents, '1000');
   status(await api('GET', `/api/agencies/${agencyId}/dashboard`, { token: U.g.token }), 403, 'başkası paneli göremez');
   const me = await api('GET', '/api/broadcaster/me', { token: U.f.token });
   ok(me);
-  assert.equal(me.body.broadcaster.progress.diamonds, '400', 'yayıncının gördüğü sayı ödenenle aynı (sesli kendine hediye dahil)');
+  assert.equal(me.body.broadcaster.progress.diamonds, '250', 'yayıncının gördüğü sayı ödenenle aynı (kendine hediye sınırlı)');
+  // Yayıncının kendi kazanç ekranı da aynı sayıyı göstermeli (me.routes earnings, ay bazlı sınır).
+  const earn = await api('GET', '/api/me/earnings/summary', { token: U.f.token });
+  ok(earn);
+  const hist = await api('GET', '/api/me/earnings/history?type=audio', { token: U.f.token });
+  ok(hist);
+  // Beklenen: bu ay başkalarından gelen + min(kendine, başkaları / 4). Veritabanından bağımsız hesaplanır.
+  const raw = (await sql(
+    `SELECT COALESCE(SUM(coin_amount) FILTER (WHERE sender_id <> receiver_id), 0)::text AS others,
+            COALESCE(SUM(coin_amount) FILTER (WHERE sender_id = receiver_id), 0)::text AS self
+     FROM gift_transactions WHERE receiver_id = $1
+       AND to_char(created_at AT TIME ZONE 'Europe/Istanbul', 'YYYY-MM') = to_char(NOW() AT TIME ZONE 'Europe/Istanbul', 'YYYY-MM')`,
+    [U.f.id],
+  )).rows[0];
+  const o = BigInt(raw.others); const sf = BigInt(raw.self);
+  assert.equal(earn.body.monthly.totalDiamonds, String(o + (sf < o / 4n ? sf : o / 4n)), 'kazanç ekranı: aylık toplam sınırlı');
+  assert.ok(BigInt(hist.body.totals.diamonds) < o + sf, 'geçmiş toplamı kendine hediyenin tamamını saymaz');
   assert.equal(me.body.broadcaster.progress.tier, 1);
   assert.equal(me.body.broadcaster.progress.next.level, 2);
 

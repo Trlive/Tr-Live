@@ -1,5 +1,5 @@
 // Ajans sistemi v2: dönem ölçümleri (toplu sorgular). Gün sınırları Türkiye saatine göredir (UTC+3).
-import { salaryGiftSql } from './salary_rules.js';
+import { salaryGiftSql, scaleSelfDays, segmentOf } from './salary_rules.js';
 import { query } from '../../infrastructure/database/database.js';
 import { payLevelFromRow, DEFAULT_AGENCY_GRADES, evaluatePay, evaluateSimplePay, evaluateVideoPay, agencyPrim } from '../games/paytable.rules.js';
 import { consumedDiamondsByUser } from '../wallet/advance_ledger.service.js';
@@ -134,19 +134,38 @@ export async function hostPeriodMetrics(hosts, start, end, validDayMinutes = 60,
     `WITH x AS (SELECT * FROM unnest($1::uuid[], $2::timestamptz[]) AS t(user_id, from_ts))
      SELECT g.receiver_id AS user_id, ((FLOOR(EXTRACT(EPOCH FROM g.created_at))::bigint + 10800) / 86400)::int AS day,
        (CASE WHEN r.room_type = 'video' THEN 'video' ELSE 'audio' END) AS kind,
+       (g.sender_id = g.receiver_id) AS self,
        SUM(COALESCE(g.diamond_amount, g.coin_amount))::text AS d
      FROM gift_transactions g JOIN x ON x.user_id = g.receiver_id LEFT JOIN rooms r ON r.id = g.room_id
      WHERE ${salaryGiftSql('r')} AND g.created_at >= x.from_ts AND g.created_at < $3::timestamptz
-     GROUP BY 1, 2, 3`,
+     GROUP BY 1, 2, 3, 4`,
     [ids, froms, endIso],
   );
+  // Kendine hediyeler ayrı toplanır; dönem sonunda %20 sınırıyla (salary_rules.js) eklenir. Görüntülü odada kendine hediye
+  // salaryGiftSql ile zaten dışarıda kalır, yani buradaki kendine hediyeler sesli taraftır.
+  const add = (m, day, kind, d) => {
+    m.diamonds += d;
+    m.giftDays.set(day, (m.giftDays.get(day) ?? 0n) + d);
+    (kind === 'video' ? m.video : m.audio).diamonds += d;
+  };
+  const selfOf = new Map(); // userId -> Map(day -> BigInt)
   for (const r of gifts.rows) {
     const m = out.get(r.user_id);
     if (!m) continue;
     const d = BigInt(r.d);
-    m.diamonds += d;
-    m.giftDays.set(r.day, (m.giftDays.get(r.day) ?? 0n) + d);
-    (r.kind === 'video' ? m.video : m.audio).diamonds += d;
+    if (r.self) {
+      let sd = selfOf.get(r.user_id);
+      if (!sd) { sd = new Map(); selfOf.set(r.user_id, sd); }
+      sd.set(r.day, (sd.get(r.day) ?? 0n) + d);
+      continue;
+    }
+    add(m, r.day, r.kind, d);
+  }
+  for (const [uid, sd] of selfOf) {
+    const m = out.get(uid);
+    const { counted, days } = scaleSelfDays(m.diamonds, sd);
+    for (const [day, d] of days) add(m, day, 'audio', d);
+    m.selfDiamonds = counted;
   }
   // Oyun süresi: yayıncının oyuncu olarak katıldığı oda oyunları (bir oyun en fazla 3 saat sayılır).
   const games = await run(
@@ -169,27 +188,52 @@ export async function hostPeriodMetrics(hosts, start, end, validDayMinutes = 60,
  * Ajans adına alınan elmaslar (hediye anında yayıncının bağlı olduğu ajans): ajans → kullanıcı → gün → elmas.
  * agencyIds boşsa tüm ajanslar.
  */
-export async function agencyGiftRows(agencyIds, start, end, run = query) {
+export async function agencyGiftRows(agencyIds, start, end, run = query, periodStarts = []) {
+  // periodStarts: aralık birden çok dönemi kapsıyorsa sonraki dönemlerin başlangıç günleri (dayIndex). Kendine hediye
+  // sınırı her dönem için ayrı uygulanır (ödenenle aynı sonuç).
   const r = await run(
     `SELECT g.receiver_agency_id AS agency_id, g.receiver_id AS user_id,
        ((FLOOR(EXTRACT(EPOCH FROM g.created_at))::bigint + 10800) / 86400)::int AS day,
+       (g.sender_id = g.receiver_id) AS self,
        SUM(COALESCE(g.diamond_amount, g.coin_amount))::text AS d
      FROM gift_transactions g LEFT JOIN rooms r ON r.id = g.room_id
      WHERE g.receiver_agency_id IS NOT NULL AND ($1::uuid[] IS NULL OR g.receiver_agency_id = ANY($1::uuid[]))
        AND ${salaryGiftSql('r')} AND g.created_at >= $2::timestamptz AND g.created_at < $3::timestamptz
-     GROUP BY 1, 2, 3`,
+     GROUP BY 1, 2, 3, 4`,
     [agencyIds && agencyIds.length ? agencyIds : null, new Date(start).toISOString(), new Date(end).toISOString()],
   );
   // Map agencyId → Map userId → { total: BigInt, days: Map(day → BigInt) }
   const out = new Map();
+  const selfOf = new Map(); // "ajans|kullanıcı|dilim" -> Map(gün -> BigInt)
+  const othersOf = new Map(); // aynı anahtar -> BigInt
+  const userRow = (agencyId, userId) => {
+    let a = out.get(agencyId);
+    if (!a) { a = new Map(); out.set(agencyId, a); }
+    let u = a.get(userId);
+    if (!u) { u = { total: 0n, days: new Map() }; a.set(userId, u); }
+    return u;
+  };
   for (const x of r.rows) {
-    let a = out.get(x.agency_id);
-    if (!a) { a = new Map(); out.set(x.agency_id, a); }
-    let u = a.get(x.user_id);
-    if (!u) { u = { total: 0n, days: new Map() }; a.set(x.user_id, u); }
+    const u = userRow(x.agency_id, x.user_id);
     const d = BigInt(x.d);
+    const key = `${x.agency_id}|${x.user_id}|${segmentOf(x.day, periodStarts)}`;
+    if (x.self) {
+      let sd = selfOf.get(key);
+      if (!sd) { sd = new Map(); selfOf.set(key, sd); }
+      sd.set(x.day, (sd.get(x.day) ?? 0n) + d);
+      continue;
+    }
+    othersOf.set(key, (othersOf.get(key) ?? 0n) + d);
     u.total += d;
     u.days.set(x.day, (u.days.get(x.day) ?? 0n) + d);
+  }
+  // Kendine hediye: dönem dilimi başına %20 sınırı (salary_rules.js).
+  for (const [key, sd] of selfOf) {
+    const [agencyId, userId] = key.split('|');
+    const u = userRow(agencyId, userId);
+    const { counted, days } = scaleSelfDays(othersOf.get(key) ?? 0n, sd);
+    u.total += counted;
+    for (const [day, d] of days) u.days.set(day, (u.days.get(day) ?? 0n) + d);
   }
   return out;
 }

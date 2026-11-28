@@ -42,7 +42,8 @@ async function agencyPeriodData(a, cfg) {
   const curStart = dayIndex(b.start);
   const prevStart = dayIndex(prev.start);
   const prevSameEnd = prevStart + (today - curStart + 1); // bu tarihten önceki günler (dahil değil)
-  const all = (await agencyGiftRows([a.id], prev.start, b.end)).get(a.id) ?? new Map();
+  // İki dönem birlikte okunur; kendine hediye sınırı her dönem için ayrı uygulanır (curStart = bu dönemin ilk günü).
+  const all = (await agencyGiftRows([a.id], prev.start, b.end, undefined, [curStart])).get(a.id) ?? new Map();
   const cur = new Map(); const prevSame = new Map();
   let lastMonth = 0n; let lastSame = 0n; let todayD = 0n; let yesterdayD = 0n;
   for (const [uid, u] of all) {
