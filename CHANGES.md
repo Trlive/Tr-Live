@@ -1,3 +1,16 @@
+## v2.155.1 — Web yönetim paneli bağlantısı uygulamada da (sunucu paneli şifresi gerekmeden)
+
+- **Sorun:** v2.153.1'den beri web panelleri gizli bağlantıyla açılıyor. Yönetim bağlantısı yalnızca şifreli sunucu panelinde (`/panel`)
+  görünüyordu. O şifre unutulursa yönetici web paneline erişimi kaybediyordu; eski `/yonetim/admin` adresi artık "bulunamadı" veriyor.
+- **Çözüm:** uygulamada **Ayarlar → Web yönetim paneli**, yalnızca süper yönetici hesabında görünür. Bağlantıyı gösterir; **Kopyala** ya da
+  **Tarayıcıda aç** seçilebilir. Tarayıcıda bir kez açılınca o tarayıcı panele 1 yıl girer.
+- **Sunucu:**
+  - Ayrı uç `GET /api/admin/panel-links/admin`, yalnızca süper yönetici. Her bakış denetim kaydına yazılır (`panel_link_admin_view`).
+  - Yönetim panelindeki ajans/bayi kopyalama kutusu yönetim bağlantısını bilerek göstermiyor (ekran paylaşımında görünmesin).
+  - `install.sh` bağlantıyı `PANEL_LINK_ADMIN` olarak sunucu ortamına yazıyor.
+- **Sınama:** e2e 57/57. Yeni test: süper yönetici alır, normal kullanıcı 403, kopyalama kutusunda görünmez, denetim kaydı yazılır.
+  Ayrıca birim testleri 551, `check` 0, `flutter analyze` 0 hata / 0 uyarı, `flutter test` 71/71, Dart ön denetimi temiz.
+
 ## v2.155.0 — Oda ekranı bölündü (rapor O-01), davranış değişikliği yok
 
 `mobile/lib/screens/room_screen.dart` 5.202 satırdı; neredeyse tamamı tek bir `_RoomScreenState` sınıfıydı. Artık ana dosya 1.043 satır, geri

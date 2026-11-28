@@ -158,7 +158,9 @@ TRUST_PROXY='1'
 CORS_ORIGIN='https://${DOMAIN}'
 PUBLIC_BASE_URL='https://${DOMAIN}'
 UPLOAD_DIR='/app/uploads'
-# Ajans ve bayi giriş bağlantıları: yönetim panelinde "bağlantıyı kopyala" için (yönetim bağlantısı burada YOK; yalnızca sunucu panelinde).
+# Ajans ve bayi giriş bağlantıları: yönetim panelinde "bağlantıyı kopyala" için. Yönetim bağlantısı YALNIZCA giriş yapmış süper
+# yöneticiye (uygulamada Ayarlar → Web yönetim paneli) verilir: sunucu paneli şifresi unutulursa web paneline erişim kesilmesin.
+PANEL_LINK_ADMIN='https://${DOMAIN}/${GATE_ADMIN}'
 PANEL_LINK_AGENCY='https://${DOMAIN}/${GATE_AGENCY}'
 PANEL_LINK_DEALER='https://${DOMAIN}/${GATE_DEALER}'
 EOF

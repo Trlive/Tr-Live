@@ -8,9 +8,18 @@ export const router = Router();
 // ---------------- Bayi (yalnızca yönetici) ----------------
 // Ajans ve bayi web paneli giriş bağlantıları (sunucu kurulumunda üretilir, PANEL_LINK_*). Yönetim panelinin bağlantısı
 // bilerek burada YOK: yalnızca sunucu panelinde (şifreli) görünür. Tanımlı değilse (eski kurulum) null.
+const panelLinkOk = (v) => (/^https:\/\/[^\s/]+\/[A-Za-z0-9]{24,64}$/.test(String(v ?? '')) ? String(v) : null);
 router.get('/panel-links', requireSuperAdmin, (req, res) => {
-  const ok = (v) => (/^https:\/\/[^\s/]+\/[A-Za-z0-9]{24,64}$/.test(String(v ?? '')) ? String(v) : null);
-  res.json({ agency: ok(process.env.PANEL_LINK_AGENCY), dealer: ok(process.env.PANEL_LINK_DEALER) });
+  res.json({ agency: panelLinkOk(process.env.PANEL_LINK_AGENCY), dealer: panelLinkOk(process.env.PANEL_LINK_DEALER) });
+});
+
+// Web YÖNETİM paneli bağlantısı: yalnızca süper yöneticiye, uygulamada (Ayarlar → Web yönetim paneli). Ayrı uç: yönetim
+// panelindeki ajans/bayi kopyalama kutusu bu bağlantıyı göstermez (ekran paylaşımında görünmesin). Denetim kaydına yazılır.
+router.get('/panel-links/admin', requireSuperAdmin, async (req, res) => {
+  const link = panelLinkOk(process.env.PANEL_LINK_ADMIN);
+  await query(`INSERT INTO financial_audit_logs(admin_id, action, reference_type, metadata) VALUES($1,'panel_link_admin_view','system',$2)`,
+    [req.user.id, JSON.stringify({ available: !!link })]);
+  res.json({ admin: link });
 });
 
 router.get('/dealers', requireSuperAdmin, async (req, res) => {

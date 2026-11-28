@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../l10n/l10n.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../services/api.dart';
 import '../services/beauty.dart';
 import '../services/effect_prefs.dart';
@@ -115,6 +116,45 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (mounted) setState(() {});
   }
 
+  /// Web yönetim panelinin giriş bağlantısı (yalnızca süper yönetici). Tarayıcıda açılınca o tarayıcı panele 1 yıl izin alır.
+  Future<void> _adminPanelLink() async {
+    final r = await guard(context, () => Api.get('/api/admin/panel-links/admin'));
+    if (r == null || !mounted) return;
+    final link = r['admin']?.toString();
+    if (link == null || link.isEmpty) {
+      toast(context, tx('Bağlantı henüz yok: sunucu yeni sürüme geçince burada görünür.'), error: true);
+      return;
+    }
+    await showDialog<void>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text(tx('Web yönetim paneli')),
+        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          SelectableText(link, style: const TextStyle(fontSize: 13)),
+          const SizedBox(height: 10),
+          Text(tx('Bu bağlantıyı kimseyle paylaşma. Tarayıcıda bir kez açınca o tarayıcı panele girer.'), style: const TextStyle(color: Pal.textDim, fontSize: 12)),
+        ]),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: link));
+              Navigator.pop(c);
+              toast(context, tx('Kopyalandı'));
+            },
+            child: Text(tx('Kopyala')),
+          ),
+          FilledButton(
+            onPressed: () async {
+              Navigator.pop(c);
+              await launchUrl(Uri.parse(link), mode: LaunchMode.externalApplication);
+            },
+            child: Text(tx('Tarayıcıda aç')),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// Dil seçimi (Türkçe / English). İlk açılışta telefonun diline göre seçilir; değişince uygulama yeni dille açılır.
   Future<void> _language() async {
     final picked = await showModalBottomSheet<String>(
@@ -185,6 +225,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _row(Icons.notifications_none_rounded, _cPink, tx('Bildirimler'), onTap: widget.onNotifyPrefs),
           _row(Icons.language_rounded, _cGreen, tx('Dil'), value: L10n.names[L10n.lang.value], onTap: _language),
           _row(Icons.share_outlined, _cSky, tx('Paylaş'), onTap: _share),
+          // Yalnızca süper yönetici: web yönetim panelinin gizli giriş bağlantısı (sunucu paneli şifresi gerekmeden).
+          if (Session.isAdmin) _row(Icons.admin_panel_settings_outlined, _cOrange, tx('Web yönetim paneli'), onTap: _adminPanelLink),
         ]),
         _group([
           _row(Icons.help_outline_rounded, _cAmber, tx('Yardım'), onTap: () => _push(const CustomerServiceScreen())),
