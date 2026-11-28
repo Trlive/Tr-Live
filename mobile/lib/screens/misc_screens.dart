@@ -26,6 +26,7 @@ class WalletScreen extends StatelessWidget {
     'dealer_credit': 'Bayi yüklemesi',
     'admin_adjustment': 'Yönetici düzenlemesi',
     'diamond_exchange': 'Elmas bozdurma',
+    'web_topup': 'Web yükleme',
     'bean_exchange': 'Fasulye çevirme',
     'bean_received': 'Fasulyeden gelen Coin',
     'lucky_bag_sent': 'Şanslı çanta gönderildi',
@@ -208,9 +209,11 @@ class _WalletViewState extends State<_WalletView> {
                           ]),
                           const SizedBox(height: 10),
                           if (isBroadcaster)
-                            const Text('Onaylı yayıncı: elmaslar maaş sistemiyle ödenir, bozdurulamaz.', style: TextStyle(color: Colors.white60, fontSize: 12))
-                          else
-                            FilledButton.icon(
+                            const Padding(
+                              padding: EdgeInsets.only(bottom: 8),
+                              child: Text('Bozdurduğun elmas o ayın maaş kotasına sayılmaz. Ay sonunda kota kadar elmas maaşa, kalanı otomatik Coin\'e çevrilir.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60, fontSize: 12)),
+                            ),
+                          FilledButton.icon(
                               onPressed: () => WalletScreen.exchange(context, (_me['diamonds'] ?? '0').toString(), _reload),
                               icon: const Icon(Icons.swap_horiz),
                               label: const Text('Elmas Bozdur (5 💎 = 1 Coin)'),

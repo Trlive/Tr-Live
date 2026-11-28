@@ -44,6 +44,19 @@ const GROUPS: { title: string; note?: string; fields: FieldDef[] }[] = [
     ],
   },
   {
+    title: "Coin satış kanalları",
+    note: "Kart (PayTR) ve USDT için gizli anahtarlar sunucunun .env dosyasındadır (PAYTR_MERCHANT_ID / PAYTR_MERCHANT_KEY / PAYTR_MERCHANT_SALT, USDT_TRC20_ADDRESS, TRONGRID_API_KEY, PUBLIC_BASE_URL); burada yalnızca aç/kapa. Anahtarı olmayan yöntem açık olsa da görünmez. Durum ve sipariş listesi: Ekonomi → Ödemeler.",
+    fields: [
+      { key: "payPaytrEnabled", label: "Kart ile ödeme (PayTR) — onaylanınca Coin otomatik", kind: "bool" },
+      { key: "payUsdtEnabled", label: "USDT (TRC20) — zincirde görülünce Coin otomatik", kind: "bool" },
+      { key: "payBankEnabled", label: "Havale / EFT — dekont yönetimde teyit edilince", kind: "bool" },
+      { key: "payWebTopupEnabled", label: "Web yükleme sayfası (/pay): kullanıcı kendi ID'siyle yükler", kind: "bool" },
+      { key: "payUsdtRateKurus", label: "USDT kuru (kuruş)", hint: "1 USDT kaç kuruş: 4200 = 42,00 TL", kind: "int" },
+      { key: "payOrderTtlMin", label: "Sipariş geçerlilik süresi (dakika)", hint: "Kart ve USDT; havale 48 saat. 5-1440", kind: "int" },
+      { key: "payBankInfo", label: "Havale bilgisi", hint: "Banka, IBAN, alıcı adı — siparişte gösterilir.", kind: "multiline" },
+    ],
+  },
+  {
     title: "Medya deposu (Cloudflare R2)",
     note: "Beşi birden dolu olmadan depo kapalıdır; görseller veritabanından sunulmaya devam eder. Dolduğunda taşıma saatte bir kendiliğinden ilerler, durumu Özellik Bayrakları ekranından izlenir. Yarım yapılandırma ile başlanmaz: dosyaların yarısını R2'de yarısını veritabanında bırakmak, temizlemesi taşımaktan zor bir karışıklık yaratır.",
     fields: [
@@ -210,6 +223,8 @@ const AGENCY_FIELDS: FieldDef[] = [
   { key: "videoMinSessionMinutes", label: "Görüntülü: sayılması için en kısa oturum (dakika)", kind: "int" },
   { key: "videoShortfallCutBps", label: "Görüntülü: süre şartı eksikse kesinti (baz puan)", kind: "int" },
   { key: "instantSalaryEnabled", label: "Ay içi maaş (avans) kuralı: açık = kota dolunca hemen yatar (acil durdurma için)", kind: "bool" },
+  { key: "monthEndDiamondConvert", label: "Ay sonu elmas kuralı: kota kadar elmas maaşa, kalan elmas 5:1 Coin'e; kota dolmazsa maaş yok, hepsi Coin", kind: "bool" },
+  { key: "autoClosePeriod", label: "Dönemi otomatik kapat: dönem bitince 10 dk sonra maaşlar yazılır, elmaslar çevrilir (yönetici tuşu gerekmez)", kind: "bool" },
 ];
 
 function AgencyConfig() {

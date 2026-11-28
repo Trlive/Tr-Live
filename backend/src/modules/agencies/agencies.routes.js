@@ -1,3 +1,7 @@
+import { clientIp } from '../../middleware/security/firewall.js';
+import { acceptWithAction } from '../contracts/contracts.service.js';
+import { cleanDevice } from '../users/sessions.service.js';
+import { requireContract } from '../contracts/contracts.routes.js';
 import { Router } from 'express';
 import { hub } from '../../infrastructure/websocket/realtime.js';
 import { query, tx } from '../../infrastructure/database/database.js';
@@ -7,11 +11,15 @@ import crypto from 'node:crypto';
 import { periodBounds, parsePeriodKey } from '../games/settlement.service.js';
 import { loadConfig, configJson, hostProgress, hostStatementJson, agencyStatementJson, assistantStatementJson } from '../wallet/payouts.service.js';
 import { estimateHosts, agencyGiftRows, agencyPrimSummary } from './agency_metrics.service.js';
+import { salaryStatus } from '../wallet/instant_salary.service.js';
 import { agencyAccess, requireOwner, logTransfer, applyTransfer, notifyTransferResult, ESCALATE_DAYS } from './agency_ops.service.js';
 import { notifyUser } from '../notifications/notify.service.js';
 
 export const router = Router();
 router.use(requireAuth);
+// Ajans sahibinin eski panel uçları da ajans sözleşmesi onayına bağlı (bkz. agency_center.routes.js).
+const agencyGate = requireContract('agency');
+router.use((req, res, next) => (/^\/agencies\/[^/]+\/(dashboard|statements|requests|invite|broadcasters)(\/|$)/.test(req.path) ? agencyGate(req, res, next) : next()));
 
 const agencyJson = (a) => ({
   id: a.id, name: a.name, logoUrl: a.logo_url, description: a.description, status: a.status,
@@ -246,6 +254,8 @@ router.post('/agency-requests/:requestId/respond', async (req, res) => {
     let result = { accepted: accept };
     if (accept) {
       if (agency.status !== 'active') throw fail('Ajans aktif değil.', 409);
+      // Yayıncı sözleşmesi daveti kabul ederken, AYNI işlemde kabul edilir (uygulama contract: true gönderir; eski sürüme 428).
+      await acceptWithAction(c, req.user, 'broadcaster', { consent: req.body?.contract === true, via: 'agency_invite', ip: clientIp(req), device: cleanDevice(req.body?.device) });
       const b = (await c.query(`SELECT status, agency_id FROM broadcasters WHERE user_id = $1 FOR UPDATE`, [q.user_id])).rows[0];
       if (b?.status === 'suspended') throw fail('Yayıncılığınız askıya alınmış. Destek ile iletişime geçin.', 409);
       if (b?.agency_id === agency.id) throw fail('Zaten bu ajansın yayıncısısınız.', 409);
@@ -305,6 +315,7 @@ router.post('/agencies/:agencyId/self-join', async (req, res) => {
     const b = (await c.query(`SELECT status, agency_id FROM broadcasters WHERE user_id = $1 FOR UPDATE`, [req.user.id])).rows[0];
     if (b?.status === 'suspended') throw fail('Yayıncılığınız askıya alınmış. Destek ile iletişime geçin.', 409);
     if (b?.agency_id === a.id && b.status === 'approved') throw fail('Zaten bu ajansın yayıncısısınız.', 409);
+    await acceptWithAction(c, req.user, 'broadcaster', { consent: req.body?.contract === true, via: 'self_join', ip: clientIp(req), device: cleanDevice(req.body?.device) });
     if (b?.agency_id && b.agency_id !== a.id) throw fail('Başka bir ajansa bağlısınız. Önce o ajanstan ayrılın.', 409);
     await c.query(
       `INSERT INTO broadcasters(user_id, agency_id, status, approved_at, joined_agency_at) VALUES($1,$2,'approved',NOW(),NOW())
@@ -405,6 +416,8 @@ router.get('/broadcaster/me', async (req, res) => {
       rejectedTransfer: lastRejected ? transferJson(lastRejected) : null,
       progress: progress ?? undefined, config: configJson(cfg),
       withdrawEligible, unpaidSalaryCents: unpaid,
+      // "Maaşım neden yatmadı?" — engel listesi (telefon doğrulama, ajans, sözleşme, kota, bakiye...).
+      salaryStatus: b.status === 'approved' ? await salaryStatus(req.user.id) : undefined,
     },
   });
 });

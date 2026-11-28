@@ -1,3 +1,4 @@
+import { requireContract } from '../contracts/contracts.routes.js';
 // Ajans Merkezi v2: Ajansım + istatistikler, yayıncı istatistikleri, kazanç ayrıntısı, asistanlar, duyuru,
 // transfer geçmişi, davet merkezi ve maaş tablosu.
 import { Router } from 'express';
@@ -22,6 +23,9 @@ router.use(function requireAgencyAuth(req, res, next) {
   if (req.path.startsWith('/agency-center') || req.path.startsWith('/agency-assistant')) return requireAuth(req, res, next);
   return next();
 });
+// Ajans sözleşmesi yayımlandıysa ajans SAHİBİNİN paneli onaydan sonra açılır (asistanlar sözleşmenin tarafı değildir).
+const agencyGate = requireContract('agency');
+router.use((req, res, next) => (req.path.startsWith('/agency-center') ? agencyGate(req, res, next) : next()));
 
 const big = (v) => String(v ?? 0);
 const pct = (cur, prev) => (prev > 0n ? Math.round(Number(((cur - prev) * 10000n) / prev)) / 100 : null);
@@ -42,7 +46,8 @@ async function agencyPeriodData(a, cfg) {
   const curStart = dayIndex(b.start);
   const prevStart = dayIndex(prev.start);
   const prevSameEnd = prevStart + (today - curStart + 1); // bu tarihten önceki günler (dahil değil)
-  const all = (await agencyGiftRows([a.id], prev.start, b.end)).get(a.id) ?? new Map();
+  // İki dönem birlikte okunur; kendine hediye sınırı her dönem için ayrı uygulanır (curStart = bu dönemin ilk günü).
+  const all = (await agencyGiftRows([a.id], prev.start, b.end, undefined, [curStart])).get(a.id) ?? new Map();
   const cur = new Map(); const prevSame = new Map();
   let lastMonth = 0n; let lastSame = 0n; let todayD = 0n; let yesterdayD = 0n;
   for (const [uid, u] of all) {

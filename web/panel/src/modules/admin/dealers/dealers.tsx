@@ -7,8 +7,9 @@ import { useApi } from "@/core/api/use-api";
 import { Badge, Card, Empty, ErrorBox, Loading, PageHeader, StatCard, inputCls, tableCls, tableWrap, tdCls, thCls } from "@/shared/components/ui";
 import { ActionMsg, Field, Tabs, btnGhost, btnOk, btnDangerOutline, btnSmall, newKey, useAction } from "@/shared/components/kit";
 import { UserPicker, type AdminUser } from "@/modules/admin/users/user-picker";
+import { PanelLinkBox } from "@/modules/admin/shared/panel-link";
 
-type Dealer = { id: string; name: string; ownerUserId: string | null; ownerUsername: string | null; coinBalance: string; commissionBps: number; isActive: boolean;
+type Dealer = { id: string; name: string; ownerUserId: string | null; ownerUsername: string | null; coinBalance: string; commissionBps: number; isActive: boolean; apiEnabled?: boolean;
   // Ana bayi / Alt bayi. parentDealerId doluysa bu bir ALT bayidir. En fazla iki kat.
   parentDealerId: string | null; parentName: string | null; kind: "main" | "sub" };
 type Tx = { id: string; type: string; coinAmount: string; description?: string | null; username?: string | null; adminUsername?: string | null; createdAt: string };
@@ -23,6 +24,7 @@ export default function AdminDealers() {
   return (
     <div>
       <PageHeader icon={<Store size={18} />} kicker="Ekonomi" title="Bayiler" description="Coin bayileri, bakiye yükleme ve bayi bakiye talepleri." />
+      <PanelLinkBox kind="dealer" />
       <Tabs
         tabs={[
           { key: "dealers", label: "Bayiler" },
@@ -88,7 +90,7 @@ function NewDealer({ onDone }: { onDone: () => void }) {
   const [owner, setOwner] = useState<AdminUser | null>(null);
   const { busy, msg, run } = useAction();
   return (
-    <Card title="Yeni bayi" subtitle="Bayi, sahibi olan hesapla bayi paneline (/yonetim/dealer/login) girer.">
+    <Card title="Yeni bayi" subtitle="Bayi, sahibi olan hesapla bayi paneline girer (giriş bağlantısı yukarıda).">
       <div className="space-y-4">
         <Field label="Bayi adı">
           <input className={inputCls} value={name} maxLength={100} onChange={(e) => setName(e.target.value)} />
@@ -137,7 +139,7 @@ function DealerRow({ d, all, open, onToggle, onChanged }: { d: Dealer; all: Deal
         </div>
         <div className="text-right">
           <div className="font-semibold text-[#d7b56d]">{fmtNumber(d.coinBalance)} Coin</div>
-          <Badge tone={d.isActive ? "green" : "red"}>{d.isActive ? "Aktif" : "Durduruldu"}</Badge>
+          <Badge tone={d.isActive ? "green" : "red"}>{d.isActive ? "Aktif" : "Durduruldu"}</Badge>{d.apiEnabled && <Badge tone="gold">API</Badge>}
         </div>
       </button>
       {open && <DealerDetail d={d} all={all} onChanged={onChanged} />}
@@ -247,6 +249,21 @@ function DealerDetail({ d, all, onChanged }: { d: Dealer; all: Dealer[]; onChang
               }
             >
               {d.isActive ? "Bayiyi durdur" : "Bayiyi aç"}
+            </button>
+            <button
+              type="button"
+              className={d.apiEnabled ? btnDangerOutline : btnGhost}
+              disabled={busy}
+              title="Bayi kendi sitesinden / botundan API anahtarıyla, kendi stoğundan Coin yükler."
+              onClick={() =>
+                run(d.apiEnabled ? "API erişimi kapatıldı." : "API erişimi açıldı.", async () => {
+                  if (d.apiEnabled && !window.confirm("API erişimi kapatılsın mı? Bayinin tüm API anahtarları hemen çalışmaz olur.")) return false;
+                  await api(`/api/admin/dealers/${d.id}/update`, { method: "POST", body: { apiEnabled: !d.apiEnabled } });
+                  onChanged();
+                })
+              }
+            >
+              {d.apiEnabled ? "API erişimini kapat" : "API erişimini aç"}
             </button>
           </div>
         </div>

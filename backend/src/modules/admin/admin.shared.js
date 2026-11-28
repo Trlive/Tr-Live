@@ -280,6 +280,7 @@ export const SETTING_COLUMNS = {
   splitByRoomType: 'split_by_room_type', videoDailyCapMinutes: 'video_daily_cap_minutes', videoMinSessionMinutes: 'video_min_session_minutes',
   videoShortfallCutBps: 'video_shortfall_cut_bps', audioShortfallCutBps: 'audio_shortfall_cut_bps',
   instantSalaryEnabled: 'instant_salary_enabled', instantSalaryBps: 'instant_salary_bps',
+  monthEndDiamondConvert: 'month_end_diamond_convert', autoClosePeriod: 'auto_close_period',
   // Ağırlıklı maaş hak edişi. salaryWeights JSONB olduğu için burada DEĞİL, ayrı
   // doğrulamadan geçirilerek yazılıyor (validateWeights).
   salaryWeightedEnabled: 'salary_weighted_enabled', salaryAutoTransfer: 'salary_auto_transfer',

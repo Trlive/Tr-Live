@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/widgets.dart';
 import '../version.dart';
 import 'api.dart';
+import 'error_log.dart';
 import 'socket_service.dart';
 
 /// Yönetim panelinden "herkese telefon bildirimi". Uygulama açıkken ya da arka planda çalışırken soketten anında
@@ -163,7 +164,10 @@ class PushService with WidgetsBindingObserver {
           if (id <= last) return;
           await prefs.setString(_personalKey, '$id');
           await _showPersonal(e);
-        } catch (_) {}
+        } catch (err, st) {
+          // Numara "görüldü" yazıldıktan sonra gösterim başarısız olursa bildirim kaybolur: en azından kayda düşsün.
+          ErrorLog.add('Bildirim gösterilemedi (kişisel)', err, st);
+        }
         return;
       }
       if (e['type'] != 'push') return;
@@ -175,7 +179,9 @@ class PushService with WidgetsBindingObserver {
         if (id <= last) return;
         await prefs.setString(_lastKey, '$id');
         await _show(id, '${e['title'] ?? 'TR Live'}', '${e['body'] ?? ''}');
-      } catch (_) {}
+      } catch (err, st) {
+        ErrorLog.add('Bildirim gösterilemedi (duyuru)', err, st);
+      }
     });
     try {
       // İzin burada istenmez (açılışta / giriş ekranında değil): Micolive gibi girişten sonra ana sayfada bir kez sorulur.

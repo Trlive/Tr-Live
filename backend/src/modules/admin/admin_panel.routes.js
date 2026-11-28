@@ -31,7 +31,7 @@ const USER_SORTS = {
 const WALLET_TYPES = [
   'admin_adjustment', 'gift_sent', 'gift_received', 'store_purchase', 'wip_purchase', 'diamond_exchange', 'lucky_gift_win',
   'lucky_bag_sent', 'lucky_bag_received', 'lucky_bag_refund', 'family_cashback', 'family_reward', 'fly_text', 'guardian_card',
-  'relation_invite', 'relation_refund', 'salary_conversion', 'salary_conversion_refund', 'dealer_credit', 'daily_bonus',
+  'relation_invite', 'relation_refund', 'salary_conversion', 'salary_conversion_refund', 'dealer_credit', 'web_topup', 'daily_bonus',
   // Basım bütçesi türleri (system_test, event_reward, vip_compensation, marketing) bilerek YOK:
   // panelde süzülemezler, çünkü listede hiç görünmüyorlar.
 ];

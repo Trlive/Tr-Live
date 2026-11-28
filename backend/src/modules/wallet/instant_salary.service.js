@@ -15,6 +15,7 @@ import { periodBounds } from '../games/settlement.service.js';
 import { loadPayConfig, estimateHosts } from '../agencies/agency_metrics.service.js';
 import { creditUsd, SALARY_PAYABLE_SQL } from './usd_wallet.service.js';
 import { advanceDue } from './instant_salary.rules.js';
+import { getConfig, phoneVerifyOn } from '../system/app_config.service.js';
 
 async function payAdvance(userId, b, { targetCents, consumeTotal, entitledCents }) {
   return tx(async (c) => {
@@ -94,4 +95,61 @@ export function startInstantSalaryTicker(nonOverlapping, intervalMs = 180e3) {
   );
   t.unref();
   return t;
+}
+
+/**
+ * "Maaşım neden yatmadı?" teşhisi (v2.152.22). Yayıncı ekranı ve yönetim paneli aynı sonucu gösterir.
+ * Dönüş: { ok, reasons: [{ code, text }], paidCents (bu dönem yatan avans), estimatedCents (bu dönem hak edilen sesli maaş),
+ *          instant (avans açık mı) }. reasons boşsa ve estimatedCents > 0 ise maaş 3 dakika içinde yatar.
+ */
+export async function salaryStatus(userId, { now = new Date(), run = query } = {}) {
+  const cfg = await loadPayConfig(run);
+  const s = cfg.settings;
+  const b = periodBounds(s.cycle, now);
+  const row = (await run(
+    `SELECT b.user_id, b.status, b.agency_id, b.approved_at, b.pay_method_pref, b.contract_tier,
+            (u.phone IS NOT NULL) AS has_phone, (u.phone_verified_at IS NOT NULL) AS phone_ok,
+            (${SALARY_PAYABLE_SQL}) AS payable, a.status AS agency_status
+     FROM users u LEFT JOIN broadcasters b ON b.user_id = u.id LEFT JOIN agencies a ON a.id = b.agency_id WHERE u.id = $1`, [userId],
+  )).rows[0];
+  const reasons = [];
+  const add = (code, text) => reasons.push({ code, text });
+  const paid = BigInt((await run(
+    `SELECT COALESCE(SUM(cents), 0)::text AS c FROM salary_advances WHERE user_id = $1 AND applied_period_id IS NULL AND created_at >= $2 AND created_at < $3`,
+    [userId, b.start, b.end],
+  )).rows[0].c);
+  const base = { periodKey: b.key, paidCents: paid.toString(), instant: s.instantSalaryEnabled === true, monthEndConvert: s.monthEndDiamondConvert === true };
+  if (!row || !row.status) { add('not_broadcaster', 'Yayıncı değilsin. Maaş yalnızca bir ajansa bağlı onaylı yayıncılara ödenir.'); return { ...base, ok: false, reasons, estimatedCents: '0' }; }
+  if (row.status !== 'approved') add('not_approved', 'Yayıncılığın henüz onaylanmadı.');
+  if (!row.agency_id) add('no_agency', 'Bir ajansa bağlı değilsin. Maaş yalnızca ajanstaki yayıncıya hesaplanır.');
+  else if (row.agency_status !== 'active') add('agency_inactive', 'Ajansın etkin değil.');
+  const sms = phoneVerifyOn(await getConfig());
+  const where = sms ? 'Ayarlar → Hesap güvenliği → Telefon numarası' : 'SMS doğrulaması şu an kapalı; destek ekibine yaz, telefonunu panelden doğrulasınlar';
+  if (!row.has_phone) add('phone_missing', `Hesabına telefon numarası bağlı değil. Maaş yalnızca doğrulanmış telefonu olan hesaba yatar (${where}).`);
+  else if (!row.phone_ok) add('phone_unverified', `Telefon numaran doğrulanmamış. Maaş yalnızca doğrulanmış telefona yatar (${where}).`);
+  if (row.phone_ok && !row.payable) add('contract_missing', 'Yayıncı sözleşmesini kabul etmen gerekiyor (Ayarlar → Sözleşmelerim).');
+  if (!sms && (!row.has_phone || !row.phone_ok)) base.smsOff = true;
+  if (s.instantSalaryEnabled !== true) add('instant_off', 'Ay içi maaş (avans) yönetim tarafından durduruldu; maaşın dönem kapanınca yatar.');
+  if (s.salaryWeightedEnabled === true) add('weighted', 'Ağırlıklı maaş sistemi açık: maaş dönem kapanınca hesaplanıp yatar.');
+  let estimated = 0n;
+  if (row.status === 'approved') {
+    const x = (await estimateHosts([row], cfg, b, run)).get(userId);
+    if (x) {
+      estimated = x.eval.audioCents;
+      const next = x.eval.next;
+      if (estimated <= 0n) {
+        // Kota dolmuş ama bakiye yetmiyor mu (bozdurma), yoksa kota hiç dolmadı mı?
+        const sorted = [...cfg.levels].sort((p, q) => (p.diamonds < q.diamonds ? -1 : 1));
+        const first = sorted[0];
+        const periodDiamonds = s.splitByRoomType !== false ? x.metrics.audio.diamonds : x.metrics.diamonds;
+        if (first && periodDiamonds >= first.diamonds && s.monthEndDiamondConvert === true) {
+          add('balance_short', `Bu dönem ${periodDiamonds} elmas aldın ama bakiyende ilk kota kadar (${first.diamonds}) elmas yok. Maaş, kota kadar elmas bakiyede durursa ödenir; bozdurulan elmas sayılmaz.`);
+        } else {
+          add('quota', next ? `Maaş kotası dolmadı: ilk seviye için ${x.eval.nextRemaining} elmas daha gerekiyor.` : 'Maaş kotası dolmadı.');
+        }
+        if (x.eval.videoCents > 0n) add('video_month_end', 'Görüntülü yayın maaşın dönem kapanınca yatar (ay içi avans yalnızca sesli maaş içindir).');
+      }
+    }
+  }
+  return { ...base, ok: reasons.length === 0 && estimated > 0n, reasons, estimatedCents: estimated.toString() };
 }

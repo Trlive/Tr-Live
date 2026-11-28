@@ -609,6 +609,9 @@ router.get('/:roomId/members', requireAuth, async (req, res) => {
   // mı" hesapları olduğu gibi doğru kalır.
   //
   // `total` ile birlikte döner: arayüz "+1.742 dinleyici" diye gösterebilsin, sayı kaybolmasın.
+  // Oda olay numarası VERİTABANI okumasından ÖNCE alınır: okuma sırasında olan olay "kaçmış" sayılır (en kötü durumda
+  // gereksiz bir yeniden yükleme), hiçbir olay sessizce kaybolmaz. İstemci bunu abonelik onayındaki numarayla karşılaştırır.
+  const seq = hub.roomSeq(roomId);
   const limit = Math.max(50, Math.min(500, Number.parseInt(req.query.limit, 10) || 300));
   const isAdmin = req.user.system_role === 'admin';
   const visible = `(rm.microphone OR rm.user_id = $2 OR $3 OR NOT is_ghost(rm.user_id))`;
@@ -629,6 +632,7 @@ router.get('/:roomId/members', requireAuth, async (req, res) => {
     ),
   ]);
   res.json({
+    seq,
     total: c.rows[0].n,
     truncated: c.rows[0].n > r.rowCount,
     members: r.rows.map((m) => ({

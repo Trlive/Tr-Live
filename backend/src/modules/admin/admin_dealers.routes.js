@@ -6,6 +6,13 @@ import { approveTopupRequest, assertUser, auditStaff, bigAmount, dealerSell, fai
 export const router = Router();
 
 // ---------------- Bayi (yalnızca yönetici) ----------------
+// Ajans ve bayi web paneli giriş bağlantıları (sunucu kurulumunda üretilir, PANEL_LINK_*). Yönetim panelinin bağlantısı
+// bilerek burada YOK: yalnızca sunucu panelinde (şifreli) görünür. Tanımlı değilse (eski kurulum) null.
+router.get('/panel-links', requireSuperAdmin, (req, res) => {
+  const ok = (v) => (/^https:\/\/[^\s/]+\/[A-Za-z0-9]{24,64}$/.test(String(v ?? '')) ? String(v) : null);
+  res.json({ agency: ok(process.env.PANEL_LINK_AGENCY), dealer: ok(process.env.PANEL_LINK_DEALER) });
+});
+
 router.get('/dealers', requireSuperAdmin, async (req, res) => {
   const r = await query(
     `SELECT d.*, u.username AS owner_username, p.name AS parent_name
@@ -16,7 +23,7 @@ router.get('/dealers', requireSuperAdmin, async (req, res) => {
   );
   res.json({ dealers: r.rows.map((d) => ({
     id: d.id, name: d.name, ownerUserId: d.owner_user_id, ownerUsername: d.owner_username,
-    coinBalance: String(d.coin_balance), commissionBps: d.commission_bps, isActive: d.is_active,
+    coinBalance: String(d.coin_balance), commissionBps: d.commission_bps, isActive: d.is_active, apiEnabled: d.api_enabled === true,
     // Ana bayi / alt bayi: parentDealerId doluysa bu bir ALT bayidir.
     parentDealerId: d.parent_dealer_id, parentName: d.parent_name,
     kind: d.parent_dealer_id ? 'sub' : 'main',
@@ -56,10 +63,13 @@ router.post('/dealers/:dealerId/coins', requireSuperAdmin, idempotent('dealer_cr
     if (!dealer) throw fail('Bayi bulunamadı.', 404);
     const before = BigInt(dealer.coin_balance);
     const balance = before + amount;
-    await c.query(`UPDATE dealer_accounts SET coin_balance = $1 WHERE id = $2`, [balance.toString(), dealer.id]);
+    // Tahsil edilen bedel (isteğe bağlı, TL): bayinin stok maliyetine eklenir (gelir-gider raporu). Boşsa maliyetsiz yükleme.
+    const pt = req.body?.priceTry === undefined || req.body?.priceTry === null || req.body?.priceTry === '' ? null : String(req.body.priceTry).trim();
+    if (pt !== null && !/^\d{1,12}(\.\d{1,2})?$/.test(pt)) throw fail('Bedel geçersiz (ör. 2500 ya da 2500.50).');
+    await c.query(`UPDATE dealer_accounts SET coin_balance = $1, stock_cost_try = stock_cost_try + COALESCE($3::numeric, 0) WHERE id = $2`, [balance.toString(), dealer.id, pt]);
     await c.query(
-      `INSERT INTO dealer_transactions(dealer_id, admin_id, type, coin_amount, description) VALUES($1,$2,'credit',$3,$4)`,
-      [dealer.id, req.user.id, amount.toString(), text(req.body?.description, 'Açıklama', { max: 200 }) || 'Admin bayi Coin yükleme'],
+      `INSERT INTO dealer_transactions(dealer_id, admin_id, type, coin_amount, description, cost_try, price_try) VALUES($1,$2,'credit',$3,$4,$5,$5)`,
+      [dealer.id, req.user.id, amount.toString(), text(req.body?.description, 'Açıklama', { max: 200 }) || 'Admin bayi Coin yükleme', pt],
     );
     await c.query(
       `INSERT INTO financial_audit_logs(admin_id, action, reference_type, reference_id, amount_coins, balance_before, balance_after)
@@ -78,13 +88,16 @@ router.post('/dealers/:dealerId/update', requireSuperAdmin, async (req, res) => 
   const dealerId = uuid(req.params.dealerId, 'Bayi');
   const name = req.body?.name === undefined ? null : text(req.body.name, 'Bayi adı', { min: 2, max: 100, required: true });
   const active = typeof req.body?.isActive === 'boolean' ? req.body.isActive : null;
+  // Bayi API'si (kendi sisteminden Coin yükleme) — yönetim açar; kapatılınca tüm anahtarları anında çalışmaz.
+  const api = typeof req.body?.apiEnabled === 'boolean' ? req.body.apiEnabled : null;
   const r = await query(
-    `UPDATE dealer_accounts SET name = COALESCE($2, name), is_active = COALESCE($3, is_active) WHERE id = $1 RETURNING id, name, is_active`,
-    [dealerId, name, active],
+    `UPDATE dealer_accounts SET name = COALESCE($2, name), is_active = COALESCE($3, is_active), api_enabled = COALESCE($4, api_enabled)
+     WHERE id = $1 RETURNING id, name, is_active, api_enabled`,
+    [dealerId, name, active, api],
   );
   if (!r.rowCount) throw fail('Bayi bulunamadı.', 404);
-  await auditStaff({ query }, req.user.id, null, 'dealer_update', { dealerId, name, isActive: active });
-  res.json({ dealer: { id: r.rows[0].id, name: r.rows[0].name, isActive: r.rows[0].is_active } });
+  await auditStaff({ query }, req.user.id, null, 'dealer_update', { dealerId, name, isActive: active, apiEnabled: api });
+  res.json({ dealer: { id: r.rows[0].id, name: r.rows[0].name, isActive: r.rows[0].is_active, apiEnabled: r.rows[0].api_enabled } });
 });
 
 // Bayinin hareketleri (sayfalı).

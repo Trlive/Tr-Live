@@ -23,7 +23,7 @@ test('dolar cüzdanı: bayiye gönderimde Coin karşılığı tam sayı hesabıy
 
 test('dolar cüzdanı: varsayılan ayarlar ve panel doğrulaması', () => {
   const s = usdSettings(CONFIG_DEFAULTS);
-  assert.deepEqual(settingsJson(s), { enabled: true, withdrawMinCents: '1000', dealerMinCents: '1000', coinsPerUsd: '4000', exchangeCoinsPerUsd: '4000', exchangeMinCents: '100' });
+  assert.deepEqual(settingsJson(s), { enabled: true, withdrawMinCents: '1000', dealerMinCents: '1000', coinsPerUsd: '4000', exchangeCoinsPerUsd: '4000', sendCoinsPerUsd: '4000', exchangeMinCents: '100' });
   assert.equal(usdSettings({ ...CONFIG_DEFAULTS, usdEnabled: false }).enabled, false);
   assert.deepEqual(validateConfigPatch({ usdWithdrawMinCents: 2500, usdDealerMinCents: 1000, usdDealerCoinsPerUsd: 5000, usdEnabled: false, usdAutoCredit: true }),
     { usdWithdrawMinCents: 2500, usdDealerMinCents: 1000, usdDealerCoinsPerUsd: 5000, usdEnabled: false, usdAutoCredit: true });

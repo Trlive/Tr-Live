@@ -1,3 +1,280 @@
+## v2.154.1 — Oda olaylarında sıra numarası (rapor O-04): diğer sohbette yapılan iş alındı, gözden geçirildi, genişletildi
+
+Kaynak: diğer sohbette hazırlanan `TR-Live-v2_152_17.zip` (temel 2.152.16). Fark yalnızca O-04 dosyalarıydı. Bugünkü koda (2.154.0) taşındı:
+- sunucuda `room_seq.js` ve hub değişikliği, bugünkü oda indeksli hub'a uyarlandı;
+- mobilde `socket_service.dart` ve `room_screen.dart` yamaları çakışmasız uygulandı;
+- testleri `room_seq.test.js` ve `realtime_seq.test.js`.
+
+**Zipten gelen (korundu):**
+- Durum değiştiren oda olaylarına artan `seq` vuruluyor; yalnızca görsel olaylar numarasız.
+- Abonelik onayı o anki numarayı taşıyor.
+- İstemci boşluk görürse (41 → 43) durumu yeniden alıyor; ardışık boşluklar 5 sn'de bir birleşiyor.
+- Yeniden bağlanınca durum, abonelik onaylandıktan SONRA alınıyor (önceki yarış kapandı); onay gelmezse 10 sn sonra yine alınıyor.
+
+**Bu sürümde düzeltilen / eklenen:**
+1. **İlk girişteki yarış da kapandı.**
+   - Sorun: zipteki çözüm yalnızca yeniden bağlanmayı kapsıyordu. Odaya ilk girişte de üye listesi REST ile abonelikten önce alınıyordu;
+     aradaki koltuk/rol değişikliği kayboluyordu.
+   - Çözüm: `/api/rooms/:id/members` yanıtı artık `seq` taşıyor. Numara veritabanı okumasından ÖNCE alınıyor; böylece okuma sırasında olan olay
+     "kaçmış" sayılıyor, en kötü durumda gereksiz bir yeniden yükleme oluyor.
+   - Abonelik onayındaki numara bundan büyükse uygulama durumu yeniden alıyor. Karşılaştırma tek seferlik ve yalnızca anlık görüntü abonelikten
+     önce alındıysa yapılıyor.
+2. **Kalp atışı boşluğu gizliyordu.** Uygulama her 60 sn'de aboneliği yeniliyor; zipteki kod her onayda takibi sunucunun numarasına
+   sıfırlıyordu, aradaki bir kaybı örtebiliyordu. Artık zaten takipteyken gelen onaydaki numara bizimkinden büyükse bu da "boşluk" sayılıyor.
+3. **Sayaç sızıntısı.** Zipte sayaç yalnızca "boş odaya yayın yapılırsa" siliniyordu; son kişi çıkıp oda sessizleşince bellekte kalıyordu.
+   Artık odanın son abonesi çıktığı anda siliniyor (oda kapanışı dahil). Abonesiz odaya yayın numara tüketmiyor.
+4. `hub.roomSeq(roomId)` (REST için) ve `SocketService.isSubscribedTo(roomId)` eklendi.
+
+**Sınama:**
+- backend 551 birim. Zipin 9 testi bugünkü hub üzerinde geçti; yeni 2 test: son abone çıkınca sayaç silinir ve abonesiz yayın numara
+  tüketmez / kalp atışı yinelemesinde onay aynı numarayı taşır. `ws` paketi bu ortamda var; testler gerçekten çalıştı.
+- gerçek PostgreSQL'de 56/56 e2e.
+- Bu ortamda Flutter var ve Dart DERLENDİ: `flutter analyze` 0 hata/0 uyarı, `flutter test` 71/71.
+- Önerilen elle deneme: odada uçak modu aç-kapa, başka cihazdan koltuk değiştirme; tanı kaydında "Bağlantı · olay boşluğu" satırı görünür.
+
+## v2.154.0 — Bayi API'si, ayrı Coin yükleme sitesi, "başkası için" Fasulye kuru
+
+**YoHo karşılaştırması (sahibin videolarından):**
+- YoHo'nun bayinin sattığı ve kullanıcının yüklediği "Coins" birimi = bizim **Coin**.
+- YoHo'daki "Cüzdan bakiyesi $" = bizim **Fasulye**.
+- "Yükleme yap → Kendim için / Diğerleri için" = bizim Fasulye → Coin çevirme / Coin gönderme.
+
+Yapı aynı kaldı: Coin satılan sanal ürün, Fasulye satılmaz (yalnızca kazanç; Coin'e çevrilir ya da çekilir).
+
+**Fasulye → başkasına Coin kuru:** YoHo'da 1 $ kendine 8.800, başkasına 9.600 Coin. Artık ayrı ayar: `usdCoinsPerUsdOthers`
+(panel: Fasulye Cüzdanı; 0 = kendine kuruyla aynı). Para döngüsü koruması bu kura da uygulanır.
+
+**Bayi API'si v1** (`/dealer-api/v1`, belge: `/dealer-api/docs`): bayi kendi sitesinden / botundan, kendi stoğundan kullanıcı ID'sine Coin yükler.
+- **Uçlar:** `GET /me`, `GET /users/{id}`, `POST /recharges` (anında ya da 5 dk sonra), `GET /recharges[/{no}]`, `POST /recharges/{no}/cancel`.
+- **Güvenlik:**
+  - Anahtar yalnızca SHA-256 özetiyle saklanır ve bayiye bir kez gösterilir.
+  - Yönetim bayi bazında açar/kapatır; kapatınca tüm anahtarlar anında durur.
+  - IP izin listesi (tek IP / IPv4 CIDR / IPv6).
+  - Anahtar başına 24 saatlik Coin sınırı ve dakikada 120 istek.
+  - En çok 5 etkin anahtar.
+  - Bayilik sözleşmesi şartı.
+  - Kendi hesabına yükleme yasağı.
+  - Anahtar oluşturma ve iptal denetim kaydına yazılır.
+- **Tekrar güvenliği:** her yükleme bayinin `clientOrderId`'siyle bir kez işlenir; tekrar gelen istek ilk sonucu döndürür, farklı içerikle 409.
+  Reddedilen istek iz bırakmaz.
+- Satış bedeli (`priceTry`) Gelir-Gider raporuna girer; alıcıya anlık bakiye ve bildirim gider.
+- **Ekranlar:** Bayi Paneli → "API Anahtarları" (oluştur, IP, günlük sınır, iptal, son kullanım). Yönetim → Bayiler → "API erişimini aç/kapat"
+  ve listede "API" rozeti.
+
+**Ayrı yükleme sitesi:** sunucu panelinde `PAY_DOMAIN` (ör. `odeme.alanadi.com`) yazılınca o adres yalnızca web yükleme sayfasını sunar
+(kök → `/pay`; geri kalan her şey 404). Sunucu panelinde PayTR ve USDT anahtar alanları da eklendi (`.env` düzenlemek gerekmez).
+
+Migration 123. **Sınama:**
+- backend 540 birim (yeni: anahtar biçimi / özet / sabit zamanlı karşılaştırma, Bearer, IP listesi ve CIDR, sipariş no);
+- gerçek PostgreSQL'de 56/56 e2e. Yeni e2e testi:
+  - API kapalıyken anahtar yok,
+  - yükleme ve aynı no ile çift yüklememe; farklı içerikte 409,
+  - kendine yükleme reddi, günlük sınır, 5 dk iptal,
+  - IP reddi, iptal edilmiş anahtar, yönetimin kapatması,
+  - belge sayfası,
+  - "başkasına" kuru ve döngü koruması.
+- panel `tsc` 0 hata; `flutter analyze` 0 hata / 0 uyarı.
+
+## v2.153.1 — Web panelleri ayrıldı: her panelin kendi gizli giriş bağlantısı
+
+- **Ayrı bağlantılar:** her panele kurulumda rastgele, tahmin edilemez bir bağlantı üretilir (`https://ALAN/<32 / 28 karakter>`).
+  - Yönetim bağlantısı → doğrudan yönetim girişi.
+  - Ajans bağlantısı → ajans girişi.
+  - Bayi bağlantısı → bayi girişi.
+- **Gizlilik:**
+  - Bağlantıyla gelmeyen kişiye panel sayfaları **404** döner; panelin varlığı bile anlaşılmaz.
+  - Eski "panel seçimi" sayfası kaldırıldı; `/yonetim` kökü de 404 veriyor.
+  - Giriş ekranındaki "Panel seçimine dön" kaldırıldı.
+- **İzin çerezi (sunucunun Caddy katmanında):**
+  - Yalnızca o panelin yoluna gider; JavaScript okuyamaz (HttpOnly), Secure, SameSite.
+  - 1 yıl geçerli.
+  - Ajans çerezi yönetim sayfalarını açmaz; diğer paneller için de aynı.
+- **Bağlantıları görme ve yenileme:**
+  - Sunucu panelinde (`/panel`) "Panel giriş bağlantıları" bölümü ve "Tüm bağlantıları yenile" (YENILE onayıyla) var.
+  - Yönetim panelinde Bayiler ve Ajanslar sayfasında ilgili bağlantı kopyalanabilir. Yönetim bağlantısı bilerek yalnızca sunucu panelinde.
+- **Güvenli devreye alma:** yeni Caddy ayarı devreye girmeden önce sunucuda `caddy validate` ile doğrulanıyor. Geçersizse son çalışan
+  ayar geri konuyor; site kapanmıyor.
+- `/yonetim/m/*` (uygulama içi Ajans / Yayıncı Merkezi) ve `/pay` (web yükleme) açık kalıyor.
+
+## v2.153.0 — Coin bayilik sistemi v2: otomatik ödeme, teşvik, gelir-gider, web yükleme sayfası
+
+Rakiplerdeki (Yoho / Bigo / Xena) üç parçalı yapı: uygulama içi bayi paneli + harici yükleme kanalı + bayi teşvik sistemi.
+Asıl eksik paranın akışıydı: bayi stok paketini seçip bağlantıya ödüyor, yönetici talebi **elle** onaylıyordu.
+
+**Otomatik ödeme siparişleri** (`payment_orders`, migration 122)
+- Yöntemler: **Kart (PayTR iFrame)**: imzalı bildirimle (HMAC) Coin anında yazılır. **USDT (TRC20)**: her siparişe benzersiz
+  tutar verilir; sunucu dakikada bir cüzdanı (TronGrid, yalnızca onaylı işlemler, resmi USDT sözleşmesi) okuyup tutarla eşler.
+  **Havale/EFT**: IBAN + sipariş no gösterilir, yönetici dekont numarasıyla teyit eder.
+- Para güvenliği: Coin yalnızca ödeme doğrulanınca ve BİR KERE yazılır.
+  - Sipariş satırı kilitlenir.
+  - Aynı ödeme (işlem özeti / dekont no) iki siparişe bağlanamaz (benzersiz indeks).
+  - Tutar uyuşmazsa Coin yazılmaz.
+  - Tekrar gelen bildirim çift yazmaz.
+  - Süresi geçmiş siparişe sonradan gelen ödeme yine yazılır; iptal edilmiş siparişe yazılmaz.
+  - Eşleşmeyen transferler yönetime düşer.
+- Gizli anahtarlar yalnızca sunucu ortamında (`PAYTR_*`, `USDT_TRC20_ADDRESS`, `TRONGRID_API_KEY`, `PUBLIC_BASE_URL`); panelde aç/kapa.
+  Anahtarı olmayan yöntem görünmez; hiçbiri yoksa bayi eski usul (bağlantı + talep) akışını görür.
+
+**Web yükleme sayfası `/pay`** (herkese açık): kullanıcı uygulama ID'sini girer, kişi kartı (ad + avatar) görünür, paket ve yöntem seçer, öder;
+Coin otomatik hesabına geçer. Sayfa sipariş durumunu kendisi yoklar. Giriş istemez; uygulamadan bu sayfaya bağlantı verilmez.
+
+**Bayi teşvik sistemi**
+- Paket bonusu (ek Coin; paketin yarısını geçemez).
+- **Aylık hacim kademesi** (Bronz / Gümüş / Altın / Elmas; bu ayki toptan alım + bu sipariş eşiği geçince % ek Coin).
+- **Kampanya** (tarih aralığı, bayi / web / ikisi, en az tutar).
+- Toplam ek oran üst sınırı %60.
+- Ek Coin siparişte sabitlenir ve stoğa ayrı "bonus" satırı olarak yazılır.
+
+**Bayi gelir-gider**
+- Satışta isteğe bağlı "satış bedeli" girilir (uygulama ve web bayi portalı).
+- Stok maliyeti **ağırlıklı ortalama** ile tutulur (ek Coin maliyetsiz; alt bayi aktarımında maliyet taşınır ya da aktarım bedeliyle geçer).
+- Rapor:
+  - satış geliri, satılan Coin'in maliyeti, brüt kâr ve marj,
+  - stok alımı, ek Coin, stok değeri, 1.000 Coin ortalama maliyeti,
+  - günlük döküm,
+  - bedeli girilmemiş satışlar ayrıca.
+- Kuruş hatası yok: hesap 1e-4 TL ölçekli tam sayıyla.
+
+**Diğer**
+- "5 dakika sonra hesaba geçiş" satışı teslimden önce **iptal** edilebilir (Coin ve maliyet stoğa döner).
+- İşlem geçmişinde alt bayi aktarımı artık "çıkış" sayılıyor.
+
+**Ekranlar**
+- **Uygulama:**
+  - Stok yükle: Kart / USDT / Havale; paketlerde ek Coin; ay kademesi ve kampanya şeridi.
+  - Sipariş ekranı: ödeme sayfası, USDT adresi ve tam tutar, havale bilgisi; ödeme doğrulanınca kendiliğinden "Ödendi" olur.
+  - Yeni: Gelir-Gider ve Siparişlerim. Satış ekranında "Satış bedeli" alanı, geçmişte "İptal".
+- **Web bayi portalı:** Stok Satın Al (otomatik ödeme), Gelir-Gider, satışta bedel.
+- **Yönetim paneli:**
+  - Ekonomi → Ödemeler: siparişler, havale teyidi, iptal, eşleşmeyen ödemeler, kademe ve kampanya düzenleme, kurulum durumu.
+  - Bayi Mağazası: paket "Ek Coin" alanı.
+  - Ayarlar → Coin satış kanalları.
+  - Bayiye elle Coin yüklemede isteğe bağlı bedel (maliyete eklenir).
+
+**Kurulum:** sunucuda `/opt/trlive/env/extra.env` içine anahtarlar (bkz. `backend/.env.example`). PayTR Mağaza Paneli → Bildirim URL:
+`{PUBLIC_BASE_URL}/pay/callback/paytr`. Sonra Panel → Ayarlar → Coin satış kanalları'ndan yöntemleri açın.
+
+**Sınama:**
+- backend 536 birim testi (yeni 9 test: sipariş no, kuruş, USDT tutarı, kademe, bonus ve üst sınır, ağırlıklı maliyet ve kalan artık, kâr/marj,
+  PayTR token ve bildirim imzası, TRC20 süzme);
+- gerçek PostgreSQL'de 55/55 e2e. Yeni e2e testi:
+  - havale → teyit → stok + bonus + maliyet,
+  - ikinci teyit ve aynı dekont reddi,
+  - satış bedeli → 175 ₺ kâr / %21,87 marj,
+  - 5 dk satış iptali,
+  - PayTR sahte imza reddi ve tekrar bildirimde çift yazmama,
+  - `/pay` sayfası, ID arama, USDT zincir eşleşmesi ve yanlış tutarın yönetime düşmesi.
+- `flutter analyze` 0 hata/0 uyarı, `flutter test` 71/71; panel `tsc` 0 hata;
+- `/pay` akışı telefonda (390 px) Playwright ile denendi.
+
+## v2.152.22 — Maaş düzeltmesi: neden yatmadığı görünür, ay sonu elmas kuralı, otomatik dönem kapanışı, yayıncıya elmas bozdurma
+
+**"Fasulye hâlâ 0" sorunu.** Ay içi maaş (avans) her 3 dakikada yatıyor, ama yalnızca **telefonu doğrulanmış** yayıncıya. Ekran ise
+"kimlik doğrulaman onaylıysa ödenir" diyordu: kimlik onaylı olan ama telefonu doğrulanmamış (ya da sunucuda SMS/Firebase kurulu olmadığı
+için doğrulayamayan) yayıncı hiçbir şey göremiyordu.
+- **Maaş durumu kartı** (Para Çekme ekranı) ve panelde kullanıcı detayında aynı teşhis: telefon yok / doğrulanmamış, ajans yok,
+  sözleşme bekliyor, avans durduruldu, kota dolmadı (kaç elmas kaldı), kota dolmuş ama elmas bozdurulmuş, görüntülü maaş ay sonunda.
+  Bu ay yatan avans tutarı gösterilir. Uç: `/api/broadcaster/me` → `salaryStatus`; panel: `GET /api/admin/payouts/salary-status/:userId`.
+- **Panelde "Telefonu doğrula"** (süper yönetici, denetim kaydıyla): SMS doğrulaması kurulu değilken maaşı açmanın tek yolu.
+- Yanlış "kimlik doğrulama" metinleri düzeltildi (uygulama, Fasulye cüzdanı, panel).
+
+**Ay sonu elmas kuralı (sahibin kararı; ayar `monthEndDiamondConvert`, varsayılan açık):**
+- Dönem kapanınca maaş kotası kadar elmas maaşa çevrilir; **kalan dönem elması 5 Elmas = 1 Coin ile Coin'e** eklenir, elmas sıfırlanır.
+  Örnek: 290 bin elmas → 200 bin kota maaşa (15 $), 90 bin → 18.000 Coin.
+- **Kota dolmazsa maaş yok, elmasın tamamı Coin'e:** 199 bin elmas → 39.800 Coin.
+- Maaş yalnızca kota kadar elmas bakiyede durursa ödenir (elmas düşülmeden ödenen "Yöntem 1" bu kuralda kapalı; kalan elmas zaten Coin
+  olduğu için aynı elması iki kez ödemek olurdu). "Elmaslarım dönüşmesin" tercihi yok sayılır. Gün/saat şartı eksikse %50 kuralı sürüyor.
+- Yalnızca **dönemin** elması çevrilir: dönem bittikten sonra gelen hediyeler yeni döneme kalır. 5'e bölünmeyen 1–4 elmas bakiyede kalır.
+  Ağırlıklı maaş alanlar hariç.
+- Kayıtlar: Coin geçmişinde "Elmas bozdurma" satırı (`{dönem} ay sonu: X Elmas → Y Coin`), özet satırında `converted_diamonds/coins`,
+  `period_diamond_conversions` (dönem + kişi birincil anahtarı: iki kez yazılamaz), dönem denetim kaydında toplamlar; yayıncıya bildirim.
+
+**Otomatik dönem kapanışı (ayar `autoClosePeriod`, varsayılan açık).** Önceden dönem yalnızca paneldeki "Dönemi kapat" tuşuyla kapanıyordu.
+Artık biten dönem bitişinden 10 dakika sonra sunucu tarafından kapatılır (maaş Fasulyeye yatar, elmas çevrilir). Bir kere güvencesi aynı:
+danışma kilidi + benzersiz dönem anahtarı; iki sunucu aynı anda denese de biri "zaten kapatılmış" alır.
+
+**Elmas bozdurma yayıncılara açıldı** (5/1). Bozdurulan elmas o ayın kotasına sayılmaz; avansla zaten düşülmüş kota etkilenmez.
+
+Migration 121. **Dikkat:** sunucu bu sürüme geçince kapatılmamış en son dönem (bugün için Ekim 2026) 10 dakika içinde otomatik kapanır;
+onaylı yayıncıların o dönemden kalan elması Coin'e çevrilir. İstenmiyorsa güncellemeden önce panelden "Dönemi otomatik kapat" kapatılmalı.
+
+**Sınama:** backend 527 birim (yeni: ay sonu kuralı 290k / 199k / bozdurulmuş bakiye / tercih / %50); gerçek PostgreSQL'de 54/54 e2e
+(yeni: otomatik kapanış, 290k → 15 $ + 18.000 Coin ve dönem sonrası hediye korunur, 199k → maaş yok + 39.800 Coin, Coin geçmişi ve
+bildirim, teşhis + panelde aynı teşhis, telefonu elle doğrulama ve yetki, yayıncı bozdurma, bozdurulan elmasın kotaya sayılmaması);
+`flutter analyze` 0 hata/0 uyarı, `flutter test` 71/71; panel `tsc` 0 hata.
+
+## v2.152.21 — Sözleşmeler rakiplerdeki gibi: işlemle birlikte tek dokunuşla kabul (SMS ve PDF kaldırıldı)
+
+Sahibin kararı: Yoho / Mico / Bigo'daki gibi sözleşme, kişinin o rolü üstlendiği işlemle birlikte kabul edilir.
+- **Yayıncı sözleşmesi:** ajans davetini kabul ederken (ya da ajans sahibi kendini yayıncı eklerken). Davet kartında "Kabul ederek TR LIVE
+  Yayıncı Sözleşmesi'ni kabul etmiş olursunuz" notu ve metne bağlantı. Kabul kaydı davetle **aynı veritabanı işleminde** yazılır: biri
+  olmadan diğeri olmaz. Eski uygulama sürümü onay göndermezse 428 alır ve sözleşme ekranı açılır.
+- **Ajans ve bayi sözleşmesi:** panel ilk açılırken tek ekran, "Okudum, kabul ediyorum". Zorunlu kaydırma, SMS kodu ve şifre kalktı.
+- **PDF kaldırıldı** (üretim, indirme bağlantısı, panel düğmesi). Kayıt yerinde: sürüm, gösterilen metnin özeti, zaman, işlem (`via`),
+  IP, cihaz; veritabanında değiştirilemez. Panelde "Nerede" sütunu (sözleşme ekranı / ajans daveti / ajans sahibi kendini ekledi).
+- Migration 120: `method` için `clickwrap`, `via` sütunu, PDF sütunları isteğe bağlı.
+- Sözleşme metinleri 1.3: kurulma maddesi yeni usule göre.
+- **Kullanıcı sözleşmesi** değişmedi: kayıtta kabul (mevcut).
+
+**Sınama:** backend 521 birim; gerçek PostgreSQL'de 53/53 e2e (davet işlemiyle birlikte kabul: onaysız istek 428 alır ve yarım kayıt kalmaz;
+panelde tek dokunuş; değiştirilemezlik; ödeme ve bayi paneli kapıları); `flutter analyze` 0 hata/0 uyarı, `flutter test` 71/71; panel `tsc` 0 hata.
+
+## v2.152.20 — Sözleşme onay sistemi, kendine hediye sınırı, sözleşmeler 1.2
+
+**Sözleşme onay sistemi (karar: herkese uygulama içi onay).** Yayıncı, ajans sahibi ve Coin bayisi sözleşmeleri.
+- **Akış:** metin kişiye doldurulmuş hâliyle gelir; sonuna kadar okunmadan onay kutusu açılmaz; onay SMS koduyla (mevcut Firebase
+  doğrulaması; numara hesaptakiyle aynı olmalı) ya da SMS kapalıysa hesap şifresiyle. Sunucu, gösterilen metnin özetini (SHA-256) yeniden
+  üretip karşılaştırır.
+- **Kayıt:** sözleşme no (YAY-/AJS-/BAY-), sürüm, metin özeti, IP, cihaz, yöntem, telefon, PDF ve PDF özeti. Yayımlanan sürümler ve onay
+  kayıtları **veritabanı tetikleyicisiyle değiştirilemez ve silinemez** (UPDATE/DELETE/TRUNCATE). Onay kayıtları kullanıcı tablosuna bağlı
+  değildir; hesap silinse de yaşar.
+- **PDF:** bağımlılıksız yazıcı (Türkçe harfler doğru); uygulamada "Ayarlar → Sözleşmelerim"den 5 dakikalık imzalı bağlantıyla açılır,
+  panelde indirilir.
+- **Kapılar (yalnızca o tür için sözleşme yayımlandıysa):**
+  - Yayıncı: maaş, avans ve tek tek ödeme.
+  - Ajans: ajans primi ve referans primi; ajans sahibinin paneli (asistanlar hariç).
+  - Bayi: bayi paneli.
+
+  Onaysız ödeme kaybolmaz, onaydan sonra yatar. Yeni sürüm yayımlanınca eski onay geçerli kalır; uygulama yenisini onaylatmak için sorar.
+- **Yönetim paneli → Sistem → Sözleşmeler:** yayımlama (`[KARAR]` notlu metin reddedilir), yayımlanmış sürümler, onay bekleyenler, onay
+  kayıtları ve PDF. İşletmeci bilgisi: ayar `contractCompany`.
+- **Henüz hiçbir sözleşme yayımlanmadı:** sistem bugünkü gibi çalışır. Yayımlamadan önce avukat incelemesi ve `[KARAR]` notları tamamlanmalı.
+
+**Kendine hediye sınırı (sahibin kararı):** sesli odada kendine hediye maaşa sayılmaya devam ediyor, ama bir dönemde sayılan kendine hediye
+sayılan toplamın en çok %20'si (başkalarından gelenin dörtte biri). Maaş, avans, ajans primi ve yayıncının kazanç ekranı aynı kuralı kullanır.
+
+**Sözleşmeler 1.2:** bayilik sözleşmesi toptan alım-satım modeline göre baştan yazıldı; imza usulü ve kendine hediye maddeleri kararlara
+göre güncellendi. Ayrıntı ve kalan açık kararlar: `docs/sozlesmeler/OKU_once.md`.
+
+**Ayrıca:** kararsız Ludo e2e testi düzeltildi (6 atılınca "tekrar at" kuralını bilmiyordu; ~6 çalıştırmada bir kırılıyordu).
+
+**Sınama:** backend 527 birim; gerçek PostgreSQL'de 53/53 e2e (art arda iki çalıştırma); `flutter analyze` 0 hata/0 uyarı, `flutter test`
+71/71 (yeni widget testi: okunmadan onaylanamaz); panel `tsc` 0 hata, `next build` başarılı; PDF'ler poppler ile doğrulandı.
+**Gerçek cihazda denenmedi:** SMS ile onay (Firebase yapılandırıldıysa) ve PDF'in telefonda açılması.
+
+## v2.152.19 — Yük testi bulgusu (şifre özeti), Android izinleri, tekrarlanabilir derleme, bayi bakiyesi
+
+- **Şifre özeti ana iş parçacığının dışında (en büyük bulgu):** yük testiyle (gerçek PostgreSQL, 150 kullanıcı) ölçüldü: bcryptjs tek işlemde
+  ~290 ms işlemci harcıyor ve Node'un tek iş parçacığını kilitliyordu; kayıt/giriş dalgasında oda listesi, `/me` ve ayarlar 6–19 sn bekledi,
+  isteklerin %32'si zaman aşımına düştü. Artık aynı bcryptjs worker_threads havuzunda (`infrastructure/crypto/password_pool.js`); özet biçimi
+  değişmedi, eski şifreler aynen doğrulanır. Aynı test: hata %32 → %0, 10,5 → 157 istek/sn, `/me` p95 16,3 sn → 22 ms.
+- **Veritabanı havuzu (Y-02) ölçüldü:** 300 kullanıcıda havuz 5 ile 20 arasında fark yok; kullanıcı satırı önbelleği (yasaklama gecikmesi riski)
+  bu yüzden yapılmadı.
+- **Android izinleri (Y-09):** `SYSTEM_ALERT_WINDOW`, `FOREGROUND_SERVICE_SPECIAL_USE`, `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` kodda hiç
+  kullanılmıyordu (Play gerekçe ister) ve paketi olmayan "yüzen balon" servisi manifestteydi; kaldırıldı. `READ_EXTERNAL_STORAGE` yalnızca
+  Android 12 ve altı. İmzalı iş akışı `READ_PHONE_STATE`'i kaldırıyordu (telefon araması algılaması bozulurdu); iki iş akışı aynı kurala getirildi.
+  **`.github` dosyaları zip ile güncellenmez; elle yüklenmeli** (aşağıya bakın).
+- **Tekrarlanabilir derleme (Y-03):** Dockerfile'larda ve backend CI'da `npm ci`; LiveKit imajı `latest` yerine `v1.13.11` (bugünkü latest).
+- **Bayi merkezi:** bakiye yüklenemeyince bayi stokunu 0 görüyor ve satış "yetersiz" diye kilitleniyordu; artık "—" ve hata mesajı.
+- **Bildirim:** "görüldü" yazıldıktan sonra gösterim hata verirse bildirim iz bırakmadan kayboluyordu; artık hata kaydına düşüyor.
+- Belgeler (README, docs/COMPARISON.md) koda göre güncellendi.
+
+**Elle yüklenmesi gereken iş akışı dosyaları:** `.github/workflows/apk_build.yml` (izinler), `.github/workflows/backend.yml` (`npm ci`,
+`postgres:18`, bağımlılık taraması), `.github/imzali/apk_build.yml` (imzalı sürüm kullanılıyorsa).
+
+**Sınama:** backend 518 birim + gerçek PostgreSQL'de 52/52 e2e; yük testi; `flutter analyze` 0 hata/0 uyarı, `flutter test` 69/69;
+iki iş akışının manifest adımı yeni bir `flutter create` projesinde çalıştırıldı; iki kilit dosyası `npm ci` ile kuruldu.
+
 ## v2.152.18 — Oturum token'ları şifreli depoda (rapor Y-10)
 
 - **Token'lar artık Android Keystore / iOS Keychain'de** (`services/token_store.dart`, `flutter_secure_storage` 10.3.4). Eskiden erişim ve

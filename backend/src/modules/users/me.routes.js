@@ -1,4 +1,4 @@
-import { salaryGiftSql } from '../agencies/salary_rules.js';
+import { salaryGiftSql, cappedSelf } from '../agencies/salary_rules.js';
 import { Router } from 'express';
 import { hiddenTxTypes } from '../wallet/coin_budgets.service.js';
 import crypto from 'node:crypto';
@@ -364,8 +364,8 @@ router.post('/diamonds/exchange', userLimit('diamond_exchange', 20, 10 * 60e3), 
   const coins = diamonds / DIAMONDS_PER_COIN;
   const out = await tx(async (c) => {
     const u = (await c.query(`SELECT coins, diamonds FROM users WHERE id = $1 FOR UPDATE`, [req.user.id])).rows[0];
-    const b = (await c.query(`SELECT 1 FROM broadcasters WHERE user_id = $1 AND status = 'approved'`, [req.user.id])).rowCount;
-    if (b) throw fail('Onaylı yayıncılar elmasları maaş sistemiyle alır; bozdurma yapılamaz.', 403);
+    // v2.152.22: onaylı yayıncılar da bozdurabilir (sahibinin kararı). Bozdurulan elmas bakiyeden çıktığı için o dönemin
+    // maaş kotasına sayılmaz (maaş, kota kadar elmas bakiyede durursa ödenir); avansla zaten düşülmüş kota etkilenmez.
     if (BigInt(u.diamonds) < diamonds) throw fail('Yeterli elmasınız yok.', 409);
     const n = (await c.query(`UPDATE users SET diamonds = diamonds - $2, coins = coins + $3, updated_at = NOW() WHERE id = $1 RETURNING coins, diamonds`, [req.user.id, diamonds.toString(), coins.toString()])).rows[0];
     await c.query(
@@ -380,7 +380,7 @@ router.post('/diamonds/exchange', userLimit('diamond_exchange', 20, 10 * 60e3), 
 // Coin geçmişi: tür grubuna göre süzülebilir, "daha fazla" ile geriye doğru sayfalanır (before = son kaydın zamanı).
 const WALLET_GROUPS = {
   gift: ['gift_sent', 'gift_received', 'lucky_gift_win'],
-  topup: ['dealer_credit', 'admin_adjustment', 'daily_bonus'],
+  topup: ['dealer_credit', 'web_topup', 'admin_adjustment', 'daily_bonus'],
   exchange: ['diamond_exchange', 'bean_exchange', 'bean_received'],
   shop: ['store_purchase', 'wip_purchase'],
   bag: ['lucky_bag_sent', 'lucky_bag_received', 'lucky_bag_refund'],
@@ -421,19 +421,54 @@ function monthParam(v) {
   if (m) return `${m[1]}-${m[2]}`;
   return new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit' }).format(new Date()).slice(0, 7);
 }
+/**
+ * Kendine hediyenin maaşa sayılan oranı (salary_rules.js, dönem başına %20 sınırı) ay bazında: { 'YYYY-AA': {counted, self} }.
+ * Yayıncının ekranındaki sayılar ödenenle aynı olsun diye günlük ve oturum bazındaki kendine hediye bu oranla küçültülür.
+ */
+async function selfCapByMonth(userId, months = null) {
+  const r = await query(
+    `SELECT to_char(g.created_at AT TIME ZONE '${TZ}', 'YYYY-MM') AS mon, (g.sender_id = g.receiver_id) AS self,
+            COALESCE(SUM(COALESCE(g.diamond_amount, g.coin_amount)), 0)::text AS d
+     FROM gift_transactions g LEFT JOIN rooms r ON r.id = g.room_id
+     WHERE g.receiver_id = $1 AND ${salaryGiftSql('r')}
+       AND ($2::text[] IS NULL OR to_char(g.created_at AT TIME ZONE '${TZ}', 'YYYY-MM') = ANY($2::text[]))
+     GROUP BY 1, 2`,
+    [userId, months],
+  );
+  const acc = new Map();
+  for (const x of r.rows) {
+    const a = acc.get(x.mon) ?? { others: 0n, self: 0n };
+    if (x.self) a.self += BigInt(x.d); else a.others += BigInt(x.d);
+    acc.set(x.mon, a);
+  }
+  const out = new Map();
+  for (const [mon, a] of acc) out.set(mon, { counted: cappedSelf(a.others, a.self), self: a.self });
+  return out;
+}
+const scaleBy = (amount, cap) => (!cap || cap.self === 0n ? 0n : (amount * cap.counted) / cap.self);
+
 async function earningsBlock(userId, from, to) {
-  // from/to: Istanbul yerel zaman damgası (metin) — yarı açık aralık
+  // from/to: Istanbul yerel zaman damgası (metin) — yarı açık aralık. Kendine hediye, aralığın başladığı ayın oranıyla sayılır.
   const gifts = await query(
-    `SELECT COALESCE(r.room_type, 'audio') AS t, COALESCE(SUM(COALESCE(g.diamond_amount, g.coin_amount)), 0)::text AS d
+    `SELECT COALESCE(r.room_type, 'audio') AS t, (g.sender_id = g.receiver_id) AS self,
+            COALESCE(SUM(COALESCE(g.diamond_amount, g.coin_amount)), 0)::text AS d
      FROM gift_transactions g LEFT JOIN rooms r ON r.id = g.room_id
      WHERE g.receiver_id = $1 AND ${salaryGiftSql('r')}
        AND g.created_at >= ($2::timestamp AT TIME ZONE '${TZ}') AND g.created_at < ($3::timestamp AT TIME ZONE '${TZ}')
-     GROUP BY 1`,
+     GROUP BY 1, 2`,
     [userId, from, to],
   );
-  const by = Object.fromEntries(gifts.rows.map((x) => [x.t, BigInt(x.d)]));
-  const video = by.video ?? 0n;
-  const audio = Object.entries(by).filter(([k]) => k !== 'video').reduce((a, [, v]) => a + v, 0n);
+  let video = 0n; let audio = 0n; let self = 0n;
+  for (const x of gifts.rows) {
+    const d = BigInt(x.d);
+    if (x.self) self += d;
+    else if (x.t === 'video') video += d;
+    else audio += d;
+  }
+  if (self > 0n) {
+    const mon = String(from).slice(0, 7);
+    audio += scaleBy(self, (await selfCapByMonth(userId, [mon])).get(mon));
+  }
   const mic = (await query(
     `SELECT COALESCE(SUM(EXTRACT(EPOCH FROM (LEAST(COALESCE(ended_at, NOW()), ($3::timestamp AT TIME ZONE '${TZ}')) - GREATEST(started_at, ($2::timestamp AT TIME ZONE '${TZ}'))))), 0)::bigint AS secs,
             COUNT(DISTINCT (GREATEST(started_at, ($2::timestamp AT TIME ZONE '${TZ}')) AT TIME ZONE '${TZ}')::date)::int AS days
@@ -464,9 +499,13 @@ router.get('/earnings/history', async (req, res) => {
   const r = await query(
     `SELECT s.started_at, s.ended_at,
             EXTRACT(EPOCH FROM (COALESCE(s.ended_at, NOW()) - s.started_at))::bigint AS secs,
+            to_char(s.started_at AT TIME ZONE '${TZ}', 'YYYY-MM') AS mon,
             (SELECT COALESCE(SUM(COALESCE(g.diamond_amount, g.coin_amount)), 0)::text FROM gift_transactions g
-              WHERE g.receiver_id = s.user_id AND ${salaryGiftSql('rm')} AND g.room_id = s.room_id
-                AND g.created_at >= s.started_at AND g.created_at < COALESCE(s.ended_at, NOW())) AS diamonds
+              WHERE g.receiver_id = s.user_id AND g.sender_id <> g.receiver_id AND ${salaryGiftSql('rm')} AND g.room_id = s.room_id
+                AND g.created_at >= s.started_at AND g.created_at < COALESCE(s.ended_at, NOW())) AS diamonds,
+            (SELECT COALESCE(SUM(COALESCE(g.diamond_amount, g.coin_amount)), 0)::text FROM gift_transactions g
+              WHERE g.receiver_id = s.user_id AND g.sender_id = g.receiver_id AND ${salaryGiftSql('rm')} AND g.room_id = s.room_id
+                AND g.created_at >= s.started_at AND g.created_at < COALESCE(s.ended_at, NOW())) AS self_diamonds
      FROM mic_sessions s JOIN rooms rm ON rm.id = s.room_id
      WHERE s.user_id = $1 AND (CASE WHEN rm.room_type = 'video' THEN 'video' ELSE 'audio' END) = $2
      ORDER BY s.started_at DESC LIMIT 10 OFFSET $3`,
@@ -479,15 +518,23 @@ router.get('/earnings/history', async (req, res) => {
      WHERE s.user_id = $1 AND (CASE WHEN rm.room_type = 'video' THEN 'video' ELSE 'audio' END) = $2`,
     [req.user.id, type],
   )).rows[0];
-  const dia = (await query(
+  const dia0 = (await query(
     `SELECT COALESCE(SUM(COALESCE(g.diamond_amount, g.coin_amount)), 0)::text AS d FROM gift_transactions g LEFT JOIN rooms rm ON rm.id = g.room_id
-     WHERE g.receiver_id = $1 AND ${salaryGiftSql('rm')} AND (CASE WHEN rm.room_type = 'video' THEN 'video' ELSE 'audio' END) = $2`,
+     WHERE g.receiver_id = $1 AND g.sender_id <> g.receiver_id AND ${salaryGiftSql('rm')} AND (CASE WHEN rm.room_type = 'video' THEN 'video' ELSE 'audio' END) = $2`,
     [req.user.id, type],
   )).rows[0].d;
+  // Kendine hediye yalnızca sesli tarafta sayılır ve her ay kendi %20 sınırıyla (ödenenle aynı).
+  const caps = type === 'audio' ? await selfCapByMonth(req.user.id) : new Map();
+  let dia = BigInt(dia0);
+  for (const c of caps.values()) dia += c.counted;
+  const sessionCaps = type === 'audio' && r.rows.some((x) => x.self_diamonds !== '0') ? caps : new Map();
   res.json({
     type, offset, hasMore: r.rows.length === 10,
-    totals: { activeDays: totals.days, minutes: Math.floor(Number(totals.secs) / 60), diamonds: dia },
-    sessions: r.rows.map((x) => ({ startedAt: x.started_at, endedAt: x.ended_at, seconds: Number(x.secs), diamonds: x.diamonds })),
+    totals: { activeDays: totals.days, minutes: Math.floor(Number(totals.secs) / 60), diamonds: dia.toString() },
+    sessions: r.rows.map((x) => ({
+      startedAt: x.started_at, endedAt: x.ended_at, seconds: Number(x.secs),
+      diamonds: (BigInt(x.diamonds) + scaleBy(BigInt(x.self_diamonds), sessionCaps.get(x.mon))).toString(),
+    })),
   });
 });
 

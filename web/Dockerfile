@@ -2,8 +2,9 @@
 # Panel, uygulama sunucusuyla aynı adresten yayınlanır; istekler aynı adrese gider (ayrı GitHub Pages gerekmez).
 FROM node:20-bookworm-slim AS panel
 WORKDIR /p
-COPY panel/package.json ./
-RUN npm install --no-audit --no-fund > /tmp/install.log 2>&1 || (echo "UYARI: panel paketleri kurulamadı"; tail -n 40 /tmp/install.log)
+# Kilit dosyasındaki sürümler kurulur (rapor Y-03); kilit yoksa eski davranış (npm install).
+COPY panel/package.json panel/package-lock.json* ./
+RUN (if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi) > /tmp/install.log 2>&1 || (echo "UYARI: panel paketleri kurulamadı"; tail -n 40 /tmp/install.log)
 COPY panel/ ./
 ENV NEXT_PUBLIC_BASE_PATH=/yonetim NEXT_PUBLIC_API_BASE_URL=same-origin NEXT_TELEMETRY_DISABLED=1
 # Panel derlenemezse sunucu güncellemesi DURMAZ: yerine "panel derlenemedi" sayfası konur, uygulama sunucusu güncellenir.

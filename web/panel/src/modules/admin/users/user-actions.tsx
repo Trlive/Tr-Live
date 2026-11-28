@@ -113,6 +113,7 @@ export default function UserActions({ data, onChanged }: { data: Detail; onChang
       {full && <SpecialIdCard data={data} onChanged={onChanged} />}
       {full && <HostBadgeCard data={data} onChanged={onChanged} />}
       {full && data.broadcaster && <BroadcasterCard data={data} onChanged={onChanged} />}
+      {full && data.broadcaster && <SalaryStatusCard data={data} onChanged={onChanged} />}
       {full && <KycCard data={data} onChanged={onChanged} />}
       {full && !isAdminTarget && <StaffRoleCard data={data} onChanged={onChanged} />}
       {full && canEdit && <CredentialsCard data={data} onChanged={onChanged} />}
@@ -705,6 +706,65 @@ function BroadcasterCard({ data, onChanged }: { data: Detail; onChanged: () => v
   );
 }
 
+type SalaryStatus = { ok: boolean; periodKey: string; paidCents: string; estimatedCents: string; smsOff?: boolean; reasons: { code: string; text: string }[] };
+
+/** Maaş neden yatmıyor: yayıncının uygulamada gördüğü teşhisin aynısı + telefonu elle doğrulama (SMS kurulu değilse tek yol). */
+function SalaryStatusCard({ data, onChanged }: { data: Detail; onChanged: () => void }) {
+  const u = data.user;
+  const st = useApi<SalaryStatus>(`/api/admin/payouts/salary-status/${u.id}`);
+  const [phone, setPhone] = useState(u.phone ?? "");
+  const s = st.data;
+  const phoneIssue = s?.reasons.some((r) => r.code === "phone_missing" || r.code === "phone_unverified");
+  const usd = (c: string) => `${(Number(c) / 100).toFixed(2)} $`;
+  return (
+    <ActionCard title={`Maaş durumu${s ? ` · ${s.periodKey}` : ""}`} icon={<Coins size={16} />}>
+      {(run, busy) => (
+        <>
+          {st.error && <p className="text-xs text-red-500">{st.error}</p>}
+          {!s && !st.error && <p className="text-xs text-gray-500">Yükleniyor…</p>}
+          {s && (
+            <>
+              <p className="text-xs text-gray-500">
+                Bu dönem hak edilen (sesli): <b>{usd(s.estimatedCents)}</b> · yatan avans: <b>{usd(s.paidCents)}</b>
+              </p>
+              {s.reasons.length === 0 ? (
+                <p className="text-xs text-green-600">{s.ok ? "Engel yok: maaş birkaç dakikada bir otomatik yatıyor." : "Engel yok."}</p>
+              ) : (
+                <ul className="list-disc pl-4 text-xs text-amber-600">
+                  {s.reasons.map((r) => (
+                    <li key={r.code}>{r.text}</li>
+                  ))}
+                </ul>
+              )}
+              {phoneIssue && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <input className={inputCls} placeholder="+905xxxxxxxxx" value={phone} onChange={(e) => setPhone(e.target.value)} />
+                  <button
+                    type="button"
+                    disabled={busy}
+                    className={btnOk}
+                    onClick={() =>
+                      run("Telefon doğrulandı.", async () => {
+                        if (!window.confirm(`${phone || u.phone} numarası doğrulanmış sayılsın mı? Bu işlem denetim kaydına yazılır.`)) return false;
+                        await api(`/api/admin/users/${u.id}/phone-verify`, { method: "POST", body: { verified: true, ...(phone && phone !== u.phone ? { phone } : {}) } });
+                        st.reload();
+                        onChanged();
+                      })
+                    }
+                  >
+                    Telefonu doğrula
+                  </button>
+                  {s.smsOff && <span className="text-xs text-gray-500">SMS doğrulaması kapalı (Firebase ayarı yok): yayıncı kendi doğrulayamaz.</span>}
+                </div>
+              )}
+            </>
+          )}
+        </>
+      )}
+    </ActionCard>
+  );
+}
+
 function KycCard({ data, onChanged }: { data: Detail; onChanged: () => void }) {
   const u = data.user;
   const st = u.kycStatus ?? "none";
@@ -717,7 +777,7 @@ function KycCard({ data, onChanged }: { data: Detail; onChanged: () => void }) {
     <ActionCard title={`Kimlik doğrulama · ${st === "approved" ? "onaylı" : st === "pending" ? "bekliyor" : st === "rejected" ? "reddedildi" : "yok"}`} icon={<ShieldCheck size={16} />}>
       {(run, busy) => (
         <>
-          <p className="text-xs text-gray-500">Yayıncı maaşı ödemesi için kimlik onayı gerekir.</p>
+          <p className="text-xs text-gray-500">Kimlik onayı bilgi amaçlıdır; maaşın yatması için gereken şart doğrulanmış telefondur (bkz. Maaş durumu).</p>
           <div className="flex flex-wrap gap-2">
             {st !== "approved" && (
               <button type="button" disabled={busy} className={btnOk} onClick={() => set("approved", "Kimlik onaylandı.", run)}>

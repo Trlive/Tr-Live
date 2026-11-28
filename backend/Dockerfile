@@ -5,7 +5,8 @@ WORKDIR /app
 # (bu özellikler kapalı kalır, uygulama çalışır).
 RUN apk add --no-cache ffmpeg || echo "UYARI: ffmpeg kurulamadı"
 COPY package*.json ./
-RUN npm install --omit=dev && npm cache clean --force
+# npm ci: yalnızca package-lock.json'daki sürümler kurulur (her derleme aynı paketleri alır; rapor Y-03).
+RUN npm ci --omit=dev && npm cache clean --force
 COPY src ./src
 # Yüklenen profil görselleri için kalıcı bir dizin (volume bağlayın: -v trlive-uploads:/app/uploads)
 RUN mkdir -p /app/uploads && chown -R node:node /app

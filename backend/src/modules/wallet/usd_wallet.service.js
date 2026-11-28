@@ -12,6 +12,7 @@ import crypto from 'node:crypto';
 import { query, tx } from '../../infrastructure/database/database.js';
 import { fail } from '../../shared/errors/http.js';
 import { getConfig } from '../system/app_config.service.js';
+import { BROADCASTER_CONTRACT_SQL, agencyContractSql } from '../contracts/contracts.rules.js';
 
 export const CREDIT_TYPES = ['salary', 'agency_bonus', 'assistant_share', 'referral_bonus'];
 
@@ -22,12 +23,14 @@ export function usdSettings(cfg) {
     dealerMinCents: BigInt(cfg.usdDealerMinCents),
     coinsPerUsd: BigInt(cfg.usdDealerCoinsPerUsd),
     exchangeCoinsPerUsd: BigInt(cfg.usdCoinsPerUsd),
+    // "Diğerleri için" (başka kullanıcıya Coin gönderme) kuru; 0 = kendine çevirmeyle aynı (YoHo: kendine 8.800, başkasına 9.600 / $).
+    sendCoinsPerUsd: BigInt(cfg.usdCoinsPerUsdOthers || 0) > 0n ? BigInt(cfg.usdCoinsPerUsdOthers) : BigInt(cfg.usdCoinsPerUsd),
     exchangeMinCents: BigInt(cfg.usdExchangeMinCents),
   };
 }
 export const settingsJson = (s) => ({
   enabled: s.enabled, withdrawMinCents: String(s.withdrawMinCents), dealerMinCents: String(s.dealerMinCents), coinsPerUsd: String(s.coinsPerUsd),
-  exchangeCoinsPerUsd: String(s.exchangeCoinsPerUsd), exchangeMinCents: String(s.exchangeMinCents),
+  exchangeCoinsPerUsd: String(s.exchangeCoinsPerUsd), sendCoinsPerUsd: String(s.sendCoinsPerUsd), exchangeMinCents: String(s.exchangeMinCents),
 });
 /** Sent tutarını Fasulye metnine çevirir (1250n → "12,5"; 1000n → "10"). */
 export const beansText = (cents) => {
@@ -107,7 +110,9 @@ export async function creditStatement(c, kind, row, adminId) {
  * Koşul: telefon bağlı ve doğrulanmış. Kimlik fotoğrafı istenmiyor (sahibinin kararı);
  * geri kalan doğrulamayı ödemeyi yapacak aracı şirket belirleyecek.
  */
-export const SALARY_PAYABLE_SQL = `u.phone IS NOT NULL AND u.phone_verified_at IS NOT NULL`;
+// + Sözleşme kapısı (contracts.rules.js): yayıncı sözleşmesi yayımlandıysa en az bir sürümü onaylanmış olmalı. Dönem kapanışı,
+// toplu ödeme ve ay içi avans bu koşulu kullanır; onaylanmamış maaş kaybolmaz, onaydan sonra yatar.
+export const SALARY_PAYABLE_SQL = `u.phone IS NOT NULL AND u.phone_verified_at IS NOT NULL AND ${BROADCASTER_CONTRACT_SQL}`;
 
 export async function creditPeriod(c, periodId, adminId, { kinds = null, note = 'Dolar cüzdanına yatırıldı' } = {}) {
   const sets = [
@@ -123,9 +128,9 @@ export async function creditPeriod(c, periodId, adminId, { kinds = null, note = 
     // Telefonu doğrulanmamış yayıncının maaşı KAYBOLMUYOR: özet 'pending' kalıyor ve
     // telefonunu doğruladıktan sonraki çalışmada ödeniyor.
     { kind: 'host', table: 'host_statements', type: 'salary', sql: `SELECT s.id, s.user_id, s.salary_cents AS cents FROM host_statements s JOIN users u ON u.id = s.user_id WHERE s.period_id = $1 AND s.status = 'pending' AND s.salary_cents > 0 AND ${SALARY_PAYABLE_SQL}` },
-    { kind: 'agency', table: 'agency_statements', type: 'agency_bonus', sql: `SELECT s.id, a.owner_id AS user_id, s.owner_cents AS cents FROM agency_statements s JOIN agencies a ON a.id = s.agency_id WHERE s.period_id = $1 AND s.status = 'pending' AND s.owner_cents > 0` },
+    { kind: 'agency', table: 'agency_statements', type: 'agency_bonus', sql: `SELECT s.id, a.owner_id AS user_id, s.owner_cents AS cents FROM agency_statements s JOIN agencies a ON a.id = s.agency_id WHERE s.period_id = $1 AND s.status = 'pending' AND s.owner_cents > 0 AND ${agencyContractSql('a.owner_id')}` },
     { kind: 'assistant', table: 'assistant_statements', type: 'assistant_share', sql: `SELECT s.id, s.user_id, s.amount_cents AS cents FROM assistant_statements s WHERE s.period_id = $1 AND s.status = 'pending' AND s.amount_cents > 0` },
-    { kind: 'referral', table: 'referral_statements', type: 'referral_bonus', sql: `SELECT s.id, a.owner_id AS user_id, s.amount_cents AS cents FROM referral_statements s JOIN agencies a ON a.id = s.agency_id WHERE s.period_id = $1 AND s.status = 'pending' AND s.amount_cents > 0` },
+    { kind: 'referral', table: 'referral_statements', type: 'referral_bonus', sql: `SELECT s.id, a.owner_id AS user_id, s.amount_cents AS cents FROM referral_statements s JOIN agencies a ON a.id = s.agency_id WHERE s.period_id = $1 AND s.status = 'pending' AND s.amount_cents > 0 AND ${agencyContractSql('a.owner_id')}` },
   ];
   const out = { count: 0, cents: 0n };
   for (const set of sets) {
@@ -262,10 +267,11 @@ export async function exchangeToCoins(userId, { cents, targetUserId = null }) {
   const s = usdSettings(await getConfig());
   if (!s.enabled) throw fail('Fasulye işlemleri şu an kapalı.', 403);
   if (cents < s.exchangeMinCents) throw fail(`En az ${beansText(s.exchangeMinCents)} Fasulye çevirebilirsiniz.`);
-  const coins = coinsFor(cents, s.exchangeCoinsPerUsd);
-  if (coins <= 0n) throw fail('Tutar çok küçük.');
   const toId = targetUserId ?? userId;
   const self = toId === userId;
+  const rate = self ? s.exchangeCoinsPerUsd : s.sendCoinsPerUsd;
+  const coins = coinsFor(cents, rate);
+  if (coins <= 0n) throw fail('Tutar çok küçük.');
   const id = crypto.randomUUID();
   return tx(async (c) => {
     // İki kullanıcı aynı anda birbirine gönderirse kilitlenme (deadlock) olmasın diye satırlar kimlik sırasıyla kilitlenir.
@@ -289,7 +295,7 @@ export async function exchangeToCoins(userId, { cents, targetUserId = null }) {
     });
     const t = (await c.query(
       `INSERT INTO usd_coin_exchanges(id, user_id, target_user_id, amount_cents, coins_per_usd, coins) VALUES($1,$2,$3,$4,$5,$6) RETURNING id, created_at`,
-      [id, userId, toId, cents.toString(), s.exchangeCoinsPerUsd.toString(), coins.toString()],
+      [id, userId, toId, cents.toString(), rate.toString(), coins.toString()],
     )).rows[0];
     const before = BigInt(to.coins);
     const after = BigInt((await c.query(`UPDATE users SET coins = coins + $2, updated_at = NOW() WHERE id = $1 RETURNING coins`, [toId, coins.toString()])).rows[0].coins);
@@ -302,7 +308,7 @@ export async function exchangeToCoins(userId, { cents, targetUserId = null }) {
       `INSERT INTO financial_audit_logs(admin_id, user_id, action, reference_type, reference_id, amount_coins, balance_before, balance_after, metadata)
        VALUES(NULL,$1,'usd_coin_exchange','usd_coin_exchange',$2,$3,$4,$5,$6)`,
       [toId, id, coins.toString(), before.toString(), after.toString(),
-        JSON.stringify({ fromUserId: userId, amountCents: String(cents), coinsPerUsd: String(s.exchangeCoinsPerUsd) })],
+        JSON.stringify({ fromUserId: userId, amountCents: String(cents), coinsPerUsd: String(rate) })],
     );
     return {
       id: t.id, self, amountCents: String(cents), coins: String(coins), balanceCents: String(balance), createdAt: t.created_at,

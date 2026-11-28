@@ -2,10 +2,10 @@
 
 Sesli/görüntülü canlı oda uygulaması: **Flutter** (mobil) + **Node.js/Express** + **PostgreSQL** + **LiveKit** + **WebSocket**.
 
-> **Durum: MVP / kapalı beta adayı.** Mantık katmanı 400'den fazla birim testiyle (`backend/test`) doğrulandı. SQL sorguları ve Flutter derlemesi
-> geliştirme ortamında gerçek PostgreSQL/Flutter ile çalıştırılamadı; bu yüzden depoda **GitHub Actions** ile gerçek
-> PostgreSQL'e karşı uçtan uca test (`backend/e2e`) ve `flutter analyze` hazırdır. **İlk işiniz CI'ı çalıştırıp çıkan
-> hataları düzeltmek olmalıdır.** Rakiplerle karşılaştırma ve eksikler: [`docs/COMPARISON.md`](docs/COMPARISON.md).
+> **Durum: MVP / kapalı beta adayı.** v2.152.17'den beri her sürüm şu sınamalardan geçiyor: backend 500+ birim testi,
+> gerçek PostgreSQL 16'ya karşı uçtan uca test (`npm run test:e2e`, 52 senaryo), `flutter analyze` (0 hata/uyarı),
+> `flutter test`, panel için `tsc` ve `next build`. Gerçek cihazda ses/görüntü, TURN ve LiveKit webhook'u canlıda
+> denenmelidir. Rakiplerle karşılaştırma ve eksikler: [`docs/COMPARISON.md`](docs/COMPARISON.md).
 
 **Belgeler:** [`docs/`](docs/README.md) — mimari, Coin ekonomisi, rol/yetki tablosu, güvenlik, test planı, yol haritası ve
 koddan otomatik üretilen veritabanı / API / WebSocket belgeleri.

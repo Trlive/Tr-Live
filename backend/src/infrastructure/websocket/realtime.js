@@ -1,5 +1,6 @@
 import { WebSocketServer } from 'ws';
 import { randomUUID } from 'node:crypto';
+import { createRoomSeq, stampRoomEvent } from './room_seq.js';
 
 let wss = null;
 const OPEN = 1;
@@ -37,9 +38,15 @@ function removeFrom(map, key, ws) {
   if (!set.size) map.delete(key);
 }
 /** Soketin odasını değiştirir (null = odadan çık) ve oda dizinini günceller. */
+// Oda başına olay sıra numarası (rapor O-04): istemci boşluk görürse oda durumunu yeniden alır. Odanın son abonesi çıkınca
+// sayaç silinir (bellek şişmez); sonraki abone tabanı abonelik onayından alır.
+const roomSeq = createRoomSeq();
 function setRoom(ws, roomId) {
   if (ws.roomId === roomId) return;
-  if (ws.roomId) removeFrom(byRoom, ws.roomId, ws);
+  if (ws.roomId) {
+    removeFrom(byRoom, ws.roomId, ws);
+    if (!byRoom.has(ws.roomId)) roomSeq.drop(ws.roomId);
+  }
   ws.roomId = roomId ?? null;
   if (ws.roomId) addTo(byRoom, ws.roomId, ws);
 }
@@ -132,7 +139,14 @@ const clients = () => (wss ? wss.clients : []);
 // Tek sunucu örneği için bellek içi hub. Birden fazla örnek çalıştırılacaksa Redis pub/sub gerekir.
 export const hub = {
   broadcastRoom(roomId, payload) {
-    sendMany(byRoom.get(roomId) ?? [], payload);
+    const targets = byRoom.get(roomId);
+    if (!targets || !targets.size) return; // kimse abone değil: numara tüketilmez
+    sendMany(targets, stampRoomEvent(payload, roomId, roomSeq, DECORATIVE));
+  },
+  /** Odanın şu ana kadarki son olay numarası. REST oda yanıtı bunu taşır: istemci abonelik onayındaki numara daha büyükse
+   *  (REST okuması ile abonelik arasında olay olmuş) durumu yeniden alır. */
+  roomSeq(roomId) {
+    return roomSeq.current(roomId);
   },
   broadcastGlobal(payload) {
     // Her duyuruya kimlik: aynı kullanıcıya birden çok bağlantıdan ulaşsa da uygulama bir kez gösterir.
@@ -313,7 +327,8 @@ export function attachRealtime(server, {
         if (member) {
           if (ws.readyState !== OPEN) return; // üyelik denetlenirken soket kapandı
           setRoom(ws, data.roomId);
-          safeSend(ws, { type: 'room_subscribed', roomId: data.roomId });
+          // seq: o ana kadarki son oda olayı numarası; istemci boşluk takibine buradan başlar.
+          safeSend(ws, { type: 'room_subscribed', roomId: data.roomId, seq: roomSeq.current(data.roomId) });
         } else {
           safeSend(ws, { type: 'error', code: 'not_member', roomId: data.roomId });
         }

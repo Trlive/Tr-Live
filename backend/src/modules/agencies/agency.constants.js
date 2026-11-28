@@ -72,7 +72,7 @@ export function validateAgencyConfig(input) {
         && out.settings.salaryTransferDayFrom > out.settings.salaryTransferDayTo) {
       throw fail('Aktarım başlangıç günü, bitiş gününden büyük olamaz.');
     }
-    for (const k of ['requireGameHours', 'allowBalanceMethod', 'salaryWeightedEnabled', 'salaryAutoTransfer', 'instantSalaryEnabled']) {
+    for (const k of ['requireGameHours', 'allowBalanceMethod', 'salaryWeightedEnabled', 'salaryAutoTransfer', 'instantSalaryEnabled', 'monthEndDiamondConvert', 'autoClosePeriod']) {
       if (s[k] === undefined) continue;
       if (typeof s[k] !== 'boolean') throw fail(`${k} true/false olmalı.`);
       out.settings[k] = s[k];

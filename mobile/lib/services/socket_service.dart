@@ -52,6 +52,7 @@ class SocketService {
   DateTime _lastTick = DateTime.now();
   String? _roomId;
   bool _subscribed = false; // sunucu oda aboneliğini onayladı
+  int? _seq; // oda olaylarında son görülen sıra numarası (abonelik onayıyla başlar; sunucu eskiyse boş kalır, takip kapalıdır)
   DateTime _subAskedAt = DateTime.fromMillisecondsSinceEpoch(0);
   bool _suspended = false; // arka planda uzun süre kalındı: bağlantı bilerek kapalı
   bool _open = false; // bağlantı kuruldu ve sunucudan veri geldi (yalnızca açılıyor değil)
@@ -171,6 +172,7 @@ class SocketService {
     _gen++;
     _roomId = null;
     _subscribed = false;
+    _seq = null; // oda olay takibi abonelikle birlikte sıfırlanır
     _retry?.cancel();
     _bgTimer?.cancel();
     _bgTimer = null;
@@ -178,7 +180,10 @@ class SocketService {
   }
 
   void subscribeRoom(String roomId) {
-    if (_roomId != roomId) _subscribed = false;
+    if (_roomId != roomId) {
+      _subscribed = false;
+      _seq = null;
+    }
     _roomId = roomId;
     _askSubscribe();
   }
@@ -187,7 +192,11 @@ class SocketService {
     if (_roomId != null) _send({'type': 'room_unsubscribe'});
     _roomId = null;
     _subscribed = false;
+    _seq = null; // oda olay takibi abonelikle birlikte sıfırlanır
   }
+
+  /// Bu oda için sunucu aboneliği onayladı mı (oda ekranı ilk anlık görüntünün abonelikten önce mi alındığını bilmek için).
+  bool isSubscribedTo(String roomId) => _subscribed && _roomId == roomId;
 
   void _askSubscribe() {
     final id = _roomId;
@@ -299,14 +308,34 @@ class SocketService {
         if (!_legacyAuth) _headerAuthWorked = true;
         connected.value = true;
         _subscribed = false;
+        _seq = null; // oda olay takibi abonelikle birlikte sıfırlanır
         _askSubscribe();
       } else if (type == 'room_subscribed') {
-        if (message['roomId'] == _roomId) _subscribed = true;
+        if (message['roomId'] == _roomId) {
+          final n = (message['seq'] as num?)?.toInt();
+          final base = _seq;
+          // Kalp atışı aboneliği yeniler (zaten odadayız): sunucu o ana kadarki olayları onaydan ÖNCE göndermiştir, yani
+          // onaydaki numara bizimkiyle aynı olmalı. Büyükse araya giren bir olay bize ulaşmamıştır → boşluk.
+          if (_subscribed && base != null && n != null && n > base) {
+            _controller.add({'type': 'room_gap', 'roomId': _roomId, 'from': base, 'to': n});
+          }
+          _subscribed = true;
+          // Sıra takibi abonelik onayındaki numaradan (yeniden) başlar: yeniden abone olan sahte "boşluk" görmez.
+          _seq = n;
+        }
       } else if (type == 'error' && message['code'] == 'server' && _roomId != null && !_subscribed) {
         // Sunucu üyeliği o an doğrulayamadı (geçici): kısa süre sonra yeniden istenir.
         Timer(const Duration(seconds: 2), () {
           if (_open && _roomId != null && !_subscribed) _askSubscribe();
         });
+      }
+      // Oda olayları artan "seq" taşır: araya bir numara girdiyse bir olay kaçmıştır; oda ekranı durumu yeniden alır.
+      final seq = message['seq'];
+      final base = _seq;
+      if (seq is num && base != null && _subscribed && type != 'room_subscribed') {
+        final n = seq.toInt();
+        if (n > base + 1) _controller.add({'type': 'room_gap', 'roomId': _roomId, 'from': base, 'to': n});
+        if (n > base) _seq = n;
       }
       _controller.add(message);
     } catch (_) {/* bozuk mesajı yoksay */}
@@ -356,6 +385,7 @@ class SocketService {
     _open = false;
     _greeted = false;
     _subscribed = false;
+    _seq = null; // oda olay takibi abonelikle birlikte sıfırlanır
     if (connected.value) connected.value = false;
     _watch?.cancel();
     _watch = null;

@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'screens/contract_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/update_screen.dart';
@@ -99,6 +100,11 @@ Future<void> _boot() async {
     _loggingOut = false;
   };
   // Sunucu bu sürümü artık kabul etmiyorsa (yönetim panelinde "en düşük sürüm") güncelleme ekranı açılır.
+  // Sözleşme onayı gerekli (bayi / ajans paneli): ekran açılır; aynı anda yalnızca bir tane.
+  Api.onContractRequired = (kind) {
+    final c = navigatorKey.currentContext;
+    if (c != null) ContractGate.required(c, kind);
+  };
   Api.onUpdateRequired = (message, url) {
     if (_updateShown) return;
     _updateShown = true;

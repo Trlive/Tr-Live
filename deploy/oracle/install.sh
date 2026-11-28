@@ -104,6 +104,20 @@ if [ ! -f "$ENVD/panel.env" ]; then
   printf "PANEL_PASSWORD='%s'\n" "$PW" > "$ENVD/panel.env"
 fi
 touch "$ENVD/extra.env"
+# Web panel kapıları (v2.153.1): her panelin kuruluma özel, tahmin edilemez giriş bağlantısı. Bağlantıyla gelmeyen kişiye
+# /yonetim/admin, /yonetim/agency, /yonetim/dealer sayfaları "bulunamadı" (404) döner. Sunucu panelindeki "Bağlantıları
+# yenile" dosyayı siler; burada yenileri üretilir (eski bağlantılar ve eski tarayıcı izinleri geçersiz olur).
+gate_ok() { [[ ${1:-} =~ ^[A-Za-z0-9]{24,64}$ ]]; }
+if [ -f "$ENVD/gates.env" ]; then
+  # shellcheck disable=SC1091
+  set -a; . "$ENVD/gates.env"; set +a
+fi
+if ! gate_ok "${GATE_ADMIN:-}" || ! gate_ok "${GATE_AGENCY:-}" || ! gate_ok "${GATE_DEALER:-}"; then
+  log "Panel giriş bağlantıları üretiliyor"
+  GATE_ADMIN=$(rnd 32); GATE_AGENCY=$(rnd 28); GATE_DEALER=$(rnd 28)
+  printf "GATE_ADMIN='%s'\nGATE_AGENCY='%s'\nGATE_DEALER='%s'\n" "$GATE_ADMIN" "$GATE_AGENCY" "$GATE_DEALER" > "$ENVD/gates.env"
+fi
+gate_ok "$GATE_ADMIN" && gate_ok "$GATE_AGENCY" && gate_ok "$GATE_DEALER" || { log "HATA: panel giriş bağlantıları üretilemedi"; exit 1; }
 chmod 600 "$ENVD"/*.env
 # shellcheck disable=SC1091
 set -a; . "$ENVD/secrets.env"; set +a
@@ -144,6 +158,9 @@ TRUST_PROXY='1'
 CORS_ORIGIN='https://${DOMAIN}'
 PUBLIC_BASE_URL='https://${DOMAIN}'
 UPLOAD_DIR='/app/uploads'
+# Ajans ve bayi giriş bağlantıları: yönetim panelinde "bağlantıyı kopyala" için (yönetim bağlantısı burada YOK; yalnızca sunucu panelinde).
+PANEL_LINK_AGENCY='https://${DOMAIN}/${GATE_AGENCY}'
+PANEL_LINK_DEALER='https://${DOMAIN}/${GATE_DEALER}'
 EOF
 printf "POSTGRES_PASSWORD='%s'\nDOMAIN='%s'\nSSLIP='%s'\n" "$POSTGRES_PASSWORD" "$DOMAIN" "$SSLIP" > "$ENVD/compose.env"
 chmod 600 "$ENVD"/*.env
@@ -173,6 +190,13 @@ logging:
   level: warn
 EOF
 
+# Ayrı Coin yükleme sitesi (v2.154.0, isteğe bağlı): sunucu panelinde PAY_DOMAIN (ör. odeme.alanadi.com) yazılırsa o adres
+# YALNIZCA web yükleme sayfasını sunar (kök → /pay); panel, API ve diğer her şey orada 404. Alan adının DNS kaydı bu sunucuyu göstermeli.
+PAY_DOMAIN=$(grep -E "^PAY_DOMAIN=" "$ENVD/extra.env" 2>/dev/null | tail -n 1 | cut -d= -f2- | tr -d "'\" \r\n" | tr 'A-Z' 'a-z')
+if ! [[ $PAY_DOMAIN =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$ ]] || [ "$PAY_DOMAIN" = "$DOMAIN" ] || [ "$PAY_DOMAIN" = "$SSLIP" ]; then
+  [ -n "$PAY_DOMAIN" ] && log "PAY_DOMAIN geçersiz ya da ana adresle aynı: $PAY_DOMAIN (yok sayıldı)"
+  PAY_DOMAIN=""
+fi
 HOSTS="$SSLIP"; LKHOSTS="lk.$SSLIP"
 if [ "$DOMAIN" != "$SSLIP" ]; then HOSTS="$SSLIP, $DOMAIN"; LKHOSTS="lk.$SSLIP, lk.$DOMAIN"; fi
 cat > "$ENVD/Caddyfile" <<EOF
@@ -181,7 +205,55 @@ $HOSTS {
   handle /panel* {
     reverse_proxy 127.0.0.1:8090
   }
-  # Yönetim / ajans paneli (adminler, ajans sahipleri, bayiler linkle girer) ve tanıtım sitesi.
+  # ---- Web panel kapıları ----
+  # Giriş bağlantısı (https://ALAN/<gizli>) tarayıcıya o panele özel bir izin çerezi bırakır ve giriş sayfasını açar.
+  # Çerezi olmayan kişi panel sayfalarını göremez: 404 (panelin var olduğu bile anlaşılmaz). Çerez yalnızca o panelin
+  # yoluna gider (Path), JavaScript okuyamaz (HttpOnly), başka siteden gönderilmez (SameSite). Asıl koruma yine şifre + sunucu yetkisidir.
+  @gate_admin path /${GATE_ADMIN} /${GATE_ADMIN}/
+  handle @gate_admin {
+    header +Set-Cookie "trg_a=${GATE_ADMIN}; Path=/yonetim/admin; Max-Age=31536000; Secure; HttpOnly; SameSite=Lax"
+    header Cache-Control "no-store"
+    redir /yonetim/admin/login/ 302
+  }
+  @gate_agency path /${GATE_AGENCY} /${GATE_AGENCY}/
+  handle @gate_agency {
+    header +Set-Cookie "trg_g=${GATE_AGENCY}; Path=/yonetim/agency; Max-Age=31536000; Secure; HttpOnly; SameSite=Lax"
+    header Cache-Control "no-store"
+    redir /yonetim/agency/login/ 302
+  }
+  @gate_dealer path /${GATE_DEALER} /${GATE_DEALER}/
+  handle @gate_dealer {
+    header +Set-Cookie "trg_d=${GATE_DEALER}; Path=/yonetim/dealer; Max-Age=31536000; Secure; HttpOnly; SameSite=Lax"
+    header Cache-Control "no-store"
+    redir /yonetim/dealer/login/ 302
+  }
+  @no_admin {
+    path /yonetim/admin /yonetim/admin/*
+    not header_regexp Cookie (^|;\s*)trg_a=${GATE_ADMIN}(;|$)
+  }
+  @no_agency {
+    path /yonetim/agency /yonetim/agency/*
+    not header_regexp Cookie (^|;\s*)trg_g=${GATE_AGENCY}(;|$)
+  }
+  @no_dealer {
+    path /yonetim/dealer /yonetim/dealer/*
+    not header_regexp Cookie (^|;\s*)trg_d=${GATE_DEALER}(;|$)
+  }
+  # Eski panel seçim sayfası kaldırıldı: /yonetim kökü de yok sayılır.
+  @no_root path /yonetim /yonetim/ /yonetim/index.html /yonetim/index.txt
+  handle @no_admin {
+    respond 404
+  }
+  handle @no_agency {
+    respond 404
+  }
+  handle @no_dealer {
+    respond 404
+  }
+  handle @no_root {
+    respond 404
+  }
+  # Yönetim / ajans / bayi paneli (yalnızca kapıdan gelenler) ve tanıtım sitesi. /yonetim/m/* uygulama içi sayfalardır, açık.
   @web path /yonetim /yonetim/* / /index.html /privacy.html /terms.html /kvkk.html /community.html /child-safety.html /contact.html /assets/*
   handle @web {
     reverse_proxy 127.0.0.1:8091
@@ -194,6 +266,23 @@ $LKHOSTS {
   reverse_proxy 127.0.0.1:7880
 }
 EOF
+if [ -n "$PAY_DOMAIN" ]; then
+  cat >> "$ENVD/Caddyfile" <<EOF
+$PAY_DOMAIN {
+  encode gzip
+  @root path /
+  rewrite @root /pay
+  @pay path /pay /pay/*
+  handle @pay {
+    reverse_proxy 127.0.0.1:3000
+  }
+  handle {
+    respond 404
+  }
+}
+EOF
+  log "Ayrı yükleme sitesi: https://$PAY_DOMAIN"
+fi
 
 # ---------- Uzak yedek (isteğe bağlı) ----------
 # Panelde "Uzak yedek" girildiyse gece yedeğinin uzak kopyası için rclone gerekir (backup.sh). Girilmediyse hiçbir şey yapılmaz.
@@ -260,6 +349,15 @@ fi
 mkdir -p "$STATE"
 [ -e "$STATE/git-token" ] || install -m 622 /dev/null "$STATE/git-token" 2>/dev/null || true
 [ "$(stat -c %a "$STATE/update" 2>/dev/null)" = 666 ] || { systemctl stop trlive-apply.path 2>/dev/null; touch "$STATE/update" && chmod 666 "$STATE/update"; systemctl start trlive-apply.path 2>/dev/null; } || true
+# Caddy ayarı devreye girmeden ÖNCE doğrulanır (panel kapıları v2.153.1 ile ayar büyüdü): geçersizse son çalışan ayar
+# geri konur, site kapanmaz. İlk kurulumda doğrulanmış kopya yoksa ayar olduğu gibi denenir.
+if docker run --rm -v "$ENVD/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2 caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >"$STATE/caddy-validate.log" 2>&1; then
+  cp "$ENVD/Caddyfile" "$ENVD/Caddyfile.ok"
+else
+  log "HATA: yeni Caddy ayarı geçersiz (ayrıntı: $STATE/caddy-validate.log); son çalışan ayar kullanılıyor"
+  tail -n 5 "$STATE/caddy-validate.log" 2>/dev/null | sed 's/^/    /' || true
+  [ -f "$ENVD/Caddyfile.ok" ] && cp "$ENVD/Caddyfile.ok" "$ENVD/Caddyfile"
+fi
 log "Servisler derleniyor ve başlatılıyor (ilk seferde birkaç dakika sürer)"
 $COMPOSE up -d --build --remove-orphans
 if [ "$MODE" = --apply ]; then

@@ -85,6 +85,32 @@ Avatar, hediye animasyonu, müzik gibi dosyalar önce veritabanına yazılır, a
   (örn. `rclone sync r2:kovam yedek:kovam`).
 - R2 yapılandırılmazsa her şey eskisi gibi çalışır (dosyalar veritabanında kalır); medya 500 MB'ı aşınca günlükte `media_db_growth` uyarısı çıkar.
 
+## 9. Web panel giriş bağlantıları (yönetim / ajans / bayi)
+
+Her panelin kurulumda üretilen kendine özel, tahmin edilemez bir giriş bağlantısı vardır (`https://ALAN/<gizli kod>`).
+Bağlantılar **sunucu panelinde** (`https://ALAN/panel`, şifreli) "Panel giriş bağlantıları" bölümündedir.
+
+- **Yönetim paneli:** yalnızca siz. Yardımcı adminlere tek tek siz iletin.
+- **Ajans paneli:** ajans sahipleri ve asistanları (yönetim panelinde Ajanslar sayfasında da kopyalanır).
+- **Bayi paneli:** bayiler (yönetim panelinde Bayiler sayfasında da kopyalanır).
+
+Bağlantı bir tarayıcıda bir kez açılınca o tarayıcı 1 yıl hatırlar. Bağlantı olmadan `/yonetim/admin`, `/yonetim/agency`,
+`/yonetim/dealer` ve eski panel seçim sayfası **"bulunamadı" (404)** döner. Uygulama içi sayfalar (`/yonetim/m/...`) etkilenmez.
+Bağlantı sızarsa: sunucu panelinde **YENILE** yazıp "Tüm bağlantıları yenile". Eski bağlantılar ve tarayıcılardaki eski izinler
+geçersiz olur; şifreler ve oturumlar değişmez. Gizli bağlantı ek bir katmandır: asıl koruma hesap şifresi, iki adımlı doğrulama
+ve sunucudaki yetki denetimidir.
+
+## 10. Bayi API'si ve ayrı Coin yükleme sitesi
+
+**Bayi API'si:** bayi kendi sitesinden / botundan, kendi Coin stoğundan müşterinin ID'sine yükleme yapar.
+1. Yönetim paneli → Bayiler → bayiyi seç → **API erişimini aç**.
+2. Bayi, Bayi Paneli → **API Anahtarları**'ndan anahtar oluşturur (sunucusunun IP'sini ve isterse günlük sınırı yazar). Anahtar bir kez gösterilir.
+3. Belge ve örnek kodlar: `https://ALAN/dealer-api/docs`. API adresi: `https://ALAN/dealer-api/v1`.
+
+**Ayrı yükleme sitesi (YoHo Online Recharge gibi):** kendi alan adınızda bir alt alan adı açın (ör. `odeme.alanadi.com`). DNS'te A kaydını
+bu sunucunun IP'sine yönlendirin. Sunucu panelinde **PAY_DOMAIN** alanına yazıp kaydedin. Birkaç dakika içinde `https://odeme.alanadi.com`
+yalnızca Coin yükleme sayfasını açar; panel ve API o adreste yoktur. Ödeme anahtarları (PayTR, USDT) da aynı bölümdedir.
+
 ## Notlar
 - Google/Facebook girişinde yönlendirme adresleri yeni adresle (`https://…sslip.io/api/auth/oauth/google/callback`
   ve `…/facebook/callback`) güncellenmelidir. Google, sslip.io adreslerini yayın modunda kabul etmeyebilir; o

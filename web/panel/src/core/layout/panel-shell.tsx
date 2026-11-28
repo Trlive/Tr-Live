@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import {
+import { FileSignature, KeyRound,
   Activity,
   LayoutDashboard,
   Users,
@@ -87,6 +87,7 @@ const adminGroups: NavGroup[] = [
       { label: "Mali Kayıtlar", href: "/admin/coins", icon: Coins, adminOnly: true },
       { label: "Bayiler", href: "/admin/dealers", icon: Store, adminOnly: true },
       { label: "Bayi Mağazası", href: "/admin/dealer-shop", icon: CreditCard, adminOnly: true },
+      { label: "Ödemeler", href: "/admin/payments", icon: Banknote, adminOnly: true },
       { label: "Fasulye Cüzdanı", href: "/admin/usd", icon: Wallet, adminOnly: true },
       { label: "Şanslı Havuzlar", href: "/admin/lucky", icon: Clover, adminOnly: true },
       { label: "İçerik Yükle", href: "/admin/upload", icon: Upload, adminOnly: true },
@@ -104,6 +105,7 @@ const adminGroups: NavGroup[] = [
       { label: "Etkinlikler", href: "/admin/events", icon: CalendarDays, adminOnly: true },
       { label: "Oda Etkinlikleri", href: "/admin/activities", icon: PartyPopper, adminOnly: true },
       { label: "Oyun Paketleri", href: "/admin/plugins", icon: PartyPopper, adminOnly: true },
+      { label: "Sözleşmeler", href: "/admin/contracts", icon: FileSignature, adminOnly: true },
       { label: "Ana Ekran Düzeni", href: "/admin/sdui", icon: LayoutDashboard, adminOnly: true },
       { label: "Ekran Düzenleri", href: "/admin/screens", icon: LayoutDashboard, adminOnly: true },
       { label: "Özellik Bayrakları", href: "/admin/flags", icon: ToggleLeft, adminOnly: true },
@@ -140,8 +142,10 @@ const panelConfig: Record<DesktopPanel, { title: string; subtitle: string; group
         title: "Menü",
         links: [
           { label: "Coin Satışı", href: "/dealer/dashboard", icon: Coins },
-          { label: "Bakiye Talebi", href: "/dealer/history", icon: Wallet },
+          { label: "Stok Satın Al", href: "/dealer/history", icon: Wallet },
+          { label: "Gelir-Gider", href: "/dealer/finance", icon: Banknote },
           { label: "Hareketler", href: "/dealer/transactions", icon: History },
+          { label: "API Anahtarları", href: "/dealer/api", icon: KeyRound },
         ],
       },
     ],
