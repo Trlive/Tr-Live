@@ -81,6 +81,26 @@ function body(req) {
 // ---- Eski veritabanını aktarma: istek dosyası yazılır, aktarmayı sunucu (import.sh) yapar ----
 const importing = () => readText(`${STATE}/import.log`).trim() !== '' && !/Bitti\.\s*$/.test(readText(`${STATE}/import.log`));
 
+// ---- Web panel giriş bağlantıları (v2.153.1) ----
+// Kurulumda üretilir (install.sh → /data/env/gates.env). Yönetim bağlantısını yalnızca siz bilin; ajans bağlantısını ajans
+// sahiplerine, bayi bağlantısını bayilere verin. Bağlantı sızarsa "Yenile": eskiler ve tarayıcılardaki eski izinler geçersiz olur.
+function gatesSection(d) {
+  const g = readEnv(`${ENV_DIR}/gates.env`);
+  const ok = (v) => /^[A-Za-z0-9]{24,64}$/.test(v || '');
+  if (!ok(g.GATE_ADMIN) || !ok(g.GATE_AGENCY) || !ok(g.GATE_DEALER)) {
+    return '<section><h2>Panel giriş bağlantıları</h2><p>Henüz üretilmedi. "Şimdi güncelle"ye basın; birkaç dakika içinde burada görünür.</p></section>';
+  }
+  const row = (t, v, note) => `<label>${esc(t)}<input readonly value="https://${esc(d)}/${esc(v)}" onclick="this.select()"></label><p style="margin:2px 0 8px;color:#9ca3af;font-size:12px">${esc(note)}</p>`;
+  return `<section><h2>Panel giriş bağlantıları</h2>
+<p>Her panelin kendi gizli bağlantısı var. Bağlantıyla açmayan kişi panel sayfası yerine "bulunamadı" görür. Bağlantı bir kez açıldıktan sonra o tarayıcı hatırlar (1 yıl).</p>
+${row('Yönetim paneli (yalnızca siz)', g.GATE_ADMIN, 'Kimseyle paylaşmayın. Yardımcı adminlere ayrı ayrı siz iletin.')}
+${row('Ajans paneli', g.GATE_AGENCY, 'Ajans sahiplerine ve asistanlarına verin.')}
+${row('Bayi paneli', g.GATE_DEALER, 'Bayilere verin. Yönetim panelinde Bayiler sayfasında da kopyalanabilir.')}
+<form method="post" action="/panel/gates"><label>Bağlantılar sızdıysa: onay için YENILE yazın<input name="confirm" autocomplete="off"></label>
+<button class="red">Tüm bağlantıları yenile</button></form>
+<p style="color:#9ca3af;font-size:12px">Yenileyince herkes yeni bağlantıyla bir kez açmalı. Oturumlar ve şifreler değişmez.</p></section>`;
+}
+
 // ---- Sayfa ----
 async function page(msg = '') {
   const env = readEnv(`${ENV_DIR}/extra.env`);
@@ -113,6 +133,8 @@ button.red{background:#f43f5e;color:#fff}pre{white-space:pre-wrap;background:#0b
 <p>Uygulama adresi (APK için): <code>https://${esc(d)}</code><br>LiveKit: <code>wss://lk.${esc(d)}</code></p>
 <form method="post" action="/panel/update"><button>Şimdi güncelle (GitHub'daki son sürüm)</button></form>
 <pre>${tail('update.log', 8) || 'Henüz güncelleme kaydı yok.'}</pre></section>
+
+${gatesSection(d)}
 
 <section><h2>Ayarlar</h2><form method="post" action="/panel/env">${fields}
 <label>Alan adı (değiştirmeyin; kendi alan adınızı aldıysanız yazın)<input name="DOMAIN" value="${esc(d)}"></label>
@@ -170,6 +192,14 @@ async function handle(req, res) {
     if (/^[a-z0-9.-]{4,120}$/.test(dom) && dom !== DOMAIN()) fs.writeFileSync(`${ENV_DIR}/domain`, `${dom}\n`);
     touch('apply');
     return back('Kaydedildi. Sunucu 1-2 dakika içinde yeni ayarlarla açılır.');
+  }
+  if (url.pathname === '/panel/gates') {
+    if (String(f.get('confirm') ?? '').trim().toLocaleUpperCase('tr-TR') !== 'YENILE' && String(f.get('confirm') ?? '').trim().toLocaleUpperCase('tr-TR') !== 'YENİLE') {
+      return back('Onay için YENILE yazmalısınız.');
+    }
+    try { fs.unlinkSync(`${ENV_DIR}/gates.env`); } catch { /* zaten yok */ }
+    touch('apply');
+    return back('Yeni bağlantılar üretiliyor. 1-2 dakika sonra bu sayfayı yenileyin.');
   }
   if (url.pathname === '/panel/import') {
     const old = String(f.get('old') ?? '').trim();

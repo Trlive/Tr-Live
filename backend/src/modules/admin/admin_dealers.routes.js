@@ -6,6 +6,13 @@ import { approveTopupRequest, assertUser, auditStaff, bigAmount, dealerSell, fai
 export const router = Router();
 
 // ---------------- Bayi (yalnızca yönetici) ----------------
+// Ajans ve bayi web paneli giriş bağlantıları (sunucu kurulumunda üretilir, PANEL_LINK_*). Yönetim panelinin bağlantısı
+// bilerek burada YOK: yalnızca sunucu panelinde (şifreli) görünür. Tanımlı değilse (eski kurulum) null.
+router.get('/panel-links', requireSuperAdmin, (req, res) => {
+  const ok = (v) => (/^https:\/\/[^\s/]+\/[A-Za-z0-9]{24,64}$/.test(String(v ?? '')) ? String(v) : null);
+  res.json({ agency: ok(process.env.PANEL_LINK_AGENCY), dealer: ok(process.env.PANEL_LINK_DEALER) });
+});
+
 router.get('/dealers', requireSuperAdmin, async (req, res) => {
   const r = await query(
     `SELECT d.*, u.username AS owner_username, p.name AS parent_name

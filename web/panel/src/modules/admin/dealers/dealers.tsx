@@ -7,6 +7,7 @@ import { useApi } from "@/core/api/use-api";
 import { Badge, Card, Empty, ErrorBox, Loading, PageHeader, StatCard, inputCls, tableCls, tableWrap, tdCls, thCls } from "@/shared/components/ui";
 import { ActionMsg, Field, Tabs, btnGhost, btnOk, btnDangerOutline, btnSmall, newKey, useAction } from "@/shared/components/kit";
 import { UserPicker, type AdminUser } from "@/modules/admin/users/user-picker";
+import { PanelLinkBox } from "@/modules/admin/shared/panel-link";
 
 type Dealer = { id: string; name: string; ownerUserId: string | null; ownerUsername: string | null; coinBalance: string; commissionBps: number; isActive: boolean;
   // Ana bayi / Alt bayi. parentDealerId doluysa bu bir ALT bayidir. En fazla iki kat.
@@ -23,6 +24,7 @@ export default function AdminDealers() {
   return (
     <div>
       <PageHeader icon={<Store size={18} />} kicker="Ekonomi" title="Bayiler" description="Coin bayileri, bakiye yükleme ve bayi bakiye talepleri." />
+      <PanelLinkBox kind="dealer" />
       <Tabs
         tabs={[
           { key: "dealers", label: "Bayiler" },
@@ -88,7 +90,7 @@ function NewDealer({ onDone }: { onDone: () => void }) {
   const [owner, setOwner] = useState<AdminUser | null>(null);
   const { busy, msg, run } = useAction();
   return (
-    <Card title="Yeni bayi" subtitle="Bayi, sahibi olan hesapla bayi paneline (/yonetim/dealer/login) girer.">
+    <Card title="Yeni bayi" subtitle="Bayi, sahibi olan hesapla bayi paneline girer (giriş bağlantısı yukarıda).">
       <div className="space-y-4">
         <Field label="Bayi adı">
           <input className={inputCls} value={name} maxLength={100} onChange={(e) => setName(e.target.value)} />

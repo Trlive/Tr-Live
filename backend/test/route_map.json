@@ -220,6 +220,7 @@
     "GET /orders/:orderNo",
     "GET /orders/:orderNo/events",
     "GET /overview/pending",
+    "GET /panel-links",
     "GET /payouts",
     "GET /payouts/:id",
     "GET /payouts/salary-status/:userId",
@@ -587,13 +588,13 @@
     "USE /:id",
     "USE /:id/panel"
   ],
-  "total": 576,
+  "total": 577,
   "files": {
     "modules/admin/admin.routes.js": 1,
     "modules/admin/admin_agencies.routes.js": 16,
     "modules/admin/admin_catalog.routes.js": 35,
     "modules/admin/admin_coins.routes.js": 1,
-    "modules/admin/admin_dealers.routes.js": 9,
+    "modules/admin/admin_dealers.routes.js": 10,
     "modules/admin/admin_events.routes.js": 16,
     "modules/admin/admin_finance.routes.js": 5,
     "modules/admin/admin_flags.routes.js": 7,

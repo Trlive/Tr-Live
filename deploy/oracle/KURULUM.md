@@ -85,6 +85,21 @@ Avatar, hediye animasyonu, müzik gibi dosyalar önce veritabanına yazılır, a
   (örn. `rclone sync r2:kovam yedek:kovam`).
 - R2 yapılandırılmazsa her şey eskisi gibi çalışır (dosyalar veritabanında kalır); medya 500 MB'ı aşınca günlükte `media_db_growth` uyarısı çıkar.
 
+## 9. Web panel giriş bağlantıları (yönetim / ajans / bayi)
+
+Her panelin kurulumda üretilen kendine özel, tahmin edilemez bir giriş bağlantısı vardır (`https://ALAN/<gizli kod>`).
+Bağlantılar **sunucu panelinde** (`https://ALAN/panel`, şifreli) "Panel giriş bağlantıları" bölümündedir.
+
+- **Yönetim paneli:** yalnızca siz. Yardımcı adminlere tek tek siz iletin.
+- **Ajans paneli:** ajans sahipleri ve asistanları (yönetim panelinde Ajanslar sayfasında da kopyalanır).
+- **Bayi paneli:** bayiler (yönetim panelinde Bayiler sayfasında da kopyalanır).
+
+Bağlantı bir tarayıcıda bir kez açılınca o tarayıcı 1 yıl hatırlar. Bağlantı olmadan `/yonetim/admin`, `/yonetim/agency`,
+`/yonetim/dealer` ve eski panel seçim sayfası **"bulunamadı" (404)** döner. Uygulama içi sayfalar (`/yonetim/m/...`) etkilenmez.
+Bağlantı sızarsa: sunucu panelinde **YENILE** yazıp "Tüm bağlantıları yenile". Eski bağlantılar ve tarayıcılardaki eski izinler
+geçersiz olur; şifreler ve oturumlar değişmez. Gizli bağlantı ek bir katmandır: asıl koruma hesap şifresi, iki adımlı doğrulama
+ve sunucudaki yetki denetimidir.
+
 ## Notlar
 - Google/Facebook girişinde yönlendirme adresleri yeni adresle (`https://…sslip.io/api/auth/oauth/google/callback`
   ve `…/facebook/callback`) güncellenmelidir. Google, sslip.io adreslerini yayın modunda kabul etmeyebilir; o

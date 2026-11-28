@@ -1,3 +1,24 @@
+## v2.153.1 — Web panelleri ayrıldı: her panelin kendi gizli giriş bağlantısı
+
+- **Ayrı bağlantılar:** her panele kurulumda rastgele, tahmin edilemez bir bağlantı üretilir (`https://ALAN/<32 / 28 karakter>`).
+  - Yönetim bağlantısı → doğrudan yönetim girişi.
+  - Ajans bağlantısı → ajans girişi.
+  - Bayi bağlantısı → bayi girişi.
+- **Gizlilik:**
+  - Bağlantıyla gelmeyen kişiye panel sayfaları **404** döner; panelin varlığı bile anlaşılmaz.
+  - Eski "panel seçimi" sayfası kaldırıldı; `/yonetim` kökü de 404 veriyor.
+  - Giriş ekranındaki "Panel seçimine dön" kaldırıldı.
+- **İzin çerezi (sunucunun Caddy katmanında):**
+  - Yalnızca o panelin yoluna gider; JavaScript okuyamaz (HttpOnly), Secure, SameSite.
+  - 1 yıl geçerli.
+  - Ajans çerezi yönetim sayfalarını açmaz; diğer paneller için de aynı.
+- **Bağlantıları görme ve yenileme:**
+  - Sunucu panelinde (`/panel`) "Panel giriş bağlantıları" bölümü ve "Tüm bağlantıları yenile" (YENILE onayıyla) var.
+  - Yönetim panelinde Bayiler ve Ajanslar sayfasında ilgili bağlantı kopyalanabilir. Yönetim bağlantısı bilerek yalnızca sunucu panelinde.
+- **Güvenli devreye alma:** yeni Caddy ayarı devreye girmeden önce sunucuda `caddy validate` ile doğrulanıyor. Geçersizse son çalışan
+  ayar geri konuyor; site kapanmıyor.
+- `/yonetim/m/*` (uygulama içi Ajans / Yayıncı Merkezi) ve `/pay` (web yükleme) açık kalıyor.
+
 ## v2.153.0 — Coin bayilik sistemi v2: otomatik ödeme, teşvik, gelir-gider, web yükleme sayfası
 
 Rakiplerdeki (Yoho / Bigo / Xena) üç parçalı yapı: uygulama içi bayi paneli + harici yükleme kanalı + bayi teşvik sistemi.

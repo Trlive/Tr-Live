@@ -7,6 +7,7 @@ import { useApi } from "@/core/api/use-api";
 import { Badge, Card, Empty, ErrorBox, Loading, PageHeader, inputCls, tableCls, tableWrap, tdCls, thCls } from "@/shared/components/ui";
 import { UserPicker, type AdminUser } from "@/modules/admin/users/user-picker";
 import { ActionMsg, Field, Tabs, UserLink, agencyStatusText, btnDangerOutline, btnGhost, btnOk, btnSmall, fmtRel, hostStatusText, selectCls, useAction } from "@/shared/components/kit";
+import { PanelLinkBox } from "@/modules/admin/shared/panel-link";
 
 type Agency = {
   id: string;
@@ -33,6 +34,7 @@ export default function AdminAgencies() {
   return (
     <div>
       <PageHeader icon={<Building2 size={18} />} kicker="Ajans sistemi" title="Ajanslar ve yayıncılar" description="Ajans açın, durum ve komisyonu yönetin; yayıncı başvurularını, ajans önerilerini ve transferleri karara bağlayın." />
+      <PanelLinkBox kind="agency" />
       <Tabs
         tabs={[
           { key: "agencies", label: "Ajanslar" },

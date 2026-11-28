@@ -2,9 +2,8 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Crown, Eye, EyeOff, LockKeyhole } from "lucide-react";
+import { Crown, Eye, EyeOff, LockKeyhole } from "lucide-react";
 import { getSession, login, TotpRequired } from "@/core/api/api";
 
 type PanelType = "admin" | "agency" | "dealer";
@@ -79,14 +78,6 @@ export default function PanelLogin({
   return (
     <main className="flex min-h-screen items-center justify-center px-5 py-10">
       <div className="w-full max-w-md">
-        <Link
-          href="/"
-          className="mb-8 inline-flex items-center gap-2 text-sm text-neutral-400 transition hover:text-amber-300"
-        >
-          <ArrowLeft size={17} />
-          Panel seçimine dön
-        </Link>
-
         <section className="rounded-2xl border border-amber-400/20 bg-[#111111] p-7 shadow-2xl sm:p-9">
           <div className="mb-7 text-center">
             <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl border border-amber-400/30 bg-amber-400/10">
