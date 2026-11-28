@@ -57,6 +57,7 @@ import { log } from './infrastructure/observability/log.js';
 import { router as assetsRouter } from './modules/assets/assets.routes.js';
 import { router as sduiRouter } from './modules/sdui/sdui.routes.js';
 import { router as sduiV2Router } from './modules/sdui/v2/sdui_v2.routes.js';
+import { router as livekitWebhookRouter } from './modules/rooms/livekit_webhook.routes.js';
 import { redactSecrets } from './middleware/security/redact.js';
 import { r2Config } from './infrastructure/storage/storage.js';
 import { cdnUrlFor } from './modules/media/offload.service.js';
@@ -81,6 +82,9 @@ app.use(cors({
   origin: config.corsOrigin.includes('*') ? true : config.corsOrigin,
   allowedHeaders: ['Content-Type', 'Authorization', 'X-App-Version', 'Idempotency-Key', 'X-Client'],
 }));
+// LiveKit webhook'u gövdeyi HAM okur (imza baytlar üzerinden doğrulanır): JSON ayrıştırıcıdan ÖNCE ve /api dışında
+// (zorunlu güncelleme kapısı sürüm başlığı bekler; ses sunucusu göndermez).
+app.use('/livekit/webhook', livekitWebhookRouter);
 app.use(express.json({ limit: '100kb' }));
 app.use(bodyGuard()); // derin/dev JSON ve prototype pollution anahtarlarını reddeder
 app.use('/api', (req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });

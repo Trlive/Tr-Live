@@ -101,7 +101,7 @@ alertTicker.unref();
 // dönemlerin maaşını dolar bakiyesine geçirir. Bayrak KAPALI geldiği için varsayılan
 // kurulumda hiçbir şey yapmaz. "Bir kere" güvencesi servisin kendisinde (veritabanında).
 const salaryTicker = startSalaryTransferTicker(nonOverlapping);
-// Ay içi maaş avansı: 3 dakikada bir. Ayar KAPALI geldiği için varsayılan kurulumda hiçbir şey ödemez.
+// Ay içi maaş avansı: 3 dakikada bir. Ayar varsayılan AÇIK (migration 116); panelde tek kutuyla durdurulur.
 const instantSalaryTicker = startInstantSalaryTicker(nonOverlapping);
 loadBans().then((n) => n && console.log(`${n} aktif IP yasağı yüklendi.`)).catch((e) => console.error('IP yasakları yüklenemedi:', e.message));
 promoteBootstrapAdmins().catch((e) => console.error('ADMIN_USERNAMES uygulanamadı:', e.message));

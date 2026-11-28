@@ -555,6 +555,9 @@ test('ajans/yayıncı: başvuru, kod, onay, katılma, hedef/maaş, komisyon kade
   const lv = (diamonds, hours, s1, ag) => ({ diamonds, days: null, hours, gameHours: 0, salary1Cents: s1, salary2Cents: s1, agencyCents: ag });
   status(await api('PUT', '/api/admin/pay-levels', { token: U.a.token, body: { levels: [lv('100', 1, '1000', '300')] } }), 403);
   status(await api('PUT', '/api/admin/pay-levels', { token: U.d.token, body: { levels: [lv('1000', 1, '1000', '300'), lv('100', 1, '1', '1')] } }), 400, 'azalan elmas kotası');
+  // Para döngüsü koruması (salaryLoopError): aşağıdaki test tablosu 1$ için ~7 elmas ister; gerçek kurla (1$ = 4000 Coin)
+  // "Coin al → kendine hediye → maaş" kâr ederdi ve sunucu tabloyu reddeder. Test süresince kurlar 1 Coin/$'a çekilir.
+  ok(await api('PUT', '/api/admin/app-config', { token: U.d.token, body: { usdCoinsPerUsd: 1, usdDealerCoinsPerUsd: 1 } }));
   // Test için küçük tablo: 100 Diamond + 1 saat → 10 $ maaş, ajansa 3 $ prim; 1000 Diamond + 10 saat → 50 $.
   ok(await api('PUT', '/api/admin/pay-levels', { token: U.d.token, body: { levels: [lv('100', 1, '1000', '300'), lv('1000', 10, '5000', '900')] } }));
 
@@ -633,6 +636,7 @@ test('ajans/yayıncı: başvuru, kod, onay, katılma, hedef/maaş, komisyon kade
   const reset = await api('POST', '/api/admin/pay-levels/reset', { token: U.d.token });
   ok(reset);
   assert.equal(reset.body.config.payLevels.length, 44);
+  ok(await api('PUT', '/api/admin/app-config', { token: U.d.token, body: { usdCoinsPerUsd: 4000, usdDealerCoinsPerUsd: 4000 } }), 'varsayılan tabloyla varsayılan kur geçerli');
 });
 
 test('oda: gizli oda + davet kodu, tema, WIP özel tema, sayı tahtası, sohbet temizleme', { skip, timeout: 60000 }, async () => {

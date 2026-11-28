@@ -8,3 +8,9 @@ rtc:
 keys:
   CHANGE_ME: CHANGE_ME_LONG_SECRET   # "API_KEY: API_SECRET"
 # TLS için LiveKit'in önüne ayrı bir alt alan adıyla nginx/caddy koyun (wss://livekit.example.com)
+# İzinsiz yayını kesmek için olaylar uygulama sunucusuna bildirilir (backend: /livekit/webhook). Adres, LiveKit'in
+# uygulama sunucusuna ulaşabildiği adres olmalı (nginx kökü backend'e yönlendiriyorsa https://alanadi/livekit/webhook).
+webhook:
+  api_key: CHANGE_ME
+  urls:
+    - http://127.0.0.1:3000/livekit/webhook

@@ -1,6 +1,8 @@
 // rooms — mic. Ortak yardımcılar: rooms.shared.js
 import { Router } from 'express';
-import { MIC_EMOJI_COUNT, SEAT_MANAGERS, activeRoom, broadcastQueue, consumeMicInvite, fail, hasMicInvite, hub, isGhost, loadPublicRow, memberOf, noteTask, notifyNext, openMicSession, query, queueOf, releaseSeat, removeFromQueue, requireAuth, roomUser, setCanPublish, tx, userLimit, uuid } from './rooms.shared.js';
+import { setPublishPermission } from '../../infrastructure/livekit/livekit.js';
+import { publishPolicy } from './publish_policy.rules.js';
+import { MIC_EMOJI_COUNT, SEAT_MANAGERS, activeRoom, broadcastQueue, consumeMicInvite, fail, hasMicInvite, hub, isGhost, loadPublicRow, memberOf, noteTask, notifyNext, openMicSession, query, queueOf, releaseSeat, removeFromQueue, requireAuth, roomUser, tx, userLimit, uuid } from './rooms.shared.js';
 
 export const router = Router();
 
@@ -50,7 +52,11 @@ router.post('/:roomId/mic/take', requireAuth, userLimit('mic', 60, 60e3), async 
   });
   // Mikten mike geçiş hızlı: kişi zaten mikrofondaysa yayın izni ve mikrofon süresi zaten açık; yalnızca koltuk değişir
   // ve herkese hemen duyurulur.
+  // Yayın izni yeni koltuğa göre (susturulmuş koltuğa geçen ya da oradan çıkan yönetici dahil). Duyurudan ÖNCE: uygulama
+  // koltuk olayını alınca mikrofonu açar; izin o anda hazır olsun.
+  const policy = publishPolicy(room, { seat_index: seatIndex });
   if (wasSeated) {
+    await setPublishPermission(roomId, userId, policy);
     hub.broadcastRoom(roomId, { type: 'room_seat_changed', roomId, userId, seatIndex, microphone: true });
     return res.json({ ok: true, seatIndex });
   }
@@ -59,8 +65,8 @@ router.post('/:roomId/mic/take', requireAuth, userLimit('mic', 60, 60e3), async 
     const row = await loadPublicRow(userId);
     hub.broadcastRoom(roomId, { type: 'room_member_joined', roomId, user: roomUser(row, null), entranceEffect: null, silent: true });
   }
+  await setPublishPermission(roomId, userId, policy);
   hub.broadcastRoom(roomId, { type: 'room_seat_changed', roomId, userId, seatIndex, microphone: true });
-  await setCanPublish(roomId, userId, true);
   consumeMicInvite(roomId, userId);
   await removeFromQueue(roomId, userId);
   noteTask(userId, 'mic');

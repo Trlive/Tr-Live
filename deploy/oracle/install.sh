@@ -163,6 +163,12 @@ rtc:
   use_external_ip: false
 keys:
   ${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}
+# Katılım ve yayın olayları uygulama sunucusuna bildirilir: izinsiz yayın (koltukta değil / susturulmuş) kesilir,
+# odadan atılan katılımcı çıkarılır (backend/src/modules/rooms/livekit_webhook.routes.js). İstekler bu anahtarla imzalanır.
+webhook:
+  api_key: ${LIVEKIT_API_KEY}
+  urls:
+    - http://127.0.0.1:3000/livekit/webhook
 logging:
   level: warn
 EOF

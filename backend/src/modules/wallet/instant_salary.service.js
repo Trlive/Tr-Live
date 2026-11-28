@@ -6,7 +6,7 @@
 //  - Kota kadar elmas avansla birlikte Fasulyeye çevrilir (bakiyeden düşer); dönem kapanışı aynı elması ikinci kez düşmez.
 //  - Dönem kapanışında (closePeriod) tam hak ediş aynı kuralla hesaplanır, ödenen avanslar düşülür, kalan yatırılır.
 //
-// Güvenlik: ayar `instantSalaryEnabled` KAPALI başlar. Ağırlıklı maaş açıkken avans verilmez. Her avans, closePeriod ile AYNI
+// Güvenlik: ayar `instantSalaryEnabled` varsayılan AÇIK (migration 116; panelde acil durdurma kutusu). Ağırlıklı maaş açıkken avans verilmez. Her avans, closePeriod ile AYNI
 // kilidi ('payout_close') alır: ya kapanıştan önce işlenir ve kapanışta düşülür, ya da kapanıştan sonra reddedilir.
 // Telefonu doğrulanmamış yayıncıya (SALARY_PAYABLE_SQL) avans yatmaz.
 import { query, tx } from '../../infrastructure/database/database.js';

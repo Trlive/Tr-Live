@@ -1,5 +1,7 @@
 // rooms — moderation. Ortak yardımcılar: rooms.shared.js
 import { Router } from 'express';
+import { setPublishPermission } from '../../infrastructure/livekit/livekit.js';
+import { publishPolicy } from './publish_policy.rules.js';
 import { KICK_BAN_HOURS, SEAT_MANAGERS, activeBan, activeRoom, assertNotImmune, assertStaffShield, banFromRoom, canManage, fail, grantMicInvite, hub, isQueued, loadPublicRows, logModeration, memberOf, moderationContext, moderationRows, oneOf, publicUser, query, releaseSeat, removeFromRoom, requireAuth, roomUser, syncProfile, unbanFromRoom, userLimit, uuid } from './rooms.shared.js';
 
 export const router = Router();
@@ -165,6 +167,9 @@ router.post('/:roomId/seats/:index/mute', requireAuth, userLimit('moderate', 60,
       : `UPDATE rooms SET muted_seats = array_remove(muted_seats, $2::int) WHERE id = $1 RETURNING muted_seats`,
     [roomId, idx],
   );
+  // Susturma ses sunucusunda da uygulanır (eskiden yalnızca uygulama kendi mikrofonunu kapatıyordu). Duyurudan ÖNCE:
+  // susturma kalkınca uygulama mikrofonu açmaya çalıştığında izin hazır olsun.
+  if (occupant) await setPublishPermission(roomId, occupant.user_id, publishPolicy({ ...room, muted_seats: r.rows[0].muted_seats }, { seat_index: idx }));
   hub.broadcastRoom(roomId, { type: 'room_seats_muted', roomId, mutedSeats: r.rows[0].muted_seats, seatIndex: idx, muted });
   res.json({ ok: true, mutedSeats: r.rows[0].muted_seats });
 });
