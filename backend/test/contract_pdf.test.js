@@ -47,3 +47,16 @@ test('kişiye metin deterministik: aynı girdi aynı özet, taraf değişince ö
   assert.match(a, /Yayıncı adı: Ali/);
   assert.match(a, /Madde 1\.1'de belirtilen işletmeci/, 'şirket belli değilken');
 });
+
+test('PDF bağlantısı: imzalı, belgeye özel, süreli', async () => {
+  process.env.JWT_SECRET ||= 'test-secret-test-secret-test-secret-1234';
+  const { pdfLinkToken, readPdfLinkToken } = await import('../src/modules/contracts/contracts.routes.js');
+  const id = '11111111-1111-4111-8111-111111111111';
+  const t = pdfLinkToken(id, 1_000_000_000);
+  assert.equal(readPdfLinkToken(t, 1_000_000_000), id);
+  assert.equal(readPdfLinkToken(t, 1_000_000_000 + 301_000), null, '5 dakika sonra geçersiz');
+  const [body, sig] = t.split('.');
+  const other = Buffer.from(`22222222-2222-4222-8222-222222222222|${Buffer.from(body, 'base64url').toString().split('|')[1]}`).toString('base64url');
+  assert.equal(readPdfLinkToken(`${other}.${sig}`, 1_000_000_000), null, 'imza başka belgeye taşınamaz');
+  assert.equal(readPdfLinkToken('bozuk'), null);
+});

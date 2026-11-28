@@ -1,4 +1,5 @@
 // Sözleşme uçları: kullanıcı (/api/contracts) ve süper yönetici (/api/admin/contracts). Kurallar: contracts.service.js.
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,11 +11,33 @@ import { fail, uuid } from '../../shared/errors/http.js';
 import { cleanDevice } from '../users/sessions.service.js';
 import { getConfig, phoneVerifyOn } from '../system/app_config.service.js';
 import { log } from '../../infrastructure/observability/log.js';
+import { jwtSecret } from '../../config.js';
 import { KINDS, isKind, statusFor, viewFor, accept, publishTemplate, relationOf, hasAccepted } from './contracts.service.js';
 
 export const router = Router();
 export const adminRouter = Router();
+export const publicRouter = Router();
 router.use(requireAuth);
+
+// ---------------------------------------------------------------- PDF indirme bağlantısı
+// Uygulama PDF'i telefonun tarayıcısında açar; tarayıcıda oturum başlığı olmadığı için tek belgeye özel, 5 dakikalık imzalı
+// bağlantı verilir. Bağlantıda belge kimliği ve bitiş zamanı imzalıdır; başka belgeye ya da süre sonrasına kullanılamaz.
+const LINK_TTL_SEC = 300;
+const b64u = (b) => Buffer.from(b).toString('base64url');
+const linkSig = (body) => b64u(crypto.createHmac('sha256', jwtSecret()).update(`contract-pdf|${body}`).digest());
+export function pdfLinkToken(acceptanceId, now = Date.now()) {
+  const body = b64u(`${acceptanceId}|${Math.floor(now / 1000) + LINK_TTL_SEC}`);
+  return `${body}.${linkSig(body)}`;
+}
+export function readPdfLinkToken(token, now = Date.now()) {
+  const [body, sig] = String(token ?? '').split('.');
+  if (!body || !sig || body.length > 200) return null;
+  const want = linkSig(body);
+  if (want.length !== sig.length || !crypto.timingSafeEqual(Buffer.from(want), Buffer.from(sig))) return null;
+  const [id, exp] = Buffer.from(body, 'base64url').toString().split('|');
+  if (!/^[0-9a-f-]{36}$/i.test(id ?? '') || !(Number(exp) > Math.floor(now / 1000))) return null;
+  return id;
+}
 
 const maskPhone = (p) => (p ? `${p.slice(0, 4)}••••${p.slice(-2)}` : null);
 
@@ -59,6 +82,20 @@ async function sendPdf(res, id, ownerId = null) {
 
 router.get('/acceptances/:id/pdf', async (req, res) => {
   await sendPdf(res, uuid(req.params.id, 'Belge'), req.user.id);
+});
+
+router.post('/acceptances/:id/link', userLimit('contract_pdf_link', 30, 15 * 60e3), async (req, res) => {
+  const id = uuid(req.params.id, 'Belge');
+  const own = await query(`SELECT 1 FROM contract_acceptances WHERE id = $1 AND user_id = $2`, [id, req.user.id]);
+  if (!own.rowCount) throw fail('Belge bulunamadı.', 404);
+  res.json({ path: `/api/contract-pdf/${pdfLinkToken(id)}`, expiresIn: LINK_TTL_SEC });
+});
+
+// Oturumsuz (imzalı bağlantı). app.js'te /api/contract-pdf altına bağlanır.
+publicRouter.get('/:token', async (req, res) => {
+  const id = readPdfLinkToken(req.params.token);
+  if (!id) throw fail('Bağlantının süresi dolmuş ya da geçersiz. Uygulamadan yeniden açın.', 410);
+  await sendPdf(res, id);
 });
 
 router.get('/:kind', async (req, res) => {

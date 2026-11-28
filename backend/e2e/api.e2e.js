@@ -775,10 +775,16 @@ test('Ludo: kurma, katılma, başlatma, zar/hamle yetkisi, ayrılma', { skip, ti
   const turnUser = view.body.game.turnUserId;
   const other = turnUser === U.a.id ? U.b : U.a; const cur = turnUser === U.a.id ? U.a : U.b;
   status(await api('POST', `/api/games/${gid}/roll`, { token: other.token }), 409, 'sıra sizde değil');
-  const roll = await api('POST', `/api/games/${gid}/roll`, { token: cur.token });
-  ok(roll);
-  assert.ok(roll.body.dice >= 1 && roll.body.dice <= 6);
-  if (!roll.body.skipped) {
+  // 6 gelirse kural gereği yeniden atılır (rollAgain: o an oynanabilir hamle yok). Eskiden test bunu bilmiyordu ve her 6'da
+  // (yaklaşık 6 çalıştırmada bir) "Önce zar atın" ile rastgele kırılıyordu. Üç 6 üst üste gelirse sıra geçer (skipped).
+  let roll;
+  for (let i = 0; i < 3; i += 1) {
+    roll = await api('POST', `/api/games/${gid}/roll`, { token: cur.token });
+    ok(roll);
+    assert.ok(roll.body.dice >= 1 && roll.body.dice <= 6);
+    if (!roll.body.rollAgain) break;
+  }
+  if (!roll.body.skipped && !roll.body.rollAgain) {
     status(await api('POST', `/api/games/${gid}/move`, { token: cur.token, body: { token: 9 } }), 409, 'geçersiz taş');
     ok(await api('POST', `/api/games/${gid}/move`, { token: cur.token, body: { token: roll.body.legal[0] } }));
   }
@@ -2548,6 +2554,14 @@ test('sözleşme onayı: yayımlama, kişiye metin, onay, değiştirilemez kayı
   status(await fetch(`${BASE}/api/contracts/acceptances/${acc.body.id}/pdf`, { headers: { Authorization: `Bearer ${dealerOwner.token}` } }), 404, 'başkasının belgesi');
   const adminPdf = await fetch(`${BASE}/api/admin/contracts/acceptances/${acc.body.id}/pdf`, { headers: { Authorization: `Bearer ${U.d.token}` } });
   assert.equal(adminPdf.status, 200);
+  // Uygulama PDF'i tarayıcıda açar: 5 dakikalık imzalı bağlantı, oturum ve sürüm başlığı olmadan çalışır.
+  const link = await api('POST', `/api/contracts/acceptances/${acc.body.id}/link`, { token: host.token });
+  ok(link);
+  const viaLink = await fetch(`${BASE}${link.body.path}`);
+  assert.equal(viaLink.status, 200);
+  assert.equal(createHash('sha256').update(Buffer.from(await viaLink.arrayBuffer())).digest('hex'), pdfRes.headers.get('x-content-sha256'));
+  status(await api('POST', `/api/contracts/acceptances/${acc.body.id}/link`, { token: dealerOwner.token }), 404, 'başkasının belgesine bağlantı yok');
+  assert.equal((await fetch(`${BASE}/api/contract-pdf/bozuk.imza`)).status, 410);
   const list = await api('GET', `/api/admin/contracts/acceptances?q=${acc.body.contractNo}`, { token: U.d.token });
   assert.equal(list.body.acceptances[0]?.contractNo, acc.body.contractNo);
 
