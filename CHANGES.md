@@ -1,3 +1,36 @@
+## v2.152.20 — Sözleşme onay sistemi, kendine hediye sınırı, sözleşmeler 1.2
+
+**Sözleşme onay sistemi (karar: herkese uygulama içi onay).** Yayıncı, ajans sahibi ve Coin bayisi sözleşmeleri.
+- **Akış:** metin kişiye doldurulmuş hâliyle gelir; sonuna kadar okunmadan onay kutusu açılmaz; onay SMS koduyla (mevcut Firebase
+  doğrulaması; numara hesaptakiyle aynı olmalı) ya da SMS kapalıysa hesap şifresiyle. Sunucu, gösterilen metnin özetini (SHA-256) yeniden
+  üretip karşılaştırır.
+- **Kayıt:** sözleşme no (YAY-/AJS-/BAY-), sürüm, metin özeti, IP, cihaz, yöntem, telefon, PDF ve PDF özeti. Yayımlanan sürümler ve onay
+  kayıtları **veritabanı tetikleyicisiyle değiştirilemez ve silinemez** (UPDATE/DELETE/TRUNCATE). Onay kayıtları kullanıcı tablosuna bağlı
+  değildir; hesap silinse de yaşar.
+- **PDF:** bağımlılıksız yazıcı (Türkçe harfler doğru); uygulamada "Ayarlar → Sözleşmelerim"den 5 dakikalık imzalı bağlantıyla açılır,
+  panelde indirilir.
+- **Kapılar (yalnızca o tür için sözleşme yayımlandıysa):**
+  - Yayıncı: maaş, avans ve tek tek ödeme.
+  - Ajans: ajans primi ve referans primi; ajans sahibinin paneli (asistanlar hariç).
+  - Bayi: bayi paneli.
+
+  Onaysız ödeme kaybolmaz, onaydan sonra yatar. Yeni sürüm yayımlanınca eski onay geçerli kalır; uygulama yenisini onaylatmak için sorar.
+- **Yönetim paneli → Sistem → Sözleşmeler:** yayımlama (`[KARAR]` notlu metin reddedilir), yayımlanmış sürümler, onay bekleyenler, onay
+  kayıtları ve PDF. İşletmeci bilgisi: ayar `contractCompany`.
+- **Henüz hiçbir sözleşme yayımlanmadı:** sistem bugünkü gibi çalışır. Yayımlamadan önce avukat incelemesi ve `[KARAR]` notları tamamlanmalı.
+
+**Kendine hediye sınırı (sahibin kararı):** sesli odada kendine hediye maaşa sayılmaya devam ediyor, ama bir dönemde sayılan kendine hediye
+sayılan toplamın en çok %20'si (başkalarından gelenin dörtte biri). Maaş, avans, ajans primi ve yayıncının kazanç ekranı aynı kuralı kullanır.
+
+**Sözleşmeler 1.2:** bayilik sözleşmesi toptan alım-satım modeline göre baştan yazıldı; imza usulü ve kendine hediye maddeleri kararlara
+göre güncellendi. Ayrıntı ve kalan açık kararlar: `docs/sozlesmeler/OKU_once.md`.
+
+**Ayrıca:** kararsız Ludo e2e testi düzeltildi (6 atılınca "tekrar at" kuralını bilmiyordu; ~6 çalıştırmada bir kırılıyordu).
+
+**Sınama:** backend 527 birim; gerçek PostgreSQL'de 53/53 e2e (art arda iki çalıştırma); `flutter analyze` 0 hata/0 uyarı, `flutter test`
+71/71 (yeni widget testi: okunmadan onaylanamaz); panel `tsc` 0 hata, `next build` başarılı; PDF'ler poppler ile doğrulandı.
+**Gerçek cihazda denenmedi:** SMS ile onay (Firebase yapılandırıldıysa) ve PDF'in telefonda açılması.
+
 ## v2.152.19 — Yük testi bulgusu (şifre özeti), Android izinleri, tekrarlanabilir derleme, bayi bakiyesi
 
 - **Şifre özeti ana iş parçacığının dışında (en büyük bulgu):** yük testiyle (gerçek PostgreSQL, 150 kullanıcı) ölçüldü: bcryptjs tek işlemde

@@ -1,5 +1,9 @@
 # Sözleşmeler: yapılan düzeltmeler, kararlar, imza usulü
 
+> **Taslakların yeri:** `backend/src/modules/contracts/drafts/` (sunucu imajına girsin diye buraya taşındı). Yayımlama web panelinde:
+> **Sistem → Sözleşmeler** — tür seç, metni düzenle, sürüm ver, yayımla. `[KARAR]` notu kalmış metin yayımlanamaz; yayımlanan sürüm
+> ve onay kayıtları değiştirilemez (veritabanı engeller). Sözleşmelerin tarafı olan işletmeci bilgisi: uygulama ayarı `contractCompany`.
+
 ## Sahibin kararları (sürüm 1.2)
 
 | Konu | Karar | Metne / sisteme etkisi |

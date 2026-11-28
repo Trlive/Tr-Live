@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import {
+import { FileSignature,
   Activity,
   LayoutDashboard,
   Users,
@@ -104,6 +104,7 @@ const adminGroups: NavGroup[] = [
       { label: "Etkinlikler", href: "/admin/events", icon: CalendarDays, adminOnly: true },
       { label: "Oda Etkinlikleri", href: "/admin/activities", icon: PartyPopper, adminOnly: true },
       { label: "Oyun Paketleri", href: "/admin/plugins", icon: PartyPopper, adminOnly: true },
+      { label: "Sözleşmeler", href: "/admin/contracts", icon: FileSignature, adminOnly: true },
       { label: "Ana Ekran Düzeni", href: "/admin/sdui", icon: LayoutDashboard, adminOnly: true },
       { label: "Ekran Düzenleri", href: "/admin/screens", icon: LayoutDashboard, adminOnly: true },
       { label: "Özellik Bayrakları", href: "/admin/flags", icon: ToggleLeft, adminOnly: true },
