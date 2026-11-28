@@ -1,3 +1,26 @@
+## v2.152.19 — Yük testi bulgusu (şifre özeti), Android izinleri, tekrarlanabilir derleme, bayi bakiyesi
+
+- **Şifre özeti ana iş parçacığının dışında (en büyük bulgu):** yük testiyle (gerçek PostgreSQL, 150 kullanıcı) ölçüldü: bcryptjs tek işlemde
+  ~290 ms işlemci harcıyor ve Node'un tek iş parçacığını kilitliyordu; kayıt/giriş dalgasında oda listesi, `/me` ve ayarlar 6–19 sn bekledi,
+  isteklerin %32'si zaman aşımına düştü. Artık aynı bcryptjs worker_threads havuzunda (`infrastructure/crypto/password_pool.js`); özet biçimi
+  değişmedi, eski şifreler aynen doğrulanır. Aynı test: hata %32 → %0, 10,5 → 157 istek/sn, `/me` p95 16,3 sn → 22 ms.
+- **Veritabanı havuzu (Y-02) ölçüldü:** 300 kullanıcıda havuz 5 ile 20 arasında fark yok; kullanıcı satırı önbelleği (yasaklama gecikmesi riski)
+  bu yüzden yapılmadı.
+- **Android izinleri (Y-09):** `SYSTEM_ALERT_WINDOW`, `FOREGROUND_SERVICE_SPECIAL_USE`, `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` kodda hiç
+  kullanılmıyordu (Play gerekçe ister) ve paketi olmayan "yüzen balon" servisi manifestteydi; kaldırıldı. `READ_EXTERNAL_STORAGE` yalnızca
+  Android 12 ve altı. İmzalı iş akışı `READ_PHONE_STATE`'i kaldırıyordu (telefon araması algılaması bozulurdu); iki iş akışı aynı kurala getirildi.
+  **`.github` dosyaları zip ile güncellenmez; elle yüklenmeli** (aşağıya bakın).
+- **Tekrarlanabilir derleme (Y-03):** Dockerfile'larda ve backend CI'da `npm ci`; LiveKit imajı `latest` yerine `v1.13.11` (bugünkü latest).
+- **Bayi merkezi:** bakiye yüklenemeyince bayi stokunu 0 görüyor ve satış "yetersiz" diye kilitleniyordu; artık "—" ve hata mesajı.
+- **Bildirim:** "görüldü" yazıldıktan sonra gösterim hata verirse bildirim iz bırakmadan kayboluyordu; artık hata kaydına düşüyor.
+- Belgeler (README, docs/COMPARISON.md) koda göre güncellendi.
+
+**Elle yüklenmesi gereken iş akışı dosyaları:** `.github/workflows/apk_build.yml` (izinler), `.github/workflows/backend.yml` (`npm ci`,
+`postgres:18`, bağımlılık taraması), `.github/imzali/apk_build.yml` (imzalı sürüm kullanılıyorsa).
+
+**Sınama:** backend 518 birim + gerçek PostgreSQL'de 52/52 e2e; yük testi; `flutter analyze` 0 hata/0 uyarı, `flutter test` 69/69;
+iki iş akışının manifest adımı yeni bir `flutter create` projesinde çalıştırıldı; iki kilit dosyası `npm ci` ile kuruldu.
+
 ## v2.152.18 — Oturum token'ları şifreli depoda (rapor Y-10)
 
 - **Token'lar artık Android Keystore / iOS Keychain'de** (`services/token_store.dart`, `flutter_secure_storage` 10.3.4). Eskiden erişim ve
