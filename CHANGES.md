@@ -1,3 +1,14 @@
+## v2.155.6 — Oda sesi: telefonun sesi sonuna kadar kısılınca tamamen susar; oda değişiminde ses üst üste binmez
+
+- **Sorun:** Odada ses (yankı giderme ve Bluetooth için) Android'in "görüşme" kanalından çalıyor. Android bu kanalı
+  çoğu telefonda sıfıra indirmiyor: ses tuşuyla en alta inince bile konuşmalar duyuluyordu.
+- **Çözüm:** Uygulama görüşme ses seviyesini izliyor (yeni yerel kanal `trlive/call_volume`, Bluetooth görüşme
+  bağlantısı dahil). En alt seviyeye gelince konuşmalar, oda müziği, hediye/araç sesleri ve video PK sesi uygulama
+  tarafından tamamen kapatılıyor; bir kademe açınca geri geliyor.
+- **Oda değişimi:** Eski odadan çıkarken bağlantının kopması bir-iki saniye sürebiliyor; bu sırada eski odanın
+  konuşmaları yeni odanın sesinin üstüne biniyordu. Artık çıkış anında eski odanın sesleri hemen kapatılıyor.
+- Yalnızca Android (yeni APK gerekir). iPhone'da bu kısım ayrı yerel kod ister, yapılmadı.
+
 ## v2.155.5 — Resim önbelleği cihaza göre (sağlamlık sıralaması, 3. madde)
 
 - Flutter resim önbelleğinin üst sınırı artık cihazın belleğine göre ayarlanıyor: düşük bellekli telefonda 48 MB,

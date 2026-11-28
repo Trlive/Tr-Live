@@ -2,7 +2,10 @@ package com.trlive.tr_live
 
 import android.Manifest
 import android.annotation.TargetApi
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.database.ContentObserver
 import android.net.Uri
@@ -58,6 +61,9 @@ class MainActivity : FlutterActivity() {
     private var shotCallback: Any? = null
     private var shotObserver: ContentObserver? = null
     private var lastShotAt = 0L
+    private var volSink: EventChannel.EventSink? = null
+    private var volReceiver: BroadcastReceiver? = null
+    private var volLast: Boolean? = null
 
     /// Kablolu kulaklık / kulaklık girişi / USB kulaklık / Bluetooth kulaklık bağlı mı.
     private fun headsetConnected(): Boolean {
@@ -360,6 +366,31 @@ class MainActivity : FlutterActivity() {
                 stopShotWatch()
             }
         })
+        // Görüşme ses seviyesi en altta mı (true/false). Odada ses "görüşme" kanalından çalar; Android bu kanalı çoğu
+        // telefonda sıfıra indirmez (en düşük seviye 1). Kullanıcı sesi sonuna kadar kısınca uygulama odanın sesini
+        // kendisi tamamen susturur (RoomAudio.systemSilent).
+        EventChannel(messenger, "trlive/call_volume").setStreamHandler(object : EventChannel.StreamHandler {
+            override fun onListen(arguments: Any?, sink: EventChannel.EventSink?) {
+                volSink = sink
+                volLast = null
+                emitVolume()
+                if (volReceiver != null) return
+                val r = object : BroadcastReceiver() {
+                    override fun onReceive(context: Context?, intent: Intent?) = emitVolume()
+                }
+                try {
+                    val f = IntentFilter("android.media.VOLUME_CHANGED_ACTION")
+                    if (Build.VERSION.SDK_INT >= 33) registerReceiver(r, f, Context.RECEIVER_EXPORTED) else registerReceiver(r, f)
+                    volReceiver = r
+                } catch (e: Exception) {
+                }
+            }
+
+            override fun onCancel(arguments: Any?) {
+                volSink = null
+                stopVolumeWatch()
+            }
+        })
         EventChannel(messenger, "trlive/phone_call").setStreamHandler(object : EventChannel.StreamHandler {
             override fun onListen(arguments: Any?, sink: EventChannel.EventSink?) {
                 events = sink
@@ -373,6 +404,41 @@ class MainActivity : FlutterActivity() {
                 stopWatch()
             }
         })
+    }
+
+    private fun emitVolume() {
+        val am = getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
+        val silent = try {
+            // Bluetooth görüşme bağlantısı (SCO) açıkken ses tuşları onun kanalını (6) değiştirir.
+            @Suppress("DEPRECATION")
+            val sco = am.isBluetoothScoOn
+            val stream = if (sco) 6 else AudioManager.STREAM_VOICE_CALL
+            val min = if (Build.VERSION.SDK_INT >= 28) {
+                try { am.getStreamMinVolume(stream) } catch (e: Exception) { if (sco) 0 else 1 }
+            } else {
+                if (sco) 0 else 1
+            }
+            am.getStreamVolume(stream) <= min
+        } catch (e: Exception) {
+            false
+        }
+        if (silent == volLast) return
+        volLast = silent
+        main.post {
+            try {
+                volSink?.success(silent)
+            } catch (e: Exception) {
+            }
+        }
+    }
+
+    private fun stopVolumeWatch() {
+        val r = volReceiver ?: return
+        volReceiver = null
+        try {
+            unregisterReceiver(r)
+        } catch (e: Exception) {
+        }
     }
 
     override fun onStart() {
@@ -512,6 +578,8 @@ class MainActivity : FlutterActivity() {
         }
         netCallback = null
         netSink = null
+        volSink = null
+        stopVolumeWatch()
         super.onDestroy()
     }
 

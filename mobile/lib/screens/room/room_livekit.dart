@@ -168,7 +168,7 @@ extension _RoomLivekit on _RoomScreenState {
       // Abonelik olayı izin kendisini verir: susturma artık ilk örnek çalmadan uygulanır.
       listener.on<lk.TrackSubscribedEvent>((e) {
         if (e.track is! lk.AudioTrack) return;
-        if (!_roomMuted && !CallGuard.instance.inCall.value) return;
+        if (!_roomMuted && !CallGuard.instance.inCall.value && !RoomAudio.systemSilent.value) return;
         try {
           e.track.mediaStreamTrack.enabled = false;
         } catch (_) {/* iz o anda kapanmış */}

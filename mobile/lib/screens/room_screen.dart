@@ -234,6 +234,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     RoomDock.exitHandler = _onBack;
     // Telefon araması gelince oda sesi ve mikrofon kapanır, bitince açılır.
     CallGuard.instance.inCall.addListener(_onPhoneCall);
+    RoomAudio.systemSilent.addListener(_applyRoomSound);
     CallGuard.instance.start();
     WidgetsBinding.instance.addObserver(this);
     FxLoad.pressure.addListener(_onMemoryPressure);
@@ -345,6 +346,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     _fxTick.dispose();
     _headsTimer?.cancel();
     CallGuard.instance.inCall.removeListener(_onPhoneCall);
+    RoomAudio.systemSilent.removeListener(_applyRoomSound);
     CallGuard.instance.stop();
     HeadsetAudio.instance.stop();
     RoomAudio.leave();
@@ -380,6 +382,16 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     if (room != null) {
       room.removeListener(_onLkChanged);
       _disposeLkListener();
+      // Bağlantı kopması bir-iki saniye sürebilir; bu sırada eski odanın konuşmaları yeni odanın sesinin üstüne
+      // binmesin diye uzak sesler hemen kapatılır.
+      for (final p in room.remoteParticipants.values) {
+        for (final pub in p.audioTrackPublications) {
+          if (!pub.subscribed) continue;
+          try {
+            pub.track?.mediaStreamTrack.enabled = false;
+          } catch (_) {/* iz zaten kapanmış */}
+        }
+      }
       room.disconnect().whenComplete(() => room.dispose()).catchError((_) {});
     }
     super.dispose();
@@ -704,7 +716,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   // ---------- LiveKit ----------
   void _onLkChanged() {
-    if (_roomMuted || CallGuard.instance.inCall.value) _applyRoomSound();
+    if (_roomMuted || CallGuard.instance.inCall.value || RoomAudio.systemSilent.value) _applyRoomSound();
     final r = _lk;
     // Arka plandayken yeni açılan kameralar da indirilmez.
     if (_videoPaused && r != null) _unsubscribeRemoteVideo(r);
@@ -889,7 +901,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       roomId: widget.roomId,
                       hostVideo: _pkHostVideo(),
                       canManage: _myRole == 'owner',
-                      muted: _roomMuted || CallGuard.instance.inCall.value,
+                      muted: _roomMuted || CallGuard.instance.inCall.value || RoomAudio.systemSilent.value,
                       paused: _videoPaused || RoomDock.minimized.value,
                     )
                   else if (_pk != null)

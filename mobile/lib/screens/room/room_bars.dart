@@ -475,7 +475,8 @@ extension _RoomBars on _RoomScreenState {
   void _applyRoomSound() {
     final room = _lk;
     if (room == null) return;
-    final on = !_roomMuted && !CallGuard.instance.inCall.value;
+    // Telefonun sesi sonuna kadar kısıldıysa da (RoomAudio.systemSilent) konuşmalar tamamen susar.
+    final on = !_roomMuted && !CallGuard.instance.inCall.value && !RoomAudio.systemSilent.value;
     for (final p in room.remoteParticipants.values) {
       for (final pub in p.audioTrackPublications) {
         // Aboneliği bitmiş yayının izi bırakılmıştır; ona dokunmak "MediaStreamTrack has been disposed" hatası verir.

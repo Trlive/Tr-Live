@@ -8,6 +8,7 @@ import '../services/call_guard.dart';
 import '../services/effect_prefs.dart';
 import '../services/fx_load.dart';
 import '../services/media_cache.dart';
+import '../services/room_audio.dart';
 import 'common.dart' show kFrameScale, frameScaleOf;
 import 'net_image.dart';
 import 'svga_lite.dart';
@@ -128,6 +129,7 @@ class _AnimAssetState extends State<AnimAsset> {
     super.initState();
     CallGuard.instance.inCall.addListener(_onCall);
     EffectPrefs.roomMuted.addListener(_onCall);
+    RoomAudio.systemSilent.addListener(_onCall);
     EffectPrefs.version.addListener(_onCall);
     _claimMp4();
     if (_mp4Denied) return;
@@ -172,6 +174,7 @@ class _AnimAssetState extends State<AnimAsset> {
   void dispose() {
     CallGuard.instance.inCall.removeListener(_onCall);
     EffectPrefs.roomMuted.removeListener(_onCall);
+    RoomAudio.systemSilent.removeListener(_onCall);
     EffectPrefs.version.removeListener(_onCall);
     _doneTimer?.cancel();
     _releaseMp4();
@@ -191,7 +194,7 @@ class _AnimAssetState extends State<AnimAsset> {
     _playSound();
   }
 
-  bool get _soundAllowed => !(EffectPrefs.giftSound == false || EffectPrefs.roomMuted.value || CallGuard.instance.inCall.value);
+  bool get _soundAllowed => !(EffectPrefs.giftSound == false || EffectPrefs.roomMuted.value || CallGuard.instance.inCall.value || RoomAudio.systemSilent.value);
 
   /// Sesi önceden yükler (dosya açılır); görüntü ile birlikte [_playSound] ile başlatılır → ses geriden gelmez.
   Future<void> _prepareSound(String? path) async {

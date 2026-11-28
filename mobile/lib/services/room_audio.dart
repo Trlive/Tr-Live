@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 
 /// Odadaki **tüm** sesin tek sahibi.
 ///
@@ -43,6 +44,26 @@ class RoomAudio {
   /// Sunucudan gelen ayar (panel → Uygulama ayarları). Oda açılmadan önce yazılır.
   static bool enabled = true;
 
+  /// Telefonun ses seviyesi en altta mı (oda açıkken). Odada ses görüşme kanalından çalar ve Android bu kanalı çoğu
+  /// telefonda sıfıra indirmez (en düşük seviye hâlâ duyulur). Kullanıcı sesi sonuna kadar kısınca konuşmalar, oda
+  /// müziği ve hediye sesleri uygulama tarafından tamamen susturulur; bir kademe açınca geri gelir.
+  static final ValueNotifier<bool> systemSilent = ValueNotifier<bool>(false);
+  static StreamSubscription<dynamic>? _volSub;
+  static const _volume = EventChannel('trlive/call_volume');
+
+  static void _watchVolume(bool on) {
+    if (!on) {
+      _volSub?.cancel();
+      _volSub = null;
+      systemSilent.value = false;
+      return;
+    }
+    if (_volSub != null || kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
+    try {
+      _volSub = _volume.receiveBroadcastStream().listen((v) => systemSilent.value = v == true, onError: (_) {});
+    } catch (_) {/* eski APK: kanal yok */}
+  }
+
   static int _rooms = 0;
   static AudioSession? _session;
 
@@ -52,6 +73,7 @@ class RoomAudio {
   /// Oda değiştirirken yeni oda, eskisi kapanmadan açılabilir: sayaçla korunur.
   static Future<void> enter() async {
     _rooms++;
+    _watchVolume(true);
     if (_rooms > 1 && voicePath.value == enabled) return; // zaten doğru moddayız
     await _configure(enabled);
   }
@@ -61,6 +83,7 @@ class RoomAudio {
   static Future<void> leave() async {
     if (_rooms > 0) _rooms--;
     if (_rooms > 0) return;
+    _watchVolume(false);
     await _configure(false);
     try {
       await (await _ensure()).setActive(false);

@@ -113,7 +113,7 @@ class MusicService {
   bool isController(String? userId) => userId != null && state.value?['controlledBy']?.toString() == userId && mapOf(state.value?['track']) != null;
 
   /// Çalınacak ses düzeyi: kullanıcı kıstıysa ya da telefon araması sürüyorsa 0; değilse oda düzeyi × kendi düzeyi.
-  double get _vol => muted.value || EffectPrefs.roomMuted.value || CallGuard.instance.inCall.value ? 0 : volume.value * roomVolume;
+  double get _vol => muted.value || EffectPrefs.roomMuted.value || CallGuard.instance.inCall.value || RoomAudio.systemSilent.value ? 0 : volume.value * roomVolume;
 
   Timer? _volSend;
 
@@ -152,6 +152,7 @@ class MusicService {
       // Ses yolu değişince (oda açıldı / kapandı) çalan şarkı yeni yoldan devam eder.
       RoomAudio.voicePath.addListener(_rebindPlayer);
       EffectPrefs.roomMuted.addListener(() => _player?.setVolume(_vol).catchError((_) {}));
+      RoomAudio.systemSilent.addListener(() => _player?.setVolume(_vol).catchError((_) {}));
     }
     await refresh();
     _resync?.cancel();
