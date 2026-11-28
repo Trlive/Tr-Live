@@ -1,5 +1,5 @@
 import jwt from 'jsonwebtoken';
-import bcrypt from 'bcryptjs';
+import { hashInPool, compareInPool } from '../../infrastructure/crypto/password_pool.js';
 import { query } from '../../infrastructure/database/database.js';
 import { jwtSecret } from '../../config.js';
 import { fail } from '../../shared/errors/http.js';
@@ -7,8 +7,10 @@ import { banExpired, banMessage } from '../../modules/agencies/staff.rules.js';
 import { touchSession } from '../../modules/users/sessions.service.js';
 import { passwordRules } from './password_policy.js';
 
-export const hashPassword = (p) => bcrypt.hash(p, 12);
-export const checkPassword = (p, h) => bcrypt.compare(p, h);
+// bcrypt ana iş parçacığının dışında (infrastructure/crypto/password_pool.js): tek işlem ~290 ms işlemci harcar ve ana
+// iş parçacığında çalışınca o süre boyunca tüm istekler (canlı odalar dahil) beklerdi. Özet biçimi değişmedi.
+export const hashPassword = (p) => hashInPool(p, 12);
+export const checkPassword = (p, h) => compareInPool(p, h);
 
 // Şifre kuralları password_policy.js'te (bağımlılıksız, birim testli); eski içe aktarmalar bozulmasın diye buradan da dışa aktarılır.
 export { passwordRules };
