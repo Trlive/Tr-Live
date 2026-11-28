@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
+import crypto0 from 'node:crypto';
 
 const run = promisify(execFile);
 const dir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -24,6 +25,8 @@ const env = {
   JWT_SECRET: 'e2e-secret-e2e-secret-e2e-secret-1234567890', FIREWALL_ENABLED: 'false', GLOBAL_GIFT_MIN_COINS: '100',
   ADMIN_USERNAMES: `e2e_${tag}_boss`,
   UPLOAD_DIR: fs.mkdtempSync(path.join(os.tmpdir(), 'trlive-up-')),
+  PAYTR_MERCHANT_ID: '100', PAYTR_MERCHANT_KEY: 'e2e-paytr-key', PAYTR_MERCHANT_SALT: 'e2e-paytr-salt', PAYTR_TEST_MODE: '1',
+  USDT_TRC20_ADDRESS: 'TQn9Y2khEsLJW1ChVWFMSMeRDow5KcbLSE', PUBLIC_BASE_URL: `http://127.0.0.1:${PORT}`,
 };
 
 let server; let pool;
@@ -2583,6 +2586,136 @@ test('ay sonu: kota elması maaşa, kalan elmas 5:1 Coin\'e; kota dolmazsa maaş
   assert.ok(r2.reasons.some((r) => r.code === 'balance_short'), JSON.stringify(r2.reasons));
 
   ok(await api('POST', '/api/admin/pay-levels/reset', { token: U.d.token }));
+});
+
+test('bayilik v2: otomatik ödeme (havale teyidi, PayTR bildirimi, USDT zinciri), teşvik, gelir-gider, 5 dk iptal, web yükleme', { skip, timeout: 120000 }, async () => {
+  const owner = await register('bayi2');
+  const buyer = await register('bayi2alici');
+  const mk = await api('POST', '/api/admin/dealers', { token: U.d.token, body: { name: `Bayi2 ${Date.now()}`, ownerUserId: owner.id } });
+  status(mk, 201);
+  const dealerId = mk.body.dealer.id;
+  ok(await api('PUT', '/api/admin/app-config', { token: U.d.token, body: {
+    payBankEnabled: true, payBankInfo: 'Banka: E2E Bank\nIBAN: TR00 0000 0000 0000 0000 0000 00\nAlıcı: TR Live', payPaytrEnabled: true, payUsdtEnabled: true, payUsdtRateKurus: 4200,
+  } }));
+  // Teşvik: paket bonusu 10.000, kademe (bu ay ≥ 2.000 TL → %3), bayi kampanyası %5.
+  const shop0 = await api('GET', '/api/admin/dealer-shop', { token: U.d.token });
+  const p480 = shop0.body.packages.find((p) => p.code === 'Y_480K');
+  ok(await api('PUT', '/api/admin/dealer-shop/packages/Y_480K', { token: U.d.token, body: { ...p480, bonusCoins: '10000' } }));
+  status(await api('PUT', '/api/admin/dealer-shop/packages/Y_480K', { token: U.d.token, body: { ...p480, bonusCoins: '300000' } }), 400, 'bonus paketin yarısını geçemez');
+  ok(await api('PUT', '/api/admin/payments/tiers', { token: U.d.token, body: { tiers: [{ name: 'Taban', minTry: '0', bonusBps: 0 }, { name: 'Test', minTry: '2000', bonusBps: 300 }] } }));
+  status(await api('PUT', '/api/admin/payments/tiers', { token: U.d.token, body: { tiers: [{ name: 'A', minTry: '0', bonusBps: 500 }, { name: 'B', minTry: '10', bonusBps: 100 }] } }), 400, 'üst kademe düşük olamaz');
+  const camp = await api('POST', '/api/admin/payments/campaigns', { token: U.d.token, body: {
+    title: 'E2E Kampanya', appliesTo: 'dealer', bonusBps: 500, startsAt: new Date(Date.now() - 60e3).toISOString(), endsAt: new Date(Date.now() + 3600e3).toISOString() } });
+  status(camp, 201);
+  status(await api('GET', '/api/admin/payments/incentives', { token: owner.token }), 403, 'bayi teşvik ayarını göremez');
+
+  const shop = await api('GET', '/api/dealer/shop', { token: owner.token });
+  ok(shop);
+  const item = shop.body.packages.find((p) => p.code === 'Y_480K');
+  assert.equal(item.bonusCoins, String(10000 + 14400 + 24000), JSON.stringify(item.bonus));
+  assert.equal(item.totalCoins, '528400');
+  assert.deepEqual(shop.body.providers.map((p) => p.id).sort(), ['bank', 'paytr', 'usdt_trc20']);
+  status(await api('GET', '/api/dealer/shop', { token: buyer.token }), 403, 'bayi olmayan mağazayı göremez');
+
+  // 1) Havale: sipariş açılır, Coin YOK; yönetici dekontu teyit edince stok + bonus + maliyet.
+  const o1 = await api('POST', '/api/dealer/orders', { token: owner.token, body: { packageCode: 'Y_480K', provider: 'bank' } });
+  status(o1, 201);
+  assert.equal(o1.body.order.pay.type, 'bank');
+  assert.equal(o1.body.order.amount, '2500.00');
+  const bal = async () => BigInt((await sql(`SELECT coin_balance FROM dealer_accounts WHERE id = $1`, [dealerId])).rows[0].coin_balance);
+  assert.equal(await bal(), 0n, 'ödeme teyit edilmeden stok yok');
+  status(await api('POST', `/api/admin/payments/orders/${o1.body.order.orderNo}/confirm`, { token: owner.token, body: { reference: 'X' } }), 403);
+  ok(await api('POST', `/api/admin/payments/orders/${o1.body.order.orderNo}/confirm`, { token: U.d.token, body: { reference: `DEKONT-${tag}` } }));
+  assert.equal(await bal(), 528400n);
+  assert.equal(Number((await sql(`SELECT stock_cost_try FROM dealer_accounts WHERE id = $1`, [dealerId])).rows[0].stock_cost_try), 2500);
+  status(await api('POST', `/api/admin/payments/orders/${o1.body.order.orderNo}/confirm`, { token: U.d.token, body: { reference: 'BASKA' } }), 409, 'ikinci teyit yok');
+  const o2 = await api('POST', '/api/dealer/orders', { token: owner.token, body: { packageCode: 'Y_480K', provider: 'bank' } });
+  status(await api('POST', `/api/admin/payments/orders/${o2.body.order.orderNo}/confirm`, { token: U.d.token, body: { reference: `DEKONT-${tag}` } }), 409, 'aynı dekont iki siparişe sayılmaz');
+  assert.equal(await bal(), 528400n);
+  ok(await api('POST', `/api/admin/payments/orders/${o2.body.order.orderNo}/cancel`, { token: U.d.token, body: { note: 'e2e' } }));
+  const tx1 = await sql(`SELECT type, coin_amount::text AS c FROM dealer_transactions WHERE dealer_id = $1 ORDER BY type`, [dealerId]);
+  assert.deepEqual(tx1.rows.map((r) => [r.type, r.c]), [['bonus', '48400'], ['stock_purchase', '480000']]);
+
+  // 2) Satış bedeliyle satış → gelir-gider: 132.100 Coin'in maliyeti 2500 × 132100 / 528400 = 625 TL; 800 TL'ye satıldı → 175 TL kâr.
+  ok(await api('POST', '/api/dealer/sell', { token: owner.token, body: { userId: buyer.id, amount: '132100', priceTry: '800' }, headers: { 'Idempotency-Key': crypto0.randomUUID() } }));
+  status(await api('POST', '/api/dealer/sell', { token: owner.token, body: { userId: buyer.id, amount: '1', priceTry: '-3' }, headers: { 'Idempotency-Key': crypto0.randomUUID() } }), 400);
+  const fin = await api('GET', '/api/dealer/finance', { token: owner.token });
+  ok(fin);
+  assert.deepEqual([fin.body.revenueTry, fin.body.cogsTry, fin.body.profitTry, fin.body.marginBps], ['800.00', '625.00', '175.00', 2187]);
+  assert.equal(fin.body.spentTry, '2500.00');
+  assert.equal(fin.body.bonusCoins, '48400');
+  assert.equal(fin.body.stock.coins, '396300');
+  assert.equal(fin.body.stock.costTry, '1875.00');
+
+  // 3) "5 dakika sonra" satış iptal edilir: Coin ve maliyeti stoka döner, alıcıya geçmez.
+  const sch = await api('POST', '/api/dealer/sell', { token: owner.token, body: { userId: buyer.id, amount: '1000', delayMinutes: 5 }, headers: { 'Idempotency-Key': crypto0.randomUUID() } });
+  ok(sch);
+  assert.equal(await bal(), 395300n);
+  const buyerCoins = await coins(buyer);
+  ok(await api('POST', `/api/dealer/transactions/${sch.body.transactionId}/cancel`, { token: owner.token }));
+  status(await api('POST', `/api/dealer/transactions/${sch.body.transactionId}/cancel`, { token: owner.token }), 409, 'iki kez iptal yok');
+  assert.equal(await bal(), 396300n);
+  assert.equal(await coins(buyer), buyerCoins);
+  assert.equal((await api('GET', '/api/dealer/finance', { token: owner.token })).body.stock.costTry, '1875.00', 'iptalde maliyet geri döndü');
+
+  // 4) PayTR bildirimi: imza yanlışsa Coin yok; doğruysa bir kere.
+  const crypto = await import('node:crypto');
+  const pno = `TR${'P'.repeat(10)}${String(Date.now()).slice(-6)}`;
+  await sql(
+    `INSERT INTO payment_orders(order_no, kind, user_id, package_code, coins, bonus_coins, price_try, amount_minor, currency, provider, expires_at)
+     VALUES($1,'user',$2,'x',7000,0,42.99,4299,'TRY','paytr',NOW() + INTERVAL '30 minutes')`, [pno, buyer.id]);
+  const sign = (st, amount) => crypto.createHmac('sha256', 'e2e-paytr-key').update(`${pno}e2e-paytr-salt${st}${amount}`).digest('base64');
+  const cb = (body) => fetch(`${BASE}/pay/callback/paytr`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(body) });
+  const bad = await cb({ merchant_oid: pno, status: 'success', total_amount: '4299', payment_amount: '4299', hash: 'sahte' });
+  assert.equal(bad.status, 400);
+  const c0 = await coins(buyer);
+  const good = { merchant_oid: pno, status: 'success', total_amount: '4299', payment_amount: '4299', hash: sign('success', '4299') };
+  const r1 = await cb(good);
+  assert.equal(await r1.text(), 'OK');
+  assert.equal(await coins(buyer), c0 + 7000n);
+  assert.equal(await (await cb(good)).text(), 'OK', 'tekrar bildirim de OK');
+  assert.equal(await coins(buyer), c0 + 7000n, 'tekrar bildirim çift yazmaz');
+  const wt = await sql(`SELECT COUNT(*)::int AS n FROM wallet_transactions WHERE user_id = $1 AND transaction_type = 'web_topup' AND reference_id = $2`, [buyer.id, pno]);
+  assert.equal(wt.rows[0].n, 1);
+
+  // 5) Web yükleme sayfası + USDT: ID ile alıcı görünür, sipariş tutarı benzersiz; zincirde aynı tutar görülünce Coin yazılır.
+  const page = await fetch(`${BASE}/pay`);
+  assert.equal(page.status, 200);
+  assert.match(await page.text(), /Coin Yükle/);
+  const pub = (await sql(`SELECT public_id FROM users WHERE id = $1`, [buyer.id])).rows[0].public_id;
+  const lk = await (await fetch(`${BASE}/pay/api/lookup?id=${pub}`)).json();
+  assert.equal(lk.user.publicId, pub);
+  assert.equal((await fetch(`${BASE}/pay/api/lookup?id=99999999999`)).status, 404);
+  const cfg = await (await fetch(`${BASE}/pay/api/config`)).json();
+  const pk = cfg.packages[0];
+  const ou = await (await fetch(`${BASE}/pay/api/orders`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ publicId: pub, packageId: pk.id, provider: 'usdt_trc20' }) })).json();
+  assert.equal(ou.order.pay.type, 'crypto', JSON.stringify(ou));
+  const micro = BigInt(ou.order.amount.replace('.', ''));
+  process.env.DATABASE_URL = DB; process.env.DATABASE_SSL = 'false'; process.env.JWT_SECRET = env.JWT_SECRET; process.env.NODE_ENV = 'test';
+  process.env.USDT_TRC20_ADDRESS = env.USDT_TRC20_ADDRESS;
+  const { runUsdtWatcher } = await import('../src/modules/payments/payments.service.js');
+  const { USDT_TRC20_CONTRACT } = await import('../src/modules/payments/payments.rules.js');
+  const chain = (value, id) => ({ transaction_id: id, from: 'TSENDER', to: env.USDT_TRC20_ADDRESS, value: String(value), block_timestamp: Date.now(),
+    token_info: { address: USDT_TRC20_CONTRACT, decimals: 6 } });
+  const fake = (list) => async () => ({ ok: true, json: async () => ({ data: list }) });
+  const c1 = await coins(buyer);
+  const w1 = await runUsdtWatcher({ fetchImpl: fake([chain(micro + 1n, 'c'.repeat(64)), chain(micro, 'd'.repeat(64))]) });
+  assert.equal(w1.credited, 1, JSON.stringify(w1));
+  assert.equal(await coins(buyer), c1 + BigInt(pk.coins) + BigInt(pk.bonusCoins));
+  const w2 = await runUsdtWatcher({ fetchImpl: fake([chain(micro, 'd'.repeat(64))]) });
+  assert.equal(w2.credited, 0);
+  assert.equal(await coins(buyer), c1 + BigInt(pk.coins) + BigInt(pk.bonusCoins), 'aynı işlem iki kez sayılmaz');
+  const st = await (await fetch(`${BASE}/pay/api/orders/${ou.order.orderNo}`)).json();
+  assert.equal(st.order.status, 'paid');
+  const um = await api('GET', '/api/admin/payments/unmatched', { token: U.d.token });
+  assert.ok(um.body.events.some((e) => e.data.txid === 'c'.repeat(64)), 'tutarı tutmayan transfer yönetime düşer');
+  const list = await api('GET', `/api/admin/payments/orders?q=${ou.order.orderNo}`, { token: U.d.token });
+  assert.equal(list.body.orders[0].providerRef, 'd'.repeat(64));
+  ok(await api('GET', '/api/admin/payments/status', { token: U.d.token }));
+
+  // Geri al: sonraki testler etkilenmesin.
+  ok(await api('PUT', '/api/admin/app-config', { token: U.d.token, body: { payBankEnabled: false, payPaytrEnabled: false, payUsdtEnabled: false } }));
+  ok(await api('DELETE', `/api/admin/payments/campaigns/${camp.body.id}`, { token: U.d.token }));
 });
 
 // EN SONDA: yayımlanan sözleşmeler silinemez ve ödeme/panel kapılarını açar; önceki testleri etkilemesin.

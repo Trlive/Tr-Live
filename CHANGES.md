@@ -1,3 +1,74 @@
+## v2.153.0 — Coin bayilik sistemi v2: otomatik ödeme, teşvik, gelir-gider, web yükleme sayfası
+
+Rakiplerdeki (Yoho / Bigo / Xena) üç parçalı yapı: uygulama içi bayi paneli + harici yükleme kanalı + bayi teşvik sistemi.
+Asıl eksik paranın akışıydı: bayi stok paketini seçip bağlantıya ödüyor, yönetici talebi **elle** onaylıyordu.
+
+**Otomatik ödeme siparişleri** (`payment_orders`, migration 122)
+- Yöntemler: **Kart (PayTR iFrame)**: imzalı bildirimle (HMAC) Coin anında yazılır. **USDT (TRC20)**: her siparişe benzersiz
+  tutar verilir; sunucu dakikada bir cüzdanı (TronGrid, yalnızca onaylı işlemler, resmi USDT sözleşmesi) okuyup tutarla eşler.
+  **Havale/EFT**: IBAN + sipariş no gösterilir, yönetici dekont numarasıyla teyit eder.
+- Para güvenliği: Coin yalnızca ödeme doğrulanınca ve BİR KERE yazılır.
+  - Sipariş satırı kilitlenir.
+  - Aynı ödeme (işlem özeti / dekont no) iki siparişe bağlanamaz (benzersiz indeks).
+  - Tutar uyuşmazsa Coin yazılmaz.
+  - Tekrar gelen bildirim çift yazmaz.
+  - Süresi geçmiş siparişe sonradan gelen ödeme yine yazılır; iptal edilmiş siparişe yazılmaz.
+  - Eşleşmeyen transferler yönetime düşer.
+- Gizli anahtarlar yalnızca sunucu ortamında (`PAYTR_*`, `USDT_TRC20_ADDRESS`, `TRONGRID_API_KEY`, `PUBLIC_BASE_URL`); panelde aç/kapa.
+  Anahtarı olmayan yöntem görünmez; hiçbiri yoksa bayi eski usul (bağlantı + talep) akışını görür.
+
+**Web yükleme sayfası `/pay`** (herkese açık): kullanıcı uygulama ID'sini girer, kişi kartı (ad + avatar) görünür, paket ve yöntem seçer, öder;
+Coin otomatik hesabına geçer. Sayfa sipariş durumunu kendisi yoklar. Giriş istemez; uygulamadan bu sayfaya bağlantı verilmez.
+
+**Bayi teşvik sistemi**
+- Paket bonusu (ek Coin; paketin yarısını geçemez).
+- **Aylık hacim kademesi** (Bronz / Gümüş / Altın / Elmas; bu ayki toptan alım + bu sipariş eşiği geçince % ek Coin).
+- **Kampanya** (tarih aralığı, bayi / web / ikisi, en az tutar).
+- Toplam ek oran üst sınırı %60.
+- Ek Coin siparişte sabitlenir ve stoğa ayrı "bonus" satırı olarak yazılır.
+
+**Bayi gelir-gider**
+- Satışta isteğe bağlı "satış bedeli" girilir (uygulama ve web bayi portalı).
+- Stok maliyeti **ağırlıklı ortalama** ile tutulur (ek Coin maliyetsiz; alt bayi aktarımında maliyet taşınır ya da aktarım bedeliyle geçer).
+- Rapor:
+  - satış geliri, satılan Coin'in maliyeti, brüt kâr ve marj,
+  - stok alımı, ek Coin, stok değeri, 1.000 Coin ortalama maliyeti,
+  - günlük döküm,
+  - bedeli girilmemiş satışlar ayrıca.
+- Kuruş hatası yok: hesap 1e-4 TL ölçekli tam sayıyla.
+
+**Diğer**
+- "5 dakika sonra hesaba geçiş" satışı teslimden önce **iptal** edilebilir (Coin ve maliyet stoğa döner).
+- İşlem geçmişinde alt bayi aktarımı artık "çıkış" sayılıyor.
+
+**Ekranlar**
+- **Uygulama:**
+  - Stok yükle: Kart / USDT / Havale; paketlerde ek Coin; ay kademesi ve kampanya şeridi.
+  - Sipariş ekranı: ödeme sayfası, USDT adresi ve tam tutar, havale bilgisi; ödeme doğrulanınca kendiliğinden "Ödendi" olur.
+  - Yeni: Gelir-Gider ve Siparişlerim. Satış ekranında "Satış bedeli" alanı, geçmişte "İptal".
+- **Web bayi portalı:** Stok Satın Al (otomatik ödeme), Gelir-Gider, satışta bedel.
+- **Yönetim paneli:**
+  - Ekonomi → Ödemeler: siparişler, havale teyidi, iptal, eşleşmeyen ödemeler, kademe ve kampanya düzenleme, kurulum durumu.
+  - Bayi Mağazası: paket "Ek Coin" alanı.
+  - Ayarlar → Coin satış kanalları.
+  - Bayiye elle Coin yüklemede isteğe bağlı bedel (maliyete eklenir).
+
+**Kurulum:** sunucuda `/opt/trlive/env/extra.env` içine anahtarlar (bkz. `backend/.env.example`). PayTR Mağaza Paneli → Bildirim URL:
+`{PUBLIC_BASE_URL}/pay/callback/paytr`. Sonra Panel → Ayarlar → Coin satış kanalları'ndan yöntemleri açın.
+
+**Sınama:**
+- backend 536 birim testi (yeni 9 test: sipariş no, kuruş, USDT tutarı, kademe, bonus ve üst sınır, ağırlıklı maliyet ve kalan artık, kâr/marj,
+  PayTR token ve bildirim imzası, TRC20 süzme);
+- gerçek PostgreSQL'de 55/55 e2e. Yeni e2e testi:
+  - havale → teyit → stok + bonus + maliyet,
+  - ikinci teyit ve aynı dekont reddi,
+  - satış bedeli → 175 ₺ kâr / %21,87 marj,
+  - 5 dk satış iptali,
+  - PayTR sahte imza reddi ve tekrar bildirimde çift yazmama,
+  - `/pay` sayfası, ID arama, USDT zincir eşleşmesi ve yanlış tutarın yönetime düşmesi.
+- `flutter analyze` 0 hata/0 uyarı, `flutter test` 71/71; panel `tsc` 0 hata;
+- `/pay` akışı telefonda (390 px) Playwright ile denendi.
+
 ## v2.152.22 — Maaş düzeltmesi: neden yatmadığı görünür, ay sonu elmas kuralı, otomatik dönem kapanışı, yayıncıya elmas bozdurma
 
 **"Fasulye hâlâ 0" sorunu.** Ay içi maaş (avans) her 3 dakikada yatıyor, ama yalnızca **telefonu doğrulanmış** yayıncıya. Ekran ise

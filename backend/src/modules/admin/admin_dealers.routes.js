@@ -56,10 +56,13 @@ router.post('/dealers/:dealerId/coins', requireSuperAdmin, idempotent('dealer_cr
     if (!dealer) throw fail('Bayi bulunamadı.', 404);
     const before = BigInt(dealer.coin_balance);
     const balance = before + amount;
-    await c.query(`UPDATE dealer_accounts SET coin_balance = $1 WHERE id = $2`, [balance.toString(), dealer.id]);
+    // Tahsil edilen bedel (isteğe bağlı, TL): bayinin stok maliyetine eklenir (gelir-gider raporu). Boşsa maliyetsiz yükleme.
+    const pt = req.body?.priceTry === undefined || req.body?.priceTry === null || req.body?.priceTry === '' ? null : String(req.body.priceTry).trim();
+    if (pt !== null && !/^\d{1,12}(\.\d{1,2})?$/.test(pt)) throw fail('Bedel geçersiz (ör. 2500 ya da 2500.50).');
+    await c.query(`UPDATE dealer_accounts SET coin_balance = $1, stock_cost_try = stock_cost_try + COALESCE($3::numeric, 0) WHERE id = $2`, [balance.toString(), dealer.id, pt]);
     await c.query(
-      `INSERT INTO dealer_transactions(dealer_id, admin_id, type, coin_amount, description) VALUES($1,$2,'credit',$3,$4)`,
-      [dealer.id, req.user.id, amount.toString(), text(req.body?.description, 'Açıklama', { max: 200 }) || 'Admin bayi Coin yükleme'],
+      `INSERT INTO dealer_transactions(dealer_id, admin_id, type, coin_amount, description, cost_try, price_try) VALUES($1,$2,'credit',$3,$4,$5,$5)`,
+      [dealer.id, req.user.id, amount.toString(), text(req.body?.description, 'Açıklama', { max: 200 }) || 'Admin bayi Coin yükleme', pt],
     );
     await c.query(
       `INSERT INTO financial_audit_logs(admin_id, action, reference_type, reference_id, amount_coins, balance_before, balance_after)

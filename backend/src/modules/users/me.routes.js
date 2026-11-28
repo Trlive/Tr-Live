@@ -380,7 +380,7 @@ router.post('/diamonds/exchange', userLimit('diamond_exchange', 20, 10 * 60e3), 
 // Coin geçmişi: tür grubuna göre süzülebilir, "daha fazla" ile geriye doğru sayfalanır (before = son kaydın zamanı).
 const WALLET_GROUPS = {
   gift: ['gift_sent', 'gift_received', 'lucky_gift_win'],
-  topup: ['dealer_credit', 'admin_adjustment', 'daily_bonus'],
+  topup: ['dealer_credit', 'web_topup', 'admin_adjustment', 'daily_bonus'],
   exchange: ['diamond_exchange', 'bean_exchange', 'bean_received'],
   shop: ['store_purchase', 'wip_purchase'],
   bag: ['lucky_bag_sent', 'lucky_bag_received', 'lucky_bag_refund'],

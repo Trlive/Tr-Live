@@ -26,6 +26,7 @@ class WalletScreen extends StatelessWidget {
     'dealer_credit': 'Bayi yüklemesi',
     'admin_adjustment': 'Yönetici düzenlemesi',
     'diamond_exchange': 'Elmas bozdurma',
+    'web_topup': 'Web yükleme',
     'bean_exchange': 'Fasulye çevirme',
     'bean_received': 'Fasulyeden gelen Coin',
     'lucky_bag_sent': 'Şanslı çanta gönderildi',

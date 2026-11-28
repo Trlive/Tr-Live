@@ -98,6 +98,15 @@ export const CONFIG_DEFAULTS = Object.freeze({
   // GEÇİCİ değer: bayi liste fiyatına (100 Coin ≈ 1 TL, 1 dolar ≈ 40 TL) göre, bayi kuruyla aynı seçildi; panelden ayarlanır.
   usdCoinsPerUsd: 4000,
   usdExchangeMinCents: 100,
+  // Coin satış kanalları (v2.153.0). Gizli anahtarlar ortam değişkeninde (PAYTR_*, USDT_TRC20_ADDRESS, TRONGRID_API_KEY);
+  // burada yalnızca açık/kapalı ve gizli olmayan değerler. Anahtarı tanımlı olmayan yöntem açık olsa da görünmez.
+  payPaytrEnabled: false, // kart (PayTR): ödeme onaylanınca Coin otomatik yazılır
+  payUsdtEnabled: false, // USDT (TRC20): zincirde görülen transfer, tutarıyla siparişe eşlenir
+  payBankEnabled: false, // havale / EFT: yönetici dekontu teyit edince yazılır
+  payWebTopupEnabled: true, // web yükleme sayfasında kullanıcıların kendi ID'leriyle yükleme yapması
+  payUsdtRateKurus: 4200, // 1 USDT kaç kuruş (4200 = 42,00 TL)
+  payOrderTtlMin: 30, // kart ve USDT siparişinin geçerlilik süresi (dakika); havale 48 saat
+  payBankInfo: '', // havale bilgisi (banka, IBAN, alıcı adı) — siparişte gösterilir
   // Medya bütçesi: hediye / çerçeve / efekt dosyalarının üst sınırları. Telefonun belleği ve video çözücüsü sınırlı;
   // sınırı aşan dosya yüklenirken (ve "Medya bütçesi" ekranından mevcutlarda) otomatik olarak bu sınıra indirilir.
   mediaBudgetAuto: true, // yüklenen dosyayı otomatik sınıra indir
@@ -184,6 +193,8 @@ export function validateConfigPatch(body) {
       if (typeof v !== 'string' || (v && !/^https:\/\/[^\s/]{4,200}$/.test(v))) throw fail('CDN kökü https ile başlamalı ve yol içermemeli (ör. https://cdn.alanadi.com).');
     } else if (k === 'r2AccountId' || k === 'r2Bucket' || k === 'r2AccessKey' || k === 'r2SecretKey') {
       if (typeof v !== 'string' || v.length > 200) throw fail(`${k} en fazla 200 karakter olmalı.`);
+    } else if (k === 'payBankInfo') {
+      if (typeof v !== 'string' || v.length > 500) throw fail('Havale bilgisi en fazla 500 karakter olmalı.');
     } else if (k === 'contractCompany') {
       if (typeof v !== 'string' || v.length > 500 || /[\u0000-\u001f]/.test(v)) throw fail('İşletmeci bilgisi en fazla 500 karakterlik tek satır olmalı.');
     } else if (k === 'smtpHost') {
@@ -203,7 +214,7 @@ export function validateConfigPatch(body) {
         luckyRtpBps: [0, 9000], luckyJackpotShareBps: [0, 8000], luckyReceiverBps: [0, 5000], luckyMaxWin: [1, 1000000000], luckyAnnounceMultiplier: [10, 1000],
         flyTextCoins: [0, 1000000], ludoEntrySilver: [0, 100000000], tekEntrySilver: [0, 100000000], checkinItemDays: [1, 90], smtpPort: [1, 65535],
         usdWithdrawMinCents: [100, 100000000], usdDealerMinCents: [100, 100000000], usdDealerCoinsPerUsd: [1, 100000000],
-        usdCoinsPerUsd: [1, 100000000], usdExchangeMinCents: [1, 100000000],
+        usdCoinsPerUsd: [1, 100000000], usdExchangeMinCents: [1, 100000000], payUsdtRateKurus: [100, 100000000], payOrderTtlMin: [5, 1440],
         mediaMp4MaxWidth: [180, 1080], mediaMp4MaxHeight: [180, 1920], mediaMp4MaxFps: [10, 30], mediaMp4MaxKb: [256, 40960],
         mediaSvgaMaxKb: [256, 40960], mediaSvgaMaxSide: [128, 2048], mediaSvgaMaxDecodedMb: [8, 256],
         mediaImageMaxSide: [128, 2048], mediaImageMaxKb: [64, 20480], mediaSmallMaxSide: [128, 1024], mediaIconMaxSide: [64, 1024],

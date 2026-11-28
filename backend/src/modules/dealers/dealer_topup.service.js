@@ -18,6 +18,7 @@ export const packageView = (p) => ({
   priceTry: p.priceTry,
   listTry: p.listTry,
   discountPct: p.listTry > 0 ? Math.round((1 - p.priceTry / p.listTry) * 100) : 0,
+  bonusCoins: String(p.bonusCoins ?? 0),
 });
 
 export const packagesView = () => DEALER_TOPUP_PACKAGES.map(packageView);
@@ -60,7 +61,7 @@ export async function loadPackages(run, { all = false } = {}) {
   try {
     const rows = (await run(`SELECT * FROM dealer_packages ${all ? '' : 'WHERE active'} ORDER BY sort_order, coins`)).rows;
     if (rows.length || all) {
-      return rows.map((r) => ({ code: r.code, coins: BigInt(r.coins), priceTry: Number(r.price_try), listTry: Number(r.list_try), label: r.label, active: r.active, sortOrder: r.sort_order }));
+      return rows.map((r) => ({ code: r.code, coins: BigInt(r.coins), priceTry: Number(r.price_try), listTry: Number(r.list_try), label: r.label, active: r.active, sortOrder: r.sort_order, bonusCoins: BigInt(r.bonus_coins ?? 0) }));
     }
   } catch (e) {
     if (e?.code !== '42P01') throw e;
@@ -111,11 +112,12 @@ export async function approveTopupRequest(c, { requestId, adminId, reviewNote })
   const coins = BigInt(req.requested_coins);
   const before = BigInt(dealer.coin_balance);
   const after = before + coins;
-  await c.query(`UPDATE dealer_accounts SET coin_balance = $1 WHERE id = $2`, [after.toString(), dealer.id]);
+  // Toptan bedel stok maliyetine eklenir (gelir-gider raporu: ağırlıklı ortalama maliyet).
+  await c.query(`UPDATE dealer_accounts SET coin_balance = $1, stock_cost_try = stock_cost_try + COALESCE($3::numeric, 0) WHERE id = $2`, [after.toString(), dealer.id, req.price_try]);
   await c.query(
-    `INSERT INTO dealer_transactions(dealer_id, admin_id, type, coin_amount, description)
-     VALUES($1,$2,'admin_topup',$3,$4)`,
-    [dealer.id, adminId, coins.toString(), `Bayi bakiye yüklemesi (paket ${req.package_code})`],
+    `INSERT INTO dealer_transactions(dealer_id, admin_id, type, coin_amount, description, cost_try, price_try)
+     VALUES($1,$2,'admin_topup',$3,$4,$5,$5)`,
+    [dealer.id, adminId, coins.toString(), `Bayi bakiye yüklemesi (paket ${req.package_code})`, req.price_try],
   );
   await c.query(
     `INSERT INTO financial_audit_logs(admin_id, action, reference_type, reference_id, amount_coins, balance_before, balance_after, metadata)

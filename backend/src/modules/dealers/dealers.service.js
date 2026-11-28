@@ -1,31 +1,34 @@
 import { fail } from '../../shared/errors/http.js';
 import { addFamilyContrib } from '../families/family.service.js';
+import { costOut, toScaled4, fromScaled4 } from '../payments/payments.rules.js';
 
 // Bayi bakiyesinden kullanıcıya Coin satışı. Çağıran, bir transaction (client "c") içinde olmalıdır.
-export async function dealerSell(c, { dealerId, userId, coins, actorId, description, delayMinutes = 0 }) {
+// priceTry: bayinin müşteriden aldığı bedel (isteğe bağlı; gelir-gider raporu için). Stok maliyeti ağırlıklı ortalamayla düşer.
+export async function dealerSell(c, { dealerId, userId, coins, actorId, description, delayMinutes = 0, priceTry = null }) {
   const dealer = (await c.query(`SELECT * FROM dealer_accounts WHERE id = $1 AND is_active = TRUE FOR UPDATE`, [dealerId])).rows[0];
   if (!dealer) throw fail('Bayi bulunamadı.', 404);
   const user = (await c.query(`SELECT coins FROM users WHERE id = $1 AND account_status = 'active' FOR UPDATE`, [userId])).rows[0];
   if (!user) throw fail('Kullanıcı bulunamadı.', 404);
   const balance = BigInt(dealer.coin_balance);
   if (balance < coins) throw fail('Bayinin Coin bakiyesi yetersiz.');
+  const cost = fromScaled4(costOut(toScaled4(dealer.stock_cost_try ?? '0'), balance, coins));
   if (delayMinutes > 0) {
-    // Gecikmeli teslim: Coin bayiden şimdi düşer, kullanıcıya teslim zamanında (deliverScheduled) geçer.
-    await c.query(`UPDATE dealer_accounts SET coin_balance = coin_balance - $1 WHERE id = $2`, [coins.toString(), dealer.id]);
+    // Gecikmeli teslim: Coin bayiden şimdi düşer, kullanıcıya teslim zamanında (deliverScheduled) geçer. Süre dolmadan iptal edilebilir.
+    await c.query(`UPDATE dealer_accounts SET coin_balance = coin_balance - $1, stock_cost_try = stock_cost_try - $3 WHERE id = $2`, [coins.toString(), dealer.id, cost]);
     const t = (await c.query(
-      `INSERT INTO dealer_transactions(dealer_id, admin_id, user_id, type, coin_amount, description, status, deliver_at)
-       VALUES($1,$2,$3,'sale',$4,$5,'scheduled', NOW() + ($6::int * INTERVAL '1 minute')) RETURNING id, deliver_at`,
-      [dealer.id, actorId, userId, coins.toString(), description || 'Bayi kullanıcı Coin satışı', delayMinutes],
+      `INSERT INTO dealer_transactions(dealer_id, admin_id, user_id, type, coin_amount, description, status, deliver_at, cost_try, price_try)
+       VALUES($1,$2,$3,'sale',$4,$5,'scheduled', NOW() + ($6::int * INTERVAL '1 minute'), $7, $8) RETURNING id, deliver_at`,
+      [dealer.id, actorId, userId, coins.toString(), description || 'Bayi kullanıcı Coin satışı', delayMinutes, cost, priceTry],
     )).rows[0];
     return { dealerBalance: (balance - coins).toString(), userBalance: String(user.coins), scheduled: true, deliverAt: t.deliver_at, transactionId: t.id };
   }
   const before = BigInt(user.coins);
   const after = before + coins;
-  await c.query(`UPDATE dealer_accounts SET coin_balance = coin_balance - $1 WHERE id = $2`, [coins.toString(), dealer.id]);
+  await c.query(`UPDATE dealer_accounts SET coin_balance = coin_balance - $1, stock_cost_try = stock_cost_try - $3 WHERE id = $2`, [coins.toString(), dealer.id, cost]);
   await c.query(`UPDATE users SET coins = $1, updated_at = NOW() WHERE id = $2`, [after.toString(), userId]);
   await c.query(
-    `INSERT INTO dealer_transactions(dealer_id, admin_id, user_id, type, coin_amount, description) VALUES($1,$2,$3,'sale',$4,$5)`,
-    [dealer.id, actorId, userId, coins.toString(), description || 'Bayi kullanıcı Coin satışı'],
+    `INSERT INTO dealer_transactions(dealer_id, admin_id, user_id, type, coin_amount, description, cost_try, price_try) VALUES($1,$2,$3,'sale',$4,$5,$6,$7)`,
+    [dealer.id, actorId, userId, coins.toString(), description || 'Bayi kullanıcı Coin satışı', cost, priceTry],
   );
   await c.query(
     `INSERT INTO wallet_transactions(user_id, transaction_type, coin_amount, reference_id, description) VALUES($1,'dealer_credit',$2,$3,$4)`,
@@ -54,7 +57,7 @@ export async function deliverScheduled(c, limit = 50) {
     const coins = BigInt(t.coin_amount);
     const user = (await c.query(`SELECT coins FROM users WHERE id = $1 AND account_status = 'active' FOR UPDATE`, [t.user_id])).rows[0];
     if (!user) {
-      await c.query(`UPDATE dealer_accounts SET coin_balance = coin_balance + $1 WHERE id = $2`, [coins.toString(), t.dealer_id]);
+      await c.query(`UPDATE dealer_accounts SET coin_balance = coin_balance + $1, stock_cost_try = stock_cost_try + COALESCE($3::numeric, 0) WHERE id = $2`, [coins.toString(), t.dealer_id, t.cost_try]);
       await c.query(`UPDATE dealer_transactions SET status = 'refunded' WHERE id = $1`, [t.id]);
       continue;
     }
@@ -77,6 +80,27 @@ export async function deliverScheduled(c, limit = 50) {
   return out;
 }
 
+/**
+ * Teslim zamanı gelmemiş (5 dk sonra geçiş) satışı iptal eder: Coin ve maliyeti bayi stokuna döner. Yalnızca o bayi.
+ * Teslim edicinin seçtiği satırla yarışmasın diye satır kilitlenir; 'scheduled' değilse (teslim edildi) iptal yok.
+ */
+export async function cancelScheduled(c, { dealerId, transactionId, actorId }) {
+  const t = (await c.query(`SELECT * FROM dealer_transactions WHERE id = $1 AND dealer_id = $2 FOR UPDATE`, [transactionId, dealerId])).rows[0];
+  if (!t) throw fail('İşlem bulunamadı.', 404);
+  if (t.status !== 'scheduled') throw fail('Bu satış teslim edildi ya da iptal edildi; geri alınamaz.', 409);
+  await c.query(`UPDATE dealer_transactions SET status = 'cancelled' WHERE id = $1`, [t.id]);
+  const bal = (await c.query(
+    `UPDATE dealer_accounts SET coin_balance = coin_balance + $2, stock_cost_try = stock_cost_try + COALESCE($3::numeric, 0) WHERE id = $1 RETURNING coin_balance`,
+    [dealerId, String(t.coin_amount), t.cost_try],
+  )).rows[0].coin_balance;
+  await c.query(
+    `INSERT INTO financial_audit_logs(admin_id, user_id, action, reference_type, reference_id, amount_coins, metadata)
+     VALUES($1,$2,'dealer_sale_cancel','dealer_transaction',$3,$4,$5)`,
+    [actorId, t.user_id, t.id, String(t.coin_amount), JSON.stringify({ dealerId })],
+  );
+  return { dealerBalance: String(bal), coins: String(t.coin_amount) };
+}
+
 // ---------------------------------------------------------------------------
 // Ana bayi / Alt bayi
 // ---------------------------------------------------------------------------
@@ -93,12 +117,13 @@ export async function deliverScheduled(c, limit = 50) {
  * aynı anda ters yönde gelse bile kilit sırası aynı olduğu için karşılıklı kilitlenme
  * (deadlock) oluşmaz.
  */
-export async function transferToSub(c, { parentId, subId, coins, actorId, description }) {
+// priceTry: ana bayinin alt bayiden aldığı bedel (isteğe bağlı). Verilmezse alt bayiye ana bayinin maliyetiyle geçer.
+export async function transferToSub(c, { parentId, subId, coins, actorId, description, priceTry = null }) {
   if (parentId === subId) throw fail('Bayi kendine aktarım yapamaz.');
   if (!(coins > 0n)) throw fail('Aktarılacak Coin 0 olamaz.');
 
   const parent = (await c.query(
-    `SELECT id, name, coin_balance, parent_dealer_id FROM dealer_accounts WHERE id = $1 AND is_active = TRUE FOR UPDATE`,
+    `SELECT id, name, coin_balance, parent_dealer_id, stock_cost_try FROM dealer_accounts WHERE id = $1 AND is_active = TRUE FOR UPDATE`,
     [parentId],
   )).rows[0];
   if (!parent) throw fail('Ana bayi bulunamadı.', 404);
@@ -116,18 +141,20 @@ export async function transferToSub(c, { parentId, subId, coins, actorId, descri
   const before = BigInt(parent.coin_balance);
   if (before < coins) throw fail('Bakiyeniz yetersiz.');
 
-  await c.query(`UPDATE dealer_accounts SET coin_balance = coin_balance - $1 WHERE id = $2`, [coins.toString(), parent.id]);
-  await c.query(`UPDATE dealer_accounts SET coin_balance = coin_balance + $1 WHERE id = $2`, [coins.toString(), sub.id]);
+  const cost = fromScaled4(costOut(toScaled4(parent.stock_cost_try ?? '0'), before, coins));
+  const subCost = priceTry !== null ? String(priceTry) : cost;
+  await c.query(`UPDATE dealer_accounts SET coin_balance = coin_balance - $1, stock_cost_try = stock_cost_try - $3 WHERE id = $2`, [coins.toString(), parent.id, cost]);
+  await c.query(`UPDATE dealer_accounts SET coin_balance = coin_balance + $1, stock_cost_try = stock_cost_try + $3 WHERE id = $2`, [coins.toString(), sub.id, subCost]);
   const note = description || `Alt bayi aktarımı`;
   await c.query(
-    `INSERT INTO dealer_transactions(dealer_id, admin_id, type, coin_amount, description)
-     VALUES($1,$2,'sub_transfer_out',$3,$4)`,
-    [parent.id, actorId, coins.toString(), `${note} → ${sub.name}`],
+    `INSERT INTO dealer_transactions(dealer_id, admin_id, type, coin_amount, description, cost_try, price_try)
+     VALUES($1,$2,'sub_transfer_out',$3,$4,$5,$6)`,
+    [parent.id, actorId, coins.toString(), `${note} → ${sub.name}`, cost, priceTry],
   );
   await c.query(
-    `INSERT INTO dealer_transactions(dealer_id, admin_id, type, coin_amount, description)
-     VALUES($1,$2,'sub_transfer_in',$3,$4)`,
-    [sub.id, actorId, coins.toString(), `${note} ← ${parent.name}`],
+    `INSERT INTO dealer_transactions(dealer_id, admin_id, type, coin_amount, description, cost_try, price_try)
+     VALUES($1,$2,'sub_transfer_in',$3,$4,$5,$6)`,
+    [sub.id, actorId, coins.toString(), `${note} ← ${parent.name}`, subCost, priceTry],
   );
   await c.query(
     `INSERT INTO financial_audit_logs(admin_id, action, reference_type, reference_id, amount_coins, balance_before, balance_after, metadata)

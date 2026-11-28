@@ -35,6 +35,7 @@ export default function DealerSell() {
   const [finding, setFinding] = useState(false);
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
+  const [price, setPrice] = useState(""); // müşteriden alınan bedel (₺) — Gelir-Gider raporu
   // Aynı satış iki kez gönderilmesin: anahtar ancak başarılı satıştan sonra yenilenir.
   const [key, setKey] = useState(newKey);
   const amountRef = useRef<HTMLInputElement>(null);
@@ -79,12 +80,13 @@ export default function DealerSell() {
       if (!window.confirm(`${label} hesabına ${fmtNumber(coins)} Coin gönderilsin mi?\nBu işlem geri alınamaz.`)) return false;
       await api("/api/dealer/sell", {
         method: "POST",
-        body: { userId: b.id, amount: coins, description: note.trim() || undefined },
+        body: { userId: b.id, amount: coins, description: note.trim() || undefined, priceTry: price.trim().replace(",", ".") || undefined },
         headers: { "Idempotency-Key": key },
       });
       setKey(newKey());
       setAmount("");
       setNote("");
+      setPrice("");
       setBuyer(null);
       setQ("");
       reload();
@@ -172,6 +174,10 @@ export default function DealerSell() {
                     </button>
                   ))}
                 </div>
+                <label className="block text-sm text-gray-400">
+                  Satış bedeli ₺ (isteğe bağlı — kâr raporu için)
+                  <input className={`${inputCls} mt-1`} value={price} inputMode="decimal" onChange={(e) => setPrice(e.target.value.replace(/[^\d.,]/g, ""))} placeholder="Ör. 800" />
+                </label>
                 <label className="block text-sm text-gray-400">
                   Not (isteğe bağlı)
                   <input className={`${inputCls} mt-1`} value={note} maxLength={200} onChange={(e) => setNote(e.target.value)} placeholder="Ör. havale referansı" />

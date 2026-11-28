@@ -5,7 +5,10 @@ import { requireAuth, requireSuperAdmin } from '../../middleware/authentication/
 import { userLimit } from '../../middleware/security/firewall.js';
 import { fail, bigAmount, text, uuid } from '../../shared/errors/http.js';
 import crypto from 'node:crypto';
-import { dealerSell, deliverScheduled, transferToSub } from './dealers.service.js';
+import { dealerSell, deliverScheduled, transferToSub, cancelScheduled } from './dealers.service.js';
+import { createOrder, orderView, dealerShop } from '../payments/payments.service.js';
+import { ORDER_NO_RE, toScaled4, profitSummary } from '../payments/payments.rules.js';
+import { clientIp } from '../../middleware/security/firewall.js';
 import { createTopupRequest, requestView, packageView, loadPackages, methodView, fillPayUrl } from './dealer_topup.service.js';
 import { idempotent } from '../../middleware/validation/idempotency.js';
 import { hub } from '../../infrastructure/websocket/realtime.js';
@@ -16,6 +19,14 @@ router.use(requireAuth);
 // Bayilik sözleşmesi yayımlandıysa bayi paneli onaydan sonra açılır (428 contract_required).
 router.use(requireContract('dealer'));
 
+
+/** Bayinin girdiği TL bedel (isteğe bağlı): "1250", "1250.5", "1.250,50" değil — nokta ondalık. */
+function priceTryOf(v) {
+  if (v === undefined || v === null || v === '') return null;
+  const s = String(v).trim().replace(',', '.');
+  if (!/^\d{1,12}(\.\d{1,2})?$/.test(s)) throw fail('Satış bedeli geçersiz (ör. 1250 ya da 1250.50).');
+  return s;
+}
 
 async function myDealer(userId) {
   const d = (await query(`SELECT * FROM dealer_accounts WHERE owner_user_id = $1 AND is_active = TRUE`, [userId])).rows[0];
@@ -31,7 +42,9 @@ router.get('/me', async (req, res) => {
     [d.id],
   )).rows;
   res.json({
-    dealer: { id: d.id, name: d.name, coinBalance: String(d.coin_balance) },
+    dealer: { id: d.id, name: d.name, coinBalance: String(d.coin_balance), isSub: !!d.parent_dealer_id,
+      stockCostTry: Number(d.stock_cost_try ?? 0).toFixed(2),
+      avgCostPer1000: BigInt(d.coin_balance) > 0n ? (Number(d.stock_cost_try ?? 0) * 1000 / Number(d.coin_balance)).toFixed(2) : null },
     transactions: tr.map((t) => ({ id: t.id, type: t.type, coinAmount: String(t.coin_amount), description: t.description, username: t.username, createdAt: t.created_at })),
   });
 });
@@ -116,6 +129,7 @@ router.post('/sell', userLimit('dealer_sell', 60, 3600e3), idempotent('dealer_se
   if (![0, 5].includes(delayMinutes)) throw fail('Geçersiz geçiş süresi.');
   const result = await tx((c) => dealerSell(c, {
     dealerId: d.id, userId, coins, actorId: req.user.id, description: text(req.body?.description, 'Açıklama', { max: 200 }), delayMinutes,
+    priceTry: priceTryOf(req.body?.priceTry),
   }));
   if (!result.scheduled) {
     // Alıcı Coin'in geldiğini HEMEN görür: bakiyesi canlı güncellenir + bildirim (Yoho / Bigo bayi yüklemesi gibi).
@@ -180,6 +194,7 @@ router.post('/subs/:subId/transfer', userLimit('dealer_sub_transfer', 60, 3600e3
   const out = await tx((c) => transferToSub(c, {
     parentId: d.id, subId, coins, actorId: req.user.id,
     description: text(req.body?.description, 'Açıklama', { max: 120, optional: true }) || undefined,
+    priceTry: priceTryOf(req.body?.priceTry),
   }));
   // Alt bayinin sahibi açıksa bakiyesini anında görsün.
   if (out.subOwnerId) hub.sendToUser(out.subOwnerId, { type: 'dealer_balance', coinBalance: out.subBalance });
@@ -194,13 +209,13 @@ router.get('/transactions', async (req, res) => {
   const type = ['in', 'out'].includes(req.query.type) ? req.query.type : 'all';
   const before = typeof req.query.before === 'string' && !Number.isNaN(Date.parse(req.query.before)) ? req.query.before : null;
   const rows = (await query(
-    `SELECT t.id, t.type, t.coin_amount, t.description, t.created_at, t.status, t.deliver_at,
+    `SELECT t.id, t.type, t.coin_amount, t.description, t.created_at, t.status, t.deliver_at, t.price_try, t.cost_try,
             u.id AS uid, u.username, u.display_name, u.public_id, u.avatar_url
      FROM dealer_transactions t LEFT JOIN users u ON u.id = t.user_id
      WHERE t.dealer_id = $1
        AND ($2::date IS NULL OR t.created_at >= ($2::date AT TIME ZONE 'Europe/Istanbul'))
        AND ($3::date IS NULL OR t.created_at < (($3::date + 1) AT TIME ZONE 'Europe/Istanbul'))
-       AND ($4 = 'all' OR ($4 = 'out' AND t.type = 'sale') OR ($4 = 'in' AND t.type <> 'sale'))
+       AND ($4 = 'all' OR ($4 = 'out' AND t.type IN ('sale', 'sub_transfer_out')) OR ($4 = 'in' AND t.type NOT IN ('sale', 'sub_transfer_out')))
        AND ($5::timestamptz IS NULL OR t.created_at < $5::timestamptz)
      ORDER BY t.created_at DESC LIMIT 30`,
     [d.id, from, to, type, before],
@@ -209,6 +224,7 @@ router.get('/transactions', async (req, res) => {
     items: rows.map((t) => ({
       id: t.id, type: t.type, coinAmount: String(t.coin_amount), description: t.description, createdAt: t.created_at,
       status: t.status ?? 'done', deliverAt: t.deliver_at ?? null,
+      priceTry: t.price_try != null ? Number(t.price_try).toFixed(2) : null, costTry: t.cost_try != null ? Number(t.cost_try).toFixed(2) : null,
       user: t.uid ? { id: t.uid, username: t.username, displayName: t.display_name || t.username, publicId: t.public_id, avatarUrl: t.avatar_url } : null,
     })),
     more: rows.length === 30,
@@ -309,11 +325,14 @@ shopAdminRouter.put('/packages/:code', async (req, res) => {
   const price = Number(b.priceTry);
   const list = Number(b.listTry ?? 0);
   if (!Number.isFinite(price) || price < 0 || !Number.isFinite(list) || list < 0) throw fail('Fiyat geçersiz.');
+  // Paket bonusu (ek Coin, maliyetsiz). Paket Coin'inin yarısını geçemez: yanlış girişle bedava stok dağıtılmasın.
+  const bonus = b.bonusCoins === undefined || b.bonusCoins === '' || b.bonusCoins === null ? 0n : BigInt(String(b.bonusCoins).replace(/\D/g, '') || '0');
+  if (bonus * 2n > coins) throw fail('Ek Coin, paket Coin\'inin yarısını geçemez.');
   const r = await query(
-    `INSERT INTO dealer_packages(code, coins, price_try, list_try, label, active, sort_order) VALUES($1,$2,$3,$4,$5,$6,$7)
+    `INSERT INTO dealer_packages(code, coins, price_try, list_try, label, active, sort_order, bonus_coins) VALUES($1,$2,$3,$4,$5,$6,$7,$8)
      ON CONFLICT (code) DO UPDATE SET coins = EXCLUDED.coins, price_try = EXCLUDED.price_try, list_try = EXCLUDED.list_try,
-       label = EXCLUDED.label, active = EXCLUDED.active, sort_order = EXCLUDED.sort_order RETURNING code`,
-    [code, coins.toString(), price, list, text(b.label, 'Ad', { max: 80 }) ?? '', b.active !== false, Number.parseInt(b.sortOrder, 10) || 0],
+       label = EXCLUDED.label, active = EXCLUDED.active, sort_order = EXCLUDED.sort_order, bonus_coins = EXCLUDED.bonus_coins RETURNING code`,
+    [code, coins.toString(), price, list, text(b.label, 'Ad', { max: 80 }) ?? '', b.active !== false, Number.parseInt(b.sortOrder, 10) || 0, bonus.toString()],
   );
   res.json({ ok: true, code: r.rows[0].code });
 });
@@ -354,4 +373,98 @@ shopAdminRouter.patch('/methods/:id', async (req, res) => {
 shopAdminRouter.delete('/methods/:id', async (req, res) => {
   await query(`DELETE FROM dealer_pay_methods WHERE id = $1`, [uuid(req.params.id, 'Ödeme yöntemi')]);
   res.json({ ok: true });
+});
+
+// ---------------- Stok satın alma (otomatik ödeme) — v2.153.0 ----------------
+// Bayi paketi ve ödeme yöntemini seçer; sipariş açılır. Kart: ödeme sayfası bağlantısı; USDT: adres + tam tutar; havale: IBAN +
+// sipariş no. Ödeme doğrulanınca stok OTOMATİK yüklenir (yönetici onayı gerekmez; havale hariç). Bonus siparişte sabitlenir.
+
+router.get('/shop', async (req, res) => {
+  const d = await myDealer(req.user.id);
+  res.json({ dealer: { id: d.id, name: d.name, coinBalance: String(d.coin_balance) }, ...(await dealerShop(query, d)) });
+});
+
+router.post('/orders', userLimit('dealer_order', 30, 3600e3), async (req, res) => {
+  const d = await myDealer(req.user.id);
+  const order = await createOrder({
+    kind: 'dealer', provider: String(req.body?.provider ?? ''), packageCode: text(req.body?.packageCode, 'Paket', { required: true, max: 40 }),
+    dealer: d, targetUserId: req.user.id, buyerUserId: req.user.id, email: null, ip: clientIp(req),
+  });
+  res.status(201).json({ order });
+});
+
+router.get('/orders', async (req, res) => {
+  const d = await myDealer(req.user.id);
+  const r = await query(`SELECT * FROM payment_orders WHERE dealer_id = $1 ORDER BY created_at DESC LIMIT 50`, [d.id]);
+  res.json({ orders: r.rows.map((o) => orderView(o)) });
+});
+
+router.get('/orders/:orderNo', async (req, res) => {
+  const d = await myDealer(req.user.id);
+  const no = String(req.params.orderNo);
+  if (!ORDER_NO_RE.test(no)) throw fail('Sipariş bulunamadı.', 404);
+  const o = (await query(`SELECT * FROM payment_orders WHERE order_no = $1 AND dealer_id = $2`, [no, d.id])).rows[0];
+  if (!o) throw fail('Sipariş bulunamadı.', 404);
+  res.json({ order: orderView(o) });
+});
+
+/** "5 dakika sonra hesaba geçiş" ile yapılan satışı, teslimden önce iptal et (yanlış ID / yanlış miktar). */
+router.post('/transactions/:id/cancel', userLimit('dealer_cancel', 60, 3600e3), async (req, res) => {
+  const d = await myDealer(req.user.id);
+  const out = await tx((c) => cancelScheduled(c, { dealerId: d.id, transactionId: uuid(req.params.id, 'İşlem'), actorId: req.user.id }));
+  res.json(out);
+});
+
+/**
+ * Gelir-gider (bayinin kendi defteri): seçilen aralıkta
+ *  - Gider: stok alımları (ödenen toptan bedel) ve alt bayiden alımlar,
+ *  - Satış: satılan Coin, girilen satış bedeli (gelir) ve o satışların stok maliyeti → brüt kâr ve marj,
+ *  - Bedeli girilmemiş satışlar ayrıca sayılır (kâr hesabına giremez),
+ *  - Stok: bugünkü Coin ve stok maliyeti (ortalama maliyet).
+ */
+router.get('/finance', async (req, res) => {
+  const d = await myDealer(req.user.id);
+  const day = (v) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
+  const from = day(req.query.from); const to = day(req.query.to);
+  const r = (await query(
+    `SELECT
+       COALESCE(SUM(price_try) FILTER (WHERE type IN ('stock_purchase', 'admin_topup', 'sub_transfer_in', 'credit')), 0)::text AS spent,
+       COALESCE(SUM(coin_amount) FILTER (WHERE type IN ('stock_purchase', 'admin_topup', 'sub_transfer_in', 'bonus', 'credit')), 0)::text AS coins_in,
+       COALESCE(SUM(coin_amount) FILTER (WHERE type = 'bonus'), 0)::text AS bonus,
+       COALESCE(SUM(coin_amount) FILTER (WHERE type IN ('sale', 'sub_transfer_out') AND status IN ('done', 'scheduled')), 0)::text AS coins_out,
+       COUNT(*) FILTER (WHERE type IN ('sale', 'sub_transfer_out') AND status IN ('done', 'scheduled'))::int AS sales,
+       COALESCE(SUM(price_try) FILTER (WHERE type IN ('sale', 'sub_transfer_out') AND status IN ('done', 'scheduled') AND price_try IS NOT NULL), 0)::text AS revenue,
+       COALESCE(SUM(cost_try) FILTER (WHERE type IN ('sale', 'sub_transfer_out') AND status IN ('done', 'scheduled') AND price_try IS NOT NULL), 0)::text AS cogs,
+       COUNT(*) FILTER (WHERE type IN ('sale', 'sub_transfer_out') AND status IN ('done', 'scheduled') AND price_try IS NULL)::int AS unpriced,
+       COALESCE(SUM(coin_amount) FILTER (WHERE type IN ('sale', 'sub_transfer_out') AND status IN ('done', 'scheduled') AND price_try IS NULL), 0)::text AS unpriced_coins
+     FROM dealer_transactions WHERE dealer_id = $1
+       AND ($2::date IS NULL OR created_at >= ($2::date AT TIME ZONE 'Europe/Istanbul'))
+       AND ($3::date IS NULL OR created_at < (($3::date + 1) AT TIME ZONE 'Europe/Istanbul'))`,
+    [d.id, from, to],
+  )).rows[0];
+  const p = profitSummary({ revenue4: toScaled4(Number(r.revenue).toFixed(4)), cogs4: toScaled4(Number(r.cogs).toFixed(4)) });
+  const daily = (await query(
+    `SELECT to_char(created_at AT TIME ZONE 'Europe/Istanbul', 'YYYY-MM-DD') AS day,
+            COALESCE(SUM(coin_amount) FILTER (WHERE type IN ('sale', 'sub_transfer_out')), 0)::text AS coins_out,
+            COALESCE(SUM(price_try) FILTER (WHERE type IN ('sale', 'sub_transfer_out')), 0)::text AS revenue,
+            COALESCE(SUM(cost_try) FILTER (WHERE type IN ('sale', 'sub_transfer_out') AND price_try IS NOT NULL), 0)::text AS cogs,
+            COALESCE(SUM(price_try) FILTER (WHERE type IN ('stock_purchase', 'admin_topup', 'sub_transfer_in', 'credit')), 0)::text AS spent
+     FROM dealer_transactions WHERE dealer_id = $1 AND status IN ('done', 'scheduled')
+       AND created_at >= COALESCE(($2::date AT TIME ZONE 'Europe/Istanbul'), NOW() - INTERVAL '30 days')
+       AND ($3::date IS NULL OR created_at < (($3::date + 1) AT TIME ZONE 'Europe/Istanbul'))
+     GROUP BY 1 ORDER BY 1 DESC LIMIT 62`,
+    [d.id, from, to],
+  )).rows;
+  const stockCost = Number(d.stock_cost_try ?? 0);
+  res.json({
+    range: { from, to },
+    spentTry: Number(r.spent).toFixed(2), coinsIn: r.coins_in, bonusCoins: r.bonus,
+    coinsOut: r.coins_out, sales: r.sales,
+    revenueTry: Number(p.revenue).toFixed(2), cogsTry: Number(p.cogs).toFixed(2), profitTry: Number(p.profit).toFixed(2), marginBps: p.marginBps,
+    unpriced: { sales: r.unpriced, coins: r.unpriced_coins },
+    stock: { coins: String(d.coin_balance), costTry: stockCost.toFixed(2),
+      avgCostPer1000: BigInt(d.coin_balance) > 0n ? (stockCost * 1000 / Number(d.coin_balance)).toFixed(2) : null },
+    daily: daily.map((x) => ({ day: x.day, coinsOut: x.coins_out, revenueTry: Number(x.revenue).toFixed(2),
+      profitTry: (Number(x.revenue) - Number(x.cogs)).toFixed(2), spentTry: Number(x.spent).toFixed(2) })),
+  });
 });

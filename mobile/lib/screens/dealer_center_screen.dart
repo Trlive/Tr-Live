@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -266,6 +267,13 @@ class _DealerCenterScreenState extends State<DealerCenterScreen> {
                     }),
                     tool(Icons.receipt_long, tx('Taleplerim'), () => _open(const DealerRequestsScreen())),
                   ]),
+                  const SizedBox(height: 8),
+                  Row(children: [
+                    tool(Icons.query_stats, tx('Gelir-Gider'), () => _open(const DealerFinanceScreen())),
+                    tool(Icons.shopping_bag_outlined, tx('Siparişlerim'), () => _open(const DealerOrdersScreen())),
+                    const Expanded(child: SizedBox()),
+                    const Expanded(child: SizedBox()),
+                  ]),
                 ]),
               ),
               // Ana bayi / Alt bayi. Yalnızca ANA bayide görünür: alt bayinin kendi
@@ -313,6 +321,7 @@ class _DealerSellScreenState extends State<DealerSellScreen> {
   final _q = TextEditingController();
   final _amount = TextEditingController();
   final _note = TextEditingController();
+  final _price = TextEditingController(); // müşteriden alınan bedel (TL, isteğe bağlı): Gelir-Gider raporu
   Map<String, dynamic>? _buyer;
   // null = henüz alınamadı. Eskiden '0' ile başlıyordu: yükleme sessizce başarısız olunca bayi stokunu 0 görüyor ve satış
   // "bakiye yetersiz" diye kilitleniyordu. Bilinmiyorsa satış açık kalır; yetersizliği sunucu zaten reddeder.
@@ -335,6 +344,7 @@ class _DealerSellScreenState extends State<DealerSellScreen> {
     _q.dispose();
     _amount.dispose();
     _note.dispose();
+    _price.dispose();
     super.dispose();
   }
 
@@ -430,6 +440,7 @@ class _DealerSellScreenState extends State<DealerSellScreen> {
         'amount': _coins.toString(),
         'delayMinutes': _delay,
         if (_note.text.trim().isNotEmpty) 'description': _note.text.trim(),
+        if (_price.text.trim().isNotEmpty) 'priceTry': _price.text.trim().replaceAll(',', '.'),
       }, key: _key),
     );
     if (!mounted) return;
@@ -443,6 +454,7 @@ class _DealerSellScreenState extends State<DealerSellScreen> {
       _key = Api.newIdempotencyKey();
       _amount.clear();
       _note.clear();
+      _price.clear();
       _buyer = null;
       _q.clear();
       _delay = 0;
@@ -580,6 +592,14 @@ class _DealerSellScreenState extends State<DealerSellScreen> {
         if (_tooMuch) Padding(padding: const EdgeInsets.only(top: 6), child: Text(tx('Stok yetersiz.'), style: const TextStyle(color: Colors.redAccent))),
         label(tx('Hesaba Geçiş Süresi')),
         Row(children: [radio(0, tx('Anında Hesaba Geçiş')), radio(5, tx('5 Dakika Sonra Hesaba Geçiş'))]),
+        label(tx('Satış bedeli (₺, isteğe bağlı)')),
+        TextField(
+          controller: _price,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))],
+          style: const TextStyle(color: Colors.white),
+          decoration: deco(tx('Müşteriden aldığın tutar — kâr raporun için')),
+        ),
         label(tx('Not:')),
         TextField(controller: _note, maxLength: 200, style: const TextStyle(color: Colors.white), decoration: deco(tx('İsteğe bağlı (ör. havale referansı)'))),
         const SizedBox(height: 8),
@@ -610,6 +630,8 @@ class _StockSheet extends StatefulWidget {
 }
 
 class _StockSheetState extends State<_StockSheet> {
+  // v2.153: otomatik ödeme (Kart / USDT / Havale) — /api/dealer/shop. Yöntem tanımlı değilse eski "talep + bağlantı" akışı.
+  Map<String, dynamic>? _shop;
   List<Map<String, dynamic>> _packages = [];
   List<Map<String, dynamic>> _methods = [];
   String? _method;
@@ -617,6 +639,8 @@ class _StockSheetState extends State<_StockSheet> {
   bool _loading = true;
   bool _busy = false;
   String? _err;
+
+  bool get _auto => listOf(_shop?['providers']).isNotEmpty;
 
   @override
   void initState() {
@@ -626,9 +650,27 @@ class _StockSheetState extends State<_StockSheet> {
 
   Future<void> _load() async {
     try {
+      Map<String, dynamic>? shop;
+      try {
+        shop = await Api.get('/api/dealer/shop');
+      } catch (_) {
+        shop = null; // eski sunucu
+      }
+      if (shop != null && listOf(shop['providers']).isNotEmpty) {
+        if (!mounted) return;
+        setState(() {
+          _shop = shop;
+          _packages = listOf(shop!['packages']);
+          _methods = listOf(shop['providers']);
+          _method = '${_methods.first['id']}';
+          _loading = false;
+        });
+        return;
+      }
       final r = await Api.get('/api/dealer/topup-packages');
       if (!mounted) return;
       setState(() {
+        _shop = shop;
         _packages = listOf(r['packages']);
         _methods = listOf(r['methods']);
         _method = _methods.where((m) => m['ready'] == true).firstOrNull?['id']?.toString();
@@ -648,6 +690,17 @@ class _StockSheetState extends State<_StockSheet> {
     final code = _pkg;
     if (code == null || _busy) return;
     setState(() => _busy = true);
+    if (_auto) {
+      final r = await guard(context, () => Api.post('/api/dealer/orders', {'packageCode': code, 'provider': _method}));
+      if (!mounted) return;
+      setState(() => _busy = false);
+      final order = mapOf(r?['order']);
+      if (order == null) return;
+      final nav = Navigator.of(context);
+      nav.pop();
+      await nav.push(MaterialPageRoute(builder: (_) => DealerOrderScreen(order: order)));
+      return;
+    }
     final r = await guard(context, () => Api.postOnce('/api/dealer/topup-requests', {'packageCode': code, if (_method != null) 'methodId': _method}));
     if (!mounted) return;
     setState(() => _busy = false);
@@ -664,11 +717,43 @@ class _StockSheetState extends State<_StockSheet> {
     return u != null ? NetImg(u, width: size, height: size, fit: BoxFit.contain) : Text(ic, style: TextStyle(fontSize: size * 0.8));
   }
 
+  IconData _provIcon(String id) => id == 'usdt_trc20' ? Icons.currency_bitcoin : (id == 'bank' ? Icons.account_balance : Icons.credit_card);
+
+  /// Bu ayki alım, kademe ve sonraki kademeye kalan (teşvik).
+  Widget _tierBar() {
+    final m = mapOf(_shop?['month']);
+    if (m == null) return const SizedBox.shrink();
+    final tier = mapOf(m['tier']);
+    final next = mapOf(m['next']);
+    final camp = mapOf(_shop?['campaign']);
+    final pct = (int bps) => '%${(bps / 100).toStringAsFixed(bps % 100 == 0 ? 0 : 1)}';
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 2, 12, 6),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(color: _card, borderRadius: BorderRadius.circular(12), border: Border.all(color: _line)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(
+          '${tx('Bu ay alım')}: ₺${fmtNumber('${double.tryParse('${m['paidTry']}')?.round() ?? 0}')}'
+          '${tier != null ? ' · ${tier['name']} (+${pct((tier['bonusBps'] as num?)?.toInt() ?? 0)})' : ''}',
+          style: const TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w700),
+        ),
+        if (next != null)
+          Text(tx('{n} kademesine ₺{r} kaldı (+{p} ek Coin)', {
+            'n': '${next['name']}',
+            'r': fmtNumber('${double.tryParse('${next['remainingTry']}')?.round() ?? 0}'),
+            'p': pct((next['bonusBps'] as num?)?.toInt() ?? 0),
+          }), style: const TextStyle(color: Colors.white60, fontSize: 11.5)),
+        if (camp != null)
+          Text('🎁 ${camp['title']} · +${pct((camp['bonusBps'] as num?)?.toInt() ?? 0)}', style: const TextStyle(color: _goldHi, fontSize: 11.5, fontWeight: FontWeight.w700)),
+      ]),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final sel = _packages.where((p) => p['code'] == _pkg).firstOrNull;
     return Container(
-      constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.8),
+      constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.85),
       decoration: const BoxDecoration(
         borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
         gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFF2A1F08), _dark]),
@@ -688,6 +773,7 @@ class _StockSheetState extends State<_StockSheet> {
                         IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close, color: Colors.white70)),
                       ]),
                     ),
+                    if (_auto) _tierBar(),
                     if (_methods.isNotEmpty)
                       SizedBox(
                         height: 52,
@@ -697,24 +783,24 @@ class _StockSheetState extends State<_StockSheet> {
                               padding: const EdgeInsets.only(right: 8),
                               child: Stack(clipBehavior: Clip.none, children: [
                                 ChoiceChip(
-                                  avatar: _icon('${m['icon'] ?? '💳'}', 20),
+                                  avatar: _auto ? Icon(_provIcon('${m['id']}'), size: 18, color: _goldHi) : _icon('${m['icon'] ?? '💳'}', 20),
                                   label: Text('${m['name']}'),
                                   selected: _method == m['id'],
-                                  onSelected: m['ready'] == true ? (_) => setState(() => _method = '${m['id']}') : null,
+                                  onSelected: _auto || m['ready'] == true ? (_) => setState(() => _method = '${m['id']}') : null,
                                   selectedColor: const Color(0xFF3A2A0C),
                                   backgroundColor: _card,
                                   side: BorderSide(color: _method == m['id'] ? _gold : _line),
                                   labelStyle: const TextStyle(color: Colors.white),
                                   showCheckmark: false,
                                 ),
-                                if ('${m['badge'] ?? ''}'.isNotEmpty)
+                                if ('${m['badge'] ?? ''}'.isNotEmpty || (_auto && m['auto'] == true))
                                   Positioned(
                                     right: 0,
                                     top: -6,
                                     child: Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                                      decoration: BoxDecoration(color: const Color(0xFFE53935), borderRadius: BorderRadius.circular(6)),
-                                      child: Text('${m['badge']}', style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700)),
+                                      decoration: BoxDecoration(color: _auto ? const Color(0xFF16A34A) : const Color(0xFFE53935), borderRadius: BorderRadius.circular(6)),
+                                      child: Text(_auto ? tx('Anında') : '${m['badge']}', style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700)),
                                     ),
                                   ),
                               ]),
@@ -728,7 +814,7 @@ class _StockSheetState extends State<_StockSheet> {
                         padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
                         mainAxisSpacing: 8,
                         crossAxisSpacing: 8,
-                        childAspectRatio: 1.35,
+                        childAspectRatio: 1.2,
                         children: [
                           for (final p in _packages)
                             InkWell(
@@ -742,9 +828,11 @@ class _StockSheetState extends State<_StockSheet> {
                                 ),
                                 child: Column(children: [
                                   Expanded(
-                                    child: Center(
-                                      child: Text('🪙 ${_short('${p['coins']}')}', style: const TextStyle(color: _goldHi, fontWeight: FontWeight.w900, fontSize: 15.5)),
-                                    ),
+                                    child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                                      Text('🪙 ${_short('${p['coins']}')}', style: const TextStyle(color: _goldHi, fontWeight: FontWeight.w900, fontSize: 15.5)),
+                                      if ((BigInt.tryParse('${p['bonusCoins'] ?? 0}') ?? BigInt.zero) > BigInt.zero)
+                                        Text('+${_short('${p['bonusCoins']}')}', style: const TextStyle(color: Color(0xFF4ADE80), fontWeight: FontWeight.w800, fontSize: 11.5)),
+                                    ]),
                                   ),
                                   Container(
                                     width: double.infinity,
@@ -766,22 +854,32 @@ class _StockSheetState extends State<_StockSheet> {
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
                       child: Text(
-                        _methods.where((m) => m['ready'] == true).isEmpty
-                            ? tx('Ödeme bağlantısı henüz eklenmedi; talep yönetime düşer, ödeme bilgisi size iletilir.')
-                            : tx('Ödeme sayfası açılır; ödeme açıklamasına talep referansını yazın. Onaylanınca stoğa eklenir.'),
+                        _auto
+                            ? (_method == 'bank'
+                                ? tx('Havale bilgisi ve sipariş numarası gösterilir; dekont teyit edilince stoğa eklenir.')
+                                : tx('Ödeme doğrulanınca stoğa otomatik eklenir; yönetici onayı beklemezsin.'))
+                            : (_methods.where((m) => m['ready'] == true).isEmpty
+                                ? tx('Ödeme bağlantısı henüz eklenmedi; talep yönetime düşer, ödeme bilgisi size iletilir.')
+                                : tx('Ödeme sayfası açılır; ödeme açıklamasına talep referansını yazın. Onaylanınca stoğa eklenir.')),
                         style: const TextStyle(color: Colors.white54, fontSize: 11.5),
                       ),
                     ),
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
                       child: Row(children: [
-                        Text('${tx('Stok')} 🪙 ${fmtNumber(widget.balance)}', style: const TextStyle(color: Colors.white70)),
-                        const Spacer(),
+                        Expanded(
+                          child: Text(
+                            sel != null && _auto
+                                ? '${tx('Alınacak')} 🪙 ${_short('${sel['totalCoins'] ?? sel['coins']}')}'
+                                : '${tx('Stok')} 🪙 ${fmtNumber(widget.balance)}',
+                            style: const TextStyle(color: Colors.white70),
+                          ),
+                        ),
                         SizedBox(
                           width: 170,
                           child: _goldButton(
                             _busy ? '…' : (sel == null ? tx('Paket seç') : '₺${fmtNumber('${(sel['priceTry'] as num?)?.round() ?? 0}')} ${tx('Öde')}'),
-                            sel == null || _busy ? null : _buy,
+                            sel == null || _busy || _method == null && _auto ? null : _buy,
                             h: 46,
                           ),
                         ),
@@ -789,6 +887,141 @@ class _StockSheetState extends State<_StockSheet> {
                     ),
                   ]),
       ),
+    );
+  }
+}
+
+// ============================================================================================================
+// Stok siparişi: ödeme talimatı (kart sayfası / USDT adresi ve tam tutar / havale bilgisi) ve canlı durum
+// ============================================================================================================
+class DealerOrderScreen extends StatefulWidget {
+  final Map<String, dynamic> order;
+  const DealerOrderScreen({super.key, required this.order});
+
+  @override
+  State<DealerOrderScreen> createState() => _DealerOrderScreenState();
+}
+
+class _DealerOrderScreenState extends State<DealerOrderScreen> {
+  late Map<String, dynamic> _o = widget.order;
+  Timer? _timer;
+  bool _opened = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 5), (_) => _poll());
+    final pay = mapOf(_o['pay']);
+    if (pay?['type'] == 'redirect' && pay?['url'] != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _openCheckout());
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _openCheckout() async {
+    final url = mapOf(_o['pay'])?['url']?.toString();
+    if (url == null || url.isEmpty) return;
+    _opened = true;
+    await openPayLink(url);
+  }
+
+  Future<void> _poll() async {
+    if (_o['status'] != 'created') {
+      _timer?.cancel();
+      return;
+    }
+    try {
+      final r = await Api.get('/api/dealer/orders/${_o['orderNo']}');
+      final o = mapOf(r['order']);
+      if (o == null || !mounted) return;
+      if (o['status'] != _o['status']) {
+        setState(() => _o = o);
+        if (o['status'] == 'paid') {
+          toast(context, tx('{c} Coin stoğuna eklendi.', {'c': fmtNumber('${o['totalCoins']}')}));
+          try {
+            await Session.refresh();
+          } catch (_) {}
+        }
+      }
+    } catch (_) {/* ağ yoksa sonraki turda */}
+  }
+
+  Widget _line(String k, String v, {bool copy = false}) => Padding(
+        padding: const EdgeInsets.only(top: 10),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(k, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+          Row(children: [
+            Expanded(child: SelectableText(v, style: const TextStyle(color: Colors.white, fontSize: 15.5, fontWeight: FontWeight.w700))),
+            if (copy)
+              TextButton(
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: v));
+                  toast(context, tx('Kopyalandı'));
+                },
+                child: Text(tx('Kopyala'), style: const TextStyle(color: _goldHi)),
+              ),
+          ]),
+        ]),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final st = '${_o['status']}';
+    final pay = mapOf(_o['pay']);
+    final cur = _o['currency'] == 'USDT' ? 'USDT' : '₺';
+    return Scaffold(
+      backgroundColor: _dark,
+      appBar: AppBar(backgroundColor: _dark, title: Text(tx('Stok siparişi'))),
+      body: ListView(padding: const EdgeInsets.all(16), children: [
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(color: _card, borderRadius: BorderRadius.circular(16), border: Border.all(color: st == 'paid' ? const Color(0xFF16A34A) : const Color(0xFF3A2F1A))),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Icon(st == 'paid' ? Icons.check_circle : (st == 'created' ? Icons.hourglass_top : Icons.error_outline),
+                  color: st == 'paid' ? const Color(0xFF4ADE80) : (st == 'created' ? _goldHi : Colors.redAccent)),
+              const SizedBox(width: 8),
+              Text(
+                {'paid': tx('Ödendi · stoğa eklendi'), 'created': tx('Ödeme bekleniyor'), 'expired': tx('Süresi doldu'), 'failed': tx('Ödeme başarısız'), 'cancelled': tx('İptal edildi')}[st] ?? st,
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 16),
+              ),
+            ]),
+            _line(tx('Alınacak Coin'), '🪙 ${fmtNumber('${_o['totalCoins']}')}'
+                '${(BigInt.tryParse('${_o['bonusCoins']}') ?? BigInt.zero) > BigInt.zero ? '  (${tx('ek')} +${fmtNumber('${_o['bonusCoins']}')})' : ''}'),
+            _line(tx('Tutar'), '${_o['amount']} $cur', copy: pay?['type'] != 'redirect'),
+            _line(tx('Sipariş numarası'), '${_o['orderNo']}', copy: true),
+          ]),
+        ),
+        const SizedBox(height: 12),
+        if (st == 'created' && pay != null) ...[
+          if (pay['type'] == 'redirect')
+            _goldButton(_opened ? tx('Ödeme sayfasını yeniden aç') : tx('Ödeme sayfasını aç'), _openCheckout, icon: Icons.credit_card),
+          if (pay['type'] == 'crypto')
+            _panel(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              _line(tx('Ağ'), '${pay['network']}'),
+              _line(tx('Adres'), '${pay['address']}', copy: true),
+              _line(tx('Gönderilecek tutar (USDT)'), '${pay['amount']}', copy: true),
+              const SizedBox(height: 10),
+              Text('${pay['warning']}', style: const TextStyle(color: Color(0xFFFFC43D), fontSize: 12)),
+            ])),
+          if (pay['type'] == 'bank')
+            _panel(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              _line(tx('Havale bilgisi'), '${pay['info']}'),
+              _line(tx('Tutar'), '${pay['amount']} ₺', copy: true),
+              _line(tx('Açıklama'), '${pay['reference']}', copy: true),
+              const SizedBox(height: 10),
+              Text('${pay['warning']}', style: const TextStyle(color: Color(0xFFFFC43D), fontSize: 12)),
+            ])),
+          const SizedBox(height: 8),
+          Text(tx('Bu ekran ödeme doğrulanınca kendiliğinden güncellenir. Kapatabilirsin; stok yine eklenir.'),
+              textAlign: TextAlign.center, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+        ],
+      ]),
     );
   }
 }
@@ -830,6 +1063,16 @@ class _DealerHistoryScreenState extends State<DealerHistoryScreen> {
 
   String _d(DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
   String _show(DateTime d) => '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+
+  /// "5 dakika sonra" satışı teslimden önce geri al: Coin stoğa döner.
+  Future<void> _cancel(Map<String, dynamic> t) async {
+    if (!await confirm(context, tx('Bu satış iptal edilsin mi? {c} Coin stoğuna geri döner.', {'c': fmtNumber('${t['coinAmount']}')}), action: tx('İptal et'))) return;
+    if (!mounted) return;
+    final r = await guard(context, () => Api.post('/api/dealer/transactions/${t['id']}/cancel'));
+    if (r == null || !mounted) return;
+    toast(context, tx('Satış iptal edildi.'));
+    await _load(reset: true);
+  }
 
   Future<void> _load({bool reset = false}) async {
     if (_loading) return;
@@ -944,7 +1187,7 @@ class _DealerHistoryScreenState extends State<DealerHistoryScreen> {
                           if (i >= _items.length) return const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator(color: _gold)));
                           final t = _items[i];
                           final u = mapOf(t['user']);
-                          final sale = t['type'] == 'sale';
+                          final sale = t['type'] == 'sale' || t['type'] == 'sub_transfer_out';
                           final at = DateTime.tryParse('${t['createdAt']}')?.toLocal();
                           final status = '${t['status'] ?? 'done'}';
                           return Container(
@@ -967,10 +1210,20 @@ class _DealerHistoryScreenState extends State<DealerHistoryScreen> {
                               Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
                                 Text('${sale ? '−' : '+'} 🪙 ${fmtNumber('${t['coinAmount']}')}',
                                     style: TextStyle(color: sale ? _goldHi : Colors.greenAccent, fontWeight: FontWeight.w800)),
+                                if (t['priceTry'] != null && sale)
+                                  Text('₺${t['priceTry']}', style: const TextStyle(color: Colors.white54, fontSize: 11)),
                                 if (status == 'scheduled')
-                                  Text(tx('Teslim sırasında'), style: const TextStyle(color: Color(0xFFFFB74D), fontSize: 11))
+                                  InkWell(
+                                    onTap: () => _cancel(t),
+                                    child: Padding(
+                                      padding: const EdgeInsets.only(top: 2),
+                                      child: Text('${tx('Teslim sırasında')} · ${tx('İptal')}', style: const TextStyle(color: Color(0xFFFFB74D), fontSize: 11, decoration: TextDecoration.underline)),
+                                    ),
+                                  )
                                 else if (status == 'refunded')
-                                  Text(tx('İade edildi'), style: const TextStyle(color: Colors.redAccent, fontSize: 11)),
+                                  Text(tx('İade edildi'), style: const TextStyle(color: Colors.redAccent, fontSize: 11))
+                                else if (status == 'cancelled')
+                                  Text(tx('İptal edildi'), style: const TextStyle(color: Colors.white38, fontSize: 11)),
                               ]),
                             ]),
                           );
@@ -1032,6 +1285,201 @@ class DealerRequestsScreen extends StatelessWidget {
                 ]),
               );
             },
+          );
+        },
+      ),
+    );
+  }
+}
+
+// ============================================================================================================
+// Gelir-Gider: stok alımı (gider), satış bedeli (gelir), satılan Coin'in maliyeti, brüt kâr, stok değeri
+// ============================================================================================================
+class DealerFinanceScreen extends StatefulWidget {
+  const DealerFinanceScreen({super.key});
+
+  @override
+  State<DealerFinanceScreen> createState() => _DealerFinanceScreenState();
+}
+
+class _DealerFinanceScreenState extends State<DealerFinanceScreen> {
+  int _range = 30; // gün; 0 = bu ay
+  int _v = 0;
+
+  String _d(DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  Future<Map<String, dynamic>> _load() {
+    final now = DateTime.now();
+    final from = _range == 0 ? DateTime(now.year, now.month, 1) : now.subtract(Duration(days: _range - 1));
+    return Api.get('/api/dealer/finance', query: {'from': _d(from), 'to': _d(now)});
+  }
+
+  String _tl(dynamic v) {
+    final n = double.tryParse('$v') ?? 0;
+    final neg = n < 0;
+    return '${neg ? '−' : ''}₺${fmtNumber('${n.abs().round()}')}';
+  }
+
+  Widget _kpi(String k, String v, {Color color = Colors.white}) => Expanded(
+        child: Container(
+          margin: const EdgeInsets.all(4),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(color: _card, borderRadius: BorderRadius.circular(14), border: Border.all(color: _line)),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(k, style: const TextStyle(color: Colors.white54, fontSize: 11.5)),
+            const SizedBox(height: 4),
+            FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: Text(v, style: TextStyle(color: color, fontSize: 18, fontWeight: FontWeight.w900))),
+          ]),
+        ),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: _dark,
+      appBar: AppBar(backgroundColor: _dark, title: Text(tx('Gelir-Gider'))),
+      body: Column(children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+          child: Wrap(spacing: 8, children: [
+            for (final r in const [(7, '7 gün'), (30, '30 gün'), (0, 'Bu ay'), (90, '90 gün')])
+              ChoiceChip(
+                label: Text(tx(r.$2)),
+                selected: _range == r.$1,
+                onSelected: (_) => setState(() {
+                  _range = r.$1;
+                  _v++;
+                }),
+                selectedColor: const Color(0xFF3A2A0C),
+                backgroundColor: _card,
+                side: BorderSide(color: _range == r.$1 ? _gold : _line),
+                labelStyle: const TextStyle(color: Colors.white),
+                showCheckmark: false,
+              ),
+          ]),
+        ),
+        Expanded(
+          child: AsyncBody<Map<String, dynamic>>(
+            version: _v,
+            load: _load,
+            builder: (context, f, reload) {
+              final profit = double.tryParse('${f['profitTry']}') ?? 0;
+              final margin = f['marginBps'] is num ? '%${((f['marginBps'] as num) / 100).toStringAsFixed(1)}' : '—';
+              final un = mapOf(f['unpriced']) ?? {};
+              final stock = mapOf(f['stock']) ?? {};
+              final daily = listOf(f['daily']);
+              return RefreshIndicator(
+                onRefresh: reload,
+                child: ListView(padding: const EdgeInsets.all(8), children: [
+                  Row(children: [
+                    _kpi(tx('Satış geliri'), _tl(f['revenueTry'])),
+                    _kpi(tx('Brüt kâr'), _tl(f['profitTry']), color: profit >= 0 ? const Color(0xFF4ADE80) : Colors.redAccent),
+                  ]),
+                  Row(children: [
+                    _kpi(tx('Satılan Coin maliyeti'), _tl(f['cogsTry'])),
+                    _kpi(tx('Kâr marjı'), margin),
+                  ]),
+                  Row(children: [
+                    _kpi(tx('Stok alımı (gider)'), _tl(f['spentTry'])),
+                    _kpi(tx('Satılan Coin'), _short('${f['coinsOut']}'), color: _goldHi),
+                  ]),
+                  Row(children: [
+                    _kpi(tx('Ek Coin (bonus)'), _short('${f['bonusCoins']}'), color: const Color(0xFF4ADE80)),
+                    _kpi(tx('Stok değeri'), _tl(stock['costTry'])),
+                  ]),
+                  if (stock['avgCostPer1000'] != null)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
+                      child: Text(tx('Ortalama maliyet: 1.000 Coin = ₺{v}', {'v': '${stock['avgCostPer1000']}'}), style: const TextStyle(color: Colors.white60, fontSize: 12.5)),
+                    ),
+                  if ((un['sales'] as num? ?? 0) > 0)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
+                      child: Text(
+                        tx('{n} satışta bedel girilmedi ({c} Coin); kâra dahil değil. Satış ekranında "Satış bedeli"ni doldurursan rapor tamamlanır.',
+                            {'n': '${un['sales']}', 'c': _short('${un['coins']}')}),
+                        style: const TextStyle(color: Color(0xFFFFC43D), fontSize: 12),
+                      ),
+                    ),
+                  const SizedBox(height: 12),
+                  if (daily.isNotEmpty)
+                    Padding(padding: const EdgeInsets.fromLTRB(8, 0, 8, 6), child: Text(tx('Günlük'), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800))),
+                  for (final d in daily)
+                    Container(
+                      margin: const EdgeInsets.fromLTRB(4, 0, 4, 6),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(color: _card, borderRadius: BorderRadius.circular(12), border: Border.all(color: _line)),
+                      child: Row(children: [
+                        Expanded(child: Text('${d['day']}', style: const TextStyle(color: Colors.white70))),
+                        Text('🪙 ${_short('${d['coinsOut']}')}', style: const TextStyle(color: _goldHi, fontSize: 12.5)),
+                        const SizedBox(width: 12),
+                        SizedBox(
+                          width: 84,
+                          child: Text(_tl(d['profitTry']), textAlign: TextAlign.right,
+                              style: TextStyle(color: (double.tryParse('${d['profitTry']}') ?? 0) >= 0 ? const Color(0xFF4ADE80) : Colors.redAccent, fontWeight: FontWeight.w700)),
+                        ),
+                      ]),
+                    ),
+                ]),
+              );
+            },
+          ),
+        ),
+      ]),
+    );
+  }
+}
+
+// ============================================================================================================
+// Siparişlerim (otomatik ödemeli stok siparişleri)
+// ============================================================================================================
+class DealerOrdersScreen extends StatelessWidget {
+  const DealerOrdersScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    const names = {'paytr': 'Kart', 'usdt_trc20': 'USDT', 'bank': 'Havale'};
+    const sts = {'paid': 'Ödendi', 'created': 'Bekliyor', 'expired': 'Süresi doldu', 'failed': 'Başarısız', 'cancelled': 'İptal'};
+    return Scaffold(
+      backgroundColor: _dark,
+      appBar: AppBar(backgroundColor: _dark, title: Text(tx('Siparişlerim'))),
+      body: AsyncBody<Map<String, dynamic>>(
+        load: () => Api.get('/api/dealer/orders'),
+        builder: (context, d, reload) {
+          final list = listOf(d['orders']);
+          if (list.isEmpty) return Center(child: Text(tx('Henüz sipariş yok.'), style: const TextStyle(color: Colors.white38)));
+          return RefreshIndicator(
+            onRefresh: reload,
+            child: ListView.separated(
+              padding: const EdgeInsets.all(14),
+              itemCount: list.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 8),
+              itemBuilder: (_, i) {
+                final o = list[i];
+                final st = '${o['status']}';
+                return InkWell(
+                  borderRadius: BorderRadius.circular(14),
+                  onTap: st == 'created' ? () async {
+                    await Navigator.push(context, MaterialPageRoute(builder: (_) => DealerOrderScreen(order: o)));
+                    await reload();
+                  } : null,
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(color: _card, borderRadius: BorderRadius.circular(14), border: Border.all(color: _line)),
+                    child: Row(children: [
+                      Expanded(
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text('🪙 ${_short('${o['totalCoins']}')} · ₺${fmtNumber('${double.tryParse('${o['priceTry']}')?.round() ?? 0}')}',
+                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
+                          Text('${names[o['provider']] ?? o['provider']} · ${o['orderNo']}', style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                        ]),
+                      ),
+                      Text(tx(sts[st] ?? st), style: TextStyle(color: st == 'paid' ? const Color(0xFF4ADE80) : (st == 'created' ? _goldHi : Colors.white38), fontWeight: FontWeight.w700)),
+                    ]),
+                  ),
+                );
+              },
+            ),
           );
         },
       ),

@@ -87,6 +87,7 @@ const adminGroups: NavGroup[] = [
       { label: "Mali Kayıtlar", href: "/admin/coins", icon: Coins, adminOnly: true },
       { label: "Bayiler", href: "/admin/dealers", icon: Store, adminOnly: true },
       { label: "Bayi Mağazası", href: "/admin/dealer-shop", icon: CreditCard, adminOnly: true },
+      { label: "Ödemeler", href: "/admin/payments", icon: Banknote, adminOnly: true },
       { label: "Fasulye Cüzdanı", href: "/admin/usd", icon: Wallet, adminOnly: true },
       { label: "Şanslı Havuzlar", href: "/admin/lucky", icon: Clover, adminOnly: true },
       { label: "İçerik Yükle", href: "/admin/upload", icon: Upload, adminOnly: true },
@@ -141,7 +142,8 @@ const panelConfig: Record<DesktopPanel, { title: string; subtitle: string; group
         title: "Menü",
         links: [
           { label: "Coin Satışı", href: "/dealer/dashboard", icon: Coins },
-          { label: "Bakiye Talebi", href: "/dealer/history", icon: Wallet },
+          { label: "Stok Satın Al", href: "/dealer/history", icon: Wallet },
+          { label: "Gelir-Gider", href: "/dealer/finance", icon: Banknote },
           { label: "Hareketler", href: "/dealer/transactions", icon: History },
         ],
       },

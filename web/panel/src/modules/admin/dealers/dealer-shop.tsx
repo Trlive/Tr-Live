@@ -7,7 +7,7 @@ import { useApi } from "@/core/api/use-api";
 import { Badge, Card, ErrorBox, Loading, PageHeader, inputCls } from "@/shared/components/ui";
 import { ActionMsg, Field, btnDangerOutline, btnSmall, useAction } from "@/shared/components/kit";
 
-type Pkg = { code: string; coins: string; priceTry: number; listTry: number; label: string; active: boolean; sortOrder: number };
+type Pkg = { code: string; coins: string; priceTry: number; listTry: number; label: string; active: boolean; sortOrder: number; bonusCoins?: string };
 type Method = { id: string; name: string; icon: string; badge: string; ready: boolean; urlTemplate: string; active: boolean; sortOrder: number };
 
 const TPL = "{price} {coins} {code} {ref} {dealer}";
@@ -26,7 +26,7 @@ export default function AdminDealerShop() {
       {error && <ErrorBox message={error} onRetry={reload} />}
       {data && (
         <div className="space-y-4">
-          <Card title="Ödeme yöntemleri" subtitle={`Bağlantıyı yapıştırın. Yer tutucular: ${TPL} (ref = talebin referans kodu).`}>
+          <Card title="Ödeme bağlantıları (eski usul)" subtitle={`Otomatik ödeme (Kart / USDT / Havale) açıksa bayi onu görür; bu bağlantılar yalnızca otomatik yöntem kapalıyken kullanılır. Yer tutucular: ${TPL}.`}>
             <div className="space-y-3">
               {data.methods.map((m) => <MethodRow key={m.id} m={m} onDone={reload} />)}
               <button
@@ -43,7 +43,7 @@ export default function AdminDealerShop() {
           <Card title="Toptan paketler" subtitle="Bayinin göreceği Coin miktarı ve TL fiyatı.">
             <div className="space-y-3">
               {data.packages.map((p) => <PkgRow key={p.code} p={p} onDone={reload} />)}
-              <PkgRow p={{ code: "", coins: "", priceTry: 0, listTry: 0, label: "", active: true, sortOrder: 100 }} onDone={reload} isNew />
+              <PkgRow p={{ code: "", coins: "", priceTry: 0, listTry: 0, label: "", active: true, sortOrder: 100, bonusCoins: "" }} onDone={reload} isNew />
             </div>
           </Card>
         </div>
@@ -82,16 +82,17 @@ function MethodRow({ m, onDone }: { m: Method; onDone: () => void }) {
 }
 
 function PkgRow({ p, onDone, isNew = false }: { p: Pkg; onDone: () => void; isNew?: boolean }) {
-  const [f, setF] = useState({ code: p.code, coins: p.coins, priceTry: String(p.priceTry || ""), label: p.label, active: p.active, sortOrder: String(p.sortOrder) });
+  const [f, setF] = useState({ code: p.code, coins: p.coins, priceTry: String(p.priceTry || ""), label: p.label, active: p.active, sortOrder: String(p.sortOrder), bonusCoins: p.bonusCoins && p.bonusCoins !== "0" ? p.bonusCoins : "" });
   const { busy, msg, run } = useAction();
   const set = (k: keyof typeof f, v: string | boolean) => setF((x) => ({ ...x, [k]: v }));
   return (
     <div className="rounded-xl border border-[#383024] p-3">
-      {!isNew && <div className="mb-2 text-sm text-gray-400"><b className="text-[#d7b56d]">{fmtNumber(p.coins)} Coin</b> · ₺{fmtNumber(String(Math.round(p.priceTry)))} {!p.active && <Badge tone="red">Kapalı</Badge>}</div>}
-      <div className="grid gap-2 md:grid-cols-6">
+      {!isNew && <div className="mb-2 text-sm text-gray-400"><b className="text-[#d7b56d]">{fmtNumber(p.coins)} Coin</b>{p.bonusCoins && p.bonusCoins !== "0" ? ` + ${fmtNumber(p.bonusCoins)} ek` : ""} · ₺{fmtNumber(String(Math.round(p.priceTry)))} {!p.active && <Badge tone="red">Kapalı</Badge>}</div>}
+      <div className="grid gap-2 md:grid-cols-7">
         <Field label="Kod"><input className={inputCls} value={f.code} disabled={!isNew} onChange={(e) => set("code", e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, ""))} placeholder="Y_480K" /></Field>
         <Field label="Coin"><input className={inputCls} value={f.coins} inputMode="numeric" onChange={(e) => set("coins", e.target.value.replace(/\D/g, ""))} /></Field>
         <Field label="Fiyat (TL)"><input className={inputCls} value={f.priceTry} inputMode="decimal" onChange={(e) => set("priceTry", e.target.value.replace(/[^\d.]/g, ""))} /></Field>
+        <Field label="Ek Coin" hint="Paket bonusu (en çok paketin yarısı)"><input className={inputCls} value={f.bonusCoins} inputMode="numeric" onChange={(e) => set("bonusCoins", e.target.value.replace(/\D/g, ""))} placeholder="0" /></Field>
         <Field label="Ad"><input className={inputCls} value={f.label} maxLength={80} onChange={(e) => set("label", e.target.value)} /></Field>
         <Field label="Sıra"><input className={inputCls} value={f.sortOrder} onChange={(e) => set("sortOrder", e.target.value.replace(/[^\d-]/g, ""))} /></Field>
         <Field label="Durum"><label className="flex items-center gap-2 text-sm text-gray-300"><input type="checkbox" checked={f.active} onChange={(e) => set("active", e.target.checked)} /> Açık</label></Field>
@@ -102,7 +103,7 @@ function PkgRow({ p, onDone, isNew = false }: { p: Pkg; onDone: () => void; isNe
           disabled={busy || !f.code || !f.coins}
           className={btnSmall}
           onClick={() => run(isNew ? "Paket eklendi." : "Kaydedildi.", async () => {
-            await api(`/api/admin/dealer-shop/packages/${encodeURIComponent(f.code)}`, { method: "PUT", body: { coins: f.coins, priceTry: Number(f.priceTry) || 0, label: f.label, active: f.active, sortOrder: Number(f.sortOrder) || 0 } });
+            await api(`/api/admin/dealer-shop/packages/${encodeURIComponent(f.code)}`, { method: "PUT", body: { coins: f.coins, priceTry: Number(f.priceTry) || 0, label: f.label, active: f.active, sortOrder: Number(f.sortOrder) || 0, bonusCoins: f.bonusCoins || "0" } });
             onDone();
           })}
         >
