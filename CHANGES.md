@@ -1,3 +1,17 @@
+## v2.156.0 — Kabuk uygulama: 5 ekrana panelden yönetilen içerik alanı (SDUI)
+
+- Önceden SDUI'ye 12 ekrandan 3'ü bağlıydı (Yardım, Bildirimler, İlişkiler). Kalan ekranlar (Aile, Bayi, Etkinlik,
+  Ayarlar, Profil) çok etkileşimli; tamamen sunucudan çizmek onları bozardı (duyurularda verilen kararla aynı gerekçe).
+- Bunun yerine bu 5 ekrana **gömülü içerik alanı** eklendi (`SduiScreenView.slot`): panelden yayınlanan düzen ekranın
+  içinde bir bölüm olarak çizilir (duyuru, banner, kart, düğme, liste — mevcut bileşenlerin hepsi). Kaydırma ve
+  yenileme ekranındır; kök "scroll" ise iç içe kaydırıcı açılmaz.
+  - Etkinlik: üst blok altı · Aile: arama kutusu üstü (aileye üye olmayan) · Bayi Merkezi: en üst · Ayarlar: en üst ·
+    Profil: menü üstü.
+- **Kullanıcı tarafında hiçbir şey değişmez:** bu ekranların taslakları boş, yayın yok; panelden yayınlanana kadar alan
+  görünmez. Kademeli açılış, geri alma ve sürüm koruması diğer SDUI ekranlarıyla aynı.
+- Panelde ekran adları neyin bağlı olduğunu söylüyor ("— üst alan" / "henüz bağlı değil"). Ajans Merkezi uygulamada
+  değil web panelinde olduğu için bağlanmadı; Etkinlik detayı, Kampanya ve Başvuru formu henüz bağlı değil.
+
 ## v2.155.7 — Ses dengesi (YoHo) ve canlı yayın görüntüsü (Mico) iyileştirmeleri
 
 **Hediye sesi / müzik konuşmanın üstüne çıkıyordu**

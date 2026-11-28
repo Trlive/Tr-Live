@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../hybrid/sdui/v2/sdui_screen_view.dart';
 import '../l10n/l10n.dart';
 import '../widgets/daily_checkin.dart';
 import '../services/screen_guard.dart';
@@ -378,6 +379,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             _moneyCards(p),
             _quickTiles(p),
+            SduiScreenView.slot('profile_sections'), // panelden bölüm/duyuru (yayın yoksa görünmez)
             _menu(p, isDealer),
             Container(
               margin: const EdgeInsets.fromLTRB(12, 10, 12, 0),

@@ -23,10 +23,12 @@ type Catalog = {
 };
 
 const TR: Record<string, string> = {
-  help: "Yardım / SSS", events: "Etkinlik listesi", event_detail: "Etkinlik detayı",
-  inbox: "Duyuru / gelen kutusu", campaign: "Kampanya / görev", relations: "İlişkiler",
-  family: "Aile merkezi", agency: "Ajans merkezi", dealer: "Bayi merkezi",
-  settings: "Ayarlar", apply_form: "Başvuru formu", profile_sections: "Profil bölümleri",
+  // "üst alan": ekranın kendisi uygulamada kalır; buradaki düzen ekranın içinde bir bölüm olarak (duyuru, banner,
+  // kart, düğme) çizilir. Yayın yoksa görünmez.
+  help: "Yardım / SSS", events: "Etkinlik — üst alan", event_detail: "Etkinlik detayı (henüz bağlı değil)",
+  inbox: "Duyuru / gelen kutusu", campaign: "Kampanya / görev (henüz bağlı değil)", relations: "İlişkiler",
+  family: "Aile — üst alan", agency: "Ajans merkezi (henüz bağlı değil)", dealer: "Bayi merkezi — üst alan",
+  settings: "Ayarlar — üst alan", apply_form: "Başvuru formu (henüz bağlı değil)", profile_sections: "Profil — menü üstü alan",
 };
 
 /**

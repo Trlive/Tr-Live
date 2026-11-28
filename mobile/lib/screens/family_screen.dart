@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../hybrid/sdui/v2/sdui_screen_view.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api.dart';
@@ -113,6 +114,7 @@ class _FamilyBrowserState extends State<_FamilyBrowser> {
         ]),
         floatingActionButton: FloatingActionButton.extended(backgroundColor: _blue, foregroundColor: Colors.white, onPressed: _create, icon: const Icon(Icons.add), label: const Text('Aile kur')),
         body: Column(children: [
+          SduiScreenView.slot('family'), // panelden duyuru/banner (yayın yoksa görünmez)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
             child: TextField(

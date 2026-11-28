@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../hybrid/sdui/v2/sdui_screen_view.dart';
 import '../l10n/l10n.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -219,6 +220,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       backgroundColor: Pal.bg,
       appBar: _bar('Ayarlar'),
       body: ListView(padding: const EdgeInsets.only(bottom: 28), children: [
+        SduiScreenView.slot('settings'), // panelden duyuru (yayın yoksa görünmez)
         _group([
           _row(Icons.verified_user_outlined, _cBlue, tx('Hesap & Güvenlik'), value: sec.$1, valueColor: sec.$2, onTap: () => _push(AccountSecurityScreen(profile: p, onChangePassword: widget.onChangePassword, onDeleteAccount: widget.onDeleteAccount))),
           _row(Icons.lock_outline_rounded, _cOrange, tx('Gizlilik'), onTap: () => _push(PrivacyScreen(profile: p))),
