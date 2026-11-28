@@ -1,3 +1,11 @@
+## v2.156.4 — Yük testi düzeltmeleri (ilk gerçek ölçümden sonra)
+
+- İlk ölçüm (2 çekirdek, sesli oda, 10 konuşmacı sürekli konuşurken): 500 dinleyiciye kadar 0 hata, 750'de 1, 1000'de 39.
+  Sonuç satırı 1000'i "sorunsuz" yazıyordu: hata sınırı %5 + 2 idi. Artık bağlantıların %1'i; altındaki ilk hatalar da
+  "İlk hatalar X dinleyicide" diye ayrıca yazılır.
+- Ses kaybı sütunu "?" kalıyordu: araç (lk 2.20) özet tablosunu çizgi karakteriyle çiziyor; "Total" satırı artık
+  biçimden bağımsız okunuyor. Panelde aracın ham çıktısı da açılır bölümde görünüyor (biçim değişirse görülsün).
+
 ## v2.156.3 — Sunucu panelinde ses/görüntü yük testi (bir oda kaç kişiyi kaldırır)
 
 - Sunucu paneli (`/panel`) → **"Ses/görüntü yük testi"**: oda türü (sesli/görüntülü), konuşmacı sayısı ve en çok dinleyici

@@ -76,7 +76,8 @@ stage() {
   # Hata ve kayıp: aracın özet tablosundan (biçim sürüme göre değişebilir; ham çıktı da kayda yazılır).
   local errs loss
   errs=$(grep -ciE "failed|could not|error:" "$out" || true)
-  loss=$(grep -iE "^\s*\|?\s*total" "$out" | grep -oE "[0-9]+(\.[0-9]+)?%" | tail -n1 | tr -d '%')
+  # Özet tablosunun "Total" satırı (araç sürümüne göre | ya da │ çizgili): son yüzde = kayıp oranı.
+  loss=$(grep -iE "total" "$out" | tail -n1 | grep -oE "[0-9]+(\.[0-9]+)?%" | tail -n1 | tr -d '%')
   echo "$n $avg $peak ${mem:-?} $gen $rc ${errs:-0} ${loss:-?} $out"
 }
 
@@ -99,9 +100,10 @@ for n in 25 50 100 200 300 500 750 1000 1500 2000 3000 4000 5000; do
   say "$(printf '%9s | %3s / %3s %% | %8s | %4s %% | %s | %s%%' "$N" "$AVG" "$PEAK" "$MEM" "$GEN" "$ERRS" "$LOSS")"
   { echo "--- $N dinleyici: araç çıktısı (son satırlar)"; tail -n 12 "$F"; } >> "$STATE/loadtest.raw"
   rm -f "$F"
-  if [ "$RC" != 0 ] || [ "${ERRS:-0}" -gt $(( N / 20 + 2 )) ]; then REASON="hatalar başladı ($N dinleyicide)"; break; fi
+  if [ "$RC" != 0 ] || [ "${ERRS:-0}" -gt $(( N / 100 )) ]; then REASON="hatalar başladı ($N dinleyicide)"; break; fi
   if [[ $LOSS =~ ^[0-9]+(\.[0-9]+)?$ ]] && awk "BEGIN{exit !($LOSS > 2)}"; then REASON="ses kaybı %2'yi geçti ($N dinleyicide)"; break; fi
   LAST_OK=$N
+  [ "${ERRS:-0}" -gt 0 ] && WARN_AT=${WARN_AT:-$N}
   if [ "$AVG" -ge "$CPU_CAP" ]; then REASON="LiveKit işlemcisi %85'e ulaştı ($N dinleyicide)"; break; fi
   if [ $((AVG + GEN)) -ge $((CORES * 95)) ]; then REASON="makinenin tamamı doldu ($N dinleyicide; ölçüm aracı da aynı makinede)"; break; fi
   avail=$(awk '/MemAvailable/{print int($2/1024)}' /proc/meminfo)
@@ -110,6 +112,7 @@ for n in 25 50 100 200 300 500 750 1000 1500 2000 3000 4000 5000; do
 done
 
 say ""
+[ -n "${WARN_AT:-}" ] && say "İlk hatalar $WARN_AT dinleyicide görüldü (sınırın altında)."
 say "SONUÇ: Sorunsuz geçen en yüksek kademe: $LAST_OK dinleyici ($PUBS konuşmacı, $([ "$MODE" = audio ] && echo sesli || echo görüntülü)). Durma sebebi: $REASON."
 say "Not: Sahte dinleyiciler de bu sunucuda çalıştığı için gerçek kapasite bundan YÜKSEKTİR (ölçüm aracının işlemci payı tabloda)."
 say "Bitti."

@@ -172,7 +172,8 @@ yaklaşık 15-20 dakika sürer; bu sayfayı arada yenileyin.</p>
 <label>Konuşmacı sayısı (koltuk, 1-20)<input name="pubs" value="10" inputmode="numeric"></label>
 <label>En çok dinleyici (10-5000)<input name="max" value="1000" inputmode="numeric"></label>
 <button ${loadtesting() ? 'disabled' : ''}>${loadtesting() ? 'Test sürüyor…' : 'Yük testini başlat'}</button></form>
-<pre>${tail('loadtest.log', 40) || 'Henüz yük testi yapılmadı.'}</pre></section>
+<pre>${tail('loadtest.log', 40) || 'Henüz yük testi yapılmadı.'}</pre>
+<details><summary>Ölçüm aracının ham çıktısı (son kademeler)</summary><pre>${tail('loadtest.raw', 60) || '-'}</pre></details></section>
 
 <section><h2>Ses sunucusu testi</h2>
 <p>5 dakikada bir kendiliğinden yenilenir. ❌ olan satır varsa ekran görüntüsünü gönderin.</p>
