@@ -1,3 +1,10 @@
+## v2.155.5 — Resim önbelleği cihaza göre (sağlamlık sıralaması, 3. madde)
+
+- Flutter resim önbelleğinin üst sınırı artık cihazın belleğine göre ayarlanıyor: düşük bellekli telefonda 48 MB,
+  orta sınıfta 100 MB (Flutter varsayılanı), yüksek sınıfta 160 MB. Kalabalık odalarda (çok avatar, hediye, çerçeve)
+  düşük bellekli telefonların bellek yetersizliğinden kapanması azalır.
+- Test: `fx_load_test.dart` (3 cihaz sınıfı).
+
 ## v2.155.4 — Fasulye dışarı gönderim sınırı (F-05, sağlamlık sıralamasında 2. madde)
 
 **Ek: izin matrisi testi (K-03).**

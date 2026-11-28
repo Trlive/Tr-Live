@@ -1,3 +1,4 @@
+import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tr_live/services/fx_load.dart';
 
@@ -52,5 +53,18 @@ void main() {
     expect(FxLoad.acquireSound(), isFalse);
     FxLoad.releaseSound();
     expect(FxLoad.acquireSound(), isTrue);
+  });
+
+  test('resim önbelleği sınırı cihaz sınıfına göre', () {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    FxLoad.debugSetTotalMb(2900); // düşük
+    FxLoad.applyImageCacheLimit();
+    expect(PaintingBinding.instance.imageCache.maximumSizeBytes, 48 * 1024 * 1024);
+    FxLoad.debugSetTotalMb(8000); // yüksek
+    FxLoad.applyImageCacheLimit();
+    expect(PaintingBinding.instance.imageCache.maximumSizeBytes, 160 * 1024 * 1024);
+    FxLoad.debugSetTotalMb(0); // bilinmiyor → orta = Flutter varsayılanı
+    FxLoad.applyImageCacheLimit();
+    expect(PaintingBinding.instance.imageCache.maximumSizeBytes, 100 * 1024 * 1024);
   });
 }
