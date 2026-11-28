@@ -1,3 +1,25 @@
+## v2.156.2 — Web paneli: sayfa sayfa sadeleştirme (tekrarlar kaldırıldı, ayarlar ait olduğu sayfaya)
+
+- **Tekrarlar kaldırıldı:** "Şanslı hediye" ayarları hem Ayarlar'da hem Şanslı Havuzlar'da vardı (Ayarlar'dan çıktı;
+  Şanslı Havuzlar'da büyük ödül payıyla birlikte duruyor). "Haftalık etkinlikler" aç/kapa hem Ayarlar'da hem
+  Etkinlikler'de vardı (Ayarlar'dan çıktı).
+- **Ayarlar ait olduğu sayfaya taşındı:**
+  - Coin satış kanalları (PayTR/USDT/havale/web yükleme aç-kapa, kur, havale bilgisi) → Ödemeler → "Satış kanalları".
+  - Otomatik moderasyon (bağlantı/telefon engeli, ihlal sınırları) → Şikâyetler → "Otomatik ihlaller" (listenin üstünde).
+  - Medya deposu (Cloudflare R2) → Medya Bütçesi (en altta).
+  - Bayi teşvikleri (aylık kademe, kampanya) Ödemeler'den → Bayi Mağazası (paketlerle birlikte; eski usul ödeme
+    bağlantıları en alta).
+- **Ayarlar sayfası** iki sekmeye indi: Uygulama (sürüm, oda, ses, WebView) · Ajans ve maaş (genel ajans ayarları +
+  maaş hak edişi aynı sekmede).
+- **Ekran düzenleri tek sayfa:** "Ana Ekran Düzeni" ve "Ekran Düzenleri" menüde iki ayrı kalemdi; artık tek sayfada
+  iki sekme (Uygulama ekranları · Ana ekran sekmeleri). Eski adres yeni sayfaya yönlenir.
+- Sayfa üst başlıkları menü gruplarıyla aynı (eskiden "Ekonomi", "Sistem", "Topluluk" gibi artık olmayan adlar).
+  Katalog sayfası yanlış yönlendiriyordu ("görsel yükleme uygulamadan"); artık İçerik Yükle sayfasını gösteriyor.
+- Ödemeler sekmeleri diğer sayfalarla aynı sekme bileşenini kullanıyor. Hızlı aramaya taşınan ayarların kelimeleri eklendi
+  (ör. "r2", "teşvik", "satış kanalı", "küfür").
+- Ajans ve bayi panellerinde tekrar bulunmadı (bayi "Stok Satın Al" otomatik ödeme kapalıyken eski talep formunu
+  gösteriyor; bu bilerek).
+
 ## v2.156.1 — Web paneli: sade menü, hızlı arama, sayfa yolu, bekleyen işler (yönetim, ajans, bayi)
 
 - **Menü işe göre yeniden gruplandı** (yönetim: Genel · Bekleyen işler · Kullanıcı ve oda · Para · Mağaza ve hediye ·

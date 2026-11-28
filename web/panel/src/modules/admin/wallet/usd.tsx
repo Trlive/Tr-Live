@@ -25,7 +25,7 @@ export default function AdminUsd() {
   const t = ov.data?.totals;
   return (
     <div>
-      <PageHeader icon={<Wallet size={18} />} kicker="Ekonomi" title="Fasulye Cüzdanı" description="1 Fasulye = 1 $. Yönetime gönderilen çekim talepleri, elle düzeltme ve ayarlar." />
+      <PageHeader icon={<Wallet size={18} />} kicker="Para" title="Fasulye Cüzdanı" description="1 Fasulye = 1 $. Yönetime gönderilen çekim talepleri, elle düzeltme ve ayarlar." />
       {t && (
         <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard label="Cüzdanlardaki toplam" value={bean(t.walletCents)} tone="gold" />

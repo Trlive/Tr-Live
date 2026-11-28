@@ -25,7 +25,7 @@ export default function AdminActivities() {
   const { busy, msg, run } = useAction();
   return (
     <div>
-      <PageHeader icon={<PartyPopper size={18} />} kicker="Sistem" title="Oda Etkinlikleri" description="Bağlantıyı yapıştırın, kaydedin — uygulama hemen açar." />
+      <PageHeader icon={<PartyPopper size={18} />} kicker="Etkinlik ve duyuru" title="Oda Etkinlikleri" description="Bağlantıyı yapıştırın, kaydedin — uygulama hemen açar." />
       {loading && !data && <Loading />}
       {error && <ErrorBox message={error} onRetry={reload} />}
       {data && (
@@ -260,7 +260,7 @@ const me = await TRGame.me();   // { uid, name, avatar, balance }  — salt okun
             göndererek kasayı boşaltabilirdi.
             <br />
             Coin ile oynanan oyunun sonucu <b>sunucuda</b> üretilmelidir:
-            <b> Sistem → Oyun Paketleri</b> (motor sunucuda çalışır) ya da imzalı sağlayıcı API'si
+            <b> Etkinlik ve duyuru → Oyun Paketleri</b> (motor sunucuda çalışır) ya da imzalı sağlayıcı API'si
             (oyun kendi sunucusunda çalışır, istekleri yukarıdaki imza anahtarıyla imzalar).
           </p>
         </div>

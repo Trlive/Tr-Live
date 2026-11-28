@@ -1,11 +1,12 @@
 "use client";
 
+import { AppConfig } from "@/modules/admin/settings/settings";
 import { useState } from "react";
 import { Banknote, RefreshCw } from "lucide-react";
 import { api, fmtDate, fmtNumber } from "@/core/api/api";
 import { useApi } from "@/core/api/use-api";
 import { Badge, Card, Empty, ErrorBox, Loading, PageHeader, inputCls, tableCls, tableWrap, tdCls, thCls } from "@/shared/components/ui";
-import { ActionMsg, Field, btnDangerOutline, btnGhost, btnOk, btnSmall, useAction } from "@/shared/components/kit";
+import { ActionMsg, Field, btnDangerOutline, btnGhost, btnOk, btnSmall, useAction, Tabs } from "@/shared/components/kit";
 
 type Order = {
   orderNo: string; kind: "dealer" | "user"; status: string; provider: string; packageCode: string; coins: string; bonusCoins: string; totalCoins: string;
@@ -32,19 +33,24 @@ const tl = (v: string | number) => `₺${Number(v).toLocaleString("tr-TR", { max
 const pct = (bps: number) => `%${(bps / 100).toLocaleString("tr-TR")}`;
 
 export default function AdminPayments() {
-  const [tab, setTab] = useState<"orders" | "unmatched" | "incentives" | "status">("orders");
+  const [tab, setTab] = useState<"orders" | "unmatched" | "channels" | "status">("orders");
   return (
     <div>
-      <PageHeader icon={<Banknote size={18} />} kicker="Ekonomi" title="Ödemeler"
+      <PageHeader icon={<Banknote size={18} />} kicker="Para" title="Ödemeler"
         description="Bayi stok siparişleri ve web yüklemeleri. Kart ve USDT ödemeleri doğrulanınca Coin otomatik yazılır; havale burada teyit edilir." />
-      <div className="mb-4 flex flex-wrap gap-2">
-        {([["orders", "Siparişler"], ["unmatched", "Eşleşmeyen ödemeler"], ["incentives", "Bayi teşvikleri"], ["status", "Kurulum durumu"]] as const).map(([k, l]) => (
-          <button key={k} type="button" className={tab === k ? btnOk : btnGhost} onClick={() => setTab(k)}>{l}</button>
-        ))}
-      </div>
+      <Tabs
+        tabs={[
+          { key: "orders", label: "Siparişler" },
+          { key: "unmatched", label: "Eşleşmeyen ödemeler" },
+          { key: "channels", label: "Satış kanalları" },
+          { key: "status", label: "Kurulum durumu" },
+        ]}
+        value={tab}
+        onChange={setTab}
+      />
       {tab === "orders" && <Orders />}
       {tab === "unmatched" && <Unmatched />}
-      {tab === "incentives" && <Incentives />}
+      {tab === "channels" && <AppConfig only={["Coin satış kanalları"]} />}
       {tab === "status" && <SetupStatus />}
     </div>
   );
@@ -182,7 +188,8 @@ function Unmatched() {
   );
 }
 
-function Incentives() {
+/** Bayi teşvikleri (aylık hacim kademeleri + kampanyalar). Bayi Mağazası sayfasında gösterilir. */
+export function Incentives() {
   const { data, error, loading, reload } = useApi<{ tiers: Tier[]; campaigns: Campaign[] }>("/api/admin/payments/incentives");
   return (
     <div className="space-y-4">
@@ -282,7 +289,7 @@ function SetupStatus() {
   const { data, error, loading, reload } = useApi<Status>("/api/admin/payments/status");
   const ok = (v: boolean) => (v ? <Badge tone="green">Hazır</Badge> : <Badge tone="red">Eksik</Badge>);
   return (
-    <Card title="Kurulum durumu" subtitle="Gizli anahtarlar sunucunun .env dosyasındadır; açma/kapama Ayarlar → Coin satış kanalları.">
+    <Card title="Kurulum durumu" subtitle="Gizli anahtarlar sunucunun .env dosyasındadır; açma/kapama bu sayfadaki Satış kanalları sekmesinde.">
       {loading && !data && <Loading />}
       {error && <ErrorBox message={error} onRetry={reload} />}
       {data && (

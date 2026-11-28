@@ -71,7 +71,7 @@ const adminGroups: NavGroup[] = [
     title: "Bekleyen işler",
     links: [
       { label: "Destek", href: "/admin/support", icon: Headphones, badge: "support", keys: "talep yardım müşteri" },
-      { label: "Şikâyetler", href: "/admin/reports", icon: Flag, adminOnly: true, badge: "reports", keys: "rapor bildirim" },
+      { label: "Şikâyetler", href: "/admin/reports", icon: Flag, adminOnly: true, badge: "reports", keys: "rapor bildirim moderasyon küfür link" },
       { label: "Kimlik Onayları", href: "/admin/kyc", icon: Fingerprint, adminOnly: true, badge: "kyc", keys: "kyc doğrulama" },
       { label: "Ajanslar", href: "/admin/agencies", icon: Building2, adminOnly: true, badge: "agencyTotal", keys: "ajans prim transfer yayıncı başvuru" },
     ],
@@ -91,11 +91,11 @@ const adminGroups: NavGroup[] = [
     title: "Para",
     links: [
       { label: "Mali Kayıtlar", href: "/admin/coins", icon: Coins, adminOnly: true, keys: "coin elmas bakiye işlem" },
-      { label: "Ödemeler", href: "/admin/payments", icon: CreditCard, adminOnly: true, keys: "paytr usdt havale sipariş" },
+      { label: "Ödemeler", href: "/admin/payments", icon: CreditCard, adminOnly: true, keys: "paytr usdt havale sipariş satış kanalı" },
       { label: "Maaş Dönemleri", href: "/admin/payouts", icon: Banknote, match: ["/admin/payout"], adminOnly: true, keys: "maaş ay sonu kapanış" },
       { label: "Fasulye Cüzdanı", href: "/admin/usd", icon: Wallet, adminOnly: true, keys: "usd çekim fasulye" },
       { label: "Bayiler", href: "/admin/dealers", icon: Store, adminOnly: true, keys: "bayi stok" },
-      { label: "Bayi Mağazası", href: "/admin/dealer-shop", icon: Package, adminOnly: true, keys: "bayi paket kademe kampanya" },
+      { label: "Bayi Mağazası", href: "/admin/dealer-shop", icon: Package, adminOnly: true, keys: "bayi paket kademe kampanya teşvik" },
     ],
   },
   {
@@ -107,7 +107,7 @@ const adminGroups: NavGroup[] = [
       { label: "WIP Mağazası", href: "/admin/wip", icon: Crown, adminOnly: true, keys: "vip" },
       { label: "Madalyalar", href: "/admin/medals", icon: Medal, adminOnly: true, keys: "rozet" },
       { label: "Şanslı Havuzlar", href: "/admin/lucky", icon: Clover, adminOnly: true, keys: "şans hediye" },
-      { label: "Medya Bütçesi", href: "/admin/media-budget", icon: Gauge, adminOnly: true, keys: "boyut sınır" },
+      { label: "Medya Bütçesi", href: "/admin/media-budget", icon: Gauge, adminOnly: true, keys: "boyut sınır r2 cloudflare depo" },
     ],
   },
   {
@@ -124,8 +124,7 @@ const adminGroups: NavGroup[] = [
     links: [
       { label: "Ayarlar", href: "/admin/settings", icon: Settings, adminOnly: true, keys: "uygulama ayar oran limit" },
       { label: "Sözleşmeler", href: "/admin/contracts", icon: FileSignature, adminOnly: true, keys: "kvkk yayıncı bayi" },
-      { label: "Ana Ekran Düzeni", href: "/admin/sdui", icon: LayoutTemplate, adminOnly: true, keys: "sdui sekme" },
-      { label: "Ekran Düzenleri", href: "/admin/screens", icon: LayoutTemplate, adminOnly: true, keys: "sdui yayınla" },
+      { label: "Ekran Düzenleri", href: "/admin/screens", icon: LayoutTemplate, match: ["/admin/sdui"], adminOnly: true, keys: "sdui yayınla ana ekran sekme" },
       { label: "Özellik Bayrakları", href: "/admin/flags", icon: ToggleLeft, adminOnly: true, keys: "flag aç kapat" },
       { label: "Sunucu", href: "/admin/server", icon: Server, adminOnly: true, keys: "durum disk bellek" },
     ],

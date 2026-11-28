@@ -18,7 +18,7 @@ export default function AdminScreenshots() {
   const { data, error, loading, reload } = useApi<{ last24h: number; items: Ev[] }>(`/api/admin/screenshots?limit=200${screen ? `&screen=${screen}` : ""}`);
   return (
     <div>
-      <PageHeader icon={<Camera size={18} />} kicker="Güvenlik" title="Ekran Görüntüleri" description="Uygulamada alınan ekran görüntüleri: kim, ne zaman, hangi ekranda, kimin profilinde / hangi odada. 90 gün saklanır." />
+      <PageHeader icon={<Camera size={18} />} kicker="Kullanıcı ve oda" title="Ekran Görüntüleri" description="Uygulamada alınan ekran görüntüleri: kim, ne zaman, hangi ekranda, kimin profilinde / hangi odada. 90 gün saklanır." />
       {data && (
         <div className="mb-6 grid gap-4 sm:grid-cols-3">
           <StatCard label="Son 24 saat" value={String(data.last24h)} />

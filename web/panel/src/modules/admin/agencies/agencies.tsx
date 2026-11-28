@@ -33,7 +33,7 @@ export default function AdminAgencies() {
   const [tab, setTab] = useState<TabKey>("agencies");
   return (
     <div>
-      <PageHeader icon={<Building2 size={18} />} kicker="Ajans sistemi" title="Ajanslar ve yayıncılar" description="Ajans açın, durum ve komisyonu yönetin; yayıncı başvurularını, ajans önerilerini ve transferleri karara bağlayın." />
+      <PageHeader icon={<Building2 size={18} />} kicker="Bekleyen işler" title="Ajanslar ve yayıncılar" description="Ajans açın, durum ve komisyonu yönetin; yayıncı başvurularını, ajans önerilerini ve transferleri karara bağlayın." />
       <PanelLinkBox kind="agency" />
       <Tabs
         tabs={[

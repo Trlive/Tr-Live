@@ -1,5 +1,7 @@
 "use client";
 
+import { AppConfig } from "@/modules/admin/settings/settings";
+import { isFullAdmin } from "@/shared/components/kit";
 import { useRef, useState } from "react";
 import { Gauge, Undo2, Zap } from "lucide-react";
 import { api } from "@/core/api/api";
@@ -92,6 +94,11 @@ export default function AdminMediaBudget() {
             { key: "mediaIconMaxSide", label: "Hediye küçük resmi: en uzun kenar", type: "int", suffix: "px" },
           ]}
         />
+      )}
+      {isFullAdmin() && (
+        <div className="mt-6">
+          <AppConfig only={["Medya deposu (Cloudflare R2)"]} />
+        </div>
       )}
     </div>
   );

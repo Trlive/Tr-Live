@@ -1,5 +1,6 @@
 "use client";
 
+import { Incentives } from "@/modules/admin/payments/payments";
 import { useState } from "react";
 import { CreditCard, Plus, Trash2 } from "lucide-react";
 import { api, fmtNumber } from "@/core/api/api";
@@ -21,11 +22,18 @@ export default function AdminDealerShop() {
   const add = useAction();
   return (
     <div>
-      <PageHeader icon={<CreditCard size={18} />} kicker="Ekonomi" title="Bayi Mağazası" description="Toptan Coin paketleri ve ödeme bağlantıları." />
+      <PageHeader icon={<CreditCard size={18} />} kicker="Para" title="Bayi Mağazası" description="Bayilere satılan toptan Coin paketleri, teşvikler (aylık kademe, kampanya) ve eski usul ödeme bağlantıları." />
       {loading && !data && <Loading />}
       {error && <ErrorBox message={error} onRetry={reload} />}
       {data && (
         <div className="space-y-4">
+          <Card title="Toptan paketler" subtitle="Bayinin göreceği Coin miktarı ve TL fiyatı.">
+            <div className="space-y-3">
+              {data.packages.map((p) => <PkgRow key={p.code} p={p} onDone={reload} />)}
+              <PkgRow p={{ code: "", coins: "", priceTry: 0, listTry: 0, label: "", active: true, sortOrder: 100, bonusCoins: "" }} onDone={reload} isNew />
+            </div>
+          </Card>
+          <Incentives />
           <Card title="Ödeme bağlantıları (eski usul)" subtitle={`Otomatik ödeme (Kart / USDT / Havale) açıksa bayi onu görür; bu bağlantılar yalnızca otomatik yöntem kapalıyken kullanılır. Yer tutucular: ${TPL}.`}>
             <div className="space-y-3">
               {data.methods.map((m) => <MethodRow key={m.id} m={m} onDone={reload} />)}
@@ -38,12 +46,6 @@ export default function AdminDealerShop() {
                 <Plus size={14} /> Ödeme yöntemi ekle
               </button>
               <ActionMsg msg={add.msg} />
-            </div>
-          </Card>
-          <Card title="Toptan paketler" subtitle="Bayinin göreceği Coin miktarı ve TL fiyatı.">
-            <div className="space-y-3">
-              {data.packages.map((p) => <PkgRow key={p.code} p={p} onDone={reload} />)}
-              <PkgRow p={{ code: "", coins: "", priceTry: 0, listTry: 0, label: "", active: true, sortOrder: 100, bonusCoins: "" }} onDone={reload} isNew />
             </div>
           </Card>
         </div>

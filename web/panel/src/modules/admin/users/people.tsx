@@ -20,7 +20,7 @@ export function AdminKyc() {
     });
   return (
     <div>
-      <PageHeader icon={<Fingerprint size={18} />} kicker="Ödeme güvenliği" title="Kimlik onayları (KYC)" description="Yayıncı maaşı ödenebilmesi için kimlik onayı gerekir. Onay / ret kullanıcının ödeme özetlerine yansır." />
+      <PageHeader icon={<Fingerprint size={18} />} kicker="Bekleyen işler" title="Kimlik onayları (KYC)" description="Yayıncı maaşı ödenebilmesi için kimlik onayı gerekir. Onay / ret kullanıcının ödeme özetlerine yansır." />
       <Tabs
         tabs={[
           { key: "pending", label: "Bekleyenler" },
@@ -76,7 +76,7 @@ export function AdminStaff() {
     });
   return (
     <div>
-      <PageHeader icon={<UserCog size={18} />} kicker="Ekip" title="Yetkililer" description="Yöneticiler ve yardımcı adminler. Yardımcı admin: kullanıcı arama, ban, sohbet kısıtı, nick / fotoğraf, Coin yükleme (tek seferde en fazla 100.000), seviye (en fazla 100), WIP ve öğe verme, destek yanıtları." />
+      <PageHeader icon={<UserCog size={18} />} kicker="Kullanıcı ve oda" title="Yetkililer" description="Yöneticiler ve yardımcı adminler. Yardımcı admin: kullanıcı arama, ban, sohbet kısıtı, nick / fotoğraf, Coin yükleme (tek seferde en fazla 100.000), seviye (en fazla 100), WIP ve öğe verme, destek yanıtları." />
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
         <Card title="Yetkili listesi">
           <ActionMsg msg={msg} />
@@ -148,7 +148,7 @@ export function AdminFamilies() {
   };
   return (
     <div>
-      <PageHeader icon={<Home size={18} />} kicker="Topluluk" title="Aileler" description="Tüm aileler, puanları ve üye sayıları. Aile reisine tıklayınca profili açılır." />
+      <PageHeader icon={<Home size={18} />} kicker="Kullanıcı ve oda" title="Aileler" description="Tüm aileler, puanları ve üye sayıları. Aile reisine tıklayınca profili açılır." />
       <Card>
         <form onSubmit={search} className="mb-4 flex flex-col gap-2 sm:flex-row">
           <div className="relative flex-1">

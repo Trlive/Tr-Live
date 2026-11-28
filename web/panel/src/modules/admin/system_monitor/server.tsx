@@ -15,7 +15,7 @@ export default function AdminServer() {
   const [token, setToken] = useState("");
   return (
     <div>
-      <PageHeader icon={<Server size={18} />} kicker="Sistem" title="Sunucu" description="Sürüm, güncelleme kayıtları ve şimdi güncelle. Sunucu GitHub'daki yeni sürümü birkaç dakikada bir kendiliğinden alır." />
+      <PageHeader icon={<Server size={18} />} kicker="Uygulama ve sistem" title="Sunucu" description="Sürüm, güncelleme kayıtları ve şimdi güncelle. Sunucu GitHub'daki yeni sürümü birkaç dakikada bir kendiliğinden alır." />
       {loading && !data && <Loading />}
       {error && <ErrorBox message={error} onRetry={reload} />}
       {data && (

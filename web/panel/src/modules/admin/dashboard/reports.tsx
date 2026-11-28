@@ -1,5 +1,6 @@
 "use client";
 
+import { AppConfig } from "@/modules/admin/settings/settings";
 import { useState } from "react";
 import ModerationQueue from "@/modules/admin/moderation/queue";
 import Link from "next/link";
@@ -53,7 +54,7 @@ export default function AdminReports() {
   const pending = useApi<{ reports?: number }>("/api/admin/overview/pending");
   return (
     <div>
-      <PageHeader icon={<Flag size={18} />} kicker="Moderasyon" title="Şikâyetler ve ihlaller" description="Kullanıcı şikâyetlerini inceleyin, karara bağlayın; otomatik moderasyonun yakaladığı ihlalleri görün." />
+      <PageHeader icon={<Flag size={18} />} kicker="Bekleyen işler" title="Şikâyetler ve ihlaller" description="Kullanıcı şikâyetlerini inceleyin, karara bağlayın; otomatik moderasyonun yakaladığı ihlalleri görün." />
       <Tabs
         tabs={[
           // Kuyruk ilk sekme: moderatör ekranı açtığında önce "ne yapmalıyım" sorusunun cevabını
@@ -70,7 +71,10 @@ export default function AdminReports() {
       {tab === "queue" ? (
         <ModerationQueue />
       ) : tab === "strikes" ? (
-        <Strikes />
+        <div className="space-y-6">
+          <AppConfig only={["Otomatik moderasyon"]} />
+          <Strikes />
+        </div>
       ) : (
         <ReportList key={tab} status={tab} onChanged={pending.reload} />
       )}

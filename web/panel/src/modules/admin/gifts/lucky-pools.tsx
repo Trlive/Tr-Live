@@ -14,7 +14,7 @@ export default function AdminLuckyPools() {
   const { data, error, loading, reload } = useApi<{ jackpotOpen: number; pools: Pool[] }>("/api/admin/lucky-pools");
   return (
     <div>
-      <PageHeader icon={<Clover size={18} />} kicker="Ekonomi" title="Şanslı Hediye Havuzları" description="Her şanslı hediyenin ödül havuzu. Büyük ödül havuzu fiyatın belli katına ulaşınca açılır." />
+      <PageHeader icon={<Clover size={18} />} kicker="Mağaza ve hediye" title="Şanslı Hediye Havuzları" description="Her şanslı hediyenin ödül havuzu. Büyük ödül havuzu fiyatın belli katına ulaşınca açılır." />
       {loading && !data && <Loading />}
       {error && <ErrorBox message={error} onRetry={reload} />}
       {data && (

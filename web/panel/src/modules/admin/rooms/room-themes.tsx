@@ -18,7 +18,7 @@ export default function AdminRoomThemes() {
   const pend = useApi<{ items: Custom[] }>("/api/admin/room-themes/custom?status=pending");
   return (
     <div>
-      <PageHeader icon={<Palette size={18} />} kicker="Katalog" title="Oda Temaları" description="Katalog temaları, özel tema onayları ve tema hediye etme." />
+      <PageHeader icon={<Palette size={18} />} kicker="Mağaza ve hediye" title="Oda Temaları" description="Katalog temaları, özel tema onayları ve tema hediye etme." />
       <Tabs
         tabs={[
           { key: "themes", label: "Temalar" },

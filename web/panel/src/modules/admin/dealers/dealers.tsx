@@ -23,7 +23,7 @@ export default function AdminDealers() {
   const pend = useApi<{ requests: Req[] }>("/api/admin/topup-requests?status=pending");
   return (
     <div>
-      <PageHeader icon={<Store size={18} />} kicker="Ekonomi" title="Bayiler" description="Coin bayileri, bakiye yükleme ve bayi bakiye talepleri." />
+      <PageHeader icon={<Store size={18} />} kicker="Para" title="Bayiler" description="Coin bayileri, bakiye yükleme ve bayi bakiye talepleri." />
       <PanelLinkBox kind="dealer" />
       <Tabs
         tabs={[

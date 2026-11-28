@@ -17,7 +17,7 @@ export default function AdminFinance() {
   const [tab, setTab] = useState<TabKey>("actions");
   return (
     <div>
-      <PageHeader icon={<Coins size={18} />} kicker="Ekonomi" title="Mali kayıtlar" description="Yetkili işlemleri, Coin / Elmas hareketleri, mutabakat, basım bütçeleri, hediye akışı ve Coin paketleri." />
+      <PageHeader icon={<Coins size={18} />} kicker="Para" title="Mali kayıtlar" description="Yetkili işlemleri, Coin / Elmas hareketleri, mutabakat, basım bütçeleri, hediye akışı ve Coin paketleri." />
       <Tabs
         tabs={[
           { key: "actions", label: "İşlem kaydı" },

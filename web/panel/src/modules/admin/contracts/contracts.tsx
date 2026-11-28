@@ -59,7 +59,7 @@ export default function AdminContracts() {
   return (
     <div>
       {confirmNode}
-      <PageHeader icon={<FileSignature size={18} />} kicker="Sistem" title="Sözleşmeler" description="Yayıncı, ajans sahibi ve Coin bayisi sözleşmeleri. Yayıncı sözleşmesi ajans davetini kabul ederken, ajans ve bayi sözleşmesi panel ilk açılırken tek dokunuşla kabul edilir. Yayımlanan sürümler ve kabul kayıtları değiştirilemez." />
+      <PageHeader icon={<FileSignature size={18} />} kicker="Uygulama ve sistem" title="Sözleşmeler" description="Yayıncı, ajans sahibi ve Coin bayisi sözleşmeleri. Yayıncı sözleşmesi ajans davetini kabul ederken, ajans ve bayi sözleşmesi panel ilk açılırken tek dokunuşla kabul edilir. Yayımlanan sürümler ve kabul kayıtları değiştirilemez." />
       <div className="mb-4 flex flex-wrap gap-2">
         {(["broadcaster", "agency", "dealer"] as Kind[]).map((k) => (
           <button key={k} type="button" className={`${btnSmall} ${k === kind ? "border-[#8c713d] text-[#e5c77e]" : ""}`} onClick={() => setKind(k)}>

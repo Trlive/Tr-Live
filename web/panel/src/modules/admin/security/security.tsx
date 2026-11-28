@@ -24,7 +24,7 @@ export default function AdminSecurity() {
   const [tab, setTab] = useState<TabKey>("events");
   return (
     <div>
-      <PageHeader icon={<ShieldAlert size={18} />} kicker="Güvenlik duvarı" title="Güvenlik" description="Saldırı / şüpheli olay kayıtları, IP engelleri ve uygulamadan gelen hata raporları." />
+      <PageHeader icon={<ShieldAlert size={18} />} kicker="Kullanıcı ve oda" title="Güvenlik" description="Saldırı / şüpheli olay kayıtları, IP engelleri ve uygulamadan gelen hata raporları." />
       <Tabs
         tabs={[
           { key: "events", label: "Güvenlik olayları" },

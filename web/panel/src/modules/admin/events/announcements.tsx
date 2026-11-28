@@ -13,7 +13,7 @@ export default function AdminAnnouncements() {
   const [tab, setTab] = useState<TabKey>("push");
   return (
     <div>
-      <PageHeader icon={<Megaphone size={18} />} kicker="İletişim" title="Duyuru ve bildirimler" description="Herkese telefon bildirimi gönderin, Mesajlar ekranındaki duyuru kartlarını ve ana sayfa bannerlarını yönetin." />
+      <PageHeader icon={<Megaphone size={18} />} kicker="Etkinlik ve duyuru" title="Duyuru ve bildirimler" description="Herkese telefon bildirimi gönderin, Mesajlar ekranındaki duyuru kartlarını ve ana sayfa bannerlarını yönetin." />
       <Tabs
         tabs={[
           { key: "push", label: "Telefon bildirimi" },
