@@ -506,6 +506,25 @@ EOF
   systemctl enable --now trlive-update.timer trlive-apply.path trlive-import.path trlive-backup.timer >/dev/null
 fi
 
+# Ses/görüntü yük testi (sunucu panelinden): her kurulum/güncellemede yazılır (eski sunuculara da gelsin).
+cat > /etc/systemd/system/trlive-loadtest.path <<EOF
+[Path]
+PathModified=$STATE/loadtest-request
+[Install]
+WantedBy=multi-user.target
+EOF
+cat > /etc/systemd/system/trlive-loadtest.service <<EOF
+[Unit]
+Description=TR Live ses/görüntü yük testi
+[Service]
+Type=oneshot
+Environment=HOME=/root
+TimeoutStartSec=3h
+ExecStart=/bin/bash $SRC/deploy/oracle/loadtest.sh
+EOF
+systemctl daemon-reload || true
+systemctl enable --now trlive-loadtest.path >/dev/null 2>&1 || true
+
 log "Bitti. Adres: https://${DOMAIN}  ·  Panel: https://${DOMAIN}/panel"
 console "TR LIVE KURULUM TAMAM: https://${DOMAIN}/panel"
 echo "$(date -Is) ok $DOMAIN" > "$STATE/installed"

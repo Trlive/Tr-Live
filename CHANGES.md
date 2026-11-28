@@ -1,3 +1,15 @@
+## v2.156.3 — Sunucu panelinde ses/görüntü yük testi (bir oda kaç kişiyi kaldırır)
+
+- Sunucu paneli (`/panel`) → **"Ses/görüntü yük testi"**: oda türü (sesli/görüntülü), konuşmacı sayısı ve en çok dinleyici
+  seçilir. Test LiveKit'in resmi aracıyla (`lk load-test`, ilk çalıştırmada kurulur) tek bir odayı 25 → 50 → 100 → 200 →
+  300 → 500 → 750 → 1000 … dinleyiciyle doldurur; her kademede LiveKit'in işlemci (ortalama/tepe), bellek, hata ve ses
+  kaybını yazar. İşlemci %85'e, hata ya da %2 kayba ulaşınca durur; sonucu ve durma sebebini panelde gösterir.
+- Ölçüm aynı sunucuda yapılır (sahte dinleyiciler de bu makinenin işlemcisini kullanır): sonuç gerçek kapasitenin ALTINDA
+  kalır, aracın işlemci payı ayrı sütunda. Başlamadan önce 1 konuşmacı + 2 dinleyiciyle ön deneme yapılır; bağlanamazsa
+  ham çıktıyı yazıp durur.
+- Test odasının adı UUID değil: uygulamanın LiveKit kuralları (üye olmayanı odadan at) test katılımcılarına dokunmaz.
+- `deploy/oracle/loadtest.sh` + systemd `trlive-loadtest.path` (her güncellemede kurulur, eski sunuculara da gelir).
+
 ## v2.156.2 — Web paneli: sayfa sayfa sadeleştirme (tekrarlar kaldırıldı, ayarlar ait olduğu sayfaya)
 
 - **Tekrarlar kaldırıldı:** "Şanslı hediye" ayarları hem Ayarlar'da hem Şanslı Havuzlar'da vardı (Ayarlar'dan çıktı;
