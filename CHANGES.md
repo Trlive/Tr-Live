@@ -1,3 +1,20 @@
+## v2.152.18 — Oturum token'ları şifreli depoda (rapor Y-10)
+
+- **Token'lar artık Android Keystore / iOS Keychain'de** (`services/token_store.dart`, `flutter_secure_storage` 10.3.4). Eskiden erişim ve
+  60 günlük yenileme token'ı `SharedPreferences`'ta düz metin duruyordu; root'lu telefonda, ADB yedeğinde ve Android'in Google Drive yedeğinde
+  okunabiliyordu.
+- **Kullanıcı oturumdan atılmaz:** eski sürümden güncellenen telefonda düz kayıt ilk açılışta güvenli depoya taşınır ve düz kopya silinir.
+- **Güvenceler:** güvenli depo yazamazsa (nadir cihaz hatası) oturum düşmesin diye düz depoya yazılır ve hata kaydına geçer; Android'de şifre
+  çözülemezse (yedekten geri yüklenen telefon) depo kendini sıfırlar, kullanıcı yeniden giriş yapar, uygulama çökmez. iOS'ta "bu cihaz, ilk kilit
+  açılışından sonra": kilitliyken arka planda okunur, iCloud yedeğine geçmez. Uygulama silinip yeniden kurulunca iOS Keychain'de kalan eski
+  oturum temizlenir (aksi hâlde yeniden kurulan uygulama eski hesapla açılırdı).
+- **Eskiden beri duran hata:** açılışta oturum okunurken hata ya da 5 sn süre aşımı olursa "token'lar değişince diske yaz" bağlantısı hiç
+  kurulmuyordu. O oturumda yenilenen token'lar kaydedilmiyor, sonraki açılışta eski yenileme token'ı gönderiliyor ve sunucu bunu tekrar kullanım
+  sayıp oturumu güvenlik gereği kapatıyordu. Bağlantı artık ilk iş kuruluyor.
+- `login()` token kaydını beklemeden dönüyordu; artık bekliyor.
+- Sınama: `token_store_test.dart` (4 test: taşıma, yazma/silme, bozuk depo, yeni kurulum; taşıma satırı bozulunca test kırılıyor). `flutter test` 69/69,
+  `flutter analyze` 0 hata / 0 uyarı. **Gerçek cihazda denenmedi:** güncelleme sonrası açılışta oturumun sürdüğünü bir Android ve bir iPhone'da deneyin.
+
 ## v2.152.17 — Bağımsız inceleme turu: gerçek veritabanında doğrulama, iki üretim hatası, yayın izni sunucuda, para döngüsü koruması
 
 Bu sürüm v2.152.4–v2.152.16 arasındaki değişikliklerin bağımsız incelemesidir. İlk kez **gerçek PostgreSQL 16** kuruldu: 118 migration'ın tamamı

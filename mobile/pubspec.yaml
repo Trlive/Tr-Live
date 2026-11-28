@@ -1,7 +1,7 @@
 name: tr_live
 description: TR Live - canlı sesli/görüntülü odalar, aile, WIP, ajans/yayıncı, hediyeler ve yönetim
 publish_to: none
-version: 2.152.17+106
+version: 2.152.18+107
 environment:
   sdk: '>=3.8.0 <4.0.0'
   flutter: '>=3.32.0'
@@ -56,6 +56,7 @@ dependencies:
   # sunucudan (/api/app/config) gelir ve uygulama açıkken başlatılır. Flutter BoM 4.x (kararlı) serisi.
   firebase_core: ^4.0.0
   firebase_auth: ^6.0.0
+  flutter_secure_storage: ^10.3.4
 # shared_preferences_android 2.5.0 (16 Ekim 2026) yeni JNI yöntemine geçti; yayın APK'sında küçültme (R8) yüzünden
 # "NoSuchMethodError ... SharedPreferencesApiRegistrar.getAll" ile açılışta çöküyor. Sorunsuz son yayınlanmış sürüme (2.4.28) sabitlendi.
 dependency_overrides:
@@ -66,6 +67,7 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  flutter_secure_storage_platform_interface: ^2.1.1
 flutter:
   uses-material-design: true
   assets:

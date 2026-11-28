@@ -12,6 +12,7 @@ import 'music_service.dart';
 import 'presence_service.dart';
 import 'room_dock.dart';
 import 'session.dart';
+import 'token_store.dart';
 import 'socket_service.dart';
 
 class AuthService {
@@ -19,22 +20,13 @@ class AuthService {
   static const _refreshKey = 'refresh_token';
   static const _expKey = 'token_exp';
 
-  /// Güncel token'ları telefona yazar (uygulama kapanıp açılınca oturum sürsün).
+  /// Güncel token'ları telefona yazar (uygulama kapanıp açılınca oturum sürsün). Token'lar şifreli depoda (TokenStore);
+  /// bitiş zamanı gizli değil, düz depoda kalır.
   static Future<void> persistTokens() async {
     final prefs = await SharedPreferences.getInstance();
-    final t = Api.token;
-    final rt = Api.refreshToken;
     final exp = Api.tokenExpiresAt;
-    if (t != null) {
-      await prefs.setString(_key, t);
-    } else {
-      await prefs.remove(_key);
-    }
-    if (rt != null) {
-      await prefs.setString(_refreshKey, rt);
-    } else {
-      await prefs.remove(_refreshKey);
-    }
+    await TokenStore.write(_key, Api.token);
+    await TokenStore.write(_refreshKey, Api.refreshToken);
     if (exp != null) {
       await prefs.setInt(_expKey, exp.millisecondsSinceEpoch);
     } else {
@@ -60,7 +52,8 @@ class AuthService {
   /// bir hesabın 2FA'sının açık olup olmadığı şifre bilmeden öğrenilebilirdi.
   static Future<void> login(String username, String password, {String? totpCode}) async {
     try {
-      _save(await Api.post('/api/auth/login', {
+      // Beklenir: token'lar kaydedilmeden giriş "bitti" sayılmasın (eskiden beklenmiyordu; kayıt hatası sessizce kayboluyordu).
+      await _save(await Api.post('/api/auth/login', {
         'username': username,
         'password': password,
         'device': await DeviceInfo.collect(),
@@ -152,12 +145,18 @@ class AuthService {
       }));
 
   static Future<void> restore() async {
-    final prefs = await SharedPreferences.getInstance();
-    Api.token = prefs.getString(_key);
-    Api.refreshToken = prefs.getString(_refreshKey);
-    final exp = prefs.getInt(_expKey);
-    Api.tokenExpiresAt = exp == null ? null : DateTime.fromMillisecondsSinceEpoch(exp);
+    // İLK iş: yenilenen token'lar her durumda diske yazılsın. Eskiden bu satır sondaydı; okuma hata verirse ya da açılıştaki
+    // süre sınırı (main.dart, 5 sn) aşılırsa hiç kurulmuyordu. O oturumda yenilenen token'lar kaydedilmiyor, sonraki açılışta
+    // eski yenileme token'ı gönderiliyor ve sunucu bunu "tekrar kullanım" sayıp oturumu güvenlik gereği kapatıyordu.
     Api.onTokensChanged = persistTokens;
+    final prefs = await SharedPreferences.getInstance();
+    await TokenStore.clearIfFreshInstall(const [_key, _refreshKey]);
+    final read = await Future.wait([TokenStore.read(_key), TokenStore.read(_refreshKey)]);
+    // Okuma sürerken giriş yapılmış / yenilenmiş olabilir: bellekteki daha yeni değer ezilmez.
+    Api.token ??= read[0];
+    Api.refreshToken ??= read[1];
+    final exp = prefs.getInt(_expKey);
+    Api.tokenExpiresAt ??= exp == null ? null : DateTime.fromMillisecondsSinceEpoch(exp);
   }
 
   /// Eski sürümden güncellenen uygulama: 30 günlük tek token'ı cihaz oturumuna çevirir (yeniden giriş gerekmez).
@@ -199,8 +198,8 @@ class AuthService {
     Api.clearTokens();
     Session.clear();
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_key);
-    await prefs.remove(_refreshKey);
+    await TokenStore.write(_key, null);
+    await TokenStore.write(_refreshKey, null);
     await prefs.remove(_expKey);
   }
 }

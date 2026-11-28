@@ -1,6 +1,6 @@
 {
   "name": "tr-live-backend",
-  "version": "2.152.17",
+  "version": "2.152.18",
   "private": true,
   "type": "module",
   "main": "src/server.js",
