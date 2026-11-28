@@ -167,9 +167,13 @@ jobs:
           s = mf.read_text()
           perms = ["INTERNET", "RECORD_AUDIO", "CAMERA", "MODIFY_AUDIO_SETTINGS", "ACCESS_NETWORK_STATE", "BLUETOOTH_CONNECT",
                    "WAKE_LOCK", "POST_NOTIFICATIONS", "FOREGROUND_SERVICE", "FOREGROUND_SERVICE_MICROPHONE", "FOREGROUND_SERVICE_MEDIA_PLAYBACK",
-                   "FOREGROUND_SERVICE_SPECIAL_USE", "SYSTEM_ALERT_WINDOW", "REQUEST_IGNORE_BATTERY_OPTIMIZATIONS", "READ_PHONE_STATE",
-                   "READ_MEDIA_AUDIO", "READ_EXTERNAL_STORAGE", "DETECT_SCREEN_CAPTURE"]
-          add = "".join(f'    <uses-permission android:name="android.permission.{p}"/>\n' for p in perms if f'android.permission.{p}"' not in s)
+                   "READ_PHONE_STATE", "READ_MEDIA_AUDIO", "READ_EXTERNAL_STORAGE", "DETECT_SCREEN_CAPTURE"]
+          # Kaldırıldı (rapor Y-09): SYSTEM_ALERT_WINDOW, FOREGROUND_SERVICE_SPECIAL_USE ve REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
+          # kodda hiç kullanılmıyordu; Google Play bunlar için gerekçe ister. READ_PHONE_STATE kalır: telefon araması gelince
+          # oda sesi kapanır (MainActivity.kt, TelephonyManager).
+          # READ_EXTERNAL_STORAGE yalnızca Android 12 ve altı (yerel müzik); 13+ READ_MEDIA_AUDIO kullanır.
+          extra = {"READ_EXTERNAL_STORAGE": ' android:maxSdkVersion="32"'}
+          add = "".join(f'    <uses-permission android:name="android.permission.{p}"{extra.get(p, "")}/>\n' for p in perms if f'android.permission.{p}"' not in s)
           if add:
               s = s.replace("<application", add + "    <application", 1)
           # Arka plan (ön plan servisi) ve diğer uygulamaların üzerinde balon: servis bildirimleri
@@ -178,10 +182,7 @@ jobs:
           services = ""
           if "flutter_foreground_task.service.ForegroundService" not in s:
               services += '        <service android:name="com.pravera.flutter_foreground_task.service.ForegroundService" android:foregroundServiceType="microphone|mediaPlayback" android:exported="false" tools:replace="android:foregroundServiceType"/>\n'
-          if "OverlayService" not in s:
-              services += ('        <service android:name="flutter.overlay.window.flutter_overlay_window.OverlayService" android:exported="false" android:foregroundServiceType="specialUse" tools:replace="android:foregroundServiceType">\n'
-                           '            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="Oda sesini ve yüzen balonu arka planda göstermek"/>\n'
-                           '        </service>\n')
+          # "Yüzen balon" servisi (flutter_overlay_window) kaldırıldı: paket uygulamada yok, tanım boştaydı.
           if services:
               s = s.replace("</application>", services + "    </application>", 1)
           # Google/Facebook girişinden uygulamaya dönüş bağlantısı (trlive://login?...): Flutter kendisi yakalar.
@@ -390,17 +391,13 @@ jobs:
           fi
           gh release upload son-apk TR-Live.apk --clobber
 
-      - name: APK'yı çıktı olarak paylaş
-        # Depolama kotası dolarsa derleme kırmızı olmasın (APK zaten Releases'te).
-        continue-on-error: true
-        uses: actions/upload-artifact@v4
-        with:
-          name: tr-live-apk
-          path: ${{ env.APP_DIR }}/build/app/outputs/flutter-apk/*.apk
-          if-no-files-found: error
-          retention-days: 3
-          # APK zaten sıkıştırılmış: zip içinde yeniden sıkıştırılmaz.
-          compression-level: 0
+      # APK'yı ayrıca "Actions çıktısı" olarak yüklemiyoruz.
+      #
+      # Actions depolama kotası doldu ("Artifact storage quota has been hit") ve her
+      # derlemede kırmızı bir satır bırakıyordu. 72 MB'lık APK'yı iki yere koymanın
+      # bir faydası yok: üstteki adım zaten "Releases → son-apk" etiketine yüklüyor,
+      # o indirme bağlantısı kalıcı ve kotaya SAYILMIYOR. Günlükler (aşağıda) yalnızca
+      # derleme kırılırsa yükleniyor, onlar da küçük.
 
       - name: Hata günlüklerini paylaş
         if: failure()
