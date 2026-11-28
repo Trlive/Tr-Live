@@ -190,6 +190,13 @@ logging:
   level: warn
 EOF
 
+# Ayrı Coin yükleme sitesi (v2.154.0, isteğe bağlı): sunucu panelinde PAY_DOMAIN (ör. odeme.alanadi.com) yazılırsa o adres
+# YALNIZCA web yükleme sayfasını sunar (kök → /pay); panel, API ve diğer her şey orada 404. Alan adının DNS kaydı bu sunucuyu göstermeli.
+PAY_DOMAIN=$(grep -E "^PAY_DOMAIN=" "$ENVD/extra.env" 2>/dev/null | tail -n 1 | cut -d= -f2- | tr -d "'\" \r\n" | tr 'A-Z' 'a-z')
+if ! [[ $PAY_DOMAIN =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$ ]] || [ "$PAY_DOMAIN" = "$DOMAIN" ] || [ "$PAY_DOMAIN" = "$SSLIP" ]; then
+  [ -n "$PAY_DOMAIN" ] && log "PAY_DOMAIN geçersiz ya da ana adresle aynı: $PAY_DOMAIN (yok sayıldı)"
+  PAY_DOMAIN=""
+fi
 HOSTS="$SSLIP"; LKHOSTS="lk.$SSLIP"
 if [ "$DOMAIN" != "$SSLIP" ]; then HOSTS="$SSLIP, $DOMAIN"; LKHOSTS="lk.$SSLIP, lk.$DOMAIN"; fi
 cat > "$ENVD/Caddyfile" <<EOF
@@ -259,6 +266,23 @@ $LKHOSTS {
   reverse_proxy 127.0.0.1:7880
 }
 EOF
+if [ -n "$PAY_DOMAIN" ]; then
+  cat >> "$ENVD/Caddyfile" <<EOF
+$PAY_DOMAIN {
+  encode gzip
+  @root path /
+  rewrite @root /pay
+  @pay path /pay /pay/*
+  handle @pay {
+    reverse_proxy 127.0.0.1:3000
+  }
+  handle {
+    respond 404
+  }
+}
+EOF
+  log "Ayrı yükleme sitesi: https://$PAY_DOMAIN"
+fi
 
 # ---------- Uzak yedek (isteğe bağlı) ----------
 # Panelde "Uzak yedek" girildiyse gece yedeğinin uzak kopyası için rclone gerekir (backup.sh). Girilmediyse hiçbir şey yapılmaz.

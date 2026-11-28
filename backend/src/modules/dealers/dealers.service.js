@@ -26,10 +26,10 @@ export async function dealerSell(c, { dealerId, userId, coins, actorId, descript
   const after = before + coins;
   await c.query(`UPDATE dealer_accounts SET coin_balance = coin_balance - $1, stock_cost_try = stock_cost_try - $3 WHERE id = $2`, [coins.toString(), dealer.id, cost]);
   await c.query(`UPDATE users SET coins = $1, updated_at = NOW() WHERE id = $2`, [after.toString(), userId]);
-  await c.query(
-    `INSERT INTO dealer_transactions(dealer_id, admin_id, user_id, type, coin_amount, description, cost_try, price_try) VALUES($1,$2,$3,'sale',$4,$5,$6,$7)`,
+  const sale = (await c.query(
+    `INSERT INTO dealer_transactions(dealer_id, admin_id, user_id, type, coin_amount, description, cost_try, price_try) VALUES($1,$2,$3,'sale',$4,$5,$6,$7) RETURNING id`,
     [dealer.id, actorId, userId, coins.toString(), description || 'Bayi kullanıcı Coin satışı', cost, priceTry],
-  );
+  )).rows[0];
   await c.query(
     `INSERT INTO wallet_transactions(user_id, transaction_type, coin_amount, reference_id, description) VALUES($1,'dealer_credit',$2,$3,$4)`,
     [userId, coins.toString(), dealer.id, `Bayi Coin yüklemesi (${dealer.name})`],
@@ -41,7 +41,7 @@ export async function dealerSell(c, { dealerId, userId, coins, actorId, descript
   );
   // Aile katkısı: yükleme 1 Coin = 1.
   await addFamilyContrib((t, p) => c.query(t, p), userId, coins);
-  return { dealerBalance: (balance - coins).toString(), userBalance: after.toString() };
+  return { dealerBalance: (balance - coins).toString(), userBalance: after.toString(), transactionId: sale.id };
 }
 
 /** Zamanı gelen gecikmeli satışları kullanıcıya teslim eder (tek işlem, satır kilitli; iki kez teslim edilmez).

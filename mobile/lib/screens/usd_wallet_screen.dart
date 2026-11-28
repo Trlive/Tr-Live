@@ -324,7 +324,7 @@ class _UsdWalletScreenState extends State<UsdWalletScreen> {
           const SizedBox(width: 10),
           Expanded(
             child: FilledButton.icon(
-              onPressed: canExchange ? () => _openForm(_BeanCoinForm(balance: _balance, min: minX, coinsPerUsd: rate, toOther: true)) : null,
+              onPressed: canExchange ? () => _openForm(_BeanCoinForm(balance: _balance, min: minX, coinsPerUsd: _cents('sendCoinsPerUsd') > 0 ? _cents('sendCoinsPerUsd') : rate, toOther: true)) : null,
               icon: const Icon(Icons.card_giftcard, size: 18),
               label: Text(tx('Coin gönder')),
             ),

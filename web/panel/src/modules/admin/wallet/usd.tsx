@@ -57,6 +57,7 @@ export default function AdminUsd() {
             { key: "usdDealerMinCents", label: "Bayiye gönderim alt sınırı", type: "int", scale: 100, suffix: "Fasulye" },
             { key: "usdDealerCoinsPerUsd", label: "Bayiye gönderimde 1 Fasulye", type: "int", suffix: "Coin" },
             { key: "usdCoinsPerUsd", label: "Coin'e çevirmede 1 Fasulye", type: "int", suffix: "Coin" },
+            { key: "usdCoinsPerUsdOthers", label: "Başkasına Coin gönderirken 1 Fasulye (0 = aynı kur)", type: "int", suffix: "Coin" },
             { key: "usdExchangeMinCents", label: "Coin'e çevirme alt sınırı", type: "int", scale: 100, suffix: "Fasulye" },
           ]}
           onSaved={ov.reload}

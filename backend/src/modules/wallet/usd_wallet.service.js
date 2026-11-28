@@ -23,12 +23,14 @@ export function usdSettings(cfg) {
     dealerMinCents: BigInt(cfg.usdDealerMinCents),
     coinsPerUsd: BigInt(cfg.usdDealerCoinsPerUsd),
     exchangeCoinsPerUsd: BigInt(cfg.usdCoinsPerUsd),
+    // "Diğerleri için" (başka kullanıcıya Coin gönderme) kuru; 0 = kendine çevirmeyle aynı (YoHo: kendine 8.800, başkasına 9.600 / $).
+    sendCoinsPerUsd: BigInt(cfg.usdCoinsPerUsdOthers || 0) > 0n ? BigInt(cfg.usdCoinsPerUsdOthers) : BigInt(cfg.usdCoinsPerUsd),
     exchangeMinCents: BigInt(cfg.usdExchangeMinCents),
   };
 }
 export const settingsJson = (s) => ({
   enabled: s.enabled, withdrawMinCents: String(s.withdrawMinCents), dealerMinCents: String(s.dealerMinCents), coinsPerUsd: String(s.coinsPerUsd),
-  exchangeCoinsPerUsd: String(s.exchangeCoinsPerUsd), exchangeMinCents: String(s.exchangeMinCents),
+  exchangeCoinsPerUsd: String(s.exchangeCoinsPerUsd), sendCoinsPerUsd: String(s.sendCoinsPerUsd), exchangeMinCents: String(s.exchangeMinCents),
 });
 /** Sent tutarını Fasulye metnine çevirir (1250n → "12,5"; 1000n → "10"). */
 export const beansText = (cents) => {
@@ -265,10 +267,11 @@ export async function exchangeToCoins(userId, { cents, targetUserId = null }) {
   const s = usdSettings(await getConfig());
   if (!s.enabled) throw fail('Fasulye işlemleri şu an kapalı.', 403);
   if (cents < s.exchangeMinCents) throw fail(`En az ${beansText(s.exchangeMinCents)} Fasulye çevirebilirsiniz.`);
-  const coins = coinsFor(cents, s.exchangeCoinsPerUsd);
-  if (coins <= 0n) throw fail('Tutar çok küçük.');
   const toId = targetUserId ?? userId;
   const self = toId === userId;
+  const rate = self ? s.exchangeCoinsPerUsd : s.sendCoinsPerUsd;
+  const coins = coinsFor(cents, rate);
+  if (coins <= 0n) throw fail('Tutar çok küçük.');
   const id = crypto.randomUUID();
   return tx(async (c) => {
     // İki kullanıcı aynı anda birbirine gönderirse kilitlenme (deadlock) olmasın diye satırlar kimlik sırasıyla kilitlenir.
@@ -292,7 +295,7 @@ export async function exchangeToCoins(userId, { cents, targetUserId = null }) {
     });
     const t = (await c.query(
       `INSERT INTO usd_coin_exchanges(id, user_id, target_user_id, amount_cents, coins_per_usd, coins) VALUES($1,$2,$3,$4,$5,$6) RETURNING id, created_at`,
-      [id, userId, toId, cents.toString(), s.exchangeCoinsPerUsd.toString(), coins.toString()],
+      [id, userId, toId, cents.toString(), rate.toString(), coins.toString()],
     )).rows[0];
     const before = BigInt(to.coins);
     const after = BigInt((await c.query(`UPDATE users SET coins = coins + $2, updated_at = NOW() WHERE id = $1 RETURNING coins`, [toId, coins.toString()])).rows[0].coins);
@@ -305,7 +308,7 @@ export async function exchangeToCoins(userId, { cents, targetUserId = null }) {
       `INSERT INTO financial_audit_logs(admin_id, user_id, action, reference_type, reference_id, amount_coins, balance_before, balance_after, metadata)
        VALUES(NULL,$1,'usd_coin_exchange','usd_coin_exchange',$2,$3,$4,$5,$6)`,
       [toId, id, coins.toString(), before.toString(), after.toString(),
-        JSON.stringify({ fromUserId: userId, amountCents: String(cents), coinsPerUsd: String(s.exchangeCoinsPerUsd) })],
+        JSON.stringify({ fromUserId: userId, amountCents: String(cents), coinsPerUsd: String(rate) })],
     );
     return {
       id: t.id, self, amountCents: String(cents), coins: String(coins), balanceCents: String(balance), createdAt: t.created_at,

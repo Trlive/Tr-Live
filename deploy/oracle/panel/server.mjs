@@ -24,6 +24,13 @@ const KEYS = [
   ['GLOBAL_GIFT_MIN_COINS', 'Global hediye şeridi alt sınırı (Coin)', false],
   ['BANNED_WORDS', 'Yasaklı kelimeler (virgülle)', false],
   ['FIREWALL_ALLOW_IPS', 'Asla engellenmeyecek IP adresleri (virgülle)', false],
+  ['PAY_DOMAIN', 'Ayrı Coin yükleme sitesi alan adı (isteğe bağlı, ör. odeme.alanadi.com — DNS bu sunucuyu göstermeli)', false],
+  ['PAYTR_MERCHANT_ID', 'PayTR mağaza no', false],
+  ['PAYTR_MERCHANT_KEY', 'PayTR Merchant Key', true],
+  ['PAYTR_MERCHANT_SALT', 'PayTR Merchant Salt', true],
+  ['PAYTR_TEST_MODE', 'PayTR test modu (1 = test, 0 = canlı)', false],
+  ['USDT_TRC20_ADDRESS', 'USDT (TRC20) tahsilat cüzdanı adresi (T...)', false],
+  ['TRONGRID_API_KEY', 'TronGrid API anahtarı (isteğe bağlı)', true],
   ['BACKUP_REMOTE', 'Uzak yedek (isteğe bağlı): uç-nokta kova anahtar-kimliği gizli-anahtar [bölge] — boşlukla ayırın (KURULUM.md 7)', true],
 ];
 

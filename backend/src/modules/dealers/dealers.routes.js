@@ -9,6 +9,7 @@ import { dealerSell, deliverScheduled, transferToSub, cancelScheduled } from './
 import { createOrder, orderView, dealerShop } from '../payments/payments.service.js';
 import { ORDER_NO_RE, toScaled4, profitSummary } from '../payments/payments.rules.js';
 import { clientIp } from '../../middleware/security/firewall.js';
+import { newApiKey, cleanAllowEntry } from './dealer_api.rules.js';
 import { createTopupRequest, requestView, packageView, loadPackages, methodView, fillPayUrl } from './dealer_topup.service.js';
 import { idempotent } from '../../middleware/validation/idempotency.js';
 import { hub } from '../../infrastructure/websocket/realtime.js';
@@ -467,4 +468,49 @@ router.get('/finance', async (req, res) => {
     daily: daily.map((x) => ({ day: x.day, coinsOut: x.coins_out, revenueTry: Number(x.revenue).toFixed(2),
       profitTry: (Number(x.revenue) - Number(x.cogs)).toFixed(2), spentTry: Number(x.spent).toFixed(2) })),
   });
+});
+
+// ---------------- Bayi API anahtarları (v2.154.0) ----------------
+// Bayi kendi sisteminden /dealer-api/v1 ile Coin yükler. Yönetim API'yi açmadıysa anahtar oluşturulamaz.
+const keyJson = (k) => ({ id: k.id, prefix: k.prefix, label: k.label, ipAllow: k.ip_allow, dailyLimit: String(k.daily_limit),
+  createdAt: k.created_at, lastUsedAt: k.last_used_at, lastIp: k.last_ip, revokedAt: k.revoked_at });
+
+router.get('/api-keys', async (req, res) => {
+  const d = await myDealer(req.user.id);
+  const r = await query(`SELECT * FROM dealer_api_keys WHERE dealer_id = $1 ORDER BY created_at DESC LIMIT 50`, [d.id]);
+  res.json({ apiEnabled: d.api_enabled === true, keys: r.rows.map(keyJson), docsUrl: '/dealer-api/docs' });
+});
+
+router.post('/api-keys', userLimit('dealer_api_key', 10, 3600e3), async (req, res) => {
+  const d = await myDealer(req.user.id);
+  if (!d.api_enabled) throw fail('API erişiminiz kapalı. Açılması için yönetimle görüşün.', 403);
+  const active = (await query(`SELECT COUNT(*)::int AS n FROM dealer_api_keys WHERE dealer_id = $1 AND revoked_at IS NULL`, [d.id])).rows[0].n;
+  if (active >= 5) throw fail('En fazla 5 etkin anahtar olabilir; kullanmadığınızı iptal edin.', 409);
+  const list = Array.isArray(req.body?.ipAllow) ? req.body.ipAllow : String(req.body?.ipAllow ?? '').split(/[\s,]+/);
+  const ips = [];
+  for (const raw of list.filter((x) => String(x).trim())) {
+    const ip = cleanAllowEntry(raw);
+    if (!ip) throw fail(`IP geçersiz: ${String(raw).slice(0, 50)} (ör. 203.0.113.7 ya da 203.0.113.0/24)`);
+    ips.push(ip);
+  }
+  if (ips.length > 20) throw fail('En fazla 20 IP.');
+  const limitRaw = String(req.body?.dailyLimit ?? '0').replace(/\D/g, '') || '0';
+  const k = newApiKey();
+  const r = await query(
+    `INSERT INTO dealer_api_keys(dealer_id, prefix, secret_hash, label, ip_allow, daily_limit, created_by) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+    [d.id, k.prefix, k.hash, text(req.body?.label, 'Ad', { max: 60 }) || '', ips, limitRaw, req.user.id],
+  );
+  await query(`INSERT INTO financial_audit_logs(admin_id, action, reference_type, reference_id, metadata) VALUES($1,'dealer_api_key_create','dealer',$2,$3)`,
+    [req.user.id, d.id, JSON.stringify({ prefix: k.prefix, ips, dailyLimit: limitRaw })]);
+  // Anahtarın tamamı YALNIZCA bu yanıtta: sunucu yalnızca özetini saklar.
+  res.status(201).json({ key: k.key, apiKey: keyJson(r.rows[0]) });
+});
+
+router.delete('/api-keys/:id', async (req, res) => {
+  const d = await myDealer(req.user.id);
+  const r = await query(`UPDATE dealer_api_keys SET revoked_at = NOW() WHERE id = $1 AND dealer_id = $2 AND revoked_at IS NULL RETURNING prefix`, [uuid(req.params.id, 'Anahtar'), d.id]);
+  if (!r.rowCount) throw fail('Anahtar bulunamadı ya da zaten iptal.', 404);
+  await query(`INSERT INTO financial_audit_logs(admin_id, action, reference_type, reference_id, metadata) VALUES($1,'dealer_api_key_revoke','dealer',$2,$3)`,
+    [req.user.id, d.id, JSON.stringify({ prefix: r.rows[0].prefix })]);
+  res.json({ ok: true });
 });

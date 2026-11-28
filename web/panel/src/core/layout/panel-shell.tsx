@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { FileSignature,
+import { FileSignature, KeyRound,
   Activity,
   LayoutDashboard,
   Users,
@@ -145,6 +145,7 @@ const panelConfig: Record<DesktopPanel, { title: string; subtitle: string; group
           { label: "Stok Satın Al", href: "/dealer/history", icon: Wallet },
           { label: "Gelir-Gider", href: "/dealer/finance", icon: Banknote },
           { label: "Hareketler", href: "/dealer/transactions", icon: History },
+          { label: "API Anahtarları", href: "/dealer/api", icon: KeyRound },
         ],
       },
     ],

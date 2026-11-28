@@ -1,3 +1,46 @@
+## v2.154.0 — Bayi API'si, ayrı Coin yükleme sitesi, "başkası için" Fasulye kuru
+
+**YoHo karşılaştırması (sahibin videolarından):**
+- YoHo'nun bayinin sattığı ve kullanıcının yüklediği "Coins" birimi = bizim **Coin**.
+- YoHo'daki "Cüzdan bakiyesi $" = bizim **Fasulye**.
+- "Yükleme yap → Kendim için / Diğerleri için" = bizim Fasulye → Coin çevirme / Coin gönderme.
+
+Yapı aynı kaldı: Coin satılan sanal ürün, Fasulye satılmaz (yalnızca kazanç; Coin'e çevrilir ya da çekilir).
+
+**Fasulye → başkasına Coin kuru:** YoHo'da 1 $ kendine 8.800, başkasına 9.600 Coin. Artık ayrı ayar: `usdCoinsPerUsdOthers`
+(panel: Fasulye Cüzdanı; 0 = kendine kuruyla aynı). Para döngüsü koruması bu kura da uygulanır.
+
+**Bayi API'si v1** (`/dealer-api/v1`, belge: `/dealer-api/docs`): bayi kendi sitesinden / botundan, kendi stoğundan kullanıcı ID'sine Coin yükler.
+- **Uçlar:** `GET /me`, `GET /users/{id}`, `POST /recharges` (anında ya da 5 dk sonra), `GET /recharges[/{no}]`, `POST /recharges/{no}/cancel`.
+- **Güvenlik:**
+  - Anahtar yalnızca SHA-256 özetiyle saklanır ve bayiye bir kez gösterilir.
+  - Yönetim bayi bazında açar/kapatır; kapatınca tüm anahtarlar anında durur.
+  - IP izin listesi (tek IP / IPv4 CIDR / IPv6).
+  - Anahtar başına 24 saatlik Coin sınırı ve dakikada 120 istek.
+  - En çok 5 etkin anahtar.
+  - Bayilik sözleşmesi şartı.
+  - Kendi hesabına yükleme yasağı.
+  - Anahtar oluşturma ve iptal denetim kaydına yazılır.
+- **Tekrar güvenliği:** her yükleme bayinin `clientOrderId`'siyle bir kez işlenir; tekrar gelen istek ilk sonucu döndürür, farklı içerikle 409.
+  Reddedilen istek iz bırakmaz.
+- Satış bedeli (`priceTry`) Gelir-Gider raporuna girer; alıcıya anlık bakiye ve bildirim gider.
+- **Ekranlar:** Bayi Paneli → "API Anahtarları" (oluştur, IP, günlük sınır, iptal, son kullanım). Yönetim → Bayiler → "API erişimini aç/kapat"
+  ve listede "API" rozeti.
+
+**Ayrı yükleme sitesi:** sunucu panelinde `PAY_DOMAIN` (ör. `odeme.alanadi.com`) yazılınca o adres yalnızca web yükleme sayfasını sunar
+(kök → `/pay`; geri kalan her şey 404). Sunucu panelinde PayTR ve USDT anahtar alanları da eklendi (`.env` düzenlemek gerekmez).
+
+Migration 123. **Sınama:**
+- backend 540 birim (yeni: anahtar biçimi / özet / sabit zamanlı karşılaştırma, Bearer, IP listesi ve CIDR, sipariş no);
+- gerçek PostgreSQL'de 56/56 e2e. Yeni e2e testi:
+  - API kapalıyken anahtar yok,
+  - yükleme ve aynı no ile çift yüklememe; farklı içerikte 409,
+  - kendine yükleme reddi, günlük sınır, 5 dk iptal,
+  - IP reddi, iptal edilmiş anahtar, yönetimin kapatması,
+  - belge sayfası,
+  - "başkasına" kuru ve döngü koruması.
+- panel `tsc` 0 hata; `flutter analyze` 0 hata / 0 uyarı.
+
 ## v2.153.1 — Web panelleri ayrıldı: her panelin kendi gizli giriş bağlantısı
 
 - **Ayrı bağlantılar:** her panele kurulumda rastgele, tahmin edilemez bir bağlantı üretilir (`https://ALAN/<32 / 28 karakter>`).

@@ -1979,7 +1979,7 @@ test('dolar cüzdanı: bakiye, admin\'e gönderim (öde / reddet / vazgeç), bay
   let me = await api('GET', '/api/usd/me', { token: h.token });
   ok(me);
   assert.equal(me.body.balanceCents, '0');
-  assert.deepEqual(me.body.settings, { enabled: true, withdrawMinCents: '1000', dealerMinCents: '1000', coinsPerUsd: '4000', exchangeCoinsPerUsd: '4000', exchangeMinCents: '100' });
+  assert.deepEqual(me.body.settings, { enabled: true, withdrawMinCents: '1000', dealerMinCents: '1000', coinsPerUsd: '4000', exchangeCoinsPerUsd: '4000', sendCoinsPerUsd: '4000', exchangeMinCents: '100' });
   status(await api('POST', '/api/usd/withdrawals', { token: h.token, body: { amountCents: 1000, method: 'IBAN', account: 'TR00 1111' } }), 409, 'bakiye yok');
   // Yönetim uçları yalnızca tam yetkili admin'e açıktır
   status(await api('GET', '/api/admin/usd', { token: h.token }), 403, 'kullanıcı yönetim ucuna giremez');
@@ -2716,6 +2716,96 @@ test('bayilik v2: otomatik ödeme (havale teyidi, PayTR bildirimi, USDT zinciri)
   // Geri al: sonraki testler etkilenmesin.
   ok(await api('PUT', '/api/admin/app-config', { token: U.d.token, body: { payBankEnabled: false, payPaytrEnabled: false, payUsdtEnabled: false } }));
   ok(await api('DELETE', `/api/admin/payments/campaigns/${camp.body.id}`, { token: U.d.token }));
+});
+
+test('bayi API v1: anahtar, yükleme, tekrar güvenliği, IP, günlük sınır, iptal; Fasulye başkasına kuru', { skip, timeout: 60000 }, async () => {
+  const owner = await register('apibayi');
+  const cust = await register('apimusteri');
+  const mk = await api('POST', '/api/admin/dealers', { token: U.d.token, body: { name: `API Bayi ${Date.now()}`, ownerUserId: owner.id } });
+  status(mk, 201);
+  const dealerId = mk.body.dealer.id;
+  ok(await api('POST', `/api/admin/dealers/${dealerId}/coins`, { token: U.d.token, body: { amount: '1000000' }, headers: { 'Idempotency-Key': crypto0.randomUUID() } }));
+  status(await api('POST', '/api/dealer/api-keys', { token: owner.token, body: { label: 'site' } }), 403, 'yönetim açmadan anahtar yok');
+  status(await api('POST', `/api/admin/dealers/${dealerId}/update`, { token: owner.token, body: { apiEnabled: true } }), 403);
+  ok(await api('POST', `/api/admin/dealers/${dealerId}/update`, { token: U.d.token, body: { apiEnabled: true } }));
+  status(await api('POST', '/api/dealer/api-keys', { token: owner.token, body: { ipAllow: 'example.com' } }), 400, 'geçersiz IP');
+  const k1 = await api('POST', '/api/dealer/api-keys', { token: owner.token, body: { label: 'site', ipAllow: '127.0.0.1, ::1', dailyLimit: '500000' } });
+  status(k1, 201);
+  const key = k1.body.key;
+  assert.match(key, /^trk_[A-Za-z0-9]{8}_[A-Za-z0-9]{40}$/);
+  const list = await api('GET', '/api/dealer/api-keys', { token: owner.token });
+  assert.equal(JSON.stringify(list.body).includes(key), false, 'anahtarın tamamı bir daha gösterilmez');
+  const stored = (await sql(`SELECT secret_hash FROM dealer_api_keys WHERE dealer_id = $1`, [dealerId])).rows[0].secret_hash;
+  assert.notEqual(stored, key);
+
+  const call = (method, p, body, k = key) => api(method, `/dealer-api/v1${p}`, { body, headers: { Authorization: `Bearer ${k}`, 'X-App-Version': '' } });
+  status(await api('GET', '/dealer-api/v1/me'), 401);
+  status(await call('GET', '/me', undefined, `${key.slice(0, -1)}Z`), 401, 'yanlış anahtar');
+  const me = await call('GET', '/me');
+  ok(me);
+  assert.equal(me.body.balance, '1000000');
+  const pub = (await sql(`SELECT public_id FROM users WHERE id = $1`, [cust.id])).rows[0].public_id;
+  const ownPub = (await sql(`SELECT public_id FROM users WHERE id = $1`, [owner.id])).rows[0].public_id;
+  const lk = await call('GET', `/users/${pub}`);
+  assert.equal(lk.body.user.userId, pub);
+  status(await call('GET', '/users/99999999999'), 404);
+
+  const c0 = await coins(cust);
+  const r1 = await call('POST', '/recharges', { clientOrderId: 'SIP-1', userId: pub, coins: '200000', priceTry: '1000' });
+  status(r1, 201);
+  assert.equal(r1.body.recharge.status, 'completed');
+  assert.equal(r1.body.balance, '800000');
+  assert.equal(await coins(cust), c0 + 200000n);
+  const again = await call('POST', '/recharges', { clientOrderId: 'SIP-1', userId: pub, coins: '200000', priceTry: '1000' });
+  status(again, 200);
+  assert.equal(again.body.replay, true);
+  assert.equal(await coins(cust), c0 + 200000n, 'aynı sipariş no iki kez yüklemez');
+  status(await call('POST', '/recharges', { clientOrderId: 'SIP-1', userId: pub, coins: '1' }), 409, 'aynı no farklı miktar');
+  status(await call('POST', '/recharges', { clientOrderId: 'SIP-own', userId: ownPub, coins: '1' }), 400, 'kendine API yüklemesi yok');
+  status(await call('POST', '/recharges', { clientOrderId: 'bad id!', userId: pub, coins: '1' }), 400);
+  // Günlük sınır 500.000: 200.000 kullanıldı, 400.000 daha aşar.
+  const over = await call('POST', '/recharges', { clientOrderId: 'SIP-2', userId: pub, coins: '400000' });
+  status(over, 429);
+  assert.equal(over.body.error.code, 'rate_limited');
+  assert.equal((await call('GET', '/recharges/SIP-2')).status, 404, 'reddedilen sipariş kaydı kalmaz');
+  // 5 dakika sonra geçiş: iptal edilir, stoğa döner.
+  const sch = await call('POST', '/recharges', { clientOrderId: 'SIP-3', userId: pub, coins: '1000', delayMinutes: 5 });
+  status(sch, 201);
+  assert.equal(sch.body.recharge.status, 'scheduled');
+  const can = await call('POST', '/recharges/SIP-3/cancel');
+  ok(can);
+  assert.equal(can.body.recharge.status, 'cancelled');
+  assert.equal(can.body.balance, '800000');
+  status(await call('POST', '/recharges/SIP-3/cancel'), 409);
+  assert.equal((await call('GET', '/recharges')).body.recharges.length, 2);
+  // Dolar ölçüsü: finans raporunda API satış bedeli görünür.
+  assert.equal((await api('GET', '/api/dealer/finance', { token: owner.token })).body.revenueTry, '1000.00');
+
+  // IP kısıtı: yalnızca 10.9.9.9'a izinli anahtar bu sunucudan (127.0.0.1) reddedilir.
+  const k2 = await api('POST', '/api/dealer/api-keys', { token: owner.token, body: { ipAllow: '10.9.9.9' } });
+  const ipr = await call('GET', '/me', undefined, k2.body.key);
+  status(ipr, 403);
+  assert.equal(ipr.body.error.code, 'ip_not_allowed');
+  // İptal edilen anahtar çalışmaz; yönetim API'yi kapatınca da.
+  ok(await api('DELETE', `/api/dealer/api-keys/${k1.body.apiKey.id}`, { token: owner.token }));
+  status(await call('GET', '/me'), 401);
+  const k3 = await api('POST', '/api/dealer/api-keys', { token: owner.token, body: {} });
+  ok(await call('GET', '/me', undefined, k3.body.key));
+  ok(await api('POST', `/api/admin/dealers/${dealerId}/update`, { token: U.d.token, body: { apiEnabled: false } }));
+  const off = await call('GET', '/me', undefined, k3.body.key);
+  status(off, 403);
+  assert.equal(off.body.error.code, 'api_disabled');
+  const docs = await fetch(`${BASE}/dealer-api/docs`);
+  assert.equal(docs.status, 200);
+  assert.match(await docs.text(), /clientOrderId/);
+
+  // Fasulye → başkasına Coin gönderme kuru ayrı (YoHo "Diğerleri için"); 0 iken kendine kuruyla aynı.
+  const cfg = await api('GET', '/api/usd/me', { token: owner.token });
+  assert.equal(cfg.body.settings.sendCoinsPerUsd, cfg.body.settings.exchangeCoinsPerUsd);
+  ok(await api('PUT', '/api/admin/app-config', { token: U.d.token, body: { usdCoinsPerUsdOthers: 4400 } }));
+  assert.equal((await api('GET', '/api/usd/me', { token: owner.token })).body.settings.sendCoinsPerUsd, '4400');
+  status(await api('PUT', '/api/admin/app-config', { token: U.d.token, body: { usdCoinsPerUsdOthers: 50000 } }), 400, 'para döngüsü koruması');
+  ok(await api('PUT', '/api/admin/app-config', { token: U.d.token, body: { usdCoinsPerUsdOthers: 0 } }));
 });
 
 // EN SONDA: yayımlanan sözleşmeler silinemez ve ödeme/panel kapılarını açar; önceki testleri etkilemesin.
