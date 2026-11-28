@@ -3,9 +3,9 @@
 // Express uygulamasının kendisi app.js'te kurulur; burada yalnızca ayağa kaldırılır.
 import { app } from './app.js';
 import http from 'node:http';
-import { config, validateConfig } from './config.js';
+import { config } from './config.js';
 import { refreshCappedLevels } from './modules/users/users.service.js';
-import { query, closeDb } from './infrastructure/database/database.js';
+import { closeDb } from './infrastructure/database/database.js';
 import { authenticateToken } from './middleware/authentication/auth.js';
 import { attachRealtime, hub } from './infrastructure/websocket/realtime.js';
 import { isRoomMember, startRoomSweeper } from './modules/rooms/rooms.service.js';
@@ -19,17 +19,18 @@ import { nonOverlapping } from './infrastructure/queue/ticker.js';
 import { runAlertChecks } from './modules/system/alerts.service.js';
 import { startWeeklyEventsTicker } from './modules/events/weekly_events.service.js';
 import { startNotificationJanitor } from './modules/notifications/notify.service.js';
-import { router as dealersRouter, startDealerDeliveryTicker, shopAdminRouter as dealerShopAdminRouter } from './modules/dealers/dealers.routes.js';
+import { startDealerDeliveryTicker } from './modules/dealers/dealers.routes.js';
 import { startTransferTicker } from './modules/agencies/agency_ops.service.js';
 import { startSalaryTransferTicker } from './modules/wallet/salary_transfer.service.js';
+import { startInstantSalaryTicker } from './modules/wallet/instant_salary.service.js';
 import { startPrivacySweeper } from './modules/users/privacy.service.js';
-import { router as cpRouter, startRelationRefundTicker } from './modules/relations/cp.routes.js';
+import { startRelationRefundTicker } from './modules/relations/cp.routes.js';
 import { startGuardianTicker } from './modules/users/guardian.service.js';
 import { startFamilyJanitor } from './modules/families/family.service.js';
-import { router as screenshotsRouter, adminRouter as screenshotsAdminRouter, pruneScreenshots } from './modules/moderation/screenshots.routes.js';
-import { startPlugins, pluginClientRouter, pluginApiRouter, pluginAdminRouter } from './modules/games/plugins.service.js';
+import { pruneScreenshots } from './modules/moderation/screenshots.routes.js';
+import { startPlugins } from './modules/games/plugins.service.js';
 import { startMusicTicker } from './modules/music/music.service.js';
-import { router as luckyRouter, startBagTicker } from './modules/gifts/luckybag.routes.js';
+import { startBagTicker } from './modules/gifts/luckybag.routes.js';
 import { startAvatarSweeper } from './modules/media/avatar_sweeper.service.js';
 import { startSkinSweeper } from './modules/rooms/mic_skins.service.js';
 import { startThemeSweeper, seedThemeImages } from './modules/rooms/room_themes.service.js';
@@ -37,7 +38,7 @@ import { startPkTicker } from './modules/rooms/pk.service.js';
 import { startGameTicker } from './modules/games/games.service.js';
 import { closeStaleMicSessions } from './modules/rooms/mic.service.js';
 import { seedAssetPacks } from './modules/assets/asset_packs.service.js';
-import { firewall, bodyGuard, ipLimit, loadBans, startFirewallJanitor, wsClientIp, isBanned, noteViolation } from './middleware/security/firewall.js';
+import { loadBans, startFirewallJanitor, wsClientIp, isBanned, noteViolation } from './middleware/security/firewall.js';
 import { startOffloadTicker } from './modules/media/offload.service.js';
 
 const server = http.createServer(app);
@@ -100,6 +101,8 @@ alertTicker.unref();
 // dönemlerin maaşını dolar bakiyesine geçirir. Bayrak KAPALI geldiği için varsayılan
 // kurulumda hiçbir şey yapmaz. "Bir kere" güvencesi servisin kendisinde (veritabanında).
 const salaryTicker = startSalaryTransferTicker(nonOverlapping);
+// Ay içi maaş avansı: 3 dakikada bir. Ayar varsayılan AÇIK (migration 116); panelde tek kutuyla durdurulur.
+const instantSalaryTicker = startInstantSalaryTicker(nonOverlapping);
 loadBans().then((n) => n && console.log(`${n} aktif IP yasağı yüklendi.`)).catch((e) => console.error('IP yasakları yüklenemedi:', e.message));
 promoteBootstrapAdmins().catch((e) => console.error('ADMIN_USERNAMES uygulanamadı:', e.message));
 seedThemeImages().then((n) => n && console.log(`${n} oda teması görseli yüklendi.`)).catch((e) => console.error('Tema görselleri yüklenemedi:', e.message));
@@ -137,6 +140,7 @@ async function shutdown(signal) {
   clearInterval(idemJanitor);
   clearInterval(banJanitor);
   clearInterval(salaryTicker);
+  clearInterval(instantSalaryTicker);
   const force = setTimeout(() => process.exit(1), 10000);
   force.unref();
   // Yeni istek alınmaz; süren istekler biter. Canlı bağlantılar (WebSocket) "yeniden başlıyor" koduyla kapatılır:

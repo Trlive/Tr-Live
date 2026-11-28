@@ -1,5 +1,7 @@
 # Rakiplerle karşılaştırma ve yol haritası
 
+> **Gözden geçirme notu (v2.152.4):** Bu tablo eskidi. Yalnızca kodla karşılaştırılarak doğrulanan satırlar güncellendi: hediye animasyonu, oyunlar, web yönetim paneli, çok dil, PK ve önerilen sıra. Diğer satırlar (ör. telefon/Google girişi, günlük ödül) da eskimiş olabilir. Güncel eksik listesi için `TR_Live_Kod_Denetimi` raporuna bakın.
+
 **Kaynak notu.** Yoho için uygulama mağazası sayfalarında yer alan özellik açıklamalarına baktım (oda içi yazılı sohbet,
 özel sohbet, konu etiketleri, oda gizliliği, oyunlar, karaoke/müzik, ülkeye özel hediyeler, SVIP, onur madalyaları,
 liderlik tabloları, kullanıcı içeriği moderasyonu). **Zula Live için resmi bir kaynak bulamadım**; bu yüzden onun adına
@@ -14,7 +16,7 @@ Bu uygulamaların iç mimarisini bilmiyorum; aşağıdaki karşılaştırma **ö
 | Oda içi yazılı sohbet | ✅ | susturma, silme, kapatma, flood/yasaklı kelime filtresi |
 | Özel mesaj | ✅ | yalnızca metin; sesli/görsel mesaj yok |
 | Müzik çalar | ✅ | senkron çalma, lisanslı kütüphane. Karaoke (söz/skor) yok |
-| Hediyeler, Coin/Diamond, global şerit | ✅ | animasyon: Lottie/PNG. SVGA/MP4 yok |
+| Hediyeler, Coin/Diamond, global şerit | ✅ | animasyon: Lottie, SVGA, şeffaf MP4 (VAP), GIF/WebP, PNG |
 | Kendine hediye | ✅ | istismar korumalı (komisyon/sıralama dışı) |
 | Liderlik tabloları | ✅ | günlük/haftalık/aylık/tümü; gönderen, alan, aile |
 | Aile | ✅ | seviye, rol, puan. Aile görevleri/savaşları yok |
@@ -30,12 +32,12 @@ Bu uygulamaların iç mimarisini bilmiyorum; aşağıdaki karşılaştırma **ö
 | Telefon/Google/Apple girişi, şifre sıfırlama, e-posta doğrulama | ❌ | |
 | Push bildirim (FCM/APNs) | ❌ | |
 | PK savaşları | ✅ | iki oda, süreli, skor + destekçi listesi |
-| Oyunlar (Ludo, Uno, şans çarkı…) | 🟡 | yalnızca Ludo (bahissiz); Okey/Uno yok |
+| Oyunlar (Ludo, kart, şans çarkı…) | 🟡 | Ludo, TEK kart oyunu ve panelden yüklenen oyun paketleri var. Coin'i etkinlik kazancı/kaybı olarak hareket ettirebilen altyapı da var (harici sağlayıcı API'si, oyun paketi cüzdanı); hukuki/mağaza riski için bkz. kod denetimi K-06; Okey/Uno yok |
 | Görevler, günlük ödül, onur madalyaları | ❌ | **Bedava Coin = para basma riski; Diamond çekimiyle birlikte tasarlanmalı** |
 | Diamond çekimi (payout), vergi/KYC | ❌ | hukuki danışmanlık gerekir |
 | Yaş doğrulama / 18+ politikası, gizlilik politikası, KVKK | ❌ | mağaza ve yasal zorunluluk |
-| Web yönetim paneli | ❌ | şu an mobil içi panel |
-| Çok dil, ülke/dil keşfi | ❌ | yalnızca Türkçe arayüz |
+| Web yönetim paneli | ✅ | `web/panel` (Next.js, `/yonetim`); mobil içi panel de duruyor |
+| Çok dil, ülke/dil keşfi | 🟡 | arayüz Türkçe + İngilizce, Arapça, Hintçe çevirisi (`mobile/lib/l10n`); ülke/dil keşfi yok |
 | Ölçek: Redis, çoklu sunucu, LiveKit cluster, CDN, izleme | ❌ | şu an tek sunucu |
 
 ## Gerçekçi konum
@@ -50,6 +52,6 @@ yapılabilir; "o seviyede" olmak için aşağıdaki yol haritası aylar sürer.
 2. Telefon/Google/Apple girişi + şifre sıfırlama; gizlilik politikası, kullanım şartları, yaş kapısı.
 3. Google Play Billing / StoreKit + sunucu tarafı makbuz doğrulama (Coin satışı).
 4. FCM/APNs push; sesli mesaj.
-5. PK savaşları; SVGA/MP4 hediye animasyonu; karaoke.
-6. Web yönetim paneli; otomatik moderasyon (görsel/ses); Redis ve çoklu sunucu.
+5. Karaoke. (PK savaşları ve SVGA/MP4 hediye animasyonu artık var.)
+6. Otomatik moderasyon (görsel/ses); Redis ve çoklu sunucu. (Web yönetim paneli artık var.)
 7. Ajans maaş/hedef sistemi + Diamond çekimi (hukuki/vergi danışmanlığıyla).

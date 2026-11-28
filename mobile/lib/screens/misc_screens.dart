@@ -33,6 +33,8 @@ class WalletScreen extends StatelessWidget {
     'lucky_bag_refund': 'Şanslı çanta iadesi',
     'daily_bonus': 'Günlük görev ödülü',
     'store_purchase': 'Mağaza alışverişi',
+    'activity_win': 'Etkinlik kazancı',
+    'activity_spend': 'Etkinlik kaybı',
   };
 
   /// 5 Elmas = 1 Coin.

@@ -3,6 +3,7 @@
 // HTTP sunucusunu AÇMAZ ve zamanlayıcı BAŞLATMAZ — onlar server.js'in işi. Bu ayrım sayesinde
 // testler uygulamayı dinlemeye başlamadan kurabilir ve modül standardındaki (docs/MODULE_STANDARD.md)
 // "app.js / server.js" ayrımı gerçek olur.
+import { isWebPanelRequest } from './middleware/security/update_gate.js';
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
@@ -56,6 +57,7 @@ import { log } from './infrastructure/observability/log.js';
 import { router as assetsRouter } from './modules/assets/assets.routes.js';
 import { router as sduiRouter } from './modules/sdui/sdui.routes.js';
 import { router as sduiV2Router } from './modules/sdui/v2/sdui_v2.routes.js';
+import { router as livekitWebhookRouter } from './modules/rooms/livekit_webhook.routes.js';
 import { redactSecrets } from './middleware/security/redact.js';
 import { r2Config } from './infrastructure/storage/storage.js';
 import { cdnUrlFor } from './modules/media/offload.service.js';
@@ -78,8 +80,11 @@ app.use(timing);
 app.use('/api/activity-play', cors({ origin: true, allowedHeaders: ['Content-Type'], maxAge: 600 }));
 app.use(cors({
   origin: config.corsOrigin.includes('*') ? true : config.corsOrigin,
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-App-Version', 'Idempotency-Key', 'X-Client'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-App-Version', 'Idempotency-Key', 'X-Client', 'X-Totp-Code'],
 }));
+// LiveKit webhook'u gövdeyi HAM okur (imza baytlar üzerinden doğrulanır): JSON ayrıştırıcıdan ÖNCE ve /api dışında
+// (zorunlu güncelleme kapısı sürüm başlığı bekler; ses sunucusu göndermez).
+app.use('/livekit/webhook', livekitWebhookRouter);
 app.use(express.json({ limit: '100kb' }));
 app.use(bodyGuard()); // derin/dev JSON ve prototype pollution anahtarlarını reddeder
 app.use('/api', (req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
@@ -104,13 +109,21 @@ app.get('/media/:file', async (req, res) => {
   if (req.headers['if-none-match'] === headers.ETag) return res.status(304).set(headers).end();
   let hit = cachedMedia(m[1]);
   if (!hit) {
-    const r = await query('SELECT mime, data, storage_key FROM media_files WHERE id = $1', [m[1]]);
+    // Depo (R2) yapılandırılmışsa taşınmış dosyanın baytları OKUNMAZ: CASE, `data` sütununu yalnızca gerekirse değerlendirir
+    // (büyük bytea'nın TOAST'tan okunması yalnızca değer kullanılınca olur). Eskiden sütun her zaman seçiliyor, yönlendirme
+    // öncesi tüm dosya veritabanından çekilip atılıyordu. Depo kapalıysa (ya da geri alındıysa) veritabanı kopyası eskisi gibi sunulur.
+    const r2 = r2Config(await getConfig());
+    const r = await query(
+      `SELECT mime, storage_key, CASE WHEN storage_key IS NULL OR NOT $2::boolean THEN data END AS data
+         FROM media_files WHERE id = $1`,
+      [m[1], r2 !== null],
+    );
     if (!r.rowCount) return res.status(404).end();
     hit = r.rows[0];
     // Dosya R2'ye taşındıysa CDN'e yönlendirilir: gövde sunucudan hiç geçmez, veritabanı okunmaz.
     // Yönlendirme de sonsuza kadar önbelleklenebilir, çünkü dosya adı kimlik içerir ve içerik değişmez.
     if (hit.storage_key) {
-      const url = cdnUrlFor(r2Config(await getConfig()), hit.storage_key);
+      const url = cdnUrlFor(r2, hit.storage_key);
       if (url) return res.set(headers).redirect(308, url);
     }
     if (!hit.data || !hit.data.length) return res.status(404).end();
@@ -136,8 +149,8 @@ const UPDATE_EXEMPT = new Set(['/health', '/app/config', '/client-errors', '/aut
   '/auth/oauth/google/callback', '/auth/oauth/facebook/callback', '/legal/privacy', '/legal/privacy.json', '/legal/data-deletion', '/legal/terms']);
 app.use('/api', async (req, res, next) => {
   if (UPDATE_EXEMPT.has(req.path) || req.path.startsWith('/emoji/')) return next(); // emoji görselleri sürüm başlığı göndermez
-  // Web yönetim/ajans paneli bir uygulama sürümü değildir: zorunlu güncelleme ona uygulanmaz.
-  if (req.get('X-Client') === 'web-panel') return next();
+  // Web yönetim/ajans paneli bir uygulama sürümü değildir: zorunlu güncelleme yalnızca KENDİ yollarında ona uygulanmaz (bkz. update_gate.js).
+  if (isWebPanelRequest(req.get('X-Client'), req.path)) return next();
   const c = await getConfig();
   if (compareVersions(c.minAppVersion, '0.0.0') === 0) return next();
   if (compareVersions(req.get('X-App-Version'), c.minAppVersion) >= 0) return next();
@@ -176,7 +189,7 @@ app.use('/api/families', familiesRouter);
 app.use('/api/wip', wipRouter);
 app.use('/api/dealer', dealersRouter);
 app.use('/api/activities', activitiesRouter);
-app.use('/api/activity-play', activityPlayRouter); // oyun sayfası → sunucu (oyun bileti ile Coin bahis/sonuç)
+app.use('/api/activity-play', activityPlayRouter); // oyun sayfası → sunucu (oyun bileti ile salt okunur oyuncu bilgisi; Coin hareketi yok)
 app.use('/api/activity-provider', activityProviderRouter); // oyun sağlayıcısı (sunucu → sunucu, imzalı)
 app.use('/api/admin/plugins', pluginAdminRouter);
 app.use('/api/g', pluginApiRouter); // oyun paketlerinin oyuncu API'si

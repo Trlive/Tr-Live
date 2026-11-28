@@ -24,6 +24,7 @@ const KEYS = [
   ['GLOBAL_GIFT_MIN_COINS', 'Global hediye şeridi alt sınırı (Coin)', false],
   ['BANNED_WORDS', 'Yasaklı kelimeler (virgülle)', false],
   ['FIREWALL_ALLOW_IPS', 'Asla engellenmeyecek IP adresleri (virgülle)', false],
+  ['BACKUP_REMOTE', 'Uzak yedek (isteğe bağlı): uç-nokta kova anahtar-kimliği gizli-anahtar [bölge] — boşlukla ayırın (KURULUM.md 7)', true],
 ];
 
 function readText(f) {

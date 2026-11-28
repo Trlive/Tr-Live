@@ -104,7 +104,10 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
         return tx('Kullanıcı adı 3-30 karakter olmalı; yalnızca harf, rakam, nokta ve alt çizgi kullanılabilir.');
       }
     }
-    if (_password.text.length < 6) return tx('Şifre en az 6 karakter olmalı.');
+    // 8 karakter kuralı yalnızca YENİ şifreye uygulanır. Girişte uygulanırsa eski kuralla (en az 6) şifre koymuş
+    // kullanıcılar uygulamaya giremez; sunucu da girişte uzunluk denetlemez.
+    if (_register && _password.text.length < 8) return tx('Şifre en az 8 karakter olmalı.');
+    if (!_register && _password.text.isEmpty) return tx('Şifrenizi girin.');
     return null;
   }
 

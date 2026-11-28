@@ -50,6 +50,7 @@
     "/dealer-topup -> dealerTopupPageRouter",
     "/g -> pluginClientRouter",
     "/games -> hostedGamesRouter",
+    "/livekit/webhook -> livekitWebhookRouter",
     "/room-activities -> roomActivitiesRouter",
     "/room-game -> roomGamePageRouter"
   ],
@@ -276,7 +277,7 @@
     "PATCH /banners/:id",
     "PATCH /methods/:id",
     "PATCH /wip/tiers/:level",
-    "POST /  ×6",
+    "POST /  ×7",
     "POST /2fa/confirm",
     "POST /2fa/disable",
     "POST /2fa/recovery",
@@ -553,7 +554,7 @@
     "USE /:id",
     "USE /:id/panel"
   ],
-  "total": 542,
+  "total": 543,
   "files": {
     "modules/admin/admin.routes.js": 1,
     "modules/admin/admin_agencies.routes.js": 16,
@@ -594,6 +595,7 @@
     "modules/moments/feed.routes.js": 12,
     "modules/music/music.routes.js": 12,
     "modules/relations/cp.routes.js": 8,
+    "modules/rooms/livekit_webhook.routes.js": 1,
     "modules/rooms/mic_skins.routes.js": 3,
     "modules/rooms/pk.routes.js": 10,
     "modules/rooms/room_activities.routes.js": 1,

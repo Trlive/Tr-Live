@@ -95,7 +95,8 @@ router.get('/gifts/global/recent', async (req, res) => {
 
 // Hediye gönderimi: tek PostgreSQL işlemi. Kendine hediye serbesttir (gönderen alıcı olabilir):
 //  - Coin düşer, Diamond artar (muhasebe kaydı tutulur).
-//  - Kendine hediye; ajans/maaş hesabına ve liderlik tablolarına SAYILMAZ (suistimali önlemek için). PK puanına SAYILIR (Micolive gibi).
+//  - Kendine hediye: SESLİ odada alıcının maaşına ve kotasına sayılır (agencies/salary_rules.js) ve PK puanına sayılır (Micolive gibi);
+//    liderlik tablolarına sayılmaz. GÖRÜNTÜLÜ odada kendine hediye gönderilemez.
 // Dakikada 180 gönderim (saniyede 3): şanslı hediye combo'sunda hızlı dokunan kullanıcı "çok hızlı" uyarısına takılmasın.
 router.post('/rooms/:roomId/gifts/send', userLimit('gift', 180, 60e3), idempotent('gift_send'), async (req, res) => {
   const roomId = uuid(req.params.roomId, 'Oda');
@@ -155,8 +156,14 @@ router.post('/rooms/:roomId/gifts/send', userLimit('gift', 180, 60e3), idempoten
       if (targets.length > MAX_BULK_RECIPIENTS) throw fail(`Toplu hediye en fazla ${MAX_BULK_RECIPIENTS} kişiye gönderilebilir.`);
       allocation = targets.map((m) => ({ userId: m.user_id, quantity }));
     } else {
-      allocation = distributeGift(members, quantity, distribution, selectedUserIds);
+      // Bölüşen modlar (eski uygulama sürümleri): görüntülü odada gönderen havuza katılmaz. Katılsaydı mikrofondaki
+      // yayıncının "eşit/rastgele" gönderimi aşağıdaki kendine hediye kuralına takılıp her seferinde reddedilirdi.
+      const pool = room.room_type === 'video' ? members.filter((m) => m.user_id !== senderId) : members;
+      allocation = distributeGift(pool, quantity, distribution, selectedUserIds);
     }
+
+    // Görüntülü odada kendine hediye gönderilemez (sesli odada serbest; maaş/kota kuralı için bkz. agencies/salary_rules.js).
+    if (room.room_type === 'video' && allocation.some((a) => a.userId === senderId)) throw fail('Görüntülü odada kendinize hediye gönderemezsiniz.');
 
     // Toplam tutar, dağıtılan toplam adede göre hesaplanır (bölünen modlarda = adet, "herkese" modlarında = adet × kişi).
     const totalUnits = allocation.reduce((s, a) => s + BigInt(a.quantity), 0n);

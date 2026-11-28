@@ -125,8 +125,8 @@ export const gameInfo = async (ids) => {
 
 /**
  * TRGame SDK: oyun sayfası bileti ve oyuncu bilgisini (ad, bakiye) adresten/uçtan alır.
- * Coin bahsi SDK'dan yapılamaz: `bet` / `settle` / `play` v2.131.0'da kaldırıldı (kazancı istemci
- * bildiriyordu). Çağrılırlarsa sebebi açıklayan bir hata döner, sessizce başarısız olmazlar.
+ * Coin hareketi SDK'dan yapılamaz: istemci çarpanıyla çalışan eski tur çağrıları v2.131.0'da kaldırıldı (sonucu istemci
+ * bildiriyordu); SDK'da artık bu adlarda yöntem yoktur.
  */
 // SDK artık parçalara ayrıldı: modules/games/sdk/ (oturum, olaylar, köprü).
 // Tek dizede yazılıyken hiçbir parçanın gerekçesi okunamıyor ve yeniden bağlanma gibi ince

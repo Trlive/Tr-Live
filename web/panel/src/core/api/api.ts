@@ -219,7 +219,7 @@ export async function apiUpload(path: string, file: File): Promise<{ url: string
 }
 
 /** Herhangi bir dosyayı (mp4, svga, json, webp, gif, png, zip) olduğu gibi gönderir (POST). En fazla 40 MB. */
-export async function apiBinary<T = Record<string, unknown>>(path: string, file: File | Blob): Promise<T> {
+export async function apiBinary<T = Record<string, unknown>>(path: string, file: File | Blob, extraHeaders: Record<string, string> = {}): Promise<T> {
   const s = getSession();
   if (!s) throw new ApiError("Oturum bulunamadı. Lütfen yeniden giriş yapın.", 401);
   if (file.size > 40 * 1024 * 1024) throw new ApiError("Dosya en fazla 40 MB olabilir.", 400);
@@ -227,7 +227,7 @@ export async function apiBinary<T = Record<string, unknown>>(path: string, file:
   const send = (token: string) =>
     fetch(`${API_BASE}${path}`, {
       method: "POST",
-      headers: { "X-Client": "web-panel", "Content-Type": "application/octet-stream", Authorization: `Bearer ${token}` },
+      headers: { ...extraHeaders, "X-Client": "web-panel", "Content-Type": "application/octet-stream", Authorization: `Bearer ${token}` },
       body: file,
       cache: "no-store",
     });

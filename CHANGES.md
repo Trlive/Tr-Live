@@ -1,3 +1,350 @@
+## v2.152.18 — Oturum token'ları şifreli depoda (rapor Y-10)
+
+- **Token'lar artık Android Keystore / iOS Keychain'de** (`services/token_store.dart`, `flutter_secure_storage` 10.3.4). Eskiden erişim ve
+  60 günlük yenileme token'ı `SharedPreferences`'ta düz metin duruyordu; root'lu telefonda, ADB yedeğinde ve Android'in Google Drive yedeğinde
+  okunabiliyordu.
+- **Kullanıcı oturumdan atılmaz:** eski sürümden güncellenen telefonda düz kayıt ilk açılışta güvenli depoya taşınır ve düz kopya silinir.
+- **Güvenceler:** güvenli depo yazamazsa (nadir cihaz hatası) oturum düşmesin diye düz depoya yazılır ve hata kaydına geçer; Android'de şifre
+  çözülemezse (yedekten geri yüklenen telefon) depo kendini sıfırlar, kullanıcı yeniden giriş yapar, uygulama çökmez. iOS'ta "bu cihaz, ilk kilit
+  açılışından sonra": kilitliyken arka planda okunur, iCloud yedeğine geçmez. Uygulama silinip yeniden kurulunca iOS Keychain'de kalan eski
+  oturum temizlenir (aksi hâlde yeniden kurulan uygulama eski hesapla açılırdı).
+- **Eskiden beri duran hata:** açılışta oturum okunurken hata ya da 5 sn süre aşımı olursa "token'lar değişince diske yaz" bağlantısı hiç
+  kurulmuyordu. O oturumda yenilenen token'lar kaydedilmiyor, sonraki açılışta eski yenileme token'ı gönderiliyor ve sunucu bunu tekrar kullanım
+  sayıp oturumu güvenlik gereği kapatıyordu. Bağlantı artık ilk iş kuruluyor.
+- `login()` token kaydını beklemeden dönüyordu; artık bekliyor.
+- Sınama: `token_store_test.dart` (4 test: taşıma, yazma/silme, bozuk depo, yeni kurulum; taşıma satırı bozulunca test kırılıyor). `flutter test` 69/69,
+  `flutter analyze` 0 hata / 0 uyarı. **Gerçek cihazda denenmedi:** güncelleme sonrası açılışta oturumun sürdüğünü bir Android ve bir iPhone'da deneyin.
+
+## v2.152.17 — Bağımsız inceleme turu: gerçek veritabanında doğrulama, iki üretim hatası, yayın izni sunucuda, para döngüsü koruması
+
+Bu sürüm v2.152.4–v2.152.16 arasındaki değişikliklerin bağımsız incelemesidir. İlk kez **gerçek PostgreSQL 16** kuruldu: 118 migration'ın tamamı
+sıfırdan çalıştırıldı ve uçtan uca testler gerçek veritabanına karşı koşturuldu. Ayrıca **Flutter SDK** ile `flutter analyze` ve `flutter test`,
+web paneli için `tsc` ve `next build` ilk kez gerçekten çalıştırıldı.
+
+**Bulunan ve düzeltilen hatalar**
+- **Mobil girişte 8 karakter kuralı (v2.152.x'te geldi):** kural yalnızca kayıtta değil girişte de uygulanıyordu; şifresini eski kuralla (6–7 karakter)
+  koymuş her kullanıcı yeni sürümde giriş yapamazdı. Artık yalnızca kayıtta (sunucu girişte zaten uzunluk denetlemiyordu).
+- **Alt bayi listesi her açılışta "Sunucu hatası" (eskiden beri):** `COALESCE(metin, 0)` PostgreSQL'de tür hatası. Birim testleri sahte veritabanıyla
+  çalıştığı için hiç görünmemişti; gerçek veritabanında yakalandı.
+- **Görüntülü odada hediye paneli yayıncının kendisini seçiyordu:** v2.152.5 kuralı (görüntülüde kendine hediye yok) yüzünden varsayılan alıcı kendisi
+  olunca gönderim reddediliyordu. Mobil artık görüntülü odada kişinin kendisini alıcı listesinde göstermiyor; eski sürümlerin "eşit/rastgele" modunda
+  sunucu göndereni havuzdan çıkarıyor.
+- **e2e testleri sahip kararlarıyla çelişiyordu:** v2.152.5 (sesli odada kendine hediye maaşa sayılır, görüntülüde gönderilemez) ve v2.152.14
+  (basit maaş kuralı, "Maaş 2" sütunu) sonrası 3 test eski davranışı bekliyordu. Kararlara göre güncellendi; gerçek veritabanında 52/52.
+
+**Yeni korumalar**
+- **Para döngüsü koruması:** sesli odada kendine hediye maaşa sayıldığı için, Fasulye→Coin (ya da bayi) kuru maaş tablosunun en cömert seviyesinden
+  yüksek olursa "Coin al → kendine hediye → maaş" turu kâr ederdi. Varsayılanlarda döngü zararına (1$ = 4.000 Coin; tablo 1$ için en az 10.638 elmas
+  ister). Artık kur ve maaş tablosu bu sınırı aşacak şekilde kaydedilemez (`salaryLoopError`, panelde 400 ve açıklama). **Platform dışındaki bayi
+  satış fiyatı bu korumanın dışındadır:** bayiler 1$'a 10.638 Coin'den fazlasını satarsa döngü yine kârlıdır.
+- **Yayın izni sunucuda (rapor K-04):** tek kural (`rooms/publish_policy.rules.js`): koltukta olmayan yayın yapamaz; susturulmuş koltuk sesli odada
+  yayın yapamaz, görüntülüde yalnızca kamera açabilir. Kural LiveKit anahtarına, koltuğa oturmaya ve koltuk susturmaya uygulanıyor; **koltuk susturma
+  eskiden yalnızca istemcide uygulanıyordu.** Yeni `/livekit/webhook` ucu (imza doğrulamalı): odanın üyesi olmayan katılımcıyı çıkarır, kurala aykırı
+  yayını keser. `livekit.yaml`'a webhook ayarı eklendi; **ilk dağıtımda ses sunucusu bir kez yeniden başlar** (açık odalarda ses birkaç saniye kesilir).
+- **Oyun paketi (rapor K-02, ara adım):** paket yüklemek ve "tam erişim" vermek 2FA'sı açık yöneticiden, o anki kodla kabul edilir; panelde kod alanı.
+  **Yönetici hesabınızda 2FA açık değilse paket yükleyemezsiniz** — önce açın. Paketi ayrı süreçte çalıştırmak eklenti sözleşmesini değiştirdiği için yapılmadı.
+- **WebSocket dizinleri (rapor Y-01):** oda, kullanıcı, çevrimiçi izleyici ve IP dizinleri; yayınlar artık tüm bağlantıları dolaşmıyor. Gerçek
+  WebSocket istemcileriyle 5 test.
+- **TURN sertifikası yenilenince** ses sunucusu gece 04'te yeniden başlatılır (eskiden yalnızca bir güncelleme uygulanınca; uzun süre güncelleme
+  gelmezse TURN 90. günde sessizce bozulurdu).
+
+**Diğer:** avans servisindeki "ayar kapalı gelir" yorumları düzeltildi (migration 116 ile varsayılan açık). Panel `tsconfig` hedefi ES2020 (5 tür hatası).
+`mobile/pubspec.lock` ve `web/panel/package-lock.json` eklendi.
+
+**Sınama:** backend 515 birim testi; gerçek PostgreSQL 16'da 52/52 uçtan uca; `flutter analyze` 0 hata / 0 uyarı; `flutter test` 65/65; panel `tsc` 0 hata, `next build` başarılı.
+**Denenemeyenler:** gerçek cihazda ses/görüntü, LiveKit webhook'unun canlı ses sunucusundan gelişi, TURN. İlk dağıtımdan sonra: sunucu günlüğünde
+`livekit_webhook_failed` olmamalı; bir koltuğu susturup susturulan kişinin sesinin gerçekten kesildiğini deneyin.
+
+## v2.152.16 — Medya depolama (rapor O-03): taşıma tamamlanıyor, silinen dosyanın R2 nesnesi de siliniyor
+
+Mevcut R2 taşıma altyapısı (taşıyıcı, doğrulama, CDN yönlendirmesi) korundu; eksikler kapatıldı. Yükleme noktalarına DOKUNULMADI (yükleme önce veritabanına yazılır, taşıma arka planda yapılır:
+R2 bir an yanıt vermese de kullanıcı yüklemesi başarısız olmaz). Raporun önerdiği "ön imzalı adresle doğrudan R2'ye yükleme" bilerek YAPILMADI: istemci ve CORS değişikliği ister, kazancı yoktur —
+asıl dert (veritabanı/yedek büyümesi, her istekte veritabanı okuması) aşağıdakilerle çözülür.
+
+- **Sıcak yol düzeltildi (`app.js` `/media/:file`):** taşınmış dosyada bile `data` sütunu veritabanından okunup atılıyordu (yorum "veritabanı okunmaz" diyordu, sorgu okuyordu). Artık depo
+  yapılandırılmışsa taşınmış dosyanın baytı okunmaz (`CASE WHEN … THEN data END`; TOAST'taki büyük değer yalnızca kullanılırsa çekilir). Depo kapalıysa ya da geri alındıysa eskisi gibi veritabanından sunulur.
+- **Veritabanı kopyası artık OTOMATİK siliniyor:** `dropDbCopies` yalnızca panelden elle çalışıyordu, veritabanı büyümeye devam ediyordu. Saatlik işe eklendi (7 gün sonra, turda en çok 100 dosya) ve **her dosyada yeniden
+  doğrulanıyor** (R2'de şimdi var + boyut kayıtla aynı; doğrulanamayan silinmez; depo art arda 3 hata verirse tur durur). Panel eylemi de aynı doğrulamayı kullanır.
+- **Kopyası silinmiş dosya içeriden okunuyordu → boş bayt:** `media_budget.process` (medya küçültme) ve `autoIcon` (mp4'ten otomatik ikon) doğrudan `data` okuyordu; silinmiş kopyada boş bayt üzerinde çalışıp bütçe raporuna
+  yanlışlıkla "sınır içinde" yazabilirdi. Yeni `readMediaBytes` kopya silinmişse R2'den okur ve boyut/sha256 ile doğrular; okunamazsa dosyaya dokunulmaz.
+- **R2 nesneleri sahipsiz kalıyordu:** `deleteObject` hiçbir yerden çağrılmıyordu; altı farklı yerde `media_files` satırı siliniyor (hesap silme, avatar değişimi, medya yedeği temizleme…) ama R2'deki dosya ve herkese açık CDN adresi kalıyordu
+  (depolama sızıntısı + silinen hesabın görselleri erişilebilir). Migration 118: `media_files` üzerinde AFTER DELETE tetikleyicisi, anahtarı AYNI işlemde `media_delete_queue`'ya yazar (silme noktası ne olursa olsun, gelecektekiler dahil);
+  işçi her 10 dakikada kuyruğu boşaltır, R2 erişilemezse anahtar kuyrukta bekler (20 denemeden sonra durumda "takılı" görünür). Yalnızca `media/<uuid>.<uzantı>` biçimindeki anahtarlar silinir.
+- **Yarış düzeltildi:** taşıma sırasında satır silinirse az önce yazılan R2 nesnesi sahipsiz kalıyordu; artık hemen geri alınır.
+- **İzleme:** `GET /storage/status` yanıtına `deleteQueue` ve `deleteQueueStuck` eklendi; R2 yapılandırılmamış ve medya 500 MB'ı aşmışsa günlüğe `media_db_growth` uyarısı yazılır. Taşıma işi 10 dakikada bir çalışır (ağır işler yine saatte bir).
+- Migration 117: taşıma ve kopya silme taramaları için iki kısmi indeks.
+- **Yeni sınır:** kopya silindikten sonra medyanın tek kaynağı R2'dir ve veritabanı yedeği medyayı içermez; R2 kovası ayrıca yedeklenmelidir (KURULUM.md 8).
+- Sınama: `media_bytes.test.js` (13 test: doğrulama, okuma-geçiş, silme kararı, silme turu, hata serisi, anahtar biçimi, silme kuyruğu, migration, sıcak yol regresyon koruması). **Gerçek PostgreSQL ve R2 ile ÇALIŞTIRILMADI**:
+  tetikleyici SQL'i ve `CASE` sorgusu CI'da ve ilk dağıtımda gözlenmeli (önce bir test dosyası silip kuyruğa düştüğünü görün).
+
+## v2.152.15 — Sadeleştirme: panele alan eklenmiyor, her şey varsayılanla çalışıyor
+
+Sahibinin isteği: yönetim paneli şişirilmesin, sistem kurulup çalışsın.
+
+- **Yönetim paneli:** v2.152.5–14'te eklenen `instantSalaryBps` ve `audioShortfallCutBps` alanları **kaldırıldı**. Avans oranı sabit %50 (5000), eksik şartta ödenecek oran tam dolara aşağı.
+  Tek bir kutu kaldı: "Ay içi maaş (avans) kuralı" — para ödeyen bir özellikte acil durdurma düğmesi olarak bilerek bırakıldı.
+- **Ay içi maaş kuralı artık VARSAYILAN AÇIK** (migration 116: sütun varsayılanı TRUE, mevcut satırlar TRUE yapıldı). Deploy edildiği andan itibaren sesli maaş "şartlar tamamsa %100, biri eksikse %50
+  (tam dolara aşağı)" kuralıyla hesaplanır ve kota dolunca avans yatar. **Gerçek veritabanında hâlâ denenmedi**; ilk saatlerde bir yayıncının Fasulye geçmişini ve günlükte `instant_salary_failed` satırı olup olmadığını kontrol edin.
+  Sorun görürseniz yukarıdaki tek kutuyu kapatın.
+- **Sunucu mini paneli:** eklenen 7 alan (`BACKUP_S3_*` ×5, `BACKUP_REMOTE_DAYS`, `TURN_ENABLED`) yerine **tek** isteğe bağlı alan: `BACKUP_REMOTE` ("uç-nokta kova anahtar-kimliği gizli-anahtar [bölge]", gizli alan).
+  Saklama süresi sabit 30 gün. Boş bırakılırsa uzak yedek yoktur (yerel yedek her gece çalışır).
+- **TURN varsayılan AÇIK:** panelde ayarı yok. Sertifika alınabiliyorsa kendiliğinden devreye girer; ses sunucusu açılmazsa TURN'süz ayara dönülür. Sertifika alınamazsa her güncellemede beklenmez (6 saat sonra yeniden denenir).
+  Kapatmak için `extra.env`'e `TURN_ENABLED=0`. Kullanıcı tarafında tek iş: Oracle konsolunda 5349/TCP ve 3478/UDP kurallarını eklemek (KURULUM.md 6).
+- Sınama: `deploy_backup.test.js` ve `deploy_turn.test.js` yeni davranışa göre güncellendi (16 test).
+
+## v2.152.14 — Maaş: şartlar tamamsa %100, biri eksikse %50 (tam dolara aşağı), avans kilidi kaldırıldı
+
+Sahibinin son tarifi. **Ayar kapalıyken hiçbir şey değişmez**; açılınca (Panel → Ayarlar → Ajans ayarları → "Ay içi maaş (avans)") aşağıdaki kural geçerli olur.
+
+- **Kural (sesli maaş):** kota (dönemde alınan elmas) dolunca o seviyenin maaşı (Maaş 2 sütunu; ör. 200 bin elmas = 15$) hak edilir.
+  Şartların HEPSİ tamamsa (elmas bozdurmama, gün, saat; ayarlıysa oyun saati) maaşın **tamamı**; biri bile eksikse maaşın **%50'si**, **tam dolara aşağı yuvarlanarak**
+  (15$ → 7,50$ → **7$**; Fasulye tam sayıdır). Yuvarlamadan kalan 0,50$ ve kalan %50, şartların hepsi tamamlanınca yatar.
+  Oran `instantSalaryBps` (varsayılan 5000). Birden çok seviyede kota dolmuşsa en çok ödeyen seviye seçilir.
+- **Avans:** kota dolunca hak ediş hemen Fasulye olarak yatar (3 dakikada bir kontrol, saatte bir tam tarama). Her turda hak ediş yeniden hesaplanır; yalnızca daha önce ödenenden FAZLASI yatar
+  (ör. 7$ ödendikten sonra gün/saat tamamlanınca 8$ daha). Dönem kapanışında aynı kuralla tam hak ediş hesaplanır, ödenen avanslar düşülür, kalan yatırılır.
+  Örnek: gün 10, kota doldu, gün/saat eksik → 7$; ay sonu gün/saat tamam → 8$ daha (toplam 15$); şartlar hiç tamamlanmazsa 7$ kalır, ay sonunda kesir yatmaz.
+- **Elmas:** avans yatarken kota kadar elmas Fasulyeye çevrilir (bakiyeden düşer, cüzdan geçmişinde "maaş avansı: N elmas Fasulyeye çevrildi"). Değerlendirme, avansla düşülen elması bakiyeye geri ekler
+  (migration 115: `salary_advances.diamonds_consumed`), böylece "elmas bozdurmama" şartı avansın kendi düşümüyle bozulmaz ve dönem kapanışı aynı elması ikinci kez düşmez.
+  "Elmaslarım dönüşmesin" (pay_method_pref 1) seçen yayıncıda elmas düşülmez ve bozdurmama şartı sağlanmış sayılmaz (%50 ödenir). Bakiye bu arada harcandıysa o tur avans verilmez.
+- **Önemli:** ayar AÇIKKEN sesli maaş **tüm ay (ay sonu kapanış dahil)** bu kuralla hesaplanır; Maaş 1 sütunu ve sesli %40 kesinti ayarı (`audio_shortfall_cut_bps`) kullanılmaz. Görüntülü maaş kendi kuralıyla ay sonunda ödenir (avansa dahil değil).
+  Ağırlıklı maaş (`salaryWeightedEnabled`) açıkken avans verilmez.
+- **Avans KİLİDİ KALDIRILDI** (v2.152.12'deki): avans Fasulyesi sıradan Fasulyedir; Coin'e çevrilebilir, dolar olarak gönderilebilir/çekilebilir. `usd_wallet.service.js` orijinaline döndü;
+  `advance_lock.service.js` ve testi silindi. `salary_advances.locked_cents` (migration 114) artık KULLANILMAZ, zararsız 0 kalır.
+- Sınama: `paytable_simple.test.js` (10 test: 15$ örneği, 7,50$→7$, şart tekil eksikleri, bozdurma, pref 1, kota, oran sınırları, seviye seçimi, 23$→11$, ceza), `instant_salary.test.js` (uçtan uca 7$ + 8$ = 15$ dahil),
+  `instant_salary_integration.test.js` (evaluateHost bayrak açık/kapalı, etkin bakiye; DB paketleri gerektirir, CI'da çalışır). **Gerçek veritabanında ÇALIŞTIRILMADI**: avans SQL'i ve `closePeriod` entegrasyonu denenmedi;
+  açmadan önce tek test yayıncısıyla deneyin.
+
+## v2.152.13 — Yedekler (K-07) ve zorunlu güncelleme kapısı (O-08)
+
+### K-07 — yedekler artık sunucu dışına da gidebilir ve sessizce bozulmaz
+- **`deploy/oracle/backup.sh` yeniden yazıldı.** Eskiden `pg_dump` başarısız olsa bile hata görünmezdi. Artık: `pg_dump` hatası, bozuk gzip (`gzip -t`) ve 1 KB'tan küçük
+  (şüpheli) dosya hata verir (çıkış 1) ve **eski yedekler silinmez**. Son 7 yerel yedek tutulur (değişmedi).
+- **Uzak kopya (isteğe bağlı, S3 uyumlu: Backblaze B2, Cloudflare R2, Oracle Object Storage, AWS S3):** panelde 5-6 alan (`BACKUP_S3_*`, `BACKUP_REMOTE_DAYS`) doldurulunca gece yedeği
+  `rclone` ile `<kova>/trlive/` altına da kopyalanır; orada `BACKUP_REMOTE_DAYS` (varsayılan 30, **en az 7**) günden eski yedekler silinir. Kimlik bilgileri komut satırına değil ortam
+  değişkenlerine yazılır. `install.sh`, bilgiler girilince rclone'u kendisi kurar. Uzak kopya başarısızsa çıkış kodu 3 olur (systemd "failed"), yerel yedek yine alınır.
+- Geri yükleme komutu ve kova/anahtar önerileri: `KURULUM.md` 7. bölüm.
+- Sınama: `deploy_backup.test.js` (9 test): sahte `docker` ve `rclone` ile betiğin tüm yolları çalıştırıldı (başarı, `pg_dump` hatası, küçük dump, rotasyon, uzak kopya, rclone hatası, eksik ayar,
+  saklama günü, ayar okuma). **Gerçek S3 hizmetiyle ÇALIŞTIRILMADI**; rclone bayrakları (`copyto`, `delete --min-age`, `--s3-no-check-bucket`, `RCLONE_CONFIG_OFFSITE_*`) belgesine göredir.
+  İlk gece sonrası günlükte "Uzak kopya tamam" satırını ve kovada dosyayı kontrol edin.
+- **Yapılmadı:** yedeğin düzenli geri yükleme denemesi, yedek başarısızlığında bildirim (şimdilik yalnızca günlük ve systemd durumu).
+
+### O-08 — zorunlu güncelleme tek başlıkla atlanamıyor
+- `X-Client: web-panel` başlığı eskiden herhangi bir `/api` yolunda zorunlu güncellemeyi (426) atlatıyordu; eski bir uygulama başlığı ekleyerek kapıyı geçebilirdi. Artık muafiyet yalnızca **panelin
+  kendi API yollarında** geçerli (`middleware/security/update_gate.js`: admin, agency-center, agencies, agency-requests, agency-transfers, announcements, auth, broadcaster, dealer, me, users, wip).
+  Oda, hediye, cüzdan gibi uygulama yollarında başlık artık işe yaramaz.
+- Liste web/panel kaynağından çıkarıldı. `update_gate.test.js` panelin kaynağını tarar: panel listede olmayan yeni bir `/api/<parça>` kullanmaya başlarsa CI kırılır (panel sessizce bozulmaz).
+- **Kalan sınır:** `auth`, `me`, `users`, `dealer`, `broadcaster` gibi uygulamayla ortak yollarda başlık hâlâ kapıyı atlatır (panelin giriş yapabilmesi için gerekli). Tam çözüm panele ayrı
+  bir kimlik doğrulaması (ör. imzalı başlık) vermektir.
+
+## v2.152.12 — Avans Fasulyesi maaş tam yatana kadar yalnızca Coin'e çevrilebilir (sahibinin kararı)
+
+v2.152.11'de avans yattığı anda dolar olarak gönderilebiliyordu; artık değil.
+
+- **Kural:** avans olarak yatan Fasulye, o dönemin maaşı TAM yatana kadar **yalnızca Coin'e çevrilebilir** (`coin_exchange`, `coin_send`). Dolar olarak gönderim
+  (`dealer_transfer`) ve admin'e çekim talebi (`withdraw_request`) kilitli kısma dokunamaz. Serbest bakiye (önceki aylardan kalan maaş vb.) eskisi gibi gönderilebilir.
+  Reddedilince kullanıcıya "Avans olarak yatan Fasulye, maaşınız tam yatana kadar yalnızca Coin'e çevrilebilir. Şu an gönderilebilir: X Fasulye." denir.
+- **Kilit nerede tutulur:** `salary_advances.locked_cents` (migration 114). Kullanıcının kilitli toplamı = SUM(locked_cents). Avans yatarken `cents`'e eşitlenir.
+- **Coin'e çevirme önce kilitliden düşer, en eski avanstan başlayarak** (gönderilebilir tutar azalmaz): 7,50$ kilitli + 10$ serbest iken 5$ çevirmek → kilitli 2,50$, serbest 10$.
+  Kilitliden fazlası çevrilirse artanı serbest bakiyeden gider.
+- **"Maaş tam yatınca" = kilit açılır:** dönemin yayıncı özeti `paid` olduğunda ya da kalan tutar 0 olduğunda (avans maaşın tamamını karşıladıysa). Açan yerler: `creditPeriod`
+  (cüzdana yatırma, ay başı otomatik aktarım dahil), dönem kapanışı (kalanı 0 olanlar), ve her 3 dakikada bir çalışan avans turu (elle "ödendi" yapılan özetler için güvence;
+  avans bayrağı kapalı olsa da çalışır). Özeti hiç olmayan bir döneme işlenmiş avansın kilidi de açılır (sonsuza dek kilitli kalmaz). Henüz kapanmamış dönemin avansı kilitli kalır.
+  Telefonu doğrulanmamış yayıncının özeti 'pending' kaldığı sürece kilit de durur.
+- **API:** `GET` cüzdan yanıtına `lockedAdvanceCents` ve `withdrawableCents` eklendi. **Mobil ekran henüz göstermiyor**; kullanıcı "Dolar olarak gönder"e fazla tutar girerse sunucu yukarıdaki mesajla reddeder.
+- **Eski avanslar:** migration 114'ten ÖNCE yatmış avanslar kilitsizdir (varsayılan 0).
+- Sınama: `advance_lock.test.js` (8 test: gerçek `debitUsd/creditUsd` kodu sahte bağlantıyla; dolar çıkışı kilide takılır, Coin'e çevirme önce kilitliden düşer, en eskiden tüketim,
+  yetersiz bakiye mesajı, kredi/admin düzeltmesi etkilenmez, kilit açma) ve `instant_salary.test.js` (9 test). Kilit açma SQL'i ve `closePeriod` entegrasyonu gerçek veritabanında ÇALIŞTIRILMADI.
+
+## v2.152.11 — Avans koruması kaldırıldı
+
+- v2.152.10'daki avans koruması (`advanceRisk`: geliri %50 ve üzeri kendine/karşılıklı hediyeden gelen yayıncıya avans verilmemesi) sahibinin kararıyla
+  KALDIRILDI. Kota dolunca maaşın belirlenen oranı (`instantSalaryBps`) her yayıncıya avans olarak yatar; hesap kuralı yine `instant_salary.rules.js`.
+- **Hâlâ var (koruma değil, hesap tavanı):** avans hedefi = min(maaş × oran, garanti tutar). Garanti tutar, yayıncı elmaslarını harcasa bile dönem sonunda alacağı maaştır
+  (Yöntem 1). %50 oranda bu tavan nadiren devreye girer (yalnızca oran yaklaşık %60'ı geçerse ya da gün/saat eksik ve kesinti kapalıysa); avansın ay sonunda geri
+  alınamayan fazla ödemeye dönüşmesini önler.
+- **Fasulye/dolar:** uygulamada tek bir "Fasulye cüzdanı" vardır (1 Fasulye = 1 dolar = 100 sent). Avans ve ay sonu kalanı bu cüzdana Fasulye olarak yatar; Fasulye Coin'e
+  çevrilebilir ya da "Dolar olarak gönder" ile bayiye/admine gönderilebilir. Avansın ay sonuna kadar dolar olarak gönderilemeyecek şekilde kilitlenmesi İSTENİRSE ayrı bir iştir
+  (cüzdana "kilitli avans" tutarı gerekir); şu an avans yattığı anda gönderilebilir.
+
+## v2.152.10 — "bahis" ifadesi canlı koddan temizlendi, etkinlik anahtarı sağlayıcıyı da durduruyor, avans koruması
+
+- **Metin temizliği (yalnızca ifade):** canlı kodda, panel yardım metinlerinde ve uygulamadaki tek kullanıcı metninde ("Hafıza Kartları: Ücretsiz,
+  bahissiz" → "Ücretsiz") "bahis" ve eş anlamlıları çıkarıldı; "Coin hareketi" denildi. SDK'daki kaldırılmış `bet`/`settle`/`play` yöntem artıkları ve
+  `gone()` yardımcısı silindi: eski bir oyun paketi bu adları çağırırsa artık "is not a function" hatası alır (zaten çalışmıyorlardı, sessizce başarısız olmaz).
+  Panel yardım metnindeki kalkmış "Coin bahsi açık" yönergesi düzeltildi. Bu değişiklik mekanizmayı DEĞİŞTİRMEZ.
+- **Bilerek dokunulmayanlar:** (1) uygulanmış migration dosyaları (`082_…`: `activity_rounds.bet` sütunu ve açıklaması; `091_…` bu tabloyu "denetim için saklanır" diye
+  salt okunur yaptı); uygulanmış migration metnini değiştirmek veritabanını değiştirmez, yalnızca geçmişi siler. (2) `docs/ARCHITECTURE_AUDIT.md` ve bu dosya: neyin ne zaman
+  kaldırıldığının kaydı. (3) `web/site/community.html`: topluluk kurallarındaki "yasa dışı bahis ve kumar" yasağı. (4) `text_safety.js` içindeki `.bet` alan adı uzantısı: bağlantı
+  filtresi. (5) Testlerdeki bu adlar: yasaklı yöntemlerin geri gelmediğini doğrulayan regresyon denetimleridir.
+- **Hâlâ geçerli (ifadeden bağımsız):** Coin'i tur başına düşüp yatırabilen iki sunucu yolu duruyor: harici sağlayıcı API'si (`/api/activity-provider`, imza anahtarı girilen
+  etkinlikte) ve oyun paketi cüzdanı (`wallet.debit/credit`). Şanslı hediye (havuzdan geri dönüş oranı) ayrıdır. Hukuki/mağaza değerlendirmesi (K-06) bu yollara göredir.
+- **Etkinlikler kapalı anahtarı (`roomActivitiesEnabled`) artık sağlayıcı API'sini de durdurur** (`/user` ve `/balance` "Etkinlikler şu an kapalı" döner). Eskiden yalnızca sayfa gizleniyordu,
+  Coin hareketi sürüyordu.
+- **Avans koruması (rapor Y-07):** ay içi maaş avansı, geliri %50 ve üzeri kendine ya da karşılıklı (A→B ve B→A) hediyeden gelen yayıncıya verilmez (`advanceRisk`). Ay sonu maaşı etkilenmez.
+  Atlanan yayıncılar günlüğe `instant_salary_skipped_suspicious` olarak yazılır. Sesli odada kendine hediye maaşa sayıldığı için bu koruma önemlidir. Yapılmadı: panelde şüpheli
+  yayıncı raporu ve ay sonu maaş incelemesi.
+- Sınama: `instant_salary.test.js` (7 test); SDK testleri (11 test). `activity_games.test.js` bu ortamda çalışmıyor (`pg` yok); değişen iddiaları elle sınandı.
+
+## v2.152.9 — TURN (kısıtlı ağlarda ses yedeği), isteğe bağlı ve korumalı
+
+Rapor K-03. **Varsayılan KAPALI.** Mini panelde "TURN" alanına `1` yazılınca açılır (extra.env: `TURN_ENABLED`). Ayrıntı: `deploy/oracle/KURULUM.md` 6. bölüm.
+
+- **Alan adı (sslip.io de, özel alan adı da):** TURN adı her zaman `turn.<ip-tireli>.sslip.io`. sslip.io joker adı sunucu IP'sine kendiliğinden
+  çözüldüğü için ek DNS kaydı gerekmez; özel alan adı kullanan kurulumlarda da aynı ad çalışır.
+- **Sertifika:** Caddy'ye `turn.<…>.sslip.io` için site bloğu eklenir (sertifikayı Caddy alır). LiveKit, `caddy_data` hacmini salt okunur
+  (`/caddy-data`) görür ve `turn:` bloğuna (`tls_port: 5349`, `udp_port: 3478`) sertifika yolunu yazar. Sertifika henüz yoksa TURN yazılmaz;
+  kurulum sonunda 90 saniyeye kadar beklenir.
+- **Güvence:** (1) TURN'süz ayar `livekit.yaml.noturn` olarak yedeklenir. (2) TURN'lü ayarla yeniden başlatılan ses sunucusu 10 sn sonra çalışmıyorsa
+  TURN'süz ayara dönülür ve `state/turn-failed` yazılır; panelde TURN alanı boşaltılıp yeniden `1` yazılana kadar bir daha denenmez (sonsuz yeniden
+  başlatma yok). (3) Sertifika yenilenince (Caddy ~60 günde bir) LiveKit bir sonraki "Kaydet ve uygula"da yeniden başlar.
+- **Güvenlik duvarı:** `firewall.sh` 5349/tcp ve 3478/udp'yi açar (kapalıyken dinleyen yoktur, zararsız). **Oracle konsolunda (Security List) aynı iki kuralı
+  elle eklemek gerekir** (KURULUM.md).
+- **Bir kereliğine:** `compose.yml` LiveKit'e `caddy_data` bağlantısı ekledi; bu yüzden güncellemede ses sunucusu bir kez yeniden oluşturulur (kısa kesinti).
+- **Sınır:** TURN 5349'da; yalnızca 443'e izin veren ağlarda çözmez (443'ü Caddy kullanıyor; çözmek ayrı bir TCP katmanı/ikinci IP ister).
+- **Sınama:** `deploy_turn.test.js` (7 test): kabuk fonksiyonları sahte sertifika klasörleriyle çalıştırıldı, `bash -n` sözdizimi, yedek sırası, kapı kuralları.
+  **Gerçek LiveKit/Caddy ile ÇALIŞTIRILMADI**; `turn:` anahtar adları LiveKit belgesine göredir. İlk açılışı bir kısıtlı ağdan deneyin.
+
+## v2.152.8 — Ay içi maaş avansı (kota dolunca maaşın bir kısmı hemen yatar)
+
+Sahibinin tarifi: kota dolunca maaşın belirli bir kısmı anında Fasulye olarak yatar; ay sonunda gelir ve saate göre tam maaş
+hesaplanır, avans düşülerek kalanı yatırılır. **Bayrak KAPALI gelir:** panelden açılana kadar hiçbir şey ödenmez.
+
+### Nasıl çalışır
+- Her 3 dakikada bir, son 30 dakikada hediye almış yayıncılara bakılır (saatte bir tüm onaylı yayıncılar taranır). Yayıncının güncel
+  dönem hak edişi `evaluateHost` ile hesaplanır (sesli + görüntülü, kesinti ve ceza dahil).
+- **Avans hedefi = min(hak ediş × oran, garanti tutar).** Garanti tutar, yayıncı elmaslarını bugün harcasa bile dönem sonunda alacağı
+  maaştır (yalnızca Yöntem 1). Böylece avans, dönem sonunda geri alınamayacak kadar yüksek olamaz.
+- Hedef arttıkça (seviye atlama, gün/saat tamamlanması) yalnızca FARK yatar; aynı tutar iki kez yatmaz; 1$ altı fark yazılmaz.
+- Avans `usd_transactions`'a `salary` türüyle, "<dönem> maaş avansı" notuyla yazılır; `salary_advances` tablosunda izlenir.
+- **Dönem kapanışında** (`closePeriod`): tam hak ediş hesaplanır, ödenen avanslar düşülür. `host_statements.salary_cents` artık
+  AVANS DÜŞÜLMÜŞ KALAN tutardır (cüzdana yatırma, bekleyen toplamlar, otomatik aktarım ve ödeme uçları değişmeden doğru tutarı kullanır);
+  avansın kendisi `advance_cents` sütununda ve özet JSON'unda `advanceCents` olarak görünür. Toplam hak ediş = salary_cents + advance_cents.
+  Hak ediş avanstan küçük çıkarsa kalan 0 olur, fark geri alınmaz.
+- **Örnek (seviye 1, 200 bin elmas, oran %50):** gün/saat eksik → maaş 9$ (kesintili), garanti 6$ → 4,50$ yatar. Saatler tamamlanınca
+  maaş 15$, garanti 10$ → 3$ daha yatar (toplam 7,50$). Ay sonunda tam maaş 15$ − avans 7,50$ = 7,50$ yatar; toplam 15$.
+
+### Güvenlik
+- Avans, `closePeriod` ile AYNI kilidi (`payout_close`) alır; kapanışla yarışamaz. Kapanmış bir dönemle çakışan aralıkta avans verilmez.
+- Telefonu doğrulanmamış yayıncıya avans yatmaz (`SALARY_PAYABLE_SQL`, kapanıştaki kapıyla aynı).
+- Ağırlıklı maaş (`salaryWeightedEnabled`) açıkken avans VERİLMEZ (o modelde hak ediş farklı hesaplanıyor).
+
+### Açmak için
+Panel → Ayarlar → Ajans ayarları: **"Ay içi maaş avansı"** kutusunu işaretleyin, oranı baz puan olarak girin (5000 = %50).
+Önce tek bir test yayıncısıyla deneyin: kotayı doldurunca 3 dakika (en geç 1 saat) içinde Fasulye bakiyesinde "maaş avansı" görünmeli.
+
+### Sınırlar ve dikkat
+- **Veritabanında çalıştırılmadı.** Matematik birim testli (`instant_salary.test.js`, 6 test); SQL ve `closePeriod` entegrasyonu bu ortamda
+  denenemedi. İlk dönem kapanışından önce test dönemiyle (`force`) bir deneme yapılması önerilir.
+- Dönem döngüsü (haftalık/aylık) bir dönemin ortasında DEĞİŞTİRİLMEMELİ: avanslar kapanışta zaman aralığına göre düşülür.
+- Yayıncıya bildirim gönderilmez; avans cüzdan geçmişinde görünür.
+- Görüntülü maaş da hak edişe dahildir (sesli + görüntülü toplamı). Kendine hediye sesli odada maaşa sayıldığı için, avansın
+  maliyetini Coin fiyatı ile maaş oranı üzerinden ayrıca değerlendirin.
+
+## v2.152.7 — Denetim kaydı eylem adı: activity_bet → activity_spend
+
+- Oyun paketi cüzdanında harcama (`debit`) yazılırken `financial_audit_logs.action` artık `activity_bet` yerine `activity_spend`
+  (cüzdan hareket türüyle aynı ad). Kazanç zaten `activity_win` idi. `action` sütununda kısıt yok (VARCHAR(80)), kodda başka
+  `activity_bet` kullanımı yoktu.
+- **Eski kayıtlar değiştirilmedi:** denetim defteri geçmişi bilerek olduğu gibi bırakıldı; bu tarihten önceki harcamalar
+  `activity_bet` adıyla durur. İki dönemi birlikte sorgularken `action IN ('activity_bet', 'activity_spend')` kullanın.
+
+## v2.152.6 — Sesli odada gün/saat eksikse kesintili maaş (sahibinin kararı)
+
+- **Sesli maaş, gün/saat şartı eksik:** elmas kotası tutan (Yöntem 1'de dönem elması, Yöntem 2'de bakiye) ama gün/saat/oyun saati
+  şartı eksik kalan yayıncı artık maaşın **%60'ını** alıyor (%40 kesinti). Eskiden o seviye hiç sayılmıyor, şartı tutan alt seviyeye
+  düşülüyordu; hiçbiri tutmazsa maaş çıkmıyordu. Şartı tutan alt seviyenin maaşı kesintili üst seviyeden yüksekse o ödenir.
+  Örnek (seviye 1, 200 bin elmas): şartlar tam → 15$ (Yöntem 2) / 10$ (Yöntem 1); gün/saat eksik → 9$ / 6$.
+  Yöntem 2 kesintiyle ödenirse de seviyenin elmas kotası bakiyeden düşülür (elmaslar maaşa çevrilir). Resmi etkinlik cezası kesintinin
+  üstüne biner.
+- **Ayar:** `agency_settings.audio_shortfall_cut_bps` (migration 112, varsayılan 4000). Panelde Ayarlar → Ajans ayarları → "Sesli: gün/saat
+  şartı eksikse kesinti". 0 yazılırsa eski davranış (ödeme yok). Görüntülü odanın `video_shortfall_cut_bps` ayarından bağımsızdır;
+  sesli kesinti görüntülüye sızmaz (`evaluateVideoPay` kendi oranını kullanır).
+- **Dikkat:** migration, kesinti oranını mevcut ayar satırlarına da 4000 olarak yazar; yani deploy edildiği andan itibaren kota tutup
+  gün/saati eksik kalan sesli yayıncılar 0$ yerine kesintili maaş alır. Ağırlıklı maaş (`salaryWeightedEnabled`) açıksa ödemeye
+  o esas alınır ve bu kural yalnızca eski hesabı etkiler.
+- **Yapılmadı: ay içinde anında maaş.** Dönem kapanışı (`closePeriod`) ağırlıklı maaş modeli, Yöntem 2 elmas düşümü, yayıncı özet tablosu,
+  ajans primi ve cüzdana yatırma ile iç içe; ay içinde ödenen avansın kapanışta düşülmesi, elmas düşümünün tekrar sayılmaması ve
+  ağırlıklı model ile birlikte çalışması tasarlanmadan, gerçek veritabanında denenmeden yazılırsa yanlış (geri alınamaz) fasulye ödemesi
+  riski var. Önerilen tasarım: avans defteri + kapanışta düşüm, ayar bayrağı kapalı başlar, test hesabıyla denenir.
+- **Belgeler:** `scripts/gen_docs.mjs` eskimiş (taşınan `src/realtime.js` dosyasını arıyor; çalıştırınca api.md'yi 0 uçla yazıyor) ve
+  `docs/generated/*` zaten güncel değildi (118 tablo/75 migration yazıyor, gerçekte 148/110+). Bu yüzden üretici çalıştırılmadı;
+  `database.md`'ye yalnızca yeni sütun elle eklendi. Üreticinin onarılması ayrı bir iş.
+- Sınama: `paytable_audio_shortfall.test.js` (10 test). `paytable_video.test.js` bu ortamda çalışmıyor (`pg`/`dotenv` yok); CI'da görün.
+
+## v2.152.5 — Kendine hediye kuralı ve etkinlik etiketleri (sahibinin kararı)
+
+v2.152.4'te ertelenen O-02 (kendine hediye) karara bağlandı; K-06 için yalnızca görünen etiketler değişti.
+
+- **Kendine hediye, sesli oda:** alıcının maaşına ve kotasına SAYILIR. Dönem ölçümü (`hostPeriodMetrics`), ajans satırları
+  (`agencyGiftRows`) ve yayıncının kendi istatistik ekranları (`me.routes.js`, 3 sorgu) aynı kuralı kullanıyor
+  (`agencies/salary_rules.js`), böylece yayıncının gördüğü sayı ile ödenen sayı ayrışmaz. PK puanına sayılmaya devam eder.
+- **Kendine hediye, görüntülü oda:** gönderilemez ("Görüntülü odada kendinize hediye gönderemezsiniz."). Eski kayıtlarda
+  kalan görüntülü kendine hediyeler maaşa sayılmaz.
+- **Değişmeyenler (bilerek):** liderlik tabloları, ajans aylık sıralaması (`agencyRanking`) ve resmi etkinlik sayımı kendine hediyeyi
+  hâlâ dışlar; yayıncı seviyesi (`gift_level`) ve odadaki sayaç da aynen duruyor. Hangisinin değişmesi gerektiği ayrıca karara bağlanmalı.
+- **Etkinlik etiketleri:** cüzdan hareketlerinde "bahsi/kazancı" yerine "Etkinlik kaybı" ve "Etkinlik kazancı" yazıyor
+  (oyun paketi cüzdanı ve sağlayıcı API'si); mobil cüzdan ekranında `activity_win`/`activity_spend` artık bu adlarla görünüyor.
+  Veritabanındaki hareket türleri (`activity_win`, `activity_spend`) ve denetim kaydı eylem adı (`activity_bet`) DEĞİŞMEDİ;
+  mevcut kayıtlar ve sorgular bozulmasın diye. Etiket değişikliği mekanizmayı değiştirmez; hukuki/mağaza değerlendirmesi için
+  K-06'daki hukuki görüş ihtiyacı geçerli.
+- **Hâlâ açık:** "Etkinlikler kapalı" anahtarı (`roomActivitiesEnabled`) sağlayıcı API'sini (`/api/activity-provider`) durdurmuyor.
+- Sınama: `salary_rules.test.js` (3 test). Sorgular gerçek veritabanında ÇALIŞTIRILMADI; CI'da ve canlıda bir yayıncı
+  istatistik ekranı ile bir dönem özeti kontrol edilmeli.
+
+## v2.152.4 — Kod denetimi raporundan ilk düzeltme turu
+
+`TR_Live_Kod_Denetimi` raporunun kodda tek başına çözülebilen maddeleri. Altyapı, hesap ve ürün kararı
+gerektirenlere (K-01, K-02, K-03, K-05, K-06, K-07, Y-10, O-02, O-08) dokunulmadı; nedenleri aşağıda.
+
+### Yapılanlar
+- **K-04 (kısmen) — LiveKit yayın yetkisi:** anahtar ömrü 2 saatten 15 dakikaya indi (`TOKEN_TTL`). Mikrofon
+  yetkisi anahtarın içinde olduğu için, koltuktan indirilenin yetkisi `setCanPublish` ulaşamazsa 2 saat açık kalıyordu.
+  `setCanPublish` artık 3 kez deniyor (`retry.js`), katılımcı odada değilse (404) başarılı sayıyor, olmazsa
+  `livekit_permission_update_failed` olayını kayda yazıyor (eskiden sessizce yutuyordu).
+  **Yapılmadı:** LiveKit webhook'u ile katılımda yetki doğrulama (livekit.yaml'a webhook adresi gerekir).
+  **Varsayım (canlıda doğrulanmadı):** LiveKit bağlı katılımcıya anahtarı kendisi yeniliyor. Uzun odalarda
+  15. dakikada kopma görülürse `livekit.js` içindeki `TOKEN_TTL` büyütülmeli.
+- **Y-02 (kısmen) — havuz boyutu:** `deploy/oracle/install.sh` artık `DATABASE_POOL_MAX='20'` yazıyor (varsayılan 5'ti).
+  `extra.env`'deki değer bunu ezer. Kimlik doğrulama sorgusu (`SELECT *`) önbelleğe ALINMADI: `req.user` bakiye
+  alanlarını da taşıyor, eski değer göstermek riskli.
+- **O-07 — şifre politikası:** en az 8 karakter, yaygın şifre listesi, kullanıcı adıyla aynı olamaz
+  (`password_policy.js`, `auth.js` yeniden dışa aktarıyor). Mobilde kontroller ve ar/en/hi çevirileri 8'e çekildi.
+  Eski uygulama sürümleri 6 karakteri yerelde kabul edip sunucudan hata alır. Mevcut şifreler etkilenmez.
+- **O-10 — PostgreSQL sürümü:** CI 16'dan 18'e çıktı (üretimle aynı). `deploy/docker-compose.yml` 16'da kaldı:
+  kalıcı veri var, sürüm atlamak için yedek alıp geri yüklemek gerekir.
+- **D-01:** `server.js`'teki kullanılmayan 14 ad import'tan çıkarıldı (modüller başka yerlerde yüklenmeye devam ediyor).
+- **D-02:** oyun cüzdanı bakiyeyi BigInt ile hesaplıyor; paketlere Number sözleşmesi korundu (güvenli sınırda
+  kırpılır), tam değer için sonuca `balanceText` eklendi.
+- **D-04:** kayıt satırındaki iki ifade ayrıldı; şifre kuralına kullanıcı adı da veriliyor.
+- **O-09 — belgeler:** README'deki "29 birim testi" düzeltildi. `docs/COMPARISON.md`'de yalnızca kodla doğrulanan satırlar
+  güncellendi (SVGA/MP4 animasyon, oyunlar, web yönetim paneli, çok dil, PK, önerilen sıra); tablonun başına
+  "diğer satırlar eskimiş olabilir" notu eklendi.
+
+### Yapılmayanlar ve nedenleri
+- **O-02 (kendine hediye):** koddaki yoruma göre bilinçli ürün kararı; yasaklamak/sayımdan çıkarmak karar ister.
+- **O-08 (`web-panel` başlığı):** panele ayrı kimlik doğrulama olmadan gerçekten kapatılamaz.
+- **Y-10 (güvenli depolama):** `flutter_secure_storage` R8/JNI açısından riskli (bkz. `shared_preferences_android`
+  notu); derleme görmeden eklenmedi, CI'da denenerek yapılmalı.
+- **K-01 (anahtar):** anahtarın yenilenmesi ve `git filter-repo` sahibinin işi; iş akışındaki imzalama adımı sonraya kaldı.
+- **K-04'ün kalanı (LiveKit webhook ile katılımda yetki doğrulama):** güvenlik duvarının IP sınırlayıcısı yerel (127.0.0.1) çağrıları
+  da sayıyor; webhook'u duvarın dışına almak ya da muaf tutmak gerekir. Bu bir tasarım kararı ve canlı sunucuda denenmeden yazılmamalı.
+  O zamana kadar açık kalan pencere en çok 15 dakika (TOKEN_TTL) ve değiştirilmiş istemci gerektirir.
+- **Y-09 (Android izinleri):** `.github/imzali/apk_build.yml` bu izinleri (SYSTEM_ALERT_WINDOW, REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+  FOREGROUND_SERVICE_SPECIAL_USE, OverlayService) zaten kaldıran Play'e hazır sürüm; Play'e çıkarken o dosya kullanılacak. `READ_PHONE_STATE`
+  ise `MainActivity.kt`'de arama algılama için kullanılıyor; kaldırmak davranış değişikliğidir (`audio_session` ile değiştirilmeli).
+- **D-03 (boş catch):** örneklenen yerler çoğunlukla bilerek sessiz kalan temizlik adımları (ör. çıkışta müziği çözme). Hepsini kayda
+  yazmak çökme raporunu gürültüyle doldurur; gerçek bir belirti görüldüğünde tek tek ele alınmalı.
+- **Y-03 (kilit dosyaları):** ortamda internet yok, `package-lock.json` / `pubspec.lock` üretilemedi.
+
+### Elle yüklenmesi gereken
+`zip_ile_guncelle.yml` `.github` klasörünü güncellemez. `.github/workflows/backend.yml` içinde tek satır değişti:
+`image: postgres:16` → `image: postgres:18`. GitHub sitesinde dosyayı açıp kalemle düzeltin.
+
+### Doğrulama
+Yeni birim testleri: `password_policy.test.js`, `livekit_retry.test.js` (9 test, geçti). `scripts/check.mjs`
+temiz (tanımsız ad yok, 1013 import çözülüyor). Bu ortamda `pg`/`express` kurulamadığı için paket
+gerektiren testler (17 dosya) ve e2e ÇALIŞTIRILAMADI; sonucu CI'da görün.
+
 ## v2.152.3 — iOS en düşük sürüm 15.0 (derleme denemeden düzeltildi)
 
 `setup_ios.py` en düşük iOS sürümünü 14.0 yapıyordu. Bu hâliyle derleme `pod install`

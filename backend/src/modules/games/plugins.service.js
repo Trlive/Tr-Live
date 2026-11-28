@@ -22,6 +22,7 @@ import { readGameTokenAny, canSeeActivities } from './activities.routes.js';
 import { CoinWallet } from './game_wallet.service.js';
 import { checkPluginSql, createdTables } from './sandbox/sql_guard.js';
 import { log } from '../../infrastructure/observability/log.js';
+import { isEnabled as twoFactorOn, verifyLogin as verifyTotp } from '../auth/two_factor.service.js';
 
 const LIMITS = { files: 1500, totalBytes: 80 * 1024 * 1024 };
 const ID_RE = /^[a-z][a-z0-9-]{1,30}$/;
@@ -288,7 +289,32 @@ pluginAdminRouter.get('/', async (_req, res) => {
     })),
   });
 });
-pluginAdminRouter.post('/upload', express.raw({ type: () => true, limit: LIMITS.totalBytes }), async (req, res) => {
+// ---------------------------------------------------------------- Kod çalıştıran işlemlerde ek doğrulama (rapor K-02)
+// Paket yüklemek, paketin sunucu kodunu bu süreçte tam yetkiyle çalıştırır; "tam erişim" de veritabanının tamamını açar.
+// Bu yüzden ikisi de hesabında iki adımlı doğrulama AÇIK olan yöneticiden ve o anki doğrulama kodu ile kabul edilir: çalınmış
+// bir oturum (ya da şifre) tek başına sunucuya kod sokamaz. Kod hatası 403 döner (401 panelde oturumu kapatırdı).
+// Kalan sınır: 2FA'sı da ele geçirilmiş yönetici hâlâ kod çalıştırabilir; asıl çözüm paketi ayrı süreçte çalıştırmaktır.
+export function stepUpError({ enabled, code, valid }) {
+  if (!enabled) return 'Bu işlem sunucuda kod çalıştırır: önce hesabınızda iki adımlı doğrulamayı açın (Ayarlar → İki adımlı doğrulama).';
+  if (!code) return 'Bu işlem için iki adımlı doğrulama kodunu girin.';
+  if (!valid) return 'Doğrulama kodu hatalı.';
+  return null;
+}
+async function requireStepUp(req) {
+  const enabled = await twoFactorOn(req.user.id);
+  const code = String(req.get('X-Totp-Code') ?? req.body?.totpCode ?? '').trim().slice(0, 32);
+  const valid = enabled && code ? await verifyTotp(req.user.id, code) : false;
+  const msg = stepUpError({ enabled, code, valid });
+  if (msg) {
+    log.warn('plugin_step_up_denied', { adminId: req.user.id, path: req.path, reason: !enabled ? 'no_2fa' : !code ? 'no_code' : 'bad_code' });
+    throw fail(msg, 403);
+  }
+}
+// 6 haneli kod kaba kuvvetle denenemesin: kullanıcı başına 15 dakikada 10 deneme.
+const stepUpLimit = userLimit('plugin_step_up', 10, 15 * 60e3);
+
+pluginAdminRouter.post('/upload', stepUpLimit, express.raw({ type: () => true, limit: LIMITS.totalBytes }), async (req, res) => {
+  await requireStepUp(req);
   if (!Buffer.isBuffer(req.body) || !req.body.length) throw fail('Zip dosyası gönderilmedi.');
   res.json({ ok: true, ...(await installPackage(req.body, req.user?.id ?? null)) });
 });
@@ -307,9 +333,10 @@ pluginAdminRouter.patch('/:id', async (req, res) => {
 // yalnızca BİZİM yazdığımız paketler için ve bilerek açılmalıdır — açıldığı an paket
 // veritabanının tamamına erişir, yani bu daraltmanın sağladığı her şey o paket için düşer.
 // Üçüncü taraf bir paket için ASLA açılmamalı.
-pluginAdminRouter.post('/:id/trust', async (req, res) => {
+pluginAdminRouter.post('/:id/trust', stepUpLimit, async (req, res) => {
   const id = String(req.params.id);
   const on = req.body?.trusted === true;
+  if (on) await requireStepUp(req); // kapatmak güvenli: ek doğrulama gerekmez
   const r = await query(`UPDATE game_plugins SET trusted = $2 WHERE id = $1 RETURNING version, sha256`, [id, on]);
   if (!r.rows[0]) throw fail('Paket bulunamadı.', 404);
   // Yeniden başlatılmadan etkili olmaz: bağlam (ctx) paket başlarken kurulur.

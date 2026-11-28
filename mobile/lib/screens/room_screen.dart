@@ -2849,9 +2849,13 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 
   void _openGifts([String? recipientId]) {
-    final target = recipientId ??
-        (_members.firstWhere((m) => m['role'] == 'owner', orElse: () => _members.isNotEmpty ? _members.first : <String, dynamic>{})['userId'] as String?);
-    showGiftSheet(context, roomId: widget.roomId, members: _members, recipientId: target);
+    // Görüntülü odada kendine hediye gönderilemez (sunucu reddeder): yayıncı kendini alıcı listesinde görmez ve
+    // varsayılan alıcı olmaz. Sesli odada kendine hediye serbesttir, liste olduğu gibi kalır.
+    final members = _isVideo ? _members.where((m) => m['userId'] != Session.id).toList() : _members;
+    var target = recipientId ??
+        (members.firstWhere((m) => m['role'] == 'owner', orElse: () => members.isNotEmpty ? members.first : <String, dynamic>{})['userId'] as String?);
+    if (_isVideo && target == Session.id) target = null;
+    showGiftSheet(context, roomId: widget.roomId, members: members, recipientId: target);
   }
 
   /// Oda içi kullanıcı kartı (Figma): büyük avatar, rozetler, Yakın Arkadaşlarım, Madalyalar, yetkiye göre işlem düğmeleri.

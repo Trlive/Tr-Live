@@ -214,6 +214,8 @@ export function validateConfigPatch(body) {
 
 export async function saveConfig(patch, adminId) {
   // Tek işlem: birbirine bağlı ayarlar (ör. şanslı hediye oranları) yarım kaydedilmesin.
+  // Denetim işlemden ÖNCE: işlem içinde ayar/tablo okumak havuzdan ikinci bağlantı ister (küçük havuzda kilitlenme).
+  if ('usdCoinsPerUsd' in patch || 'usdDealerCoinsPerUsd' in patch) await assertNoSalaryLoop(query, patch);
   await tx(async (c) => {
     for (const [k, v] of Object.entries(patch)) {
       await c.query(
@@ -225,6 +227,24 @@ export async function saveConfig(patch, adminId) {
   });
   clearConfigCache();
   return getConfig();
+}
+
+/**
+ * Fasulye→Coin kurları maaş tablosuyla para döngüsü kurmasın (bkz. paytable.rules.js salaryLoopError).
+ * rates verilmezse kayıtlı kurlar, levels verilmezse kayıtlı tablolar kullanılır. Döngü varsa 400 fırlatır.
+ * Dinamik import: ajans modülleri bu dosyayı dolaylı olarak içe aktarabilir (döngüsel import olmasın).
+ */
+export async function assertNoSalaryLoop(run, rates = {}, levels = null) {
+  const [{ loadPayConfig }, { cheapestDiamondsPerUsd, salaryLoopError }] = await Promise.all([
+    import('../agencies/agency_metrics.service.js'), import('../games/paytable.rules.js'),
+  ]);
+  const cfg = await getConfig();
+  const pay = levels ?? await loadPayConfig(run);
+  const diamondsPerUsd = cheapestDiamondsPerUsd(pay.levels, pay.videoLevels);
+  for (const [k, label] of [['usdCoinsPerUsd', 'Fasulye → Coin kuru'], ['usdDealerCoinsPerUsd', 'Bayiye gönderim kuru']]) {
+    const msg = salaryLoopError({ coinsPerUsd: rates[k] ?? cfg[k], diamondsPerUsd, label });
+    if (msg) throw fail(msg);
+  }
 }
 
 /** "2.36.0" < "2.40.1" karşılaştırması. Geçersiz sürüm 0.0.0 sayılır. */

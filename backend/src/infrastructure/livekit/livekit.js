@@ -1,4 +1,6 @@
-import { AccessToken, RoomServiceClient } from 'livekit-server-sdk';
+import { AccessToken, RoomServiceClient, WebhookReceiver } from 'livekit-server-sdk';
+import { retry } from './retry.js';
+import { log } from '../observability/log.js';
 
 const configured = () => Boolean(process.env.LIVEKIT_API_KEY && process.env.LIVEKIT_API_SECRET && process.env.LIVEKIT_URL);
 // Sunucudan LiveKit'e (oda yönetimi) giden adres. Aynı makinede kuruluysa iç adres (LIVEKIT_API_URL) kullanılır;
@@ -6,22 +8,63 @@ const configured = () => Boolean(process.env.LIVEKIT_API_KEY && process.env.LIVE
 const httpUrl = () => (process.env.LIVEKIT_API_URL || (process.env.LIVEKIT_URL || '').replace(/^wss:/, 'https:').replace(/^ws:/, 'http:'));
 const client = () => new RoomServiceClient(httpUrl(), process.env.LIVEKIT_API_KEY, process.env.LIVEKIT_API_SECRET);
 
-// hidden: katılımcı odadakilere görünmez (görüntülü PK'da rakip yayını izleyenler). ttlSeconds: anahtar ömrü.
-export async function token({ identity, name, room, canPublish = true, metadata = '', hidden = false, ttl = '2h' }) {
+// Anahtar ömrü KISA tutulur (varsayılan 15 dk). Sebep: mikrofon yetkisi anahtarın içindedir; koltuktan indirilen biri
+// setCanPublish ile kapatılır, ama o çağrı ulaşamazsa eski anahtar süresi dolana kadar yayın yetkisi taşırdı. LiveKit sunucusu
+// bağlı katılımcıya anahtarı kendisi yeniler; yeniden katılımda uygulama zaten yeni anahtar ister (rooms_media.routes.js).
+export const TOKEN_TTL = '15m';
+
+// hidden: katılımcı odadakilere görünmez (görüntülü PK'da rakip yayını izleyenler). ttl: anahtar ömrü.
+// sources: yayın serbest olan kaynaklar (TrackSource dizisi; null = hepsi). Susturulmuş görüntülü koltuk = yalnızca kamera.
+export async function token({ identity, name, room, canPublish = true, sources = null, metadata = '', hidden = false, ttl = TOKEN_TTL }) {
   if (!configured()) throw Object.assign(new Error('LiveKit yapılandırılmamış.'), { status: 503 });
   const t = new AccessToken(process.env.LIVEKIT_API_KEY, process.env.LIVEKIT_API_SECRET, { identity, name, metadata, ttl });
   // canPublishData kapalı: uygulama LiveKit veri kanalını kullanmaz (olaylar kendi WebSocket'imizden gider). Açık kalsaydı
   // değiştirilmiş bir istemci odadaki herkese sınırsız veri paketi yollayabilirdi.
-  t.addGrant({ roomJoin: true, room, canPublish, canSubscribe: true, canPublishData: false, ...(hidden ? { hidden: true } : {}) });
+  t.addGrant({
+    roomJoin: true, room, canPublish, canSubscribe: true, canPublishData: false,
+    ...(canPublish && sources ? { canPublishSources: sources } : {}), ...(hidden ? { hidden: true } : {}),
+  });
   return t.toJwt();
 }
 
 // Aşağıdaki çağrılar "en iyi çaba"dır: LiveKit'e ulaşılamasa da oda işlemleri bozulmaz.
-export async function setCanPublish(room, identity, canPublish) {
-  if (!configured()) return;
-  try {
-    await client().updateParticipant(room, identity, undefined, { canPublish, canSubscribe: true, canPublishData: false });
-  } catch (_) { /* katılımcı henüz bağlı olmayabilir */ }
+const notConnected = (e) => e?.status === 404 || e?.code === 'not_found';
+
+/**
+ * Katılımcının yayın (mikrofon) yetkisini açar/kapatır. Geçici hatada 3 kez dener; yine olmazsa SESSİZCE yutmaz, kayda yazar.
+ * Katılımcı odada değilse (404) yapılacak bir şey yoktur: yetki bir sonraki anahtarda veritabanından zaten hesaplanır.
+ * Dönüş: true = uygulandı ya da katılımcı bağlı değil; false = uygulanamadı (yetki iptali eksik kalmış olabilir).
+ */
+export function setCanPublish(room, identity, canPublish) {
+  return setPublishPermission(room, identity, { canPublish, sources: null });
+}
+
+/**
+ * setCanPublish'in kaynak kısıtlı hâli (bkz. rooms/publish_policy.rules.js). sources null = tüm kaynaklar.
+ * İzin daraltılınca LiveKit, artık izinsiz olan izleri kendisi yayından kaldırır.
+ */
+export async function setPublishPermission(room, identity, { canPublish, sources = null }) {
+  if (!configured()) return true;
+  // canPublishSources boş dizi = "kısıt yok" (LiveKit kuralı); kısıt yalnızca izin varken anlamlıdır.
+  const permission = { canPublish, canSubscribe: true, canPublishData: false, canPublishSources: canPublish && sources ? sources : [] };
+  const r = await retry(
+    () => client().updateParticipant(room, identity, undefined, permission),
+    { attempts: 3, baseMs: 150, shouldRetry: (e) => !notConnected(e) },
+  );
+  if (r.ok || notConnected(r.error)) return true;
+  log.warn('livekit_permission_update_failed', { room, identity, canPublish, sources, attempts: r.attempts, error: r.error });
+  return false;
+}
+
+/**
+ * LiveKit webhook'larını doğrulayan alıcı (imza = API anahtarıyla imzalı JWT + gövdenin sha256'sı). LiveKit
+ * yapılandırılmamışsa null. Webhook ayarı: deploy/oracle/install.sh (livekit.yaml → webhook).
+ */
+let receiver = null;
+export function webhookReceiver() {
+  if (!configured()) return null;
+  receiver ??= new WebhookReceiver(process.env.LIVEKIT_API_KEY, process.env.LIVEKIT_API_SECRET);
+  return receiver;
 }
 
 export async function removeParticipant(room, identity) {

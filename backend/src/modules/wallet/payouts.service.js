@@ -8,6 +8,7 @@ import { grantLevelRewards } from '../agencies/agency_rewards.service.js';
 import { creditPeriod } from './usd_wallet.service.js';
 import { getConfig } from '../system/app_config.service.js';
 import { evaluateWeightedSalary, weightedJson } from './salary_weights.rules.js';
+import { netOfAdvance } from './instant_salary.rules.js';
 
 export const loadConfig = loadPayConfig;
 
@@ -71,7 +72,7 @@ export const hostStatementJson = (x) => ({
   validDays: x.valid_days ?? 0, gameSeconds: Number(x.game_seconds ?? 0), balanceDiamonds: String(x.balance_diamonds ?? 0),
   level1: x.level1 ?? null, level2: x.level2 ?? null, salary1Cents: String(x.salary1_cents ?? 0), salary2Cents: String(x.salary2_cents ?? 0),
   method: x.pay_method ?? null, consumedDiamonds: String(x.consumed_diamonds ?? 0), rewards: x.rewards ?? {},
-  baseSalaryCents: String(x.base_salary_cents), penaltyApplied: x.penalty_applied, salaryCents: String(x.salary_cents),
+  baseSalaryCents: String(x.base_salary_cents), penaltyApplied: x.penalty_applied, salaryCents: String(x.salary_cents), advanceCents: String(x.advance_cents ?? 0),
   eventsOk: x.events_ok, status: x.status, paidAt: x.paid_at, payNote: x.pay_note ?? null,
   // Ağırlıklı hak ediş. earnedBps null ise o dönemde bu hesap yapılmadı (sözleşme kademesi
   // atanmamış ya da dönem bu sürümden önce kapanmış) — 0 ile karıştırılmamalı.
@@ -128,6 +129,15 @@ export async function closePeriod({ adminId, periodKey, force = false }) {
       [b.key, b.cycle, b.start, b.end, adminId, JSON.stringify(configJson(cfg))],
     )).rows[0];
 
+    // Ay içinde ödenen maaş avansları (instant_salary.service.js). Avans yazan servis aynı 'payout_close' kilidini alır;
+    // yani buradaki toplam, kapanış sürerken değişemez. Özetteki salary_cents avans düşülmüş KALAN tutardır.
+    const advRows = (await c.query(
+      `SELECT user_id, SUM(cents)::text AS cents, SUM(diamonds_consumed)::text AS dc FROM salary_advances
+       WHERE applied_period_id IS NULL AND created_at >= $1 AND created_at < $2 GROUP BY user_id`, [b.start, b.end],
+    )).rows;
+    const advances = new Map(advRows.map((r) => [r.user_id, BigInt(r.cents)]));
+    const advConsumed = new Map(advRows.map((r) => [r.user_id, BigInt(r.dc)])); // avansla zaten Fasulyeye çevrilmiş elmas
+
     // ---- Yayıncılar ----
     const hosts = (await c.query(
       `SELECT b.user_id, b.agency_id, b.approved_at, b.pay_method_pref, b.contract_tier FROM broadcasters b
@@ -141,7 +151,9 @@ export async function closePeriod({ adminId, periodKey, force = false }) {
       const m = metrics.get(h.user_id);
       if (m.seconds === 0 && m.diamonds === 0n) continue; // dönemde hiç yayın / hediye yoksa özet oluşmaz
       // Satır kilitlenmez (dönem kapanırken yayıncıya hediye bekletilmesin); Yöntem 2 düşümü aşağıda koşullu UPDATE ile yapılır.
-      const balance = BigInt((await c.query(`SELECT diamonds FROM users WHERE id = $1`, [h.user_id])).rows[0]?.diamonds ?? 0);
+      // Etkin bakiye = bakiye + avansla zaten düşülen elmas: avansın kendi düşümü "elmas bozdurma" şartını bozmasın.
+      const ac = advConsumed.get(h.user_id) ?? 0n;
+      const balance = BigInt((await c.query(`SELECT diamonds FROM users WHERE id = $1`, [h.user_id])).rows[0]?.diamonds ?? 0) + ac;
       const evOk = !cfg.settings.requireOfficialEvents || (ev.get(h.user_id) ?? 0) >= cfg.settings.minEventCount;
       // Sesli ve görüntülü ayrı hesaplanır (ayar açıksa); e.salaryCents iki tarafın toplamıdır.
       let e = evaluateHost(cfg, m, { pref: h.pay_method_pref, eventsOk: evOk, balance });
@@ -173,16 +185,22 @@ export async function closePeriod({ adminId, periodKey, force = false }) {
       // Yayıncı elmasını tutar, gelirini ayrıca bozdurmaya devam edebilir.
       let consumed = 0n;
       if (!useWeighted && e.method === 2) {
-        const r = await c.query(
-          `UPDATE users SET diamonds = diamonds - $2, updated_at = NOW() WHERE id = $1 AND diamonds >= $2 RETURNING diamonds`,
-          [h.user_id, e.consume.toString()],
-        );
+        // Avansla zaten düşülen elmas ikinci kez düşülmez; yalnızca kalanı düşülür.
+        const need = e.consume > ac ? e.consume - ac : 0n;
+        const r = need > 0n
+          ? await c.query(
+            `UPDATE users SET diamonds = diamonds - $2, updated_at = NOW() WHERE id = $1 AND diamonds >= $2 RETURNING diamonds`,
+            [h.user_id, need.toString()],
+          )
+          : { rowCount: 1 };
         if (r.rowCount) {
           consumed = e.consume;
-          await c.query(
-            `INSERT INTO wallet_transactions(user_id, transaction_type, diamond_amount, reference_id, description) VALUES($1,'salary_conversion',$2,$3,$4)`,
-            [h.user_id, (-consumed).toString(), b.key, `${b.key} maaşı (Yöntem 2): ${consumed} elmas maaşa çevrildi`],
-          );
+          if (need > 0n) {
+            await c.query(
+              `INSERT INTO wallet_transactions(user_id, transaction_type, diamond_amount, reference_id, description) VALUES($1,'salary_conversion',$2,$3,$4)`,
+              [h.user_id, (-need).toString(), b.key, `${b.key} maaşı (Yöntem 2): ${need} elmas maaşa çevrildi`],
+            );
+          }
         } else {
           e = evaluateHost(cfg, m, { pref: 1, eventsOk: evOk, balance });
         }
@@ -190,7 +208,8 @@ export async function closePeriod({ adminId, periodKey, force = false }) {
       const rewards = e.level ? await grantLevelRewards(c, h.user_id, e.level) : {};
       if (Object.keys(rewards).length) rewarded.push(h.user_id);
 
-      const paidCents = useWeighted ? w.earnedCents : e.salaryCents;
+      const paidCents = useWeighted ? w.earnedCents : e.salaryCents; // toplam hak ediş (denetim kaydı ve bildirimler bunu kullanır)
+      const payableCents = netOfAdvance({ entitledCents: paidCents, advanceCents: advances.get(h.user_id) });
 
       totalSalary += paidCents;
       hostCount += 1;
@@ -203,7 +222,7 @@ export async function closePeriod({ adminId, periodKey, force = false }) {
            earned_bps, weighted_cents, weight_parts, salary_basis)
          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,
            $29,$30,$31,$32,$33,$34,$35,$36,$37,$38)`,
-        [p.id, h.user_id, h.agency_id, m.seconds, m.diamonds.toString(), e.level?.level ?? null, e.baseCents.toString(), e.penalty, paidCents.toString(), evOk,
+        [p.id, h.user_id, h.agency_id, m.seconds, m.diamonds.toString(), e.level?.level ?? null, e.baseCents.toString(), e.penalty, payableCents.toString(), evOk,
           m.validDays, m.gameSeconds, balance.toString(), e.level1?.level ?? null, e.level2?.level ?? null, e.salary1.toString(), e.salary2.toString(),
           e.method, consumed.toString(), JSON.stringify(rewards),
           e.split ? m.audio.seconds : m.seconds, (e.split ? m.audio.diamonds : m.diamonds).toString(), e.audioCents.toString(),
@@ -216,6 +235,17 @@ export async function closePeriod({ adminId, periodKey, force = false }) {
           w ? w.earnedBps : null, w ? w.earnedCents.toString() : null, w ? JSON.stringify(w.parts) : null,
           useWeighted ? 'weighted' : 'tier'],
       );
+    }
+
+    // Avansları özetlere işle ve "uygulandı" yap: bir daha hiçbir dönemden düşülmez.
+    if (advances.size) {
+      await c.query(
+        `UPDATE host_statements s SET advance_cents = a.cents FROM (
+           SELECT user_id, SUM(cents) AS cents FROM salary_advances
+           WHERE applied_period_id IS NULL AND created_at >= $2 AND created_at < $3 GROUP BY user_id) a
+         WHERE s.period_id = $1 AND s.user_id = a.user_id`, [p.id, b.start, b.end],
+      );
+      await c.query(`UPDATE salary_advances SET applied_period_id = $1 WHERE applied_period_id IS NULL AND created_at >= $2 AND created_at < $3`, [p.id, b.start, b.end]);
     }
 
     // ---- Ajans primleri (yayıncı başına: o ajanstayken aldığı elmasa göre), asistan payları ----

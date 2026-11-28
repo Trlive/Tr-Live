@@ -1,4 +1,4 @@
-// Ludo motoru: saf ve sunucu tarafından yönetilir (istemci yalnızca gösterir). Para/bahis YOKTUR.
+// Ludo motoru: saf ve sunucu tarafından yönetilir (istemci yalnızca gösterir). Para/Coin hareketi YOKTUR.
 //
 // Konumlar (ilerleme, "progress"):  -1 = üs,  0 = kendi başlangıç karesi,  1..50 = ortak yol,
 //                                   51..55 = ev sütunu,  56 = bitti.

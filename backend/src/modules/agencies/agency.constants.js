@@ -38,7 +38,7 @@ export function validateAgencyConfig(input) {
       if (typeof s.splitByRoomType !== 'boolean') throw fail('splitByRoomType true/false olmalı.');
       out.settings.splitByRoomType = s.splitByRoomType;
     }
-    for (const [k, max, label] of [['videoDailyCapMinutes', 1440, 'Görüntülü günlük süre sınırı'], ['videoMinSessionMinutes', 240, 'Görüntülü en kısa oturum'], ['videoShortfallCutBps', 10000, 'Görüntülü kesinti oranı']]) {
+    for (const [k, max, label] of [['videoDailyCapMinutes', 1440, 'Görüntülü günlük süre sınırı'], ['videoMinSessionMinutes', 240, 'Görüntülü en kısa oturum'], ['videoShortfallCutBps', 10000, 'Görüntülü kesinti oranı'], ['audioShortfallCutBps', 10000, 'Sesli kesinti oranı'], ['instantSalaryBps', 10000, 'Şartlardan biri eksikse ödenecek maaş oranı']]) {
       if (s[k] === undefined) continue;
       if (!Number.isInteger(s[k]) || s[k] < 0 || s[k] > max) throw fail(`${label} 0-${max} olmalı.`);
       out.settings[k] = s[k];
@@ -72,7 +72,7 @@ export function validateAgencyConfig(input) {
         && out.settings.salaryTransferDayFrom > out.settings.salaryTransferDayTo) {
       throw fail('Aktarım başlangıç günü, bitiş gününden büyük olamaz.');
     }
-    for (const k of ['requireGameHours', 'allowBalanceMethod', 'salaryWeightedEnabled', 'salaryAutoTransfer']) {
+    for (const k of ['requireGameHours', 'allowBalanceMethod', 'salaryWeightedEnabled', 'salaryAutoTransfer', 'instantSalaryEnabled']) {
       if (s[k] === undefined) continue;
       if (typeof s[k] !== 'boolean') throw fail(`${k} true/false olmalı.`);
       out.settings[k] = s[k];

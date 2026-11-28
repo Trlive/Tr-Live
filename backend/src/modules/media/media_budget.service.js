@@ -1,6 +1,8 @@
 import { query, tx } from '../../infrastructure/database/database.js';
 import { fail } from '../../shared/errors/http.js';
 import { getConfig } from '../system/app_config.service.js';
+import { readMediaBytes } from './media_bytes.service.js';
+import { r2Config } from '../../infrastructure/storage/storage.js';
 import { limitsFrom, optimize } from './media_optimize.service.js';
 import { ffmpegAvailable } from './media_tools.service.js';
 import { forgetMedia } from './images.service.js';
@@ -97,9 +99,15 @@ async function swapRefs(c, oldId, newId) {
 
 /** Tek dosyayı denetler; sınırı aşıyorsa küçültüp adresleri yeni dosyaya çevirir. */
 async function process(item, L, adminId) {
-  const row = (await query(`SELECT id, kind, mime, ext, size_bytes, data, meta, created_by FROM media_files WHERE id = $1`, [item.id])).rows[0];
+  const row = (await query(`SELECT id, kind, mime, ext, size_bytes, data, storage_key, sha256, meta, created_by FROM media_files WHERE id = $1`, [item.id])).rows[0];
   if (!row) return { id: item.id, note: 'Dosya bulunamadı.', changed: false };
-  const r = await optimize(row.data, item.kind, item.cls, L);
+  // Veritabanı kopyası silinmişse (R2'ye taşınmışsa) baytlar depodan okunur. Okunamazsa dosyaya DOKUNULMAZ: boş bayt üzerinde
+  // "optimize" etmek, bütçe raporuna yanlışlıkla "sınır içinde" yazardı.
+  let bytes;
+  try { bytes = await readMediaBytes(row, r2Config(await getConfig())); } catch (e) {
+    return { id: row.id, names: item.names, changed: false, note: `Dosya okunamadı: ${e.message}` };
+  }
+  const r = await optimize(bytes, item.kind, item.cls, L);
   if (!r.changed) {
     await query(`UPDATE media_files SET meta = meta || jsonb_build_object('budget', $2::jsonb) WHERE id = $1`, [row.id, JSON.stringify(budgetMeta(r, L))]);
     return { id: row.id, names: item.names, changed: false, note: r.note, over: r.after.over };

@@ -209,6 +209,7 @@ const AGENCY_FIELDS: FieldDef[] = [
   { key: "videoDailyCapMinutes", label: "Görüntülü: günlük sayılan en çok yayın (dakika, 0 = sınırsız)", kind: "int" },
   { key: "videoMinSessionMinutes", label: "Görüntülü: sayılması için en kısa oturum (dakika)", kind: "int" },
   { key: "videoShortfallCutBps", label: "Görüntülü: süre şartı eksikse kesinti (baz puan)", kind: "int" },
+  { key: "instantSalaryEnabled", label: "Ay içi maaş (avans) kuralı: açık = kota dolunca hemen yatar (acil durdurma için)", kind: "bool" },
 ];
 
 function AgencyConfig() {

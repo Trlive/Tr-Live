@@ -59,7 +59,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final has = Session.me.value?['hasPassword'] != false;
     final current = has ? await askText(context, tx('Mevcut şifre'), obscure: true) : '';
     if (current == null || !mounted) return;
-    final next = await askText(context, tx('Yeni şifre (en az 6 karakter)'), obscure: true);
+    final next = await askText(context, tx('Yeni şifre (en az 8 karakter)'), obscure: true);
     if (next == null || !mounted) return;
     final r = await guard(context, () => Api.post('/api/me/password', {'currentPassword': current, 'newPassword': next}));
     if (r != null) {

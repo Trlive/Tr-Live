@@ -72,6 +72,21 @@ fi
 # Yalnızca izni yanlışsa dokunulur (her dokunuş "panel isteği" sayılıp sunucuyu yeniden başlatırdı).
 [ "$(stat -c %a "$STATE/update" 2>/dev/null)" = 666 ] || { systemctl stop trlive-apply.path 2>/dev/null; touch "$STATE/update" && chmod 666 "$STATE/update"; systemctl start trlive-apply.path 2>/dev/null; } || true
 chmod 644 "$STATE/update.log" "$STATE/install.log" 2>/dev/null || true
+# TURN sertifikası yenilendiyse ses sunucusu yeni sertifikayı yüklesin. install.sh bunu yalnızca bir güncelleme
+# uygulanırken yapar; uzun süre güncelleme gelmezse LiveKit eski sertifikayı bellekte tutar (Caddy yaklaşık 60. günde
+# yeniler, eskisi 90. günde biter ve TURN sessizce bozulur). Yeniden başlatma açık odalarda sesi birkaç saniye keser:
+# bu yüzden yalnızca gece 04:00-04:59 arasında yapılır (5 dakikalık zamanlayıcı bu saatte birkaç kez bakar, bir kez uygular).
+if [ "$(date +%H)" = 04 ] && [ -s "$STATE/turn-cert.md5" ] && [ -s "$STATE/turn-cert.host" ]; then
+  TURN_NEW_MD5=$(md5sum "$(cat "$STATE/turn-cert.host")" 2>/dev/null | cut -d' ' -f1 || true)
+  if [ -n "$TURN_NEW_MD5" ] && [ "$TURN_NEW_MD5" != "$(cat "$STATE/turn-cert.md5")" ]; then
+    if docker compose -p trlive -f "$SRC/deploy/oracle/compose.yml" --env-file "$ROOT/env/compose.env" restart livekit >/dev/null 2>&1; then
+      echo "$TURN_NEW_MD5" > "$STATE/turn-cert.md5"
+      note "TURN sertifikası yenilenmiş; ses sunucusu yeniden başlatıldı"
+    else
+      note "UYARI: TURN sertifikası yenilendi ama ses sunucusu yeniden başlatılamadı"
+    fi
+  fi
+fi
 # Ses sunucusu testi (panelde "Ses sunucusu testi" bölümünde görünür).
 bash "$SRC/deploy/oracle/diag.sh" >/dev/null 2>&1 || true
 tail -n 200 "$STATE/update.log" > "$STATE/update.log.tmp" 2>/dev/null && mv "$STATE/update.log.tmp" "$STATE/update.log"

@@ -15,10 +15,63 @@ const offlineTimers = new Map();
 const presenceVisible = new Map(); // userId -> bool (gizli kullanıcı / "durumumu gizle" seçenekleri)
 let presenceHook = () => {};
 
+// ---- Dizinler ----
+// Yayınlar eskiden sunucudaki TÜM soketleri dolaşıyordu (oda mesajı, kişiye mesaj, çevrimiçi durum, IP sayımı). Kalabalık bir
+// PK'da hediye yağmuru, her olay için binlerce gereksiz döngü demekti. Artık her soket ait olduğu kümelerde tutulur; bir
+// odaya mesaj yalnızca o odadaki soketleri gezer. Kümeler yalnızca aşağıdaki yardımcılarla değişir (doğrudan ws.roomId /
+// ws.watch ataması dizini bozar).
+const byRoom = new Map();    // roomId -> Set<ws>
+const byUser = new Map();    // userId -> Set<ws> (kimliği doğrulanmış soketler)
+const watchers = new Map();  // izlenen userId -> Set<ws> (çevrimiçi durumunu izleyen soketler)
+const ipCount = new Map();   // ip -> açık soket sayısı
+
+function addTo(map, key, ws) {
+  let set = map.get(key);
+  if (!set) { set = new Set(); map.set(key, set); }
+  set.add(ws);
+}
+function removeFrom(map, key, ws) {
+  const set = map.get(key);
+  if (!set) return;
+  set.delete(ws);
+  if (!set.size) map.delete(key);
+}
+/** Soketin odasını değiştirir (null = odadan çık) ve oda dizinini günceller. */
+function setRoom(ws, roomId) {
+  if (ws.roomId === roomId) return;
+  if (ws.roomId) removeFrom(byRoom, ws.roomId, ws);
+  ws.roomId = roomId ?? null;
+  if (ws.roomId) addTo(byRoom, ws.roomId, ws);
+}
+/** Soketin izleme listesini değiştirir (null = hiçbirini izleme) ve izleyici dizinini günceller. */
+function setWatch(ws, ids) {
+  if (ws.watch) for (const id of ws.watch) removeFrom(watchers, id, ws);
+  ws.watch = ids && ids.size ? ids : null;
+  if (ws.watch) for (const id of ws.watch) addTo(watchers, id, ws);
+}
+function unwatchOne(ws, id) {
+  if (!ws.watch?.delete(id)) return;
+  removeFrom(watchers, id, ws);
+  if (!ws.watch.size) ws.watch = null;
+}
+const socketsOf = (userId) => byUser.get(userId) ?? [];
+const watchersOf = (userId) => watchers.get(userId) ?? [];
+/** Soket kapanınca tüm dizinlerden düşer. Birden çok kez çağrılabilir. */
+function forget(ws) {
+  setRoom(ws, null);
+  setWatch(ws, null);
+  if (ws.userId) removeFrom(byUser, ws.userId, ws);
+  if (ws.ipCounted) {
+    ws.ipCounted = false;
+    const n = (ipCount.get(ws.ip) ?? 1) - 1;
+    if (n > 0) ipCount.set(ws.ip, n); else ipCount.delete(ws.ip);
+  }
+}
+
 function emitPresence(userId, online) {
   if (presenceVisible.get(userId) === false) return;
   const payload = { type: 'presence', userId, online, lastSeenAt: online ? null : new Date().toISOString() };
-  for (const ws of clients()) if (ws.watch?.has(userId)) safeSend(ws, payload);
+  for (const ws of watchersOf(userId)) safeSend(ws, payload);
 }
 
 function markOnline(userId, visible) {
@@ -79,9 +132,7 @@ const clients = () => (wss ? wss.clients : []);
 // Tek sunucu örneği için bellek içi hub. Birden fazla örnek çalıştırılacaksa Redis pub/sub gerekir.
 export const hub = {
   broadcastRoom(roomId, payload) {
-    const targets = [];
-    for (const ws of clients()) if (ws.userId && ws.roomId === roomId) targets.push(ws);
-    sendMany(targets, payload);
+    sendMany(byRoom.get(roomId) ?? [], payload);
   },
   broadcastGlobal(payload) {
     // Her duyuruya kimlik: aynı kullanıcıya birden çok bağlantıdan ulaşsa da uygulama bir kez gösterir.
@@ -91,28 +142,27 @@ export const hub = {
     sendMany(targets, p);
   },
   sendToUser(userId, payload) {
-    for (const ws of clients()) if (ws.userId === userId) safeSend(ws, payload);
+    for (const ws of socketsOf(userId)) safeSend(ws, payload);
   },
   detachUserFromRoom(userId, roomId, payload = null) {
-    for (const ws of clients()) {
-      if (ws.userId !== userId) continue;
+    for (const ws of socketsOf(userId)) {
       // Yolda olan bir abonelik isteği, çıkıştan sonra soketi bu odaya yeniden bağlamasın.
       if (ws.pendingRoom === roomId) ws.subSeq = (ws.subSeq ?? 0) + 1;
       if (ws.roomId === roomId) {
-        ws.roomId = null;
+        setRoom(ws, null);
         if (payload) safeSend(ws, payload);
       }
     }
   },
   clearRoom(roomId) {
-    for (const ws of clients()) if (ws.roomId === roomId) ws.roomId = null;
+    for (const ws of [...(byRoom.get(roomId) ?? [])]) setRoom(ws, null);
   },
   isUserInRoom(userId, roomId) {
-    for (const ws of clients()) if (ws.userId === userId && ws.roomId === roomId && ws.readyState === OPEN) return true;
+    for (const ws of socketsOf(userId)) if (ws.roomId === roomId && ws.readyState === OPEN) return true;
     return false;
   },
   disconnectUser(userId, reason = 'closed') {
-    for (const ws of clients()) if (ws.userId === userId) ws.close(4001, reason);
+    for (const ws of [...socketsOf(userId)]) ws.close(4001, reason);
   },
   /** Tek bir cihaz oturumunun bağlantılarını kapatır (uzaktan çıkış). */
   disconnectSession(sessionId, reason = 'session_revoked') {
@@ -121,15 +171,12 @@ export const hub = {
   },
   /** Kullanıcının, verilen oturum dışındaki tüm bağlantılarını kapatır (keepSessionId null ise hepsini). */
   disconnectUserExcept(userId, keepSessionId, reason = 'closed') {
-    for (const ws of clients()) if (ws.userId === userId && (!keepSessionId || ws.sessionId !== keepSessionId)) ws.close(4001, reason);
+    for (const ws of [...socketsOf(userId)]) if (!keepSessionId || ws.sessionId !== keepSessionId) ws.close(4001, reason);
   },
   /** Engelleme sonrası iki kişi birbirinin çevrimiçi durumunu artık almaz (izleme listelerinden çıkarılır). */
   unwatchPair(a, b) {
-    for (const ws of clients()) {
-      if (!ws.watch) continue;
-      if (ws.userId === a) ws.watch.delete(b);
-      else if (ws.userId === b) ws.watch.delete(a);
-    }
+    for (const ws of [...socketsOf(a)]) unwatchOne(ws, b);
+    for (const ws of [...socketsOf(b)]) unwatchOne(ws, a);
   },
   /** Bağlantısı açık (ya da kısa kopma payı içinde) kullanıcı. */
   isOnline(userId) {
@@ -144,7 +191,7 @@ export const hub = {
     if (visible) { presenceVisible.set(userId, true); emitPresence(userId, true); return; }
     // Gizlenince izleyenler kişiyi çevrimdışı görür (son görülme bilgisi de verilmez).
     const payload = { type: 'presence', userId, online: false, lastSeenAt: null };
-    for (const ws of clients()) if (ws.watch?.has(userId)) safeSend(ws, payload);
+    for (const ws of watchersOf(userId)) safeSend(ws, payload);
     presenceVisible.set(userId, false);
   },
   /**
@@ -229,15 +276,16 @@ export function attachRealtime(server, {
     let data;
     try { data = JSON.parse(String(raw)); } catch { return; }
     if (data.type === 'ping') return safeSend(ws, { type: 'pong' });
-    if (data.type === 'room_unsubscribe') { ws.subSeq = (ws.subSeq ?? 0) + 1; ws.roomId = null; return; }
+    if (data.type === 'room_unsubscribe') { ws.subSeq = (ws.subSeq ?? 0) + 1; setRoom(ws, null); return; }
     // Ekranda görünen kişilerin çevrimiçi durumunu izleme (sohbet listesi, DM, profil). Liste her seferinde yenilenir.
     if (data.type === 'presence_watch' && Array.isArray(data.userIds)) {
       const ids = [...new Set(data.userIds.filter((x) => typeof x === 'string' && UUID_RE.test(x)))].slice(0, MAX_WATCH);
-      if (!ids.length) { ws.watch = null; return; }
+      if (!ids.length) { setWatch(ws, null); return; }
       try {
         // Gizli/engelli kişiler anlık görüntüden ve izleme listesinden çıkarılır.
         const users = await presenceSnapshot(ws.userId, ids);
-        ws.watch = new Set(users.map((u) => u.userId));
+        if (ws.readyState !== OPEN) return; // anlık görüntü beklenirken soket kapandı: dizine yeniden girmesin
+        setWatch(ws, new Set(users.map((u) => u.userId)));
         safeSend(ws, { type: 'presence_state', users });
       } catch (_) { /* anlık görüntü alınamazsa durum gösterilmez */ }
       return;
@@ -263,7 +311,8 @@ export function attachRealtime(server, {
         if (ws.subSeq !== seq) return;
         ws.pendingRoom = null;
         if (member) {
-          ws.roomId = data.roomId;
+          if (ws.readyState !== OPEN) return; // üyelik denetlenirken soket kapandı
+          setRoom(ws, data.roomId);
           safeSend(ws, { type: 'room_subscribed', roomId: data.roomId });
         } else {
           safeSend(ws, { type: 'error', code: 'not_member', roomId: data.roomId });
@@ -278,13 +327,15 @@ export function attachRealtime(server, {
     ws.on('error', () => {});
     ws.on('close', () => {
       if (ws.counted) { ws.counted = false; markClosed(ws.userId); }
+      forget(ws);
     });
 
     const ip = ipOf(req);
     ws.ip = ip;
     if (isBanned(ip)) { ws.close(1008, 'banned'); return; }
-    let sameIp = 0;
-    for (const c of wss.clients) if (c.ip === ip) sameIp += 1;
+    const sameIp = (ipCount.get(ip) ?? 0) + 1; // bu soket dahil
+    ipCount.set(ip, sameIp);
+    ws.ipCounted = true;
     if (sameIp > maxSocketsPerIp) {
       onViolation(ip, 'ws_ip_flood', { volume: true });
       ws.close(1013, 'too_many_connections');
@@ -315,6 +366,7 @@ export function attachRealtime(server, {
         const user = await authenticate(socketToken(req, url));
         if (ws.readyState !== OPEN) return; // doğrulama sürerken istemci gitti
         ws.userId = user.id;
+        addTo(byUser, user.id, ws);
         ws.sessionId = user.session_id ?? null;
         initialRoom = url.searchParams.get('roomId');
         const visible = await isPresenceVisible(user).catch(() => false);
@@ -326,7 +378,7 @@ export function attachRealtime(server, {
         return;
       }
       // Kullanıcı başına en fazla 5 eşzamanlı bağlantı; en eskiler kapatılır.
-      const mine = [...wss.clients].filter((c) => c !== ws && c.userId === ws.userId);
+      const mine = [...socketsOf(ws.userId)].filter((c) => c !== ws);
       while (mine.length >= MAX_SOCKETS_PER_USER) mine.shift().close(1013, 'replaced');
       ready = true;
       safeSend(ws, { type: 'connected', userId: ws.userId });

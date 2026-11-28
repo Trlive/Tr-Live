@@ -141,7 +141,7 @@ router.post('/self', userLimit('dealer_self', 30, 3600e3), idempotent('dealer_se
 async function subDealers(dealerId) {
   const r = await query(
     `SELECT d.id, d.name, d.coin_balance, d.is_active, u.username AS owner,
-            COALESCE(s.sold, 0) AS sold, COALESCE(s.sales, 0) AS sales
+            COALESCE(s.sold, '0') AS sold, COALESCE(s.sales, 0) AS sales
        FROM dealer_accounts d
        LEFT JOIN users u ON u.id = d.owner_user_id
        LEFT JOIN LATERAL (

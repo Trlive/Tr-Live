@@ -44,6 +44,8 @@ import { revokeAllSessions } from '../users/sessions.service.js';
 import { deleteAccount } from '../users/account_delete.service.js';
 import { detectMedia, ensureVapc, mimeFor, MEDIA_MAX_BYTES } from '../media/media.service.js';
 import { mediaCacheStats } from '../media/images.service.js';
+import { readMediaBytes } from '../media/media_bytes.service.js';
+import { r2Config } from '../../infrastructure/storage/storage.js';
 import { getConfig, saveConfig, validateConfigPatch, compareVersions, CONFIG_DEFAULTS, maskSecrets, SECRET_MASK, mailOn } from '../system/app_config.service.js';
 import { sendMail } from '../notifications/mailer.service.js';
 import { normalizeEmail } from '../notifications/email_codes.service.js';
@@ -189,9 +191,10 @@ export async function autoIcon(animationUrl, userId) {
   const m = /^\/media\/([0-9a-f-]{36})\.mp4$/i.exec(animationUrl);
   if (!m) return null;
   try {
-    const row = (await query('SELECT data FROM media_files WHERE id = $1', [m[1]])).rows[0];
+    const row = (await query('SELECT data, storage_key, size_bytes, sha256 FROM media_files WHERE id = $1', [m[1]])).rows[0];
     if (!row) return null;
-    const p = await prepareMp4(row.data, 'auto', { iconOnly: true });
+    // Kopyası veritabanından silinmişse (R2'ye taşınmışsa) baytlar depodan okunur.
+    const p = await prepareMp4(await readMediaBytes(row, r2Config(await getConfig())), 'auto', { iconOnly: true });
     if (!p?.icon) return null;
     const ins = await query(
       `INSERT INTO media_files(kind, mime, ext, size_bytes, data, meta, created_by) VALUES('png','image/png','png',$1,$2,$3,$4) RETURNING id`,
@@ -275,7 +278,8 @@ export const SETTING_COLUMNS = {
   validDayMinutes: 'valid_day_minutes', requireGameHours: 'require_game_hours', allowBalanceMethod: 'allow_balance_method',
   maxAssistants: 'max_assistants', maxAssistantBps: 'max_assistant_bps', referralBps: 'referral_bps', transferWaitHours: 'transfer_wait_hours',
   splitByRoomType: 'split_by_room_type', videoDailyCapMinutes: 'video_daily_cap_minutes', videoMinSessionMinutes: 'video_min_session_minutes',
-  videoShortfallCutBps: 'video_shortfall_cut_bps',
+  videoShortfallCutBps: 'video_shortfall_cut_bps', audioShortfallCutBps: 'audio_shortfall_cut_bps',
+  instantSalaryEnabled: 'instant_salary_enabled', instantSalaryBps: 'instant_salary_bps',
   // Ağırlıklı maaş hak edişi. salaryWeights JSONB olduğu için burada DEĞİL, ayrı
   // doğrulamadan geçirilerek yazılıyor (validateWeights).
   salaryWeightedEnabled: 'salary_weighted_enabled', salaryAutoTransfer: 'salary_auto_transfer',

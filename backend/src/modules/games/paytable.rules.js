@@ -110,21 +110,41 @@ export function bestLevel(levels, amount, m = {}, opts = {}, requirements = true
 /**
  * Yayıncının maaş hesabı.
  * metrics: { seconds, validDays, gameSeconds, diamonds, balance }
- * settings: { requireGameHours, allowBalanceMethod, requireOfficialEvents, penaltyBps }
+ * settings: { requireGameHours, allowBalanceMethod, requireOfficialEvents, penaltyBps, audioShortfallCutBps }
  * pref: 0 = otomatik (yüksek olan), 1 = yalnızca Yöntem 1 (elmaslar dönüşmesin)
+ *
+ * audioShortfallCutBps > 0 ise (sahibinin kararı: varsayılan 4000 = %40 kesinti): elmas kotası (Yöntem 1'de dönem elması,
+ * Yöntem 2'de bakiye) tutan ama gün / saat (/ oyun saati) şartı eksik kalan seviye, bu oranda KESİNTİYLE ödenir; şartı tutan
+ * daha düşük seviyenin maaşı daha yüksekse o ödenir. 0 ise şartı tutmayan seviye ödenmez (eski davranış). Yöntem 2 kesintili
+ * ödenirse de seviyenin elmas kotası bakiyeden düşülür (elmaslar maaşa çevrilir).
  */
 export function evaluatePay({ levels, metrics, settings = {}, pref = 0, eventsOk = true }) {
   const m = { seconds: 0, validDays: 0, gameSeconds: 0, ...metrics };
   const diamonds = BigInt(m.diamonds ?? 0);
   const balance = BigInt(m.balance ?? 0);
-  const level1 = bestLevel(levels, diamonds, m, settings);
-  const level2 = settings.allowBalanceMethod !== false && Number(pref) !== 1 ? bestLevel(levels, balance, m, settings) : null;
-  const salary1 = level1 ? level1.salary1Cents : 0n;
-  const salary2 = level2 ? level2.salary2Cents : 0n;
+  const balanceAllowed = settings.allowBalanceMethod !== false && Number(pref) !== 1;
+  const fullLevel1 = bestLevel(levels, diamonds, m, settings);
+  const fullLevel2 = balanceAllowed ? bestLevel(levels, balance, m, settings) : null;
+  let level1 = fullLevel1;
+  let level2 = fullLevel2;
+  let salary1 = level1 ? level1.salary1Cents : 0n;
+  let salary2 = level2 ? level2.salary2Cents : 0n;
+  let shortfall1 = false;
+  let shortfall2 = false;
+  const cut = BigInt(Math.min(10000, Math.max(0, Math.trunc(Number(settings.audioShortfallCutBps ?? 0)) || 0)));
+  if (cut > 0n) {
+    const quota1 = bestLevel(levels, diamonds, m, settings, false);
+    const quota2 = balanceAllowed ? bestLevel(levels, balance, m, settings, false) : null;
+    const reduced1 = quota1 && (!fullLevel1 || quota1.level > fullLevel1.level) ? (quota1.salary1Cents * (10000n - cut)) / 10000n : 0n;
+    const reduced2 = quota2 && (!fullLevel2 || quota2.level > fullLevel2.level) ? (quota2.salary2Cents * (10000n - cut)) / 10000n : 0n;
+    if (reduced1 > salary1) { level1 = quota1; salary1 = reduced1; shortfall1 = true; }
+    if (reduced2 > salary2) { level2 = quota2; salary2 = reduced2; shortfall2 = true; }
+  }
   let method = null;
   if (salary2 > salary1) method = 2;
   else if (level1) method = 1;
   const level = method === 2 ? level2 : method === 1 ? level1 : null;
+  const shortfall = method === 2 ? shortfall2 : method === 1 ? shortfall1 : false;
   const base = method === 2 ? salary2 : salary1;
   const eventsMet = !settings.requireOfficialEvents || eventsOk;
   const penalty = level !== null && !eventsMet;
@@ -132,12 +152,90 @@ export function evaluatePay({ levels, metrics, settings = {}, pref = 0, eventsOk
   const salary = penalty ? (base * (10000n - penaltyBps)) / 10000n : base;
   // Elmas kotası tutan ama şartı eksik seviye (uygulamada "gün/saat şartı eksik" uyarısı için).
   const diamondLevel = bestLevel(levels, diamonds, m, settings, false);
-  const blocked = diamondLevel && (!level1 || diamondLevel.level > level1.level) ? diamondLevel : null;
+  const blocked = diamondLevel && (!fullLevel1 || diamondLevel.level > fullLevel1.level) ? diamondLevel : null;
   const next = sorted(levels).find((l) => l.diamonds > diamonds) ?? null;
   return {
-    level1, level2, salary1, salary2, method, level, baseCents: base, salaryCents: salary, penalty, eventsMet,
+    level1, level2, salary1, salary2, method, level, baseCents: base, salaryCents: salary, penalty, eventsMet, shortfall,
     consume: method === 2 ? level2.diamonds : 0n,
     blocked, blockedBy: blocked ? unmetRequirements(blocked, m, settings) : [],
+    next, nextRemaining: next ? next.diamonds - diamonds : 0n,
+  };
+}
+
+/**
+ * Maaş tablolarının 1 dolar için istediği EN AZ elmas (en cömert seviye; maaşın yüksek sütunu + ajans primi, çünkü yayıncı
+ * kendi ajansının sahibi olabilir). null: tabloda ödeme yok.
+ */
+export function cheapestDiamondsPerUsd(...tables) {
+  let best = null;
+  for (const levels of tables) {
+    for (const l of levels ?? []) {
+      const s1 = BigInt(l.salary1Cents ?? 0); const s2 = BigInt(l.salary2Cents ?? 0);
+      const pay = (s1 > s2 ? s1 : s2) + BigInt(l.agencyCents ?? 0);
+      if (pay <= 0n) continue;
+      const per = (BigInt(l.diamonds) * 100n) / pay;
+      if (best === null || per < best) best = per;
+    }
+  }
+  return best;
+}
+
+/**
+ * Coin ↔ dolar döngüsü koruması. Normal hediyede 1 Coin = 1 elmas ve sesli odada kendine hediye maaşa sayılır; bu yüzden
+ * 1 dolar ile alınan Coin (kur) maaş tablosunun 1 dolar için istediği elmastan AZ olmalı. Eşit ya da fazlaysa
+ * "Fasulye → Coin → kendine hediye → maaş" turu para kazandırır. Hata metni ya da null döner.
+ */
+export function salaryLoopError({ coinsPerUsd, diamondsPerUsd, label = 'Kur' }) {
+  if (diamondsPerUsd === null || diamondsPerUsd === undefined) return null;
+  const rate = BigInt(coinsPerUsd);
+  if (rate < BigInt(diamondsPerUsd)) return null;
+  return `${label} (1$ = ${rate} Coin) maaş tablosunun en cömert seviyesinden (1$ = ${diamondsPerUsd} elmas) yüksek ya da eşit: `
+    + 'Coin alıp kendine hediye göndererek maaştan kâr edilebilir. Kuru düşürün ya da maaş tablosunu güncelleyin.';
+}
+
+/** Sent → tam dolar (100'ün katı), AŞAĞI yuvarlanır: Fasulye tam sayıdır (7,50$ → 7$). */
+export const wholeDollarCents = (cents) => { const c = BigInt(cents ?? 0); return c > 0n ? c - (c % 100n) : 0n; };
+
+/**
+ * Basit maaş kuralı (sahibinin kararı; ayar: instantSalaryEnabled). Kota = dönemde alınan elmas.
+ * Kota dolunca o seviyenin maaşı (Maaş 2 sütunu, ör. 200 bin elmas = 15$) hak edilir:
+ *  - ŞARTLARIN HEPSİ tamamsa maaşın tamamı: elmas bozdurmama (bakiye ≥ kota), gün, saat (ve ayarlıysa oyun saati),
+ *  - biri bile eksikse maaşın settings.instantSalaryBps'i (varsayılan 5000 = %50), TAM DOLARA AŞAĞI yuvarlanarak (15$ → 7$).
+ *    Yuvarlamayla kalan 0,50$ ve kalan %50, şartların hepsi tamamlanınca yatar (hak ediş her değerlendirmede yeniden hesaplanır).
+ * Birden çok seviyede kota dolmuşsa en çok ödeyen seviye seçilir. pref 1 ("elmaslarım dönüşmesin"): elmas düşülmez ve
+ * bozdurmama şartı sağlanmış sayılmaz → eksik oranı ödenir. Elmas düşümü (consume) yalnızca bakiye kotayı karşılıyorsa olur.
+ * Dönüş, evaluatePay ile aynı alanları taşır (özet tabloları ve ekranlar değişmeden çalışır).
+ */
+export function evaluateSimplePay({ levels, metrics, settings = {}, pref = 0, eventsOk = true }) {
+  const m = { seconds: 0, validDays: 0, gameSeconds: 0, ...metrics };
+  const diamonds = BigInt(m.diamonds ?? 0);
+  const balance = BigInt(m.balance ?? 0);
+  const unmetBps = BigInt(Math.min(10000, Math.max(0, Math.trunc(Number(settings.instantSalaryBps ?? 5000)) || 0)));
+  const balanceAllowed = settings.allowBalanceMethod !== false && Number(pref) !== 1;
+  let best = null;
+  for (const l of sorted(levels)) {
+    if (l.diamonds > diamonds) break; // kota dolmadı
+    const unmet = unmetRequirements(l, m, settings);
+    const kept = balanceAllowed && balance >= l.diamonds;
+    const full = unmet.length === 0 && kept;
+    const pay = full ? l.salary2Cents : wholeDollarCents((l.salary2Cents * unmetBps) / 10000n);
+    if (!best || pay >= best.pay) best = { level: l, pay, full, kept, unmet };
+  }
+  const level = best?.level ?? null;
+  const method = best ? (best.kept ? 2 : 1) : null;
+  const base = best ? best.pay : 0n;
+  const eventsMet = !settings.requireOfficialEvents || eventsOk;
+  const penalty = level !== null && !eventsMet;
+  const penaltyBps = BigInt(Math.min(10000, Math.max(0, Number(settings.penaltyBps ?? 0))));
+  const salary = penalty ? (base * (10000n - penaltyBps)) / 10000n : base;
+  const blocked = best && !best.full ? best.level : null;
+  const next = sorted(levels).find((l) => l.diamonds > diamonds) ?? null;
+  return {
+    level1: method === 1 ? level : null, level2: method === 2 ? level : null,
+    salary1: method === 1 ? base : 0n, salary2: method === 2 ? base : 0n,
+    method, level, baseCents: base, salaryCents: salary, penalty, eventsMet, shortfall: !!best && !best.full,
+    consume: method === 2 ? level.diamonds : 0n,
+    blocked, blockedBy: blocked ? best.unmet : [],
     next, nextRemaining: next ? next.diamonds - diamonds : 0n,
   };
 }
@@ -149,7 +247,7 @@ export function evaluatePay({ levels, metrics, settings = {}, pref = 0, eventsOk
  * (şartı tutan daha düşük seviyenin maaşı daha yüksekse o ödenir). 0 ise şartı tutmayan seviye ödenmez (sesli taraftaki gibi).
  */
 export function evaluateVideoPay({ levels, metrics, settings = {}, video = {}, eventsOk = true }) {
-  const e = evaluatePay({ levels, metrics: { ...metrics, balance: 0n }, settings: { ...settings, allowBalanceMethod: false }, pref: 1, eventsOk });
+  const e = evaluatePay({ levels, metrics: { ...metrics, balance: 0n }, settings: { ...settings, allowBalanceMethod: false, audioShortfallCutBps: 0 }, pref: 1, eventsOk }); // sesli kesinti burada uygulanmaz: görüntülü kendi oranını aşağıda kullanır
   const cut = BigInt(Math.min(10000, Math.max(0, Number(video.shortfallCutBps ?? 0))));
   let shortfall = false;
   let { level, baseCents, salaryCents } = e;

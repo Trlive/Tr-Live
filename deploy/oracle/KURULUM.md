@@ -44,9 +44,50 @@ Panel → **Ayarlar**: Render'da olan `ADMIN_USERNAMES`, `GOOGLE_*`, `FACEBOOK_*
    indirme bağlantısı = yeni APK. Böylece eski uygulamalar "Güncelleme gerekli" der.
 4. Her şey yolundaysa birkaç gün sonra Render'ı durdurabilirsin.
 
+## 6. TURN: kısıtlı Wi-Fi ve operatör ağlarında ses (varsayılan açık)
+**Neden:** Bazı okul, iş, otel Wi-Fi'ları ve bazı operatör ağları ses/görüntünün kullandığı UDP kapısını (7882) keser. O kişiler odaya girer ama ses gelmez.
+TURN, sesi şifreli ek bir yoldan geçirir. **Panelde ayarı yok; sertifika alınabiliyorsa kendiliğinden devreye girer.**
+
+Sizin yapacağınız tek şey: Oracle konsolunda 2. bölümdeki gibi (Source CIDR `0.0.0.0/0`) iki kural daha ekleyin:
+- IP Protocol **TCP**, Destination Port **5349**
+- IP Protocol **UDP**, Destination Port **3478**
+
+- **Alan adı:** sslip.io ya da kendi alan adınız fark etmez. `turn.<ip-tireli>.sslip.io` adı kullanılır; ek DNS kaydı gerekmez. Sertifikayı Caddy kendisi alır
+  (ilk güncellemede 90 saniyeye kadar beklenir; alınamazsa 6 saat sonra yeniden denenir, kurulum yavaşlamaz).
+- **Güvence:** TURN'lü ayarla ses sunucusu açılmazsa otomatik olarak TURN'süz ayara dönülür (günlükte "UYARI" satırı) ve bir daha denenmez. Yeniden denemek için sunucuda
+  `/opt/trlive/state/turn-failed` dosyasını silin.
+- **Sertifika yenileme:** yaklaşık 60 günde bir; sonraki güncellemede ses sunucusu yeni sertifikayı alır.
+- **Sınır:** TURN 5349 kapısında çalışır. Yalnızca 443'e izin veren ağlarda çözmez (443'ü Caddy kullanıyor).
+- **Kapatmak** isterseniz sunucuda `/opt/trlive/env/extra.env` dosyasına `TURN_ENABLED=0` satırı ekleyin.
+
+## 7. Yedekler: yerel ve (önerilen) uzak kopya
+Yedek yalnızca sunucuda durursa sunucu kaybolunca (disk arızası, hesap kapanması) veri de kaybolur. Bu yüzden her gece alınan yedeğin bir kopyasını **başka bir yere** koyun.
+
+- **Yerel yedek:** her gece `/opt/trlive/backups` altına, son 7 gün. Yedek alınamazsa ya da dosya bozuk/şüpheli küçükse hata verilir ve eski yedekler SİLİNMEZ.
+- **Uzak kopya (isteğe bağlı):** S3 uyumlu bir depolama (Backblaze B2: ilk 10 GB ücretsiz, Cloudflare R2, Oracle Object Storage, AWS S3). Özel (herkese açık olmayan) bir kova açın;
+  yalnızca o kovaya yazma ve silme yetkisi olan bir anahtar üretin. Panelde (`/panel`) **tek alanı** doldurup Kaydet'e basın, boşlukla ayırarak:
+  `uç-nokta kova anahtar-kimliği gizli-anahtar [bölge]`
+  Örnek: `https://s3.us-west-004.backblazeb2.com kovam 004abc... K004xyz... us-west-004`
+  Kaydet'e basınca sunucu gerekli aracı (rclone) kendisi kurar. Uzak kopya ertesi gece yerel yedekle birlikte alınır ve orada 30 gün saklanır.
+- **Başarısız olursa:** yerel yedek yine alınır; uzak kopya yüklenemediyse gece yedek işi "failed" görünür ve günlükte "HATA: uzak kopya yüklenemedi" yazar (bilgileri kontrol edin).
+- **Geri yükleme (yeni, boş bir veritabanına):** yedek dosyasını sunucuya alıp
+  `gunzip -c trlive-2026-11-30.sql.gz | docker exec -i trlive-postgres-1 psql -U trlive trlive`
+  Çalışan bir veritabanının üzerine yüklemeden önce mutlaka güncel bir yedek alın.
+
+## 8. Medya depolama (R2): veritabanı şişmesin
+Avatar, hediye animasyonu, müzik gibi dosyalar önce veritabanına yazılır, arka plan işi onları Cloudflare R2'ye taşır. R2'yi yönetim panelinde bir kez yapılandırın
+(hesap kimliği, kova, anahtarlar, herkese açık adres); gerisi otomatiktir:
+- Taşınan dosya doğrulanır (R2'den geri okunur, boyut karşılaştırılır) ve `/media/…` adresi CDN'e yönlendirilir; sunucu ve veritabanı dosyayı artık okumaz.
+- Taşımadan **7 gün sonra** veritabanındaki kopya silinir (her dosyada yeniden doğrulanır: R2'de şimdi var ve boyutu aynı olmalı). Böylece veritabanı ve yedekleri büyümez.
+  Silinen alan yeniden kullanılır; dosya boyutunun küçülmesi için ayrıca `VACUUM FULL` gerekir (kesinti ister, şart değil).
+- Dosya silinince (hesap silme, avatar değişimi, medya yedeği temizleme) R2'deki nesne de silinir: silme kuyruğu her 10 dakikada bir çalışır. R2 o an erişilemezse anahtar kuyrukta bekler.
+- **Önemli:** kopya silindikten sonra medyanın tek kaynağı R2'dir; gece alınan veritabanı yedeği medyayı içermez. R2 kovasını düzenli olarak başka bir yere kopyalayın
+  (örn. `rclone sync r2:kovam yedek:kovam`).
+- R2 yapılandırılmazsa her şey eskisi gibi çalışır (dosyalar veritabanında kalır); medya 500 MB'ı aşınca günlükte `media_db_growth` uyarısı çıkar.
+
 ## Notlar
 - Google/Facebook girişinde yönlendirme adresleri yeni adresle (`https://…sslip.io/api/auth/oauth/google/callback`
   ve `…/facebook/callback`) güncellenmelidir. Google, sslip.io adreslerini yayın modunda kabul etmeyebilir; o
   durumda ucuz bir alan adı alınır (A kaydı ve `lk.` alt alanı sunucu IP'sini göstermeli) ve panelde "Alan adı"
   alanına yazılır. sslip.io adresi her zaman çalışmaya devam eder.
-- Yedekler her gece sunucuda `/opt/trlive/backups` altında (son 7 gün).
+- Yedekler her gece sunucuda `/opt/trlive/backups` altında (son 7 gün); isteğe bağlı uzak kopya için 7. bölüm.

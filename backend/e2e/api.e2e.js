@@ -551,16 +551,20 @@ test('ajans/yayıncı: başvuru, kod, onay, katılma, hedef/maaş, komisyon kade
   ok(await api('PUT', '/api/admin/agency-config', { token: U.d.token, body: {
     settings: { cycle: 'monthly', penaltyBps: 5000, requireOfficialEvents: false, minEventCount: 0, currency: 'USD', validDayMinutes: 60, requireGameHours: false, transferWaitHours: 72 },
   } }));
-  const lv = (diamonds, hours, s1, ag) => ({ diamonds, days: null, hours, gameHours: 0, salary1Cents: s1, salary2Cents: '0', agencyCents: ag });
+  // Basit maaş kuralı (v2.152.14, varsayılan açık) "Maaş 2" sütununu öder: test tablosunda iki sütun aynı.
+  const lv = (diamonds, hours, s1, ag) => ({ diamonds, days: null, hours, gameHours: 0, salary1Cents: s1, salary2Cents: s1, agencyCents: ag });
   status(await api('PUT', '/api/admin/pay-levels', { token: U.a.token, body: { levels: [lv('100', 1, '1000', '300')] } }), 403);
   status(await api('PUT', '/api/admin/pay-levels', { token: U.d.token, body: { levels: [lv('1000', 1, '1000', '300'), lv('100', 1, '1', '1')] } }), 400, 'azalan elmas kotası');
+  // Para döngüsü koruması (salaryLoopError): aşağıdaki test tablosu 1$ için ~7 elmas ister; gerçek kurla (1$ = 4000 Coin)
+  // "Coin al → kendine hediye → maaş" kâr ederdi ve sunucu tabloyu reddeder. Test süresince kurlar 1 Coin/$'a çekilir.
+  ok(await api('PUT', '/api/admin/app-config', { token: U.d.token, body: { usdCoinsPerUsd: 1, usdDealerCoinsPerUsd: 1 } }));
   // Test için küçük tablo: 100 Diamond + 1 saat → 10 $ maaş, ajansa 3 $ prim; 1000 Diamond + 10 saat → 50 $.
   ok(await api('PUT', '/api/admin/pay-levels', { token: U.d.token, body: { levels: [lv('100', 1, '1000', '300'), lv('1000', 10, '5000', '900')] } }));
 
   // Yalnızca yayıncı onayından SONRAKİ süre ve hediyeler sayılır: önceki hediyeler (Tüm Oda testi) onaydan önceye, onay 4 saat öncesine alınır.
   await sql(`UPDATE gift_transactions SET created_at = NOW() - INTERVAL '5 hours' WHERE receiver_id = $1`, [U.f.id]);
   await sql(`UPDATE broadcasters SET approved_at = NOW() - INTERVAL '4 hours' WHERE user_id = $1`, [U.f.id]);
-  // A (oda sahibi) F'ye hediye: 200 Diamond. F kendine hediye: sayılmaz.
+  // A (oda sahibi) F'ye hediye: 200 Diamond. F kendine hediye (SESLİ oda): sahibinin kararıyla maaşa ve kotaya SAYILIR (v2.152.5).
   ok(await api('POST', `/api/rooms/${roomId}/gifts/send`, { token: U.a.token, body: { giftId: heart.id, quantity: 4, distribution: 'single', recipientId: U.f.id } }));
   ok(await api('POST', `/api/rooms/${roomId}/gifts/send`, { token: U.f.token, body: { giftId: heart.id, quantity: 4, distribution: 'single', recipientId: U.f.id } }));
   const tagged = await sql(`SELECT COUNT(*)::int AS n FROM gift_transactions WHERE receiver_id=$1 AND receiver_agency_id=$2`, [U.f.id, agencyId]);
@@ -571,16 +575,16 @@ test('ajans/yayıncı: başvuru, kod, onay, katılma, hedef/maaş, komisyon kade
   const dash = await api('GET', `/api/agencies/${agencyId}/dashboard`, { token: U.e.token });
   ok(dash);
   assert.equal(dash.body.broadcasters.length, 1);
-  assert.equal(dash.body.broadcasters[0].diamonds, '200', 'kazanca kendine hediye dahil değil');
+  assert.equal(dash.body.broadcasters[0].diamonds, '400', 'sesli odada kendine hediye kazanca dahil');
   assert.ok(dash.body.broadcasters[0].seconds >= 7200);
-  assert.equal(dash.body.totals.teamDiamonds, '200');
-  assert.equal(dash.body.totals.estimatedCommissionCents, '300', '200 ≥ 100 → 1. seviyenin ajans primi');
+  assert.equal(dash.body.totals.teamDiamonds, '400');
+  assert.equal(dash.body.totals.estimatedCommissionCents, '300', '400 ≥ 100 (ve < 1000) → 1. seviyenin ajans primi');
   assert.equal(dash.body.broadcasters[0].tier, 1);
   assert.equal(dash.body.broadcasters[0].estimatedCents, '1000');
   status(await api('GET', `/api/agencies/${agencyId}/dashboard`, { token: U.g.token }), 403, 'başkası paneli göremez');
   const me = await api('GET', '/api/broadcaster/me', { token: U.f.token });
   ok(me);
-  assert.equal(me.body.broadcaster.progress.diamonds, '200');
+  assert.equal(me.body.broadcaster.progress.diamonds, '400', 'yayıncının gördüğü sayı ödenenle aynı (sesli kendine hediye dahil)');
   assert.equal(me.body.broadcaster.progress.tier, 1);
   assert.equal(me.body.broadcaster.progress.next.level, 2);
 
@@ -599,7 +603,8 @@ test('ajans/yayıncı: başvuru, kod, onay, katılma, hedef/maaş, komisyon kade
   const detail = await api('GET', `/api/admin/payouts/${pid}`, { token: U.d.token });
   ok(detail);
   const hs = detail.body.hostStatements[0]; const as = detail.body.agencyStatements[0];
-  assert.equal(hs.salaryCents, '1000'); assert.equal(hs.penaltyApplied, false); assert.equal(hs.method, 1);
+  // Şartlar tam ve bakiye kotayı karşılıyor → tam maaş, kota elması bakiyeden düşülür (yöntem 2).
+  assert.equal(hs.salaryCents, '1000'); assert.equal(hs.penaltyApplied, false); assert.equal(hs.method, 2);
   assert.equal(as.commissionCents, '300'); assert.equal(as.ownerCents, '300');
 
   // KYC onayı olmadan yayıncı maaşı ödenemez
@@ -631,6 +636,7 @@ test('ajans/yayıncı: başvuru, kod, onay, katılma, hedef/maaş, komisyon kade
   const reset = await api('POST', '/api/admin/pay-levels/reset', { token: U.d.token });
   ok(reset);
   assert.equal(reset.body.config.payLevels.length, 44);
+  ok(await api('PUT', '/api/admin/app-config', { token: U.d.token, body: { usdCoinsPerUsd: 4000, usdDealerCoinsPerUsd: 4000 } }), 'varsayılan tabloyla varsayılan kur geçerli');
 });
 
 test('oda: gizli oda + davet kodu, tema, WIP özel tema, sayı tahtası, sohbet temizleme', { skip, timeout: 60000 }, async () => {
@@ -691,7 +697,7 @@ test('oda: gizli oda + davet kodu, tema, WIP özel tema, sayı tahtası, sohbet 
   assert.equal(ms2.rows[0].n, 0, 'oda kapanınca oturumlar kapanır');
 });
 
-test('PK: davet, kabul, skor (kendine hediye ve koltuktaki konuk da sayılır), bitiş', { skip, timeout: 60000 }, async () => {
+test('PK: davet, kabul, skor (koltuktaki konuk da sayılır; görüntülüde kendine hediye yok), bitiş', { skip, timeout: 60000 }, async () => {
   const r2 = await api('POST', '/api/rooms', { token: U.h.token, body: { name: 'PK Rakip' } });
   status(r2, 201);
   const room2 = r2.body.room.id;
@@ -707,22 +713,26 @@ test('PK: davet, kabul, skor (kendine hediye ve koltuktaki konuk da sayılır), 
   status(await api('POST', '/api/pk/challenge', { token: U.a.token, body: { roomId, targetRoomId: room2, durationSeconds: 300 } }), 409, 'ikinci PK');
   status(await api('POST', `/api/pk/${pkId}/respond`, { token: U.a.token, body: { accept: true } }), 403, 'davet eden kabul edemez');
   ok(await api('POST', `/api/pk/${pkId}/respond`, { token: U.h.token, body: { accept: true } }));
-  // Micolive gibi: A'ya (oda sahibi) B hediye 50 + A kendine 100 = 150. C, H'ye 100; C koltuğa çıkıp kendine 100 → 200.
-  await sql(`UPDATE users SET coins = coins + 10000 WHERE id = ANY($1::uuid[])`, [[U.a.id, U.b.id, U.c.id]]);
+  // A'ya (oda sahibi) B hediye 50. Görüntülü odada kendine hediye gönderilemez (v2.152.5). C, H'ye 100.
+  await sql(`UPDATE users SET coins = coins + 10000 WHERE id = ANY($1::uuid[])`, [[U.a.id, U.b.id, U.c.id, U.h.id]]);
   ok(await api('POST', `/api/rooms/${roomId}/gifts/send`, { token: U.b.token, body: { giftId: heart.id, quantity: 1, distribution: 'single', recipientId: U.a.id } }));
-  ok(await api('POST', `/api/rooms/${roomId}/gifts/send`, { token: U.a.token, body: { giftId: heart.id, quantity: 2, distribution: 'single', recipientId: U.a.id } }));
+  status(await api('POST', `/api/rooms/${roomId}/gifts/send`, { token: U.a.token, body: { giftId: heart.id, quantity: 2, distribution: 'single', recipientId: U.a.id } }), 400, 'görüntülüde kendine hediye yok');
+  // Eski sürümlerin bölüşen modu: yayıncı havuza katılmaz, hediyenin tamamı koltuktaki B'ye gider (A'ya puan yazılmaz).
+  const eq = await api('POST', `/api/rooms/${roomId}/gifts/send`, { token: U.a.token, body: { giftId: heart.id, quantity: 2, distribution: 'equal' } });
+  ok(eq);
+  assert.ok(eq.body.transactions.every((t) => t.receiverId !== U.a.id), 'gönderen kendine pay almaz');
   ok(await api('POST', `/api/rooms/${room2}/gifts/send`, { token: U.c.token, body: { giftId: heart.id, quantity: 2, distribution: 'single', recipientId: U.h.id } }));
   let st = await api('GET', `/api/rooms/${roomId}/pk`, { token: U.b.token });
-  assert.equal(st.body.pk.a.score, '150', 'kendine hediye de sayılır');
+  assert.equal(st.body.pk.a.score, '150', 'B 50 + eşit bölüşümle koltuktaki B 100; reddedilen kendine hediye puan vermez');
   assert.equal(st.body.pk.b.score, '100');
-  // Dinleyiciye (koltukta olmayan) gelen hediye sayılmaz; koltuktaki konuğa gelen (kendine bile) sayılır.
-  ok(await api('POST', `/api/rooms/${room2}/gifts/send`, { token: U.c.token, body: { giftId: heart.id, quantity: 1, distribution: 'single', recipientId: U.c.id } }));
+  // Dinleyiciye (koltukta olmayan) gelen hediye sayılmaz; koltuktaki konuğa gelen sayılır.
+  ok(await api('POST', `/api/rooms/${room2}/gifts/send`, { token: U.h.token, body: { giftId: heart.id, quantity: 1, distribution: 'single', recipientId: U.c.id } }));
   st = await api('GET', `/api/rooms/${roomId}/pk`, { token: U.b.token });
   assert.equal(st.body.pk.b.score, '100', 'dinleyiciye gelen hediye sayılmaz');
   ok(await api('POST', `/api/rooms/${room2}/mic/take`, { token: U.c.token, body: {} }), 'konuk koltuğa çıkar');
-  ok(await api('POST', `/api/rooms/${room2}/gifts/send`, { token: U.c.token, body: { giftId: heart.id, quantity: 2, distribution: 'single', recipientId: U.c.id } }));
+  ok(await api('POST', `/api/rooms/${room2}/gifts/send`, { token: U.h.token, body: { giftId: heart.id, quantity: 2, distribution: 'single', recipientId: U.c.id } }));
   st = await api('GET', `/api/rooms/${roomId}/pk`, { token: U.b.token });
-  assert.equal(st.body.pk.b.score, '200', 'koltuktaki konuğa (kendine) gelen hediye sayılır');
+  assert.equal(st.body.pk.b.score, '200', 'koltuktaki konuğa gelen hediye sayılır');
   assert.equal(st.body.pk.status, 'active');
   ok(await api('POST', `/api/pk/${pkId}/cancel`, { token: U.a.token }));
   const fin = await sql(`SELECT status, winner_room FROM pk_battles WHERE id = $1`, [pkId]);
@@ -2072,6 +2082,9 @@ test('Fasulye: Coin\'e çevirme (kendine) ve başka kullanıcıya Coin gönderme
   status(again, 201);
   assert.equal(again.body.exchange.coins, '40000');
   status(await api('PUT', '/api/admin/app-config', { token: U.d.token, body: { usdCoinsPerUsd: 0 } }), 400, 'kur 0 olamaz');
+  // Para döngüsü koruması: varsayılan tablo 1$ için ~10.638 elmas ister; kur bunu geçemez (Coin → kendine hediye → maaş).
+  status(await api('PUT', '/api/admin/app-config', { token: U.d.token, body: { usdCoinsPerUsd: 20000 } }), 400, 'kur maaş tablosundan cömert olamaz');
+  status(await api('PUT', '/api/admin/app-config', { token: U.d.token, body: { usdDealerCoinsPerUsd: 20000 } }), 400, 'bayi kuru da');
   ok(await api('PUT', '/api/admin/app-config', { token: U.d.token, body: { usdCoinsPerUsd: 4000, usdExchangeMinCents: 100 } }));
 });
 
@@ -2190,7 +2203,9 @@ test('oyun paketi yetkisi: dar erişim varsayılan, tam erişim bilerek açılı
 
   // Yetki değiştirme yalnızca süper adminde.
   status(await api('POST', '/api/admin/plugins/yok-boyle/trust', { token: U.a.token }), 403, 'kullanıcı yetki veremez');
-  status(await api('POST', '/api/admin/plugins/yok-boyle/trust', { token: U.d.token, body: { trusted: true } }), 404, 'olmayan paket');
+  // Tam erişim vermek (ve paket yüklemek) 2FA'sı açık yöneticiden, o anki kodla kabul edilir (K-02).
+  status(await api('POST', '/api/admin/plugins/yok-boyle/trust', { token: U.d.token, body: { trusted: true } }), 403, '2FA kapalı yönetici tam erişim veremez');
+  status(await api('POST', '/api/admin/plugins/yok-boyle/trust', { token: U.d.token, body: { trusted: false } }), 404, 'kapatmak ek doğrulama istemez; olmayan paket');
 });
 
 test('SDUI v2: taslak/yayın ayrımı, kademeli açılış, sürüm eşiği ve geri alma', { skip, timeout: 60000 }, async () => {
