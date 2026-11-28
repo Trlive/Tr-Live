@@ -2,6 +2,7 @@
 // Ortak yardımcılar ve import'lar: admin.shared.js
 import { Router } from 'express';
 import { transferPeriod } from '../wallet/salary_transfer.service.js';
+import { BROADCASTER_CONTRACT_SQL, agencyContractSql } from '../contracts/contracts.rules.js';
 import { SALARY_PAYABLE_SQL, STATEMENT_TABLES, agencyStatementJson, announceUserChange, assistantStatementJson, closePeriod, creditPeriod, creditStatement, fail, hostStatementJson, isWalletPeriod, loadConfig, notifyUser, oneOf, parsePeriodKey, periodKey, previousPeriod, query, referralStatementJson, requireSuperAdmin, text, tx, uuid } from './admin.shared.js';
 
 export const router = Router();
@@ -160,6 +161,13 @@ router.post('/statements/:kind/:id/pay', requireSuperAdmin, async (req, res) => 
     if (kind === 'host' && BigInt(row.salary_cents) > 0n) {
       const k = (await c.query(`SELECT kyc_status FROM users WHERE id = $1`, [row.user_id])).rows[0]?.kyc_status;
       if (k !== 'approved') throw fail('Yayıncının kimlik doğrulaması (KYC) onaylı değil.', 409);
+    }
+    // Sözleşme kapısı (contracts.rules.js): toplu ödemeyle aynı kural, tek tek ödemede de geçerli.
+    if (BigInt(row[t.amount] ?? 0) > 0n && (kind === 'host' || kind === 'agency' || kind === 'referral')) {
+      const ownerSql = kind === 'host' ? `SELECT ${BROADCASTER_CONTRACT_SQL} AS ok FROM users u WHERE u.id = $1`
+        : `SELECT ${agencyContractSql('a.owner_id')} AS ok FROM agencies a WHERE a.id = $1`;
+      const ok = (await c.query(ownerSql, [kind === 'host' ? row.user_id : row.agency_id])).rows[0]?.ok;
+      if (!ok) throw fail(kind === 'host' ? 'Yayıncı, yayıncı sözleşmesini henüz onaylamadı.' : 'Ajans sahibi, ajans sözleşmesini henüz onaylamadı.', 409);
     }
     // Cüzdan döneminde "öde" = tutarı alıcının dolar cüzdanına yatır (platform dışı ödeme yapılmaz).
     const wallet = await isWalletPeriod(c, row.period_id);

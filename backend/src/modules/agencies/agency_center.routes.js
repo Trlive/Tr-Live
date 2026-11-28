@@ -1,3 +1,4 @@
+import { requireContract } from '../contracts/contracts.routes.js';
 // Ajans Merkezi v2: Ajansım + istatistikler, yayıncı istatistikleri, kazanç ayrıntısı, asistanlar, duyuru,
 // transfer geçmişi, davet merkezi ve maaş tablosu.
 import { Router } from 'express';
@@ -22,6 +23,9 @@ router.use(function requireAgencyAuth(req, res, next) {
   if (req.path.startsWith('/agency-center') || req.path.startsWith('/agency-assistant')) return requireAuth(req, res, next);
   return next();
 });
+// Ajans sözleşmesi yayımlandıysa ajans SAHİBİNİN paneli onaydan sonra açılır (asistanlar sözleşmenin tarafı değildir).
+const agencyGate = requireContract('agency');
+router.use((req, res, next) => (req.path.startsWith('/agency-center') ? agencyGate(req, res, next) : next()));
 
 const big = (v) => String(v ?? 0);
 const pct = (cur, prev) => (prev > 0n ? Math.round(Number(((cur - prev) * 10000n) / prev)) / 100 : null);

@@ -79,6 +79,8 @@ export const CONFIG_DEFAULTS = Object.freeze({
   firebaseAppId: '',
   firebaseSenderId: '',
   // E-posta doğrulama kodu ve şifre sıfırlama için gönderici (SMTP). Şifre yönetim panelinde maskeli görünür.
+  // Sözleşmelerin tarafı olan işletmeci (unvan, vergi no, adres tek satırda). Boşsa sözleşmede "Madde 1.1'de belirtilen işletmeci" yazar.
+  contractCompany: '',
   smtpHost: '',
   smtpPort: 465,
   smtpSecure: true,
@@ -182,6 +184,8 @@ export function validateConfigPatch(body) {
       if (typeof v !== 'string' || (v && !/^https:\/\/[^\s/]{4,200}$/.test(v))) throw fail('CDN kökü https ile başlamalı ve yol içermemeli (ör. https://cdn.alanadi.com).');
     } else if (k === 'r2AccountId' || k === 'r2Bucket' || k === 'r2AccessKey' || k === 'r2SecretKey') {
       if (typeof v !== 'string' || v.length > 200) throw fail(`${k} en fazla 200 karakter olmalı.`);
+    } else if (k === 'contractCompany') {
+      if (typeof v !== 'string' || v.length > 500 || /[\u0000-\u001f]/.test(v)) throw fail('İşletmeci bilgisi en fazla 500 karakterlik tek satır olmalı.');
     } else if (k === 'smtpHost') {
       if (typeof v !== 'string' || (v && !/^[A-Za-z0-9.-]{3,200}$/.test(v))) throw fail('SMTP sunucusu geçersiz (ör. smtp-relay.brevo.com).');
     } else if (k === 'smtpUser' || k === 'smtpPass' || k === 'smtpFrom') {

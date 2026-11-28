@@ -12,6 +12,7 @@ import crypto from 'node:crypto';
 import { query, tx } from '../../infrastructure/database/database.js';
 import { fail } from '../../shared/errors/http.js';
 import { getConfig } from '../system/app_config.service.js';
+import { BROADCASTER_CONTRACT_SQL, agencyContractSql } from '../contracts/contracts.rules.js';
 
 export const CREDIT_TYPES = ['salary', 'agency_bonus', 'assistant_share', 'referral_bonus'];
 
@@ -107,7 +108,9 @@ export async function creditStatement(c, kind, row, adminId) {
  * Koşul: telefon bağlı ve doğrulanmış. Kimlik fotoğrafı istenmiyor (sahibinin kararı);
  * geri kalan doğrulamayı ödemeyi yapacak aracı şirket belirleyecek.
  */
-export const SALARY_PAYABLE_SQL = `u.phone IS NOT NULL AND u.phone_verified_at IS NOT NULL`;
+// + Sözleşme kapısı (contracts.rules.js): yayıncı sözleşmesi yayımlandıysa en az bir sürümü onaylanmış olmalı. Dönem kapanışı,
+// toplu ödeme ve ay içi avans bu koşulu kullanır; onaylanmamış maaş kaybolmaz, onaydan sonra yatar.
+export const SALARY_PAYABLE_SQL = `u.phone IS NOT NULL AND u.phone_verified_at IS NOT NULL AND ${BROADCASTER_CONTRACT_SQL}`;
 
 export async function creditPeriod(c, periodId, adminId, { kinds = null, note = 'Dolar cüzdanına yatırıldı' } = {}) {
   const sets = [
@@ -123,9 +126,9 @@ export async function creditPeriod(c, periodId, adminId, { kinds = null, note = 
     // Telefonu doğrulanmamış yayıncının maaşı KAYBOLMUYOR: özet 'pending' kalıyor ve
     // telefonunu doğruladıktan sonraki çalışmada ödeniyor.
     { kind: 'host', table: 'host_statements', type: 'salary', sql: `SELECT s.id, s.user_id, s.salary_cents AS cents FROM host_statements s JOIN users u ON u.id = s.user_id WHERE s.period_id = $1 AND s.status = 'pending' AND s.salary_cents > 0 AND ${SALARY_PAYABLE_SQL}` },
-    { kind: 'agency', table: 'agency_statements', type: 'agency_bonus', sql: `SELECT s.id, a.owner_id AS user_id, s.owner_cents AS cents FROM agency_statements s JOIN agencies a ON a.id = s.agency_id WHERE s.period_id = $1 AND s.status = 'pending' AND s.owner_cents > 0` },
+    { kind: 'agency', table: 'agency_statements', type: 'agency_bonus', sql: `SELECT s.id, a.owner_id AS user_id, s.owner_cents AS cents FROM agency_statements s JOIN agencies a ON a.id = s.agency_id WHERE s.period_id = $1 AND s.status = 'pending' AND s.owner_cents > 0 AND ${agencyContractSql('a.owner_id')}` },
     { kind: 'assistant', table: 'assistant_statements', type: 'assistant_share', sql: `SELECT s.id, s.user_id, s.amount_cents AS cents FROM assistant_statements s WHERE s.period_id = $1 AND s.status = 'pending' AND s.amount_cents > 0` },
-    { kind: 'referral', table: 'referral_statements', type: 'referral_bonus', sql: `SELECT s.id, a.owner_id AS user_id, s.amount_cents AS cents FROM referral_statements s JOIN agencies a ON a.id = s.agency_id WHERE s.period_id = $1 AND s.status = 'pending' AND s.amount_cents > 0` },
+    { kind: 'referral', table: 'referral_statements', type: 'referral_bonus', sql: `SELECT s.id, a.owner_id AS user_id, s.amount_cents AS cents FROM referral_statements s JOIN agencies a ON a.id = s.agency_id WHERE s.period_id = $1 AND s.status = 'pending' AND s.amount_cents > 0 AND ${agencyContractSql('a.owner_id')}` },
   ];
   const out = { count: 0, cents: 0n };
   for (const set of sets) {

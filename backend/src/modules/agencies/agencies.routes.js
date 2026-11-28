@@ -1,3 +1,4 @@
+import { requireContract } from '../contracts/contracts.routes.js';
 import { Router } from 'express';
 import { hub } from '../../infrastructure/websocket/realtime.js';
 import { query, tx } from '../../infrastructure/database/database.js';
@@ -12,6 +13,9 @@ import { notifyUser } from '../notifications/notify.service.js';
 
 export const router = Router();
 router.use(requireAuth);
+// Ajans sahibinin eski panel uçları da ajans sözleşmesi onayına bağlı (bkz. agency_center.routes.js).
+const agencyGate = requireContract('agency');
+router.use((req, res, next) => (/^\/agencies\/[^/]+\/(dashboard|statements|requests|invite|broadcasters)(\/|$)/.test(req.path) ? agencyGate(req, res, next) : next()));
 
 const agencyJson = (a) => ({
   id: a.id, name: a.name, logoUrl: a.logo_url, description: a.description, status: a.status,

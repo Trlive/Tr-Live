@@ -58,6 +58,7 @@ import { router as assetsRouter } from './modules/assets/assets.routes.js';
 import { router as sduiRouter } from './modules/sdui/sdui.routes.js';
 import { router as sduiV2Router } from './modules/sdui/v2/sdui_v2.routes.js';
 import { router as livekitWebhookRouter } from './modules/rooms/livekit_webhook.routes.js';
+import { router as contractsRouter, adminRouter as contractsAdminRouter } from './modules/contracts/contracts.routes.js';
 import { redactSecrets } from './middleware/security/redact.js';
 import { r2Config } from './infrastructure/storage/storage.js';
 import { cdnUrlFor } from './modules/media/offload.service.js';
@@ -195,9 +196,11 @@ app.use('/api/admin/plugins', pluginAdminRouter);
 app.use('/api/g', pluginApiRouter); // oyun paketlerinin oyuncu API'si
 app.use('/api/admin/activities', activitiesAdminRouter);
 app.use('/api/admin/dealer-shop', dealerShopAdminRouter);
+app.use('/api/admin/contracts', contractsAdminRouter); // sözleşme şablonları ve onay kayıtları (süper yönetici)
 app.use('/api/admin/usd', usdAdminRouter); // dolar cüzdanı yönetimi (çekim talepleri); genel admin yönlendiricisinden önce
 app.use('/api/admin', adminRouter);
-app.use('/api/usd', usdRouter); // dolar cüzdanı: bakiye, admin'e ve bayiye gönderim
+app.use('/api/usd', usdRouter);
+app.use('/api/contracts', contractsRouter); // sözleşme görüntüleme ve onay // dolar cüzdanı: bakiye, admin'e ve bayiye gönderim
 app.use('/api/events', eventsRouter);
 // Aşağıdakiler '/api' altında birden çok yol tanımladığı için en sona konur.
 app.use('/api', feedRouter);

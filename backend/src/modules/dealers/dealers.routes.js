@@ -1,3 +1,4 @@
+import { requireContract } from '../contracts/contracts.routes.js';
 import { Router } from 'express';
 import { query, tx } from '../../infrastructure/database/database.js';
 import { requireAuth, requireSuperAdmin } from '../../middleware/authentication/auth.js';
@@ -12,6 +13,8 @@ import { notifyUser } from '../notifications/notify.service.js';
 
 export const router = Router();
 router.use(requireAuth);
+// Bayilik sözleşmesi yayımlandıysa bayi paneli onaydan sonra açılır (428 contract_required).
+router.use(requireContract('dealer'));
 
 
 async function myDealer(userId) {
