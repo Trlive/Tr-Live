@@ -64,6 +64,34 @@ class RoomAudio {
     } catch (_) {/* eski APK: kanal yok */}
   }
 
+  /// Odada şu an biri konuşuyor mu (ses sunucusunun "konuşanlar" bildirimi). Konuşma varken oda müziği ve hediye
+  /// sesleri otomatik kısılır (konuşmanın üstüne çıkmasın); konuşma bitince [_duckHold] kadar sonra geri açılır
+  /// (cümle aralarındaki kısa sessizliklerde müzik inip çıkıp "pompalamasın").
+  static final ValueNotifier<bool> speaking = ValueNotifier<bool>(false);
+  static Timer? _duckTimer;
+  static const _duckHold = Duration(milliseconds: 900);
+
+  static void setSpeaking(bool v) {
+    if (v) {
+      _duckTimer?.cancel();
+      _duckTimer = null;
+      speaking.value = true;
+      return;
+    }
+    if (!speaking.value || _duckTimer != null) return;
+    _duckTimer = Timer(_duckHold, () {
+      _duckTimer = null;
+      speaking.value = false;
+    });
+  }
+
+  /// Konuşma varken müzik bu oranda çalar (yaklaşık -6 dB).
+  static const musicDuck = 0.5;
+
+  /// Hediye / araç sesi düzeyi: normalde ve konuşma varken. Hediye videolarının sesi çoğu zaman çok yüksek
+  /// kaydedilmiş; tam düzeyde çalınca konuşmaları bastırıyordu.
+  static double get effectVolume => speaking.value ? 0.3 : 0.6;
+
   static int _rooms = 0;
   static AudioSession? _session;
 
@@ -84,6 +112,9 @@ class RoomAudio {
     if (_rooms > 0) _rooms--;
     if (_rooms > 0) return;
     _watchVolume(false);
+    _duckTimer?.cancel();
+    _duckTimer = null;
+    speaking.value = false;
     await _configure(false);
     try {
       await (await _ensure()).setActive(false);

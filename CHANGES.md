@@ -1,3 +1,25 @@
+## v2.155.7 — Ses dengesi (YoHo) ve canlı yayın görüntüsü (Mico) iyileştirmeleri
+
+**Hediye sesi / müzik konuşmanın üstüne çıkıyordu**
+- Konuşma algılanınca oda müziği yaklaşık yarıya (≈ -6 dB) yumuşakça (~300 ms) iner, konuşma bitince ~0,9 sn sonra
+  geri çıkar (cümle aralarında inip çıkmaz). Hediye/araç sesleri normalde %60, konuşma varken %30 düzeyde çalar.
+- **Şarkılar arası ses farkı:** yüklenen her şarkının ses yüksekliği sunucuda ölçülür (ffmpeg, EBU R128) ve kazancı
+  `music_tracks.gain_db`'ye yazılır (göç 124). Uygulama şarkıyı bu kazançla çalar: yüksek kaydedilmiş şarkılar
+  kısılır, hiçbir şarkı yükseltilmez (bozulma olmaz). Ölçülmemiş şarkı ortalama düzeyde (-4 dB) çalar. Ölçüm arka
+  planda yapılır, bitince odaya yeni durum gönderilir.
+
+**Konuşmacılar arası ses farkı**
+- Otomatik ses düzeyi (AGC) artık her zaman açık (YoHo/Agora varsayılanı). Eskiden gürültü engelleme açıkken
+  kapalıydı: kısık konuşanlar çok kısık, yüksek konuşanlar çok yüksek duyuluyordu.
+
+**Yeni (YoHo'daki gibi)**
+- Kullanıcı kartı → "Sesini kapat (bende)": koltuktaki bir kişinin sesi yalnızca bu telefonda kapanır.
+- Kendi internetin zayıflayınca uyarı (dakikada en çok bir).
+
+**Canlı yayın görüntüsü (Mico)**
+- Güçlü telefonlarda canlı yayın kamerası 720p ve 2 Mbps (önceden herkes 540p, 1,3 Mbps). Orta/düşük telefonlar
+  540p'de kalır (güzellik filtresiyle kare düşmesin); zayıf izleyiciye sunucu düşük katmanı gönderir (simulcast).
+
 ## v2.155.6 — Oda sesi: telefonun sesi sonuna kadar kısılınca tamamen susar; oda değişiminde ses üst üste binmez
 
 - **Sorun:** Odada ses (yankı giderme ve Bluetooth için) Android'in "görüşme" kanalından çalıyor. Android bu kanalı

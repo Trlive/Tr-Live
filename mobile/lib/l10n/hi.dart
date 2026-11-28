@@ -983,4 +983,9 @@ const kHi = <String, String>{
   'Şarj için': 'किसके लिए टॉप-अप',
   'Gümüş': 'सिल्वर',
   'Gümüş bakiyen': 'आपका सिल्वर',
+  'Bu kişinin sesi kapatıldı (yalnızca sizde).': 'इस व्यक्ति की आवाज़ बंद (केवल आपके लिए)।',
+  'Bu kişinin sesi açıldı.': 'इस व्यक्ति की आवाज़ चालू।',
+  'Sesini kapat (bende)': 'मेरे लिए म्यूट करें',
+  'Sesini aç (bende)': 'मेरे लिए अनम्यूट करें',
+  'İnternet bağlantınız zayıf; ses/görüntü takılabilir.': 'आपका इंटरनेट कमज़ोर है; आवाज़/वीडियो अटक सकता है।',
 };

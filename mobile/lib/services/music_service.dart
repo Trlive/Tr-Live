@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 import 'api.dart';
@@ -113,7 +114,33 @@ class MusicService {
   bool isController(String? userId) => userId != null && state.value?['controlledBy']?.toString() == userId && mapOf(state.value?['track']) != null;
 
   /// Çalınacak ses düzeyi: kullanıcı kıstıysa ya da telefon araması sürüyorsa 0; değilse oda düzeyi × kendi düzeyi.
-  double get _vol => muted.value || EffectPrefs.roomMuted.value || CallGuard.instance.inCall.value || RoomAudio.systemSilent.value ? 0 : volume.value * roomVolume;
+  double get _vol => muted.value || EffectPrefs.roomMuted.value || CallGuard.instance.inCall.value || RoomAudio.systemSilent.value ? 0 : volume.value * roomVolume * trackGain * (RoomAudio.speaking.value ? RoomAudio.musicDuck : 1.0);
+
+  /// Parçanın ses yüksekliği eşitleme kazancı (sunucu ölçer: music_tracks.gain_db, yalnızca kısar). Ölçülmemiş
+  /// parça (yeni yüklenmiş, telefondaki önizleme, dış adres) ortalama bir düzeyde (-4 dB) çalar: ölçülen parçaların
+  /// çoğu (günümüz kayıtları) bu düzeyin altına iner, kısık kayıtlar ise bu düzeyin üstünde kalmaz.
+  double get trackGain {
+    final g = (mapOf(state.value?['track'])?['gainDb'] as num?)?.toDouble();
+    if (_trackId == null || g == null) return 0.63;
+    return math.pow(10, g.clamp(-20.0, 0.0) / 20).toDouble();
+  }
+
+  /// Konuşma başlayınca / bitince müzik düzeyi birden değil ~300 ms'de yumuşakça değişir.
+  Timer? _ramp;
+  void _rampVolume() {
+    final p = _player;
+    if (p == null) return;
+    _ramp?.cancel();
+    final from = p.volume;
+    final to = _vol;
+    var i = 0;
+    _ramp = Timer.periodic(const Duration(milliseconds: 50), (t) {
+      i++;
+      final v = i >= 6 ? to : from + (to - from) * i / 6;
+      p.setVolume(v).catchError((_) {});
+      if (i >= 6) t.cancel();
+    });
+  }
 
   Timer? _volSend;
 
@@ -153,6 +180,7 @@ class MusicService {
       RoomAudio.voicePath.addListener(_rebindPlayer);
       EffectPrefs.roomMuted.addListener(() => _player?.setVolume(_vol).catchError((_) {}));
       RoomAudio.systemSilent.addListener(() => _player?.setVolume(_vol).catchError((_) {}));
+      RoomAudio.speaking.addListener(_rampVolume);
     }
     await refresh();
     _resync?.cancel();

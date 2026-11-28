@@ -983,4 +983,9 @@ const kAr = <String, String>{
   'Şarj için': 'الشحن إلى',
   'Gümüş': 'فضة',
   'Gümüş bakiyen': 'رصيد الفضة',
+  'Bu kişinin sesi kapatıldı (yalnızca sizde).': 'تم كتم صوت هذا الشخص (لديك فقط).',
+  'Bu kişinin sesi açıldı.': 'تم إلغاء كتم صوت هذا الشخص.',
+  'Sesini kapat (bende)': 'كتم لدي',
+  'Sesini aç (bende)': 'إلغاء الكتم لدي',
+  'İnternet bağlantınız zayıf; ses/görüntü takılabilir.': 'اتصالك ضعيف؛ قد يتقطع الصوت/الفيديو.',
 };

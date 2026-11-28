@@ -254,6 +254,13 @@ extension _RoomMembers on _RoomScreenState {
                           ],
                           const SizedBox(height: 4),
                           // CP / yakınlık: iki kişi arasındaki seviye ve ilişki seçimi (3. kademeden itibaren).
+                          // Yalnızca bende sesini kapat (koltuktaki kişi için; karşı taraf bilmez).
+                          if (!isSelf && seat != null)
+                            TextButton.icon(
+                              onPressed: () { close(); _toggleLocalMute(userId); },
+                              icon: Icon(_localMuted.contains(userId) ? Icons.volume_up : Icons.volume_off, size: 18, color: Colors.white70),
+                              label: Text(_localMuted.contains(userId) ? tx('Sesini aç (bende)') : tx('Sesini kapat (bende)'), style: const TextStyle(color: Colors.white70)),
+                            ),
                           if (!isSelf && !hiddenUser) CpPanel(userId: userId, displayName: (user?['displayName'] ?? '').toString(), user: user),
                           // Yönetim düğmeleri: yalnızca yetkili olana görünür.
                           if (canMod || canRole) ...[
