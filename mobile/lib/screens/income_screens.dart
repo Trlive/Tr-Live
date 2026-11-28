@@ -379,6 +379,7 @@ class WithdrawScreen extends StatelessWidget {
               _card('Ödenmeyi bekleyen maaş', fmtMoney(b['unpaidSalaryCents'], cur), const [Color(0xFF05833A), Color(0xFF16B95A)]),
             ],
             const SizedBox(height: 16),
+            if (mapOf(b['salaryStatus']) != null) ...[SalaryStatusCard(status: mapOf(b['salaryStatus'])!, currency: cur), const SizedBox(height: 10)],
             ListTile(
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: const BorderSide(color: Pal.outline)),
               leading: Icon(Icons.verified_user_outlined, color: kyc == 'approved' ? Colors.greenAccent : Colors.amber),
@@ -405,7 +406,7 @@ class WithdrawScreen extends StatelessWidget {
               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => hostCenterPage(tab: 'history'))),
             ),
             const SizedBox(height: 16),
-            const Text('Maaşlar dönem kapanınca hesaplanır ve kimlik doğrulaman onaylıysa ödenir. Ödeme durumunu "Maaş özetlerim" sayfasından görebilirsin.', style: TextStyle(color: Pal.textDim, fontSize: 12, height: 1.4)),
+            const Text('Kota dolunca maaşın ay içinde birkaç dakikada bir Fasulye olarak yatar (telefon numaran doğrulanmış olmalı). Ay sonunda kota kadar elmas maaşa çevrilir, kalan elmasın otomatik Coin olur (5 Elmas = 1 Coin). Kota dolmazsa maaş yatmaz, elmasın tamamı Coin\'e çevrilir.', style: TextStyle(color: Pal.textDim, fontSize: 12, height: 1.4)),
           ]);
         },
       ),
@@ -421,4 +422,48 @@ class WithdrawScreen extends StatelessWidget {
           FittedBox(fit: BoxFit.scaleDown, child: Text(value, style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w900))),
         ]),
       );
+}
+
+/// "Maaşım neden yatmadı?" — sunucunun teşhisi (/api/broadcaster/me → salaryStatus). Engel yoksa yatan avansı gösterir.
+class SalaryStatusCard extends StatelessWidget {
+  final Map<String, dynamic> status;
+  final String currency;
+  const SalaryStatusCard({super.key, required this.status, required this.currency});
+
+  @override
+  Widget build(BuildContext context) {
+    final reasons = listOf(status['reasons']);
+    final ok = status['ok'] == true;
+    final paid = status['paidCents'] ?? 0;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Pal.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: ok ? Colors.greenAccent : (reasons.isEmpty ? Pal.outline : Colors.amber)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Icon(ok ? Icons.check_circle_outline : Icons.info_outline, color: ok ? Colors.greenAccent : Colors.amber, size: 20),
+          const SizedBox(width: 8),
+          Expanded(child: Text(ok ? 'Maaşın otomatik yatıyor' : 'Maaş durumu', style: const TextStyle(fontWeight: FontWeight.w800))),
+          Text('Bu ay yatan: ${fmtMoney(paid, currency)}', style: const TextStyle(color: Pal.textDim, fontSize: 12)),
+        ]),
+        for (final r in reasons)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Padding(padding: EdgeInsets.only(top: 2), child: Icon(Icons.warning_amber_rounded, size: 16, color: Colors.amber)),
+              const SizedBox(width: 6),
+              Expanded(child: Text('${mapOf(r)?['text'] ?? ''}', style: const TextStyle(fontSize: 12.5, height: 1.35))),
+            ]),
+          ),
+        if (ok)
+          const Padding(
+            padding: EdgeInsets.only(top: 6),
+            child: Text('Kota doldukça maaşın birkaç dakika içinde Fasulye cüzdanına eklenir.', style: TextStyle(color: Pal.textDim, fontSize: 12)),
+          ),
+      ]),
+    );
+  }
 }

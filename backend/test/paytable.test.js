@@ -80,3 +80,17 @@ test('doğrulama ve yardımcılar', () => {
     assert.ok(SPECIAL_ID_RE.test(id));
   }
 });
+
+test('evaluatePay + ay sonu kuralı: Yöntem 1 (elmas düşmeden maaş) kapanır; yalnızca bakiyedeki kota kadar ödenir', () => {
+  const H = 3600;
+  const base = { requireGameHours: false, allowBalanceMethod: true };
+  const m = { seconds: 99 * H, validDays: 25, diamonds: 3_000_000n, balance: 0n };
+  const off = evaluatePay({ levels: L, settings: base, metrics: m });
+  assert.ok(off.salaryCents > 0n, 'kural kapalı: dönem elmasıyla Yöntem 1 öder');
+  assert.equal(off.method, 1);
+  const on = evaluatePay({ levels: L, settings: { ...base, monthEndDiamondConvert: true }, metrics: m });
+  assert.equal(on.salaryCents, 0n, 'bakiyede elmas yok → maaş yok (kalan zaten Coin olur)');
+  const on2 = evaluatePay({ levels: L, settings: { ...base, monthEndDiamondConvert: true }, metrics: { ...m, balance: 5_000_000n } });
+  assert.equal(on2.method, 2);
+  assert.ok(on2.consume <= 3_000_000n, 'dönemde alınandan fazla elmas düşülmez');
+});

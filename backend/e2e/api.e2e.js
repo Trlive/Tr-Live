@@ -2479,6 +2479,112 @@ test('telefonu doğrulanmamış yayıncının maaşı KAYBOLMAZ, bekler', { skip
   assert.equal((await sql(`SELECT usd_cents::text AS c FROM users WHERE id = $1`, [host.id])).rows[0].c, '0');
 });
 
+test('ay sonu: kota elması maaşa, kalan elmas 5:1 Coin\'e; kota dolmazsa maaş yok, hepsi Coin; otomatik kapanış; teşhis; bozdurma', { skip, timeout: 90000 }, async () => {
+  // Sahibinin örneği: 290 bin elmas → 200 bin kota maaşa (15 $), kalan 90 bin → 18.000 Coin. 199 bin → maaş yok, 39.800 Coin.
+  const owner = await register('meowner');
+  const hA = await register('mehosta');
+  const hB = await register('mehostb');
+  const ag = await api('POST', '/api/admin/agencies', { token: U.d.token, body: { userId: owner.id, name: `AySonu ${tag}` } });
+  status(ag, 201);
+  const agId = ag.body.agency.id;
+  for (const h of [hA, hB]) {
+    const inv = await api('POST', `/api/agencies/${agId}/invite`, { token: owner.token, body: { userId: h.id } });
+    status(inv, 201);
+    ok(await api('POST', `/api/agency-requests/${inv.body.requestId}/respond`, { token: h.token, body: { accept: true } }));
+  }
+  const lv = (diamonds, s, a) => ({ diamonds, days: null, hours: 1, gameHours: 0, salary1Cents: s, salary2Cents: s, agencyCents: a });
+  ok(await api('PUT', '/api/admin/pay-levels', { token: U.d.token, body: { levels: [lv('200000', '1500', '300'), lv('400000', '3000', '600')] } }));
+
+  // Teşhis: telefon doğrulanmamış yayıncıya sebebi söylenir (eskiden ekranda "kimlik doğrulama" yazıyordu, gerçek şart telefon).
+  await sql(`UPDATE users SET phone = NULL, phone_verified_at = NULL WHERE id = $1`, [hA.id]);
+  const diag = await api('GET', '/api/broadcaster/me', { token: hA.token });
+  ok(diag);
+  const codes = diag.body.broadcaster.salaryStatus.reasons.map((r) => r.code);
+  assert.ok(codes.includes('phone_missing'), `telefon sebebi: ${codes}`);
+  assert.ok(codes.includes('quota'), `kota sebebi: ${codes}`);
+  const adiag = await api('GET', `/api/admin/payouts/salary-status/${hA.id}`, { token: U.d.token });
+  ok(adiag);
+  assert.deepEqual(adiag.body.reasons.map((r) => r.code), codes, 'panel aynı teşhisi görür');
+  status(await api('GET', `/api/admin/payouts/salary-status/${hA.id}`, { token: hA.token }), 403, 'kullanıcı başkasının teşhisini göremez');
+  // SMS kurulu değilken yönetici telefonu elle doğrular (denetim kaydıyla).
+  status(await api('POST', `/api/admin/users/${hA.id}/phone-verify`, { token: U.d.token, body: { verified: true } }), 400, 'numara yokken doğrulanamaz');
+  status(await api('POST', `/api/admin/users/${hA.id}/phone-verify`, { token: U.d.token, body: { phone: '12' } }), 400, 'geçersiz numara');
+  const phoneA = `+90532${String(Date.now() % 10000000).padStart(7, '0')}`;
+  ok(await api('POST', `/api/admin/users/${hA.id}/phone-verify`, { token: U.d.token, body: { verified: true, phone: phoneA } }));
+  status(await api('POST', `/api/admin/users/${hA.id}/phone-verify`, { token: hA.token, body: { verified: true } }), 403);
+  assert.ok((await sql(`SELECT phone_verified_at FROM users WHERE id = $1`, [hA.id])).rows[0].phone_verified_at, 'telefon doğrulandı');
+  assert.equal((await sql(`SELECT COUNT(*)::int AS n FROM financial_audit_logs WHERE user_id = $1 AND action = 'phone_verify_manual'`, [hA.id])).rows[0].n, 1);
+  await sql(`UPDATE users SET phone = $2, phone_verified_at = NOW() WHERE id = $1`, [hB.id, `+90533${String(Date.now() % 10000000).padStart(7, '0')}`]);
+
+  // Geçmiş bir ay (başka testlerin kapattığı dönemlerle çakışmasın): 8 ay önce.
+  const mid = new Date(Date.now() - 240 * 86400e3);
+  const pk = `${mid.getUTCFullYear()}-${String(mid.getUTCMonth() + 1).padStart(2, '0')}`;
+  const at = `${pk}-15T12:00:00Z`;
+  await sql(`UPDATE broadcasters SET approved_at = $2::timestamptz - INTERVAL '20 days' WHERE user_id = ANY($1::uuid[])`, [[hA.id, hB.id], at]);
+  const gift = async (h, amount, when) => {
+    await sql(
+      `INSERT INTO gift_transactions(room_id, sender_id, receiver_id, gift_id, quantity, coin_amount, receiver_agency_id, created_at) VALUES($1,$2,$3,$4,1,$5,$6,$7)`,
+      [roomId, U.a.id, h.id, heart.id, String(amount), agId, when],
+    );
+    await sql(`UPDATE users SET diamonds = diamonds + $2 WHERE id = $1`, [h.id, String(amount)]);
+  };
+  for (const h of [hA, hB]) {
+    await sql(`UPDATE users SET diamonds = 0, coins = 0 WHERE id = $1`, [h.id]);
+    await sql(`INSERT INTO mic_sessions(user_id, room_id, started_at, ended_at) VALUES($1,$2,$3::timestamptz, $3::timestamptz + INTERVAL '2 hours')`, [h.id, roomId, at]);
+  }
+  await gift(hA, 290000, at);
+  await gift(hB, 199000, at);
+  await gift(hA, 1000, new Date()); // dönem BİTTİKTEN sonra gelen hediye: çevrilmez, yeni döneme kalır
+
+  // Otomatik kapanış (yönetici tuşu yok): dönem bitişinden 10 dk sonra sunucu kendisi kapatır. Burada servis doğrudan çağrılır.
+  process.env.DATABASE_URL = DB; process.env.DATABASE_SSL = 'false'; process.env.JWT_SECRET = env.JWT_SECRET; process.env.NODE_ENV = 'test';
+  const { runAutoClose } = await import('../src/modules/wallet/period_autoclose.service.js');
+  const { parsePeriodKey } = await import('../src/modules/games/settlement.service.js');
+  const end = parsePeriodKey(pk).end;
+  assert.equal((await runAutoClose({ now: new Date(end.getTime() + 60e3) })).skipped, 'bekleme', 'bitişten hemen sonra beklenir');
+  const out = await runAutoClose({ now: new Date(end.getTime() + 11 * 60e3) });
+  assert.equal(out.periodKey, pk, JSON.stringify(out));
+  assert.equal((await runAutoClose({ now: new Date(end.getTime() + 20 * 60e3) })).skipped, 'kapalı dönem', 'ikinci kez kapanmaz');
+
+  const st = async (h) => (await sql(
+    `SELECT s.salary_cents::text AS cents, s.consumed_diamonds::text AS consumed, s.converted_diamonds::text AS cd, s.converted_coins::text AS cc, s.status
+     FROM host_statements s JOIN payout_periods p ON p.id = s.period_id WHERE p.period_key = $1 AND s.user_id = $2`, [pk, h.id],
+  )).rows[0];
+  const a = await st(hA); const b = await st(hB);
+  assert.deepEqual([a.cents, a.consumed, a.cd, a.cc], ['1500', '200000', '90000', '18000'], '290k: 200k maaşa, 90k → 18.000 Coin');
+  assert.equal(a.status, 'paid', 'telefonu doğrulanmış yayıncının maaşı Fasulyeye yattı');
+  assert.equal(await diamonds(hA), 1000n, 'dönemden sonra gelen 1000 elmas duruyor');
+  assert.equal(await coins(hA), 18000n);
+  assert.equal((await sql(`SELECT usd_cents::text AS c FROM users WHERE id = $1`, [hA.id])).rows[0].c, '1500', '15 Fasulye');
+  assert.deepEqual([b.cents, b.consumed, b.cd, b.cc], ['0', '0', '199000', '39800'], '199k: kota dolmadı → maaş yok, hepsi Coin');
+  assert.equal(await diamonds(hB), 0n);
+  assert.equal(await coins(hB), 39800n);
+  const wt = (await sql(`SELECT coin_amount::text AS c, diamond_amount::text AS d FROM wallet_transactions WHERE user_id = $1 AND transaction_type = 'diamond_exchange' AND reference_id = $2`, [hB.id, pk])).rows;
+  assert.deepEqual(wt, [{ c: '39800', d: '-199000' }], 'Coin geçmişinde tek kayıt');
+  const audit = (await sql(`SELECT metadata FROM financial_audit_logs WHERE action = 'payout_period_close' AND metadata->>'periodKey' = $1`, [pk])).rows[0].metadata;
+  assert.ok(Number(audit.convertedUsers) >= 2);
+  const note = (await sql(`SELECT body FROM user_notifications WHERE user_id = $1 AND kind = 'salary_period' ORDER BY created_at DESC LIMIT 1`, [hA.id])).rows[0];
+  assert.match(note?.body ?? '', /18000 Coin/, 'yayıncıya bildirim');
+
+  // Elmas bozdurma artık onaylı yayıncıya da açık (5/1).
+  const ex = await api('POST', '/api/me/diamonds/exchange', { token: hA.token, body: { diamonds: 500 } });
+  ok(ex, 'yayıncı bozdurabilir');
+  assert.equal(ex.body.exchangedCoins, '100');
+  assert.equal(await diamonds(hA), 500n);
+
+  // Ay içi: kota kadar elmas bakiyede yoksa (bozdurulduysa) maaş yok, teşhis sebebini söyler.
+  await sql(`UPDATE users SET diamonds = 0 WHERE id = $1`, [hB.id]);
+  await gift(hB, 250000, new Date());
+  await sql(`INSERT INTO mic_sessions(user_id, room_id, started_at, ended_at) VALUES($1,$2,NOW() - INTERVAL '3 hours', NOW() - INTERVAL '1 hour')`, [hB.id, roomId]);
+  ok(await api('POST', '/api/me/diamonds/exchange', { token: hB.token, body: { diamonds: 100000 } }));
+  const d2 = await api('GET', '/api/broadcaster/me', { token: hB.token });
+  const r2 = d2.body.broadcaster.salaryStatus;
+  assert.equal(r2.estimatedCents, '0', 'bozdurulan elmas kotaya sayılmaz');
+  assert.ok(r2.reasons.some((r) => r.code === 'balance_short'), JSON.stringify(r2.reasons));
+
+  ok(await api('POST', '/api/admin/pay-levels/reset', { token: U.d.token }));
+});
+
 // EN SONDA: yayımlanan sözleşmeler silinemez ve ödeme/panel kapılarını açar; önceki testleri etkilemesin.
 test('sözleşme: yayımlama, işlemle birlikte kabul (ajans), panelde tek dokunuş, değiştirilemez kayıt, kapılar', { skip, timeout: 60000 }, async () => {
   const host = await register('soz_y');

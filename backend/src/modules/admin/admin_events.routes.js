@@ -2,8 +2,9 @@
 // Ortak yardımcılar ve import'lar: admin.shared.js
 import { Router } from 'express';
 import { transferPeriod } from '../wallet/salary_transfer.service.js';
+import { salaryStatus } from '../wallet/instant_salary.service.js';
 import { BROADCASTER_CONTRACT_SQL, agencyContractSql } from '../contracts/contracts.rules.js';
-import { SALARY_PAYABLE_SQL, STATEMENT_TABLES, agencyStatementJson, announceUserChange, assistantStatementJson, closePeriod, creditPeriod, creditStatement, fail, hostStatementJson, isWalletPeriod, loadConfig, notifyUser, oneOf, parsePeriodKey, periodKey, previousPeriod, query, referralStatementJson, requireSuperAdmin, text, tx, uuid } from './admin.shared.js';
+import { SALARY_PAYABLE_SQL, STATEMENT_TABLES, agencyStatementJson, announceUserChange, normalizePhone, assistantStatementJson, closePeriod, creditPeriod, creditStatement, fail, hostStatementJson, isWalletPeriod, loadConfig, notifyUser, oneOf, parsePeriodKey, periodKey, previousPeriod, query, referralStatementJson, requireSuperAdmin, text, tx, uuid } from './admin.shared.js';
 
 export const router = Router();
 
@@ -39,6 +40,11 @@ router.post('/events/:id/attendance', async (req, res) => {
 // Dönemi kapat (hesap özetleri üretir). period boş ise bir önceki dönem.
 
 // Dönemi kapat (hesap özetleri üretir). period boş ise bir önceki dönem.
+// Bir yayıncının maaşı neden yatmıyor: yayıncının gördüğü teşhisin aynısı (destek ekibi için).
+router.get('/payouts/salary-status/:userId', async (req, res) => {
+  res.json(await salaryStatus(uuid(req.params.userId, 'Kullanıcı')));
+});
+
 router.post('/payouts/close', requireSuperAdmin, async (req, res) => {
   const cfg = await loadConfig();
   let key = req.body?.period;
@@ -260,6 +266,30 @@ router.post('/users/:userId/kyc', requireSuperAdmin, async (req, res) => {
   if (!r.rowCount) throw fail('Kullanıcı bulunamadı.', 404);
   await query(`INSERT INTO financial_audit_logs(admin_id, user_id, action, reference_type, metadata) VALUES($1,$2,'kyc_status','user',$3)`, [req.user.id, userId, JSON.stringify({ status })]);
   res.json({ ok: true, status });
+});
+
+// Telefonu elle doğrula (SMS doğrulaması kurulu değilken maaşın açılması için). Süper yönetici; denetim kaydı tutulur.
+// Maaş şartı (SALARY_PAYABLE_SQL) doğrulanmış telefon istiyor: Firebase ayarı yoksa yayıncı kendi başına doğrulayamaz.
+router.post('/users/:userId/phone-verify', requireSuperAdmin, async (req, res) => {
+  const userId = uuid(req.params.userId, 'Kullanıcı');
+  const verified = req.body?.verified !== false;
+  const phone = req.body?.phone ? normalizePhone(req.body.phone) : undefined;
+  if (req.body?.phone && !phone) throw fail('Telefon numarası geçersiz (ör. +905xxxxxxxxx).');
+  let r;
+  try {
+    r = await query(
+      `UPDATE users SET phone = COALESCE($3, phone), phone_verified_at = CASE WHEN $2 THEN COALESCE(phone_verified_at, NOW()) ELSE NULL END, updated_at = NOW()
+       WHERE id = $1 AND ($2 = FALSE OR COALESCE($3, phone) IS NOT NULL) RETURNING id, phone, phone_verified_at`,
+      [userId, verified, phone ?? null],
+    );
+  } catch (e) {
+    if (e.code === '23505') throw fail('Bu telefon numarası başka bir hesapta kayıtlı.', 409);
+    throw e;
+  }
+  if (!r.rowCount) throw fail(verified ? 'Kullanıcının telefon numarası yok; önce numarayı girin.' : 'Kullanıcı bulunamadı.', verified ? 400 : 404);
+  await query(`INSERT INTO financial_audit_logs(admin_id, user_id, action, reference_type, metadata) VALUES($1,$2,'phone_verify_manual','user',$3)`,
+    [req.user.id, userId, JSON.stringify({ verified, phone: r.rows[0].phone })]);
+  res.json({ ok: true, phone: r.rows[0].phone, phoneVerifiedAt: r.rows[0].phone_verified_at });
 });
 
 router.get('/finance/audit', requireSuperAdmin, async (req, res) => {

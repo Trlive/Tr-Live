@@ -210,6 +210,8 @@ const AGENCY_FIELDS: FieldDef[] = [
   { key: "videoMinSessionMinutes", label: "Görüntülü: sayılması için en kısa oturum (dakika)", kind: "int" },
   { key: "videoShortfallCutBps", label: "Görüntülü: süre şartı eksikse kesinti (baz puan)", kind: "int" },
   { key: "instantSalaryEnabled", label: "Ay içi maaş (avans) kuralı: açık = kota dolunca hemen yatar (acil durdurma için)", kind: "bool" },
+  { key: "monthEndDiamondConvert", label: "Ay sonu elmas kuralı: kota kadar elmas maaşa, kalan elmas 5:1 Coin'e; kota dolmazsa maaş yok, hepsi Coin", kind: "bool" },
+  { key: "autoClosePeriod", label: "Dönemi otomatik kapat: dönem bitince 10 dk sonra maaşlar yazılır, elmaslar çevrilir (yönetici tuşu gerekmez)", kind: "bool" },
 ];
 
 function AgencyConfig() {

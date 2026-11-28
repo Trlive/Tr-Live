@@ -364,8 +364,8 @@ router.post('/diamonds/exchange', userLimit('diamond_exchange', 20, 10 * 60e3), 
   const coins = diamonds / DIAMONDS_PER_COIN;
   const out = await tx(async (c) => {
     const u = (await c.query(`SELECT coins, diamonds FROM users WHERE id = $1 FOR UPDATE`, [req.user.id])).rows[0];
-    const b = (await c.query(`SELECT 1 FROM broadcasters WHERE user_id = $1 AND status = 'approved'`, [req.user.id])).rowCount;
-    if (b) throw fail('Onaylı yayıncılar elmasları maaş sistemiyle alır; bozdurma yapılamaz.', 403);
+    // v2.152.22: onaylı yayıncılar da bozdurabilir (sahibinin kararı). Bozdurulan elmas bakiyeden çıktığı için o dönemin
+    // maaş kotasına sayılmaz (maaş, kota kadar elmas bakiyede durursa ödenir); avansla zaten düşülmüş kota etkilenmez.
     if (BigInt(u.diamonds) < diamonds) throw fail('Yeterli elmasınız yok.', 409);
     const n = (await c.query(`UPDATE users SET diamonds = diamonds - $2, coins = coins + $3, updated_at = NOW() WHERE id = $1 RETURNING coins, diamonds`, [req.user.id, diamonds.toString(), coins.toString()])).rows[0];
     await c.query(

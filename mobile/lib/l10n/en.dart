@@ -581,7 +581,7 @@ const kEn = <String, String>{
   'Bekliyor': 'Pending',
   'Bu talepten vazgeçilsin mi? Tutar cüzdanına geri döner.': 'Cancel this request? The amount returns to your wallet.',
   'Fasulye cüzdanı': 'Bean wallet',
-  '{a} maaşın bekliyor. Kimlik doğrulaman onaylanınca cüzdanına yatar (Yayıncı Merkezi → Kimlik doğrulama).': '{a} of salary is on hold. It will be added to your wallet once your identity verification is approved (Host Centre → Identity verification).',
+  '{a} maaşın bekliyor. Telefon numaran doğrulanınca cüzdanına yatar (Ayarlar → Telefon). Sözleşme isteniyorsa Ayarlar → Sözleşmelerim.': '{a} of salary is on hold. It will be added to your wallet once your phone number is verified (Settings → Phone). If a contract is required: Settings → My contracts.',
   'Hareketler': 'Transactions',
   'Henüz hareket yok.': 'No transactions yet.',
   'Fasulye bakiyesi': 'Bean balance',

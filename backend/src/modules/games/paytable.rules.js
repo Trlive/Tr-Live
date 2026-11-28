@@ -122,9 +122,12 @@ export function evaluatePay({ levels, metrics, settings = {}, pref = 0, eventsOk
   const m = { seconds: 0, validDays: 0, gameSeconds: 0, ...metrics };
   const diamonds = BigInt(m.diamonds ?? 0);
   const balance = BigInt(m.balance ?? 0);
-  const balanceAllowed = settings.allowBalanceMethod !== false && Number(pref) !== 1;
-  const fullLevel1 = bestLevel(levels, diamonds, m, settings);
-  const fullLevel2 = balanceAllowed ? bestLevel(levels, balance, m, settings) : null;
+  // Ay sonu elmas kuralı açıkken maaş YALNIZCA kota kadar elmas bakiyeden düşülerek ödenir (Yöntem 2). Yöntem 1 kapalıdır:
+  // kalan elmas zaten Coin'e çevrileceği için düşmeden ödemek aynı elması iki kez ödemek olurdu.
+  const onlyBalance = settings.monthEndDiamondConvert === true;
+  const balanceAllowed = onlyBalance || (settings.allowBalanceMethod !== false && Number(pref) !== 1);
+  const fullLevel1 = onlyBalance ? null : bestLevel(levels, diamonds, m, settings);
+  const fullLevel2 = balanceAllowed ? bestLevel(levels, onlyBalance && diamonds < balance ? diamonds : balance, m, settings) : null;
   let level1 = fullLevel1;
   let level2 = fullLevel2;
   let salary1 = level1 ? level1.salary1Cents : 0n;
@@ -133,8 +136,8 @@ export function evaluatePay({ levels, metrics, settings = {}, pref = 0, eventsOk
   let shortfall2 = false;
   const cut = BigInt(Math.min(10000, Math.max(0, Math.trunc(Number(settings.audioShortfallCutBps ?? 0)) || 0)));
   if (cut > 0n) {
-    const quota1 = bestLevel(levels, diamonds, m, settings, false);
-    const quota2 = balanceAllowed ? bestLevel(levels, balance, m, settings, false) : null;
+    const quota1 = onlyBalance ? null : bestLevel(levels, diamonds, m, settings, false);
+    const quota2 = balanceAllowed ? bestLevel(levels, onlyBalance && diamonds < balance ? diamonds : balance, m, settings, false) : null;
     const reduced1 = quota1 && (!fullLevel1 || quota1.level > fullLevel1.level) ? (quota1.salary1Cents * (10000n - cut)) / 10000n : 0n;
     const reduced2 = quota2 && (!fullLevel2 || quota2.level > fullLevel2.level) ? (quota2.salary2Cents * (10000n - cut)) / 10000n : 0n;
     if (reduced1 > salary1) { level1 = quota1; salary1 = reduced1; shortfall1 = true; }
@@ -211,12 +214,15 @@ export function evaluateSimplePay({ levels, metrics, settings = {}, pref = 0, ev
   const diamonds = BigInt(m.diamonds ?? 0);
   const balance = BigInt(m.balance ?? 0);
   const unmetBps = BigInt(Math.min(10000, Math.max(0, Math.trunc(Number(settings.instantSalaryBps ?? 5000)) || 0)));
-  const balanceAllowed = settings.allowBalanceMethod !== false && Number(pref) !== 1;
+  // Ay sonu elmas kuralı: kota kadar elmas bakiyede yoksa (bozdurulduysa) o seviye hiç ödenmez; tercih (pref 1) yok sayılır.
+  const onlyBalance = settings.monthEndDiamondConvert === true;
+  const balanceAllowed = onlyBalance || (settings.allowBalanceMethod !== false && Number(pref) !== 1);
   let best = null;
   for (const l of sorted(levels)) {
     if (l.diamonds > diamonds) break; // kota dolmadı
     const unmet = unmetRequirements(l, m, settings);
     const kept = balanceAllowed && balance >= l.diamonds;
+    if (onlyBalance && !kept) break; // üst seviyeler daha çok elmas ister: onlar da tutmaz
     const full = unmet.length === 0 && kept;
     const pay = full ? l.salary2Cents : wholeDollarCents((l.salary2Cents * unmetBps) / 10000n);
     if (!best || pay >= best.pay) best = { level: l, pay, full, kept, unmet };

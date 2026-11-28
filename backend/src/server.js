@@ -23,6 +23,7 @@ import { startDealerDeliveryTicker } from './modules/dealers/dealers.routes.js';
 import { startTransferTicker } from './modules/agencies/agency_ops.service.js';
 import { startSalaryTransferTicker } from './modules/wallet/salary_transfer.service.js';
 import { startInstantSalaryTicker } from './modules/wallet/instant_salary.service.js';
+import { startAutoCloseTicker } from './modules/wallet/period_autoclose.service.js';
 import { startPrivacySweeper } from './modules/users/privacy.service.js';
 import { startRelationRefundTicker } from './modules/relations/cp.routes.js';
 import { startGuardianTicker } from './modules/users/guardian.service.js';
@@ -103,6 +104,8 @@ alertTicker.unref();
 const salaryTicker = startSalaryTransferTicker(nonOverlapping);
 // Ay içi maaş avansı: 3 dakikada bir. Ayar varsayılan AÇIK (migration 116); panelde tek kutuyla durdurulur.
 const instantSalaryTicker = startInstantSalaryTicker(nonOverlapping);
+// Ay sonu: biten dönem 10 dakika sonra kendiliğinden kapanır (maaş yazılır, kalan elmas Coin'e çevrilir). Ayar: autoClosePeriod.
+const autoCloseTicker = startAutoCloseTicker(nonOverlapping);
 loadBans().then((n) => n && console.log(`${n} aktif IP yasağı yüklendi.`)).catch((e) => console.error('IP yasakları yüklenemedi:', e.message));
 promoteBootstrapAdmins().catch((e) => console.error('ADMIN_USERNAMES uygulanamadı:', e.message));
 seedThemeImages().then((n) => n && console.log(`${n} oda teması görseli yüklendi.`)).catch((e) => console.error('Tema görselleri yüklenemedi:', e.message));
@@ -127,6 +130,7 @@ async function shutdown(signal) {
   clearInterval(scoreboardTicker);
   clearInterval(reconcileTicker);
   clearInterval(dealerDeliveryTicker);
+  clearInterval(autoCloseTicker);
   clearInterval(offloadTicker);
   clearInterval(gameTicker);
   clearInterval(eventsTicker);

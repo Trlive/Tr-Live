@@ -109,6 +109,54 @@ export const referralStatementJson = (x) => ({
   status: x.status, paidAt: x.paid_at, payNote: x.pay_note ?? null,
 });
 
+export const DIAMONDS_PER_COIN = 5n;
+
+/**
+ * Ay sonu: onaylı yayıncıların dönemden kalan elması Coin'e çevrilir (sahibinin kuralı: "maaş kotası kesilir, kalan elmas
+ * Coin olarak hesaba düşer"; ör. 290 bin elmas, 200 bin kota → 200 bin maaşa, 90 bin → 18 bin Coin. Kota dolmadıysa
+ * elmasın tamamı Coin'e döner, maaş yok).
+ *
+ * Yalnızca DÖNEMİN elması çevrilir: dönem bittikten sonra alınan hediyeler (kapanış geç çalıştıysa) bakiyeden ayrılır ve
+ * yeni döneme kalır. 5'e bölünmeyen artık (1–4 elmas) bakiyede kalır. Maaşla düşülen kota elması bu noktada zaten
+ * bakiyeden çıkmıştır. Aynı transaction içinde ve dönem satırına bağlı (period_diamond_conversions birincil anahtarı):
+ * kapanış ikinci kez çalışamaz, çalışsa da aynı kullanıcıya iki kez yazılamaz.
+ */
+async function convertLeftoverDiamonds(c, periodId, b, skipIds = []) {
+  const r = await c.query(
+    `WITH cand AS (
+       SELECT u.id, (GREATEST(u.diamonds - COALESCE(post.d, 0), 0) / $3)::bigint AS coins
+       FROM broadcasters br JOIN users u ON u.id = br.user_id
+       LEFT JOIN LATERAL (SELECT SUM(COALESCE(g.diamond_amount, g.coin_amount)) AS d FROM gift_transactions g
+                          WHERE g.receiver_id = u.id AND g.created_at >= $2) post ON TRUE
+       WHERE br.status = 'approved' AND u.diamonds >= $3 AND NOT (u.id = ANY($4::uuid[]))
+     ), upd AS (
+       UPDATE users u SET diamonds = u.diamonds - cand.coins * $3, coins = u.coins + cand.coins, updated_at = NOW()
+       FROM cand WHERE u.id = cand.id AND cand.coins > 0 AND u.diamonds >= cand.coins * $3
+       RETURNING u.id, cand.coins
+     ), rec AS (
+       INSERT INTO period_diamond_conversions(period_id, user_id, diamonds, coins)
+       SELECT $1, id, coins * $3, coins FROM upd RETURNING user_id, diamonds, coins
+     )
+     SELECT user_id, diamonds::text, coins::text FROM rec`,
+    [periodId, b.end, DIAMONDS_PER_COIN.toString(), skipIds],
+  );
+  if (!r.rowCount) return { users: 0, diamonds: 0n, coins: 0n };
+  await c.query(
+    `INSERT INTO wallet_transactions(user_id, transaction_type, coin_amount, diamond_amount, reference_id, description)
+     SELECT v.id, 'diamond_exchange', v.coins, -v.diamonds, $1, $2 || ' ay sonu: ' || v.diamonds || ' Elmas → ' || v.coins || ' Coin'
+     FROM unnest($3::uuid[], $4::bigint[], $5::bigint[]) AS v(id, diamonds, coins)`,
+    [b.key, b.key, r.rows.map((x) => x.user_id), r.rows.map((x) => x.diamonds), r.rows.map((x) => x.coins)],
+  );
+  await c.query(
+    `UPDATE host_statements s SET converted_diamonds = v.diamonds, converted_coins = v.coins
+     FROM unnest($2::uuid[], $3::bigint[], $4::bigint[]) AS v(id, diamonds, coins) WHERE s.period_id = $1 AND s.user_id = v.id`,
+    [periodId, r.rows.map((x) => x.user_id), r.rows.map((x) => x.diamonds), r.rows.map((x) => x.coins)],
+  );
+  let diamonds = 0n; let coins = 0n;
+  for (const x of r.rows) { diamonds += BigInt(x.diamonds); coins += BigInt(x.coins); }
+  return { users: r.rowCount, diamonds, coins, rows: r.rows };
+}
+
 // Dönemi kapatır: yayıncı maaşları (iki yöntem; Yöntem 2'de elmas kotası bakiyeden düşülür), seviye ödülleri,
 // ajans primleri (yayıncı başına), asistan payları ve davet primleri. Bitmemiş dönem force olmadan kapanmaz.
 export async function closePeriod({ adminId, periodKey, force = false }) {
@@ -147,6 +195,8 @@ export async function closePeriod({ adminId, periodKey, force = false }) {
     const ev = cfg.settings.requireOfficialEvents ? await eventCounts(hosts.map((h) => h.user_id), b.start, b.end, run) : new Map();
     let totalSalary = 0n; let hostCount = 0;
     const rewarded = []; const paidHosts = [];
+    const convert = cfg.settings.monthEndDiamondConvert === true;
+    const weightedHosts = []; // ağırlıklı maaş alanların elması Coin'e çevrilmez (maaşları elmastan değil sözleşme kademesinden)
     for (const h of hosts) {
       const m = metrics.get(h.user_id);
       if (m.seconds === 0 && m.diamonds === 0n) continue; // dönemde hiç yayın / hediye yoksa özet oluşmaz
@@ -176,6 +226,7 @@ export async function closePeriod({ adminId, periodKey, force = false }) {
       // karşılaştırdıktan sonra geçiş yapıyor. Ağırlıklı hesap yoksa (sözleşme kademesi
       // atanmamış) bayrak açık olsa da eski hesap ödüyor: maaşsız bırakmak kabul edilemez.
       const useWeighted = cfg.settings.salaryWeightedEnabled === true && w !== null;
+      if (useWeighted) weightedHosts.push(h.user_id);
 
       // Yöntem 2 (elmas bakiyesini maaşa çevirme) YALNIZCA eski hesap öderken çalışır.
       //
@@ -202,7 +253,10 @@ export async function closePeriod({ adminId, periodKey, force = false }) {
             );
           }
         } else {
-          e = evaluateHost(cfg, m, { pref: 1, eventsOk: evOk, balance });
+          // Bakiye bu arada düştü (bozdurma). Ay sonu kuralında elmas düşülmeden maaş ödenmez: yalnızca avansla zaten
+          // düşülmüş elmasın karşıladığı seviye kalır. Kural kapalıyken eskisi gibi Yöntem 1'e dönülür.
+          e = convert ? evaluateHost(cfg, m, { pref: 1, eventsOk: evOk, balance: ac }) : evaluateHost(cfg, m, { pref: 1, eventsOk: evOk, balance });
+          if (convert && e.method === 2 && e.consume <= ac) consumed = e.consume;
         }
       }
       const rewards = e.level ? await grantLevelRewards(c, h.user_id, e.level) : {};
@@ -247,6 +301,9 @@ export async function closePeriod({ adminId, periodKey, force = false }) {
       );
       await c.query(`UPDATE salary_advances SET applied_period_id = $1 WHERE applied_period_id IS NULL AND created_at >= $2 AND created_at < $3`, [p.id, b.start, b.end]);
     }
+
+    // ---- Ay sonu elmas kuralı: kalan dönem elması Coin'e (5 Elmas = 1 Coin), bakiye sıfırlanır ----
+    const conversion = convert ? await convertLeftoverDiamonds(c, p.id, b, weightedHosts) : { users: 0, diamonds: 0n, coins: 0n };
 
     // ---- Ajans primleri (yayıncı başına: o ajanstayken aldığı elmasa göre), asistan payları ----
     const gifts = await agencyGiftRows(null, b.start, b.end, run);
@@ -320,7 +377,8 @@ export async function closePeriod({ adminId, periodKey, force = false }) {
     await c.query(
       `INSERT INTO financial_audit_logs(admin_id, action, reference_type, reference_id, metadata) VALUES($1,'payout_period_close','payout_period',$2,$3)`,
       [adminId, p.id, JSON.stringify({ periodKey: b.key, hosts: hostCount, agencies: agencyCount, assistants: assistantCount, referrals: referralCount,
-        totalSalaryCents: totalSalary.toString(), totalPrimCents: totalPrim.toString() })],
+        totalSalaryCents: totalSalary.toString(), totalPrimCents: totalPrim.toString(),
+        convertedUsers: conversion.users, convertedDiamonds: conversion.diamonds.toString(), convertedCoins: conversion.coins.toString() })],
     );
     // Maaş ve primler dolar cüzdanlarına yatar, özetler "ödendi" olur (ayar kapalıysa eskisi gibi bekler; admin elle işaretler).
     // KYC onayı olmayan yayıncının maaşı yatmaz; özeti bekler (admin KYC'yi onaylayıp özeti ödeyince cüzdana geçer).
@@ -333,6 +391,7 @@ export async function closePeriod({ adminId, periodKey, force = false }) {
       walletCredits: credited.count, walletCents: credited.cents.toString(),
       periodId: p.id, periodKey: b.key, hostStatements: hostCount, agencyStatements: agencyCount, assistantStatements: assistantCount,
       referralStatements: referralCount, totalSalaryCents: totalSalary.toString(), totalPrimCents: totalPrim.toString(),
+      convertedUsers: conversion.users, convertedDiamonds: conversion.diamonds.toString(), convertedCoins: conversion.coins.toString(),
       rewardedUserIds: rewarded, paidHosts: paidHosts.map((x) => ({ userId: x.userId, cents: x.cents.toString() })), currency: cfg.settings.currency,
     };
   });

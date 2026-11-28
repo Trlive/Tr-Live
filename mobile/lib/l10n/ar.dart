@@ -581,7 +581,7 @@ const kAr = <String, String>{
   'Bekliyor': 'قيد الانتظار',
   'Bu talepten vazgeçilsin mi? Tutar cüzdanına geri döner.': 'هل تريد إلغاء هذا الطلب؟ يعود المبلغ إلى محفظتك.',
   'Fasulye cüzdanı': 'محفظة الفاصوليا',
-  '{a} maaşın bekliyor. Kimlik doğrulaman onaylanınca cüzdanına yatar (Yayıncı Merkezi → Kimlik doğrulama).': 'راتب بقيمة {a} قيد الانتظار. سيُضاف إلى محفظتك بعد الموافقة على توثيق هويتك (مركز المذيع ← توثيق الهوية).',
+  '{a} maaşın bekliyor. Telefon numaran doğrulanınca cüzdanına yatar (Ayarlar → Telefon). Sözleşme isteniyorsa Ayarlar → Sözleşmelerim.': 'راتب بقيمة {a} قيد الانتظار. سيُضاف إلى محفظتك بعد توثيق رقم هاتفك (الإعدادات ← الهاتف). إذا طُلب عقد: الإعدادات ← عقودي.',
   'Hareketler': 'الحركات',
   'Henüz hareket yok.': 'لا توجد حركات بعد.',
   'Fasulye bakiyesi': 'رصيد الفاصوليا',

@@ -1,3 +1,39 @@
+## v2.152.22 — Maaş düzeltmesi: neden yatmadığı görünür, ay sonu elmas kuralı, otomatik dönem kapanışı, yayıncıya elmas bozdurma
+
+**"Fasulye hâlâ 0" sorunu.** Ay içi maaş (avans) her 3 dakikada yatıyor, ama yalnızca **telefonu doğrulanmış** yayıncıya. Ekran ise
+"kimlik doğrulaman onaylıysa ödenir" diyordu: kimlik onaylı olan ama telefonu doğrulanmamış (ya da sunucuda SMS/Firebase kurulu olmadığı
+için doğrulayamayan) yayıncı hiçbir şey göremiyordu.
+- **Maaş durumu kartı** (Para Çekme ekranı) ve panelde kullanıcı detayında aynı teşhis: telefon yok / doğrulanmamış, ajans yok,
+  sözleşme bekliyor, avans durduruldu, kota dolmadı (kaç elmas kaldı), kota dolmuş ama elmas bozdurulmuş, görüntülü maaş ay sonunda.
+  Bu ay yatan avans tutarı gösterilir. Uç: `/api/broadcaster/me` → `salaryStatus`; panel: `GET /api/admin/payouts/salary-status/:userId`.
+- **Panelde "Telefonu doğrula"** (süper yönetici, denetim kaydıyla): SMS doğrulaması kurulu değilken maaşı açmanın tek yolu.
+- Yanlış "kimlik doğrulama" metinleri düzeltildi (uygulama, Fasulye cüzdanı, panel).
+
+**Ay sonu elmas kuralı (sahibin kararı; ayar `monthEndDiamondConvert`, varsayılan açık):**
+- Dönem kapanınca maaş kotası kadar elmas maaşa çevrilir; **kalan dönem elması 5 Elmas = 1 Coin ile Coin'e** eklenir, elmas sıfırlanır.
+  Örnek: 290 bin elmas → 200 bin kota maaşa (15 $), 90 bin → 18.000 Coin.
+- **Kota dolmazsa maaş yok, elmasın tamamı Coin'e:** 199 bin elmas → 39.800 Coin.
+- Maaş yalnızca kota kadar elmas bakiyede durursa ödenir (elmas düşülmeden ödenen "Yöntem 1" bu kuralda kapalı; kalan elmas zaten Coin
+  olduğu için aynı elması iki kez ödemek olurdu). "Elmaslarım dönüşmesin" tercihi yok sayılır. Gün/saat şartı eksikse %50 kuralı sürüyor.
+- Yalnızca **dönemin** elması çevrilir: dönem bittikten sonra gelen hediyeler yeni döneme kalır. 5'e bölünmeyen 1–4 elmas bakiyede kalır.
+  Ağırlıklı maaş alanlar hariç.
+- Kayıtlar: Coin geçmişinde "Elmas bozdurma" satırı (`{dönem} ay sonu: X Elmas → Y Coin`), özet satırında `converted_diamonds/coins`,
+  `period_diamond_conversions` (dönem + kişi birincil anahtarı: iki kez yazılamaz), dönem denetim kaydında toplamlar; yayıncıya bildirim.
+
+**Otomatik dönem kapanışı (ayar `autoClosePeriod`, varsayılan açık).** Önceden dönem yalnızca paneldeki "Dönemi kapat" tuşuyla kapanıyordu.
+Artık biten dönem bitişinden 10 dakika sonra sunucu tarafından kapatılır (maaş Fasulyeye yatar, elmas çevrilir). Bir kere güvencesi aynı:
+danışma kilidi + benzersiz dönem anahtarı; iki sunucu aynı anda denese de biri "zaten kapatılmış" alır.
+
+**Elmas bozdurma yayıncılara açıldı** (5/1). Bozdurulan elmas o ayın kotasına sayılmaz; avansla zaten düşülmüş kota etkilenmez.
+
+Migration 121. **Dikkat:** sunucu bu sürüme geçince kapatılmamış en son dönem (bugün için Ekim 2026) 10 dakika içinde otomatik kapanır;
+onaylı yayıncıların o dönemden kalan elması Coin'e çevrilir. İstenmiyorsa güncellemeden önce panelden "Dönemi otomatik kapat" kapatılmalı.
+
+**Sınama:** backend 527 birim (yeni: ay sonu kuralı 290k / 199k / bozdurulmuş bakiye / tercih / %50); gerçek PostgreSQL'de 54/54 e2e
+(yeni: otomatik kapanış, 290k → 15 $ + 18.000 Coin ve dönem sonrası hediye korunur, 199k → maaş yok + 39.800 Coin, Coin geçmişi ve
+bildirim, teşhis + panelde aynı teşhis, telefonu elle doğrulama ve yetki, yayıncı bozdurma, bozdurulan elmasın kotaya sayılmaması);
+`flutter analyze` 0 hata/0 uyarı, `flutter test` 71/71; panel `tsc` 0 hata.
+
 ## v2.152.21 — Sözleşmeler rakiplerdeki gibi: işlemle birlikte tek dokunuşla kabul (SMS ve PDF kaldırıldı)
 
 Sahibin kararı: Yoho / Mico / Bigo'daki gibi sözleşme, kişinin o rolü üstlendiği işlemle birlikte kabul edilir.

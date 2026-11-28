@@ -96,3 +96,41 @@ test('resmi etkinlik cezası (ayar açıksa) hesaplanan tutarın üstüne biner'
   assert.equal(e.penalty, true);
   assert.equal(e.salaryCents, 750n); // 15$ × %50 ceza
 });
+
+// ---- Ay sonu elmas kuralı (monthEndDiamondConvert, v2.152.22) ----
+const conv = { settings: { monthEndDiamondConvert: true } };
+
+test('ay sonu kuralı: 290 bin elmas → 1. seviye (200 bin) tam maaş, kota kadar elmas düşülür', () => {
+  const e = ev({ ...okM, diamonds: 290_000n, balance: 290_000n }, conv);
+  assert.equal(e.level.level, 1);
+  assert.equal(e.salaryCents, 1500n);
+  assert.equal(e.consume, 200_000n); // kalan 90 bin dönem kapanınca Coin'e çevrilir
+});
+
+test('ay sonu kuralı: 199 bin elmas → kota dolmadı, maaş yok', () => {
+  const e = ev({ ...okM, diamonds: 199_000n, balance: 199_000n }, conv);
+  assert.equal(e.level, null);
+  assert.equal(e.salaryCents, 0n);
+  assert.equal(e.consume, 0n);
+});
+
+test('ay sonu kuralı: kota dolmuş ama elmas bozdurulmuş (bakiye < kota) → maaş YOK (kural kapalıyken %50 idi)', () => {
+  const m = { ...okM, diamonds: 250_000n, balance: 150_000n };
+  assert.equal(ev(m).salaryCents, 700n, 'eski kural: bozdurma şartı eksik → %50');
+  const e = ev(m, conv);
+  assert.equal(e.salaryCents, 0n);
+  assert.equal(e.consume, 0n);
+});
+
+test('ay sonu kuralı: "elmaslarım dönüşmesin" tercihi (pref 1) yok sayılır, elmas düşülerek ödenir', () => {
+  const e = ev(okM, { ...conv, pref: 1 });
+  assert.equal(e.salaryCents, 1500n);
+  assert.equal(e.method, 2);
+  assert.equal(e.consume, 200_000n);
+});
+
+test('ay sonu kuralı: gün/saat eksikse %50 yine geçerli, kota elması yine düşülür', () => {
+  const e = ev({ ...okM, seconds: 40 * H }, conv);
+  assert.equal(e.salaryCents, 700n);
+  assert.equal(e.consume, 200_000n);
+});

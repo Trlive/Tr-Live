@@ -206,7 +206,7 @@ class _UsdWalletScreenState extends State<UsdWalletScreen> {
 
   int _cents(String key) => int.tryParse('${mapOf(_data?['settings'])?[key] ?? 0}') ?? 0;
   int get _balance => int.tryParse('${_data?['balanceCents'] ?? 0}') ?? 0;
-  // Kimlik doğrulaması onaylanmadığı için cüzdana yatmayı bekleyen maaş.
+  // Telefon doğrulanmadığı (ya da yayıncı sözleşmesi kabul edilmediği) için cüzdana yatmayı bekleyen maaş.
   int get _held => int.tryParse('${_data?['heldSalaryCents'] ?? 0}') ?? 0;
   bool get _enabled => mapOf(_data?['settings'])?['enabled'] != false;
 
@@ -251,11 +251,11 @@ class _UsdWalletScreenState extends State<UsdWalletScreen> {
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(color: Pal.surface, borderRadius: BorderRadius.circular(12), border: Border.all(color: Pal.gold)),
                     child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      const Icon(Icons.verified_user_outlined, color: Pal.gold, size: 20),
+                      const Icon(Icons.phone_android, color: Pal.gold, size: 20),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          tx('{a} maaşın bekliyor. Kimlik doğrulaman onaylanınca cüzdanına yatar (Yayıncı Merkezi → Kimlik doğrulama).', {'a': usdText(_held)}),
+                          tx('{a} maaşın bekliyor. Telefon numaran doğrulanınca cüzdanına yatar (Ayarlar → Telefon). Sözleşme isteniyorsa Ayarlar → Sözleşmelerim.', {'a': usdText(_held)}),
                           style: const TextStyle(fontSize: 12.5),
                         ),
                       ),

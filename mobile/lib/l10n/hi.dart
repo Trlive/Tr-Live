@@ -581,7 +581,7 @@ const kHi = <String, String>{
   'Bekliyor': 'लंबित',
   'Bu talepten vazgeçilsin mi? Tutar cüzdanına geri döner.': 'यह अनुरोध रद्द करें? राशि आपके वॉलेट में लौट आएगी।',
   'Fasulye cüzdanı': 'बीन वॉलेट',
-  '{a} maaşın bekliyor. Kimlik doğrulaman onaylanınca cüzdanına yatar (Yayıncı Merkezi → Kimlik doğrulama).': '{a} का वेतन रुका हुआ है। पहचान सत्यापन स्वीकृत होते ही यह आपके वॉलेट में जुड़ जाएगा (होस्ट सेंटर → पहचान सत्यापन)।',
+  '{a} maaşın bekliyor. Telefon numaran doğrulanınca cüzdanına yatar (Ayarlar → Telefon). Sözleşme isteniyorsa Ayarlar → Sözleşmelerim.': '{a} का वेतन रुका हुआ है। फ़ोन नंबर सत्यापित होते ही यह आपके वॉलेट में जुड़ जाएगा (सेटिंग्स → फ़ोन)। अनुबंध आवश्यक हो तो: सेटिंग्स → मेरे अनुबंध।',
   'Hareketler': 'लेन-देन',
   'Henüz hareket yok.': 'अभी कोई लेन-देन नहीं।',
   'Fasulye bakiyesi': 'बीन बैलेंस',

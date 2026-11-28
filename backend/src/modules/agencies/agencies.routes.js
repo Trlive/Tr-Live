@@ -11,6 +11,7 @@ import crypto from 'node:crypto';
 import { periodBounds, parsePeriodKey } from '../games/settlement.service.js';
 import { loadConfig, configJson, hostProgress, hostStatementJson, agencyStatementJson, assistantStatementJson } from '../wallet/payouts.service.js';
 import { estimateHosts, agencyGiftRows, agencyPrimSummary } from './agency_metrics.service.js';
+import { salaryStatus } from '../wallet/instant_salary.service.js';
 import { agencyAccess, requireOwner, logTransfer, applyTransfer, notifyTransferResult, ESCALATE_DAYS } from './agency_ops.service.js';
 import { notifyUser } from '../notifications/notify.service.js';
 
@@ -415,6 +416,8 @@ router.get('/broadcaster/me', async (req, res) => {
       rejectedTransfer: lastRejected ? transferJson(lastRejected) : null,
       progress: progress ?? undefined, config: configJson(cfg),
       withdrawEligible, unpaidSalaryCents: unpaid,
+      // "Maaşım neden yatmadı?" — engel listesi (telefon doğrulama, ajans, sözleşme, kota, bakiye...).
+      salaryStatus: b.status === 'approved' ? await salaryStatus(req.user.id) : undefined,
     },
   });
 });

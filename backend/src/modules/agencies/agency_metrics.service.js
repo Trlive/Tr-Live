@@ -47,6 +47,10 @@ export async function loadPayConfig(run = query) {
       salaryAutoTransfer: s.salary_auto_transfer === true,
       instantSalaryEnabled: s.instant_salary_enabled === true,
       instantSalaryBps: s.instant_salary_bps ?? 5000,
+      // Ay sonu elmas kuralı (v2.152.22): maaş yalnızca kota kadar elmas bakiyeden düşülerek ödenir; kalan elmas dönem
+      // kapanınca Coin'e çevrilir. Sütun yoksa (eski veritabanı) açık sayılır: sahibinin kararı bu.
+      monthEndDiamondConvert: s.month_end_diamond_convert !== false,
+      autoClosePeriod: s.auto_close_period !== false,
       salaryTransferDayFrom: s.salary_transfer_day_from ?? 1,
       salaryTransferDayTo: s.salary_transfer_day_to ?? 3,
     },
