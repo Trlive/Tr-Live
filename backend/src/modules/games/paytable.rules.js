@@ -162,6 +162,37 @@ export function evaluatePay({ levels, metrics, settings = {}, pref = 0, eventsOk
   };
 }
 
+/**
+ * Maaş tablolarının 1 dolar için istediği EN AZ elmas (en cömert seviye; maaşın yüksek sütunu + ajans primi, çünkü yayıncı
+ * kendi ajansının sahibi olabilir). null: tabloda ödeme yok.
+ */
+export function cheapestDiamondsPerUsd(...tables) {
+  let best = null;
+  for (const levels of tables) {
+    for (const l of levels ?? []) {
+      const s1 = BigInt(l.salary1Cents ?? 0); const s2 = BigInt(l.salary2Cents ?? 0);
+      const pay = (s1 > s2 ? s1 : s2) + BigInt(l.agencyCents ?? 0);
+      if (pay <= 0n) continue;
+      const per = (BigInt(l.diamonds) * 100n) / pay;
+      if (best === null || per < best) best = per;
+    }
+  }
+  return best;
+}
+
+/**
+ * Coin ↔ dolar döngüsü koruması. Normal hediyede 1 Coin = 1 elmas ve sesli odada kendine hediye maaşa sayılır; bu yüzden
+ * 1 dolar ile alınan Coin (kur) maaş tablosunun 1 dolar için istediği elmastan AZ olmalı. Eşit ya da fazlaysa
+ * "Fasulye → Coin → kendine hediye → maaş" turu para kazandırır. Hata metni ya da null döner.
+ */
+export function salaryLoopError({ coinsPerUsd, diamondsPerUsd, label = 'Kur' }) {
+  if (diamondsPerUsd === null || diamondsPerUsd === undefined) return null;
+  const rate = BigInt(coinsPerUsd);
+  if (rate < BigInt(diamondsPerUsd)) return null;
+  return `${label} (1$ = ${rate} Coin) maaş tablosunun en cömert seviyesinden (1$ = ${diamondsPerUsd} elmas) yüksek ya da eşit: `
+    + 'Coin alıp kendine hediye göndererek maaştan kâr edilebilir. Kuru düşürün ya da maaş tablosunu güncelleyin.';
+}
+
 /** Sent → tam dolar (100'ün katı), AŞAĞI yuvarlanır: Fasulye tam sayıdır (7,50$ → 7$). */
 export const wholeDollarCents = (cents) => { const c = BigInt(cents ?? 0); return c > 0n ? c - (c % 100n) : 0n; };
 

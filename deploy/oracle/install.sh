@@ -300,7 +300,7 @@ if [ "$TURN_ACTIVE" = 1 ] && [ "$LK_RESTARTED" = 0 ] && [ -n "$CERT" ]; then
     $COMPOSE restart livekit
     LK_RESTARTED=1
   fi
-  if [ -n "$CRT_MD5" ]; then echo "$CRT_MD5" > "$STATE/turn-cert.md5"; fi
+  if [ -n "$CRT_MD5" ]; then echo "$CRT_MD5" > "$STATE/turn-cert.md5"; echo "$(caddy_vol)${CERT#/caddy-data}" > "$STATE/turn-cert.host"; fi
 fi
 # Güvence: TURN'lü ayarla ses sunucusu açılmadıysa TURN'süz ayara dön (ses/görüntü kesintide kalmasın).
 if [ "$TURN_ACTIVE" = 1 ] && [ "$LK_RESTARTED" = 1 ]; then

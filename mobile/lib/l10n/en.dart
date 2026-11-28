@@ -93,6 +93,7 @@ const kEn = <String, String>{
   'Kullanıcı adınızı girin.': 'Enter your username.',
   'Kullanıcı adı 3-30 karakter olmalı; yalnızca harf, rakam, nokta ve alt çizgi kullanılabilir.': 'Username must be 3-30 characters; only letters, numbers, dots and underscores are allowed.',
   'Şifre en az 8 karakter olmalı.': 'Password must be at least 8 characters.',
+  'Şifrenizi girin.': 'Enter your password.',
   'Telefon numarası geçersiz.': 'Invalid phone number.',
   '{p} ile girişi tarayıcıda tamamlayın.\nOnay verdikten sonra uygulamaya dönün.': 'Complete {p} sign-in in the browser.\nReturn to the app after approving.',
   'Vazgeç': 'Cancel',

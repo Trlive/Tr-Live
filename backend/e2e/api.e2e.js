@@ -2078,6 +2078,9 @@ test('Fasulye: Coin\'e çevirme (kendine) ve başka kullanıcıya Coin gönderme
   status(again, 201);
   assert.equal(again.body.exchange.coins, '40000');
   status(await api('PUT', '/api/admin/app-config', { token: U.d.token, body: { usdCoinsPerUsd: 0 } }), 400, 'kur 0 olamaz');
+  // Para döngüsü koruması: varsayılan tablo 1$ için ~10.638 elmas ister; kur bunu geçemez (Coin → kendine hediye → maaş).
+  status(await api('PUT', '/api/admin/app-config', { token: U.d.token, body: { usdCoinsPerUsd: 20000 } }), 400, 'kur maaş tablosundan cömert olamaz');
+  status(await api('PUT', '/api/admin/app-config', { token: U.d.token, body: { usdDealerCoinsPerUsd: 20000 } }), 400, 'bayi kuru da');
   ok(await api('PUT', '/api/admin/app-config', { token: U.d.token, body: { usdCoinsPerUsd: 4000, usdExchangeMinCents: 100 } }));
 });
 

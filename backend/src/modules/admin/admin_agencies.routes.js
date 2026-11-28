@@ -2,6 +2,7 @@
 // Ortak yardımcılar ve import'lar: admin.shared.js
 import { Router } from 'express';
 import { DEFAULT_PAY_LEVELS, SETTING_COLUMNS, TRANSFER_SELECT, agencyDupError, agencyIdByCode, auditStaff, applyTransfer, cleanPublic, config, configJson, createAgency, ensureAgencyCode, fail, hub, loadConfig, logTransfer, notifyTransferResult, notifyUser, oneOf, positiveInt, query, requireSuperAdmin, savePayLevels, text, transferJson, tx, uuid, validateAgencyConfig, validateGrades, validatePayLevels } from './admin.shared.js';
+import { assertNoSalaryLoop } from '../system/app_config.service.js';
 
 export const router = Router();
 
@@ -177,6 +178,9 @@ router.put('/agency-config', requireSuperAdmin, async (req, res) => {
 router.put('/pay-levels', requireSuperAdmin, async (req, res) => {
   const levels = validatePayLevels(req.body?.levels);
   const kind = req.body?.kind === 'video' || req.query.kind === 'video' ? 'video' : 'audio';
+  // Yeni tablo, kayıtlı Fasulye→Coin kurlarıyla para döngüsü kurmasın (bkz. paytable.rules.js salaryLoopError).
+  const current = await loadConfig();
+  await assertNoSalaryLoop(query, {}, kind === 'video' ? { levels: current.levels, videoLevels: levels } : { levels, videoLevels: current.videoLevels });
   await tx(async (c) => {
     await savePayLevels(c, levels, kind);
     await c.query(`INSERT INTO financial_audit_logs(admin_id, action, reference_type, metadata) VALUES($1,'pay_levels_update','agency_config',$2)`,
