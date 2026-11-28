@@ -11,12 +11,10 @@ test('üretilen SDK geçerli JavaScript', () => {
   assert.doesNotThrow(() => new Function(SDK_JS));
 });
 
-test('para üreten çağrılar yok ve sessizce yok olmuyorlar', () => {
-  // Sessizce kaldırılsalardı eski oyunlar hatasız ama ödülsüz çalışır, sebebi günlerce aranırdı.
-  assert.match(SDK_JS, /bet:gone\('bet'\)/);
-  assert.match(SDK_JS, /settle:gone\('settle'\)/);
-  assert.match(SDK_JS, /play:gone\('play'\)/);
-  assert.match(SDK_JS, /kaldirildi/);
+test('SDK Coin hareketi başlatabilen hiçbir yöntem ya da uç içermiyor', () => {
+  // Eski çarpan/ödül yöntemleri tamamen kaldırıldı: çağıran eski bir oyun "is not a function" hatası alır, sessizce başarısız olmaz.
+  assert.ok(!/\b(bet|settle|play)\s*:/.test(SDK_JS), 'SDK hâlâ Coin yöntemi sunuyor');
+  assert.ok(!/gone\(/.test(SDK_JS), 'SDK içinde kaldırılmış yöntem artığı var');
   // Sunucuya para hareketi isteyen bir yol kalmadı.
   assert.ok(!/\/bet|\/settle|\/play/.test(SDK_JS), 'SDK hâlâ para ucu çağırıyor');
 });

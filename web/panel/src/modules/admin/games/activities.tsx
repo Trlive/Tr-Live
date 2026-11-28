@@ -36,7 +36,7 @@ export default function AdminActivities() {
               <li>Bağlantıda şu yer tutucular kullanılabilir (açılırken doldurulur): <code className="text-[#d7b56d]">{PLACEHOLDERS}</code></li>
               <li><code className="text-[#d7b56d]">{"{token}"}</code>: o kişiye ve yalnızca bu etkinliğe özel 2 saatlik oyun bileti (oturum bileti değildir).</li>
               <li>Coin&apos;li oyun sağlayıcısı: imza anahtarını girin; sağlayıcı <code>/api/activity-provider/&lt;etkinlik-id&gt;/user</code> ve <code>/balance</code> uçlarını kullanır (belge: backend/src/routes/activities.js).</li>
-              <li>Kendi HTML oyunların: her etkinlikte <b>Oyun dosyası (zip)</b> yükle; sunucu yayınlar, bağlantıyı yazar ve oyun sayfasına <code>TRGame</code> SDK&apos;sını ekler (Coin bahis / sonuç tek satır). Coin&apos;li oyun için aşağıdan &quot;Coin bahsi açık&quot; yap.</li>
+              <li>Kendi HTML oyunların: her etkinlikte <b>Oyun dosyası (zip)</b> yükle; sunucu yayınlar, bağlantıyı yazar ve oyun sayfasına <code>TRGame</code> SDK&apos;sını ekler (oyuncu adı ve bakiyesi salt okunur).</li>
               <li>&quot;Hafıza Kartları&quot; uygulamanın kendi oyunudur ve her zaman ilk sıradadır.</li>
             </ul>
           </Card>
@@ -255,9 +255,9 @@ function GameUpload({ item, onDone }: { item: Item; onDone: () => void }) {
           <pre className="overflow-x-auto rounded bg-black/40 p-2 text-[11px] leading-relaxed text-gray-300">{`// SDK sayfaya otomatik eklenir: window.TRGame
 const me = await TRGame.me();   // { uid, name, avatar, balance }  — salt okunur`}</pre>
           <p className="rounded border border-[#5a3c1e] bg-[#2a1d0e] p-2 text-[11px] leading-relaxed text-[#e8c88a]">
-            <b>Coin bahsi bu sayfadan yapılamaz.</b> Eski <code>TRGame.play / bet / settle</code> uçları
-            kaldırıldı: kazancı oyunun kendisi (yani istemci) bildiriyordu, bileti eline geçiren oyuncu
-            her turda azami çarpanı göndererek kasayı boşaltabilirdi.
+            <b>Coin hareketi bu sayfadan yapılamaz.</b> Eski çarpan/ödül uçları kaldırıldı: sonucu oyunun
+            kendisi (yani istemci) bildiriyordu, bileti eline geçiren oyuncu her turda azami çarpanı
+            göndererek kasayı boşaltabilirdi.
             <br />
             Coin ile oynanan oyunun sonucu <b>sunucuda</b> üretilmelidir:
             <b> Sistem → Oyun Paketleri</b> (motor sunucuda çalışır) ya da imzalı sağlayıcı API'si

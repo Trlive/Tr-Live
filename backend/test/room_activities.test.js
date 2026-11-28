@@ -23,7 +23,7 @@ test('hata sayfası metni kaçırır', () => {
   assert.ok(!renderErrorPage('<img onerror=x>', 'n').includes('<img'));
 });
 
-test('ilk mini oyun listede ve ücretsiz (coin/bahis içermez)', () => {
+test('ilk mini oyun listede ve ücretsiz (Coin hareketi içermez)', () => {
   const g = ACTIVITIES.find((a) => a.game);
   assert.equal(g.id, 'memory');
   const html = renderActivitiesPage({ roomId: ROOM, appVersion: '', nonce: 'n' });

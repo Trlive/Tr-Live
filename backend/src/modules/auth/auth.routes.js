@@ -38,8 +38,9 @@ router.post('/register', ipLimit('register', 5, 3600e3), async (req, res) => {
     throw fail('Kullanıcı adı 3-30 karakter olmalı; yalnızca harf, rakam, nokta ve alt çizgi kullanılabilir.');
   }
   const password = String(req.body?.password ?? '');
-  passwordRules(password);
-  const displayName = cleanPublic(text(req.body?.displayName || username, 'Ad', { min: 1, max: 60 }), 'Ad');cleanPublic(username, 'Kullanıcı adı');
+  passwordRules(password, { username });
+  const displayName = cleanPublic(text(req.body?.displayName || username, 'Ad', { min: 1, max: 60 }), 'Ad');
+  cleanPublic(username, 'Kullanıcı adı'); // yasaklı sözcük denetimi: sonuç kullanılmaz, uygunsuzsa hata fırlatır
   const passwordHash = await hashPassword(password);
   try {
     const publicId = await newPublicId();

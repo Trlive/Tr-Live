@@ -90,8 +90,8 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       err = tx('Cinsiyetini seç.');
     } else if (_birth == null) {
       err = tx('Doğum gününü seç.');
-    } else if (!_hasPassword && pw.isNotEmpty && pw.length < 6) {
-      err = tx('Şifre en az 6 karakter olmalı (ya da boş bırak).');
+    } else if (!_hasPassword && pw.isNotEmpty && pw.length < 8) {
+      err = tx('Şifre en az 8 karakter olmalı (ya da boş bırak).');
     }
     if (err != null) {
       toast(context, err, error: true);
@@ -278,7 +278,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                   ),
                   Padding(
                     padding: EdgeInsets.fromLTRB(6, 8, 6, 0),
-                    child: Text(tx('*Şifre en az 6 karakter olmalı. İstersen boş bırakabilirsin.'), style: TextStyle(color: Pal.gold, fontSize: 13)),
+                    child: Text(tx('*Şifre en az 8 karakter olmalı. İstersen boş bırakabilirsin.'), style: TextStyle(color: Pal.gold, fontSize: 13)),
                   ),
                 ],
                 _label(tx('Ülke')),

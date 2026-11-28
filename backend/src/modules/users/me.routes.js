@@ -1,3 +1,4 @@
+import { salaryGiftSql } from '../agencies/salary_rules.js';
 import { Router } from 'express';
 import { hiddenTxTypes } from '../wallet/coin_budgets.service.js';
 import crypto from 'node:crypto';
@@ -425,7 +426,7 @@ async function earningsBlock(userId, from, to) {
   const gifts = await query(
     `SELECT COALESCE(r.room_type, 'audio') AS t, COALESCE(SUM(COALESCE(g.diamond_amount, g.coin_amount)), 0)::text AS d
      FROM gift_transactions g LEFT JOIN rooms r ON r.id = g.room_id
-     WHERE g.receiver_id = $1 AND g.sender_id <> g.receiver_id
+     WHERE g.receiver_id = $1 AND ${salaryGiftSql('r')}
        AND g.created_at >= ($2::timestamp AT TIME ZONE '${TZ}') AND g.created_at < ($3::timestamp AT TIME ZONE '${TZ}')
      GROUP BY 1`,
     [userId, from, to],
@@ -464,7 +465,7 @@ router.get('/earnings/history', async (req, res) => {
     `SELECT s.started_at, s.ended_at,
             EXTRACT(EPOCH FROM (COALESCE(s.ended_at, NOW()) - s.started_at))::bigint AS secs,
             (SELECT COALESCE(SUM(COALESCE(g.diamond_amount, g.coin_amount)), 0)::text FROM gift_transactions g
-              WHERE g.receiver_id = s.user_id AND g.sender_id <> g.receiver_id AND g.room_id = s.room_id
+              WHERE g.receiver_id = s.user_id AND ${salaryGiftSql('rm')} AND g.room_id = s.room_id
                 AND g.created_at >= s.started_at AND g.created_at < COALESCE(s.ended_at, NOW())) AS diamonds
      FROM mic_sessions s JOIN rooms rm ON rm.id = s.room_id
      WHERE s.user_id = $1 AND (CASE WHEN rm.room_type = 'video' THEN 'video' ELSE 'audio' END) = $2
@@ -480,7 +481,7 @@ router.get('/earnings/history', async (req, res) => {
   )).rows[0];
   const dia = (await query(
     `SELECT COALESCE(SUM(COALESCE(g.diamond_amount, g.coin_amount)), 0)::text AS d FROM gift_transactions g LEFT JOIN rooms rm ON rm.id = g.room_id
-     WHERE g.receiver_id = $1 AND g.sender_id <> g.receiver_id AND (CASE WHEN rm.room_type = 'video' THEN 'video' ELSE 'audio' END) = $2`,
+     WHERE g.receiver_id = $1 AND ${salaryGiftSql('rm')} AND (CASE WHEN rm.room_type = 'video' THEN 'video' ELSE 'audio' END) = $2`,
     [req.user.id, type],
   )).rows[0].d;
   res.json({

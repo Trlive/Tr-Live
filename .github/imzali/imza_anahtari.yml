@@ -1,0 +1,81 @@
+# Google Play yükleme anahtarını BİR KEZ oluşturur.
+# Önce: Settings → Secrets and variables → Actions → New repository secret
+#   Ad: KEYSTORE_PASSWORD   Değer: en az 12 karakterli güçlü bir şifre (kimseyle paylaşmayın).
+# Sonra: Actions → "İmza anahtarı oluştur" → Run workflow.
+# Anahtar şifrelenmiş olarak .github/signing/upload.jks.enc dosyasına kaydedilir; şifre olmadan işe yaramaz.
+# Anahtar zaten varsa çalışmaz (anahtar değişirse Google Play yeni sürümleri kabul etmez).
+name: İmza anahtarı oluştur
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: imza-anahtari
+  cancel-in-progress: false
+
+jobs:
+  anahtar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Anahtar oluştur ve şifreleyip kaydet
+        shell: bash
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${KEYSTORE_PASSWORD:-}" ]; then
+            echo "::error::Önce KEYSTORE_PASSWORD gizli değerini ekleyin (Settings → Secrets and variables → Actions)."
+            exit 1
+          fi
+          if [ "${#KEYSTORE_PASSWORD}" -lt 12 ]; then
+            echo "::error::Şifre en az 12 karakter olmalı."
+            exit 1
+          fi
+          ENC=.github/signing/upload.jks.enc
+          if [ -f "$ENC" ]; then
+            echo "::error::Anahtar zaten var ($ENC). Yeni anahtar oluşturulmadı; mevcut anahtar kullanılmaya devam eder."
+            exit 1
+          fi
+          mkdir -p .github/signing
+          T=$(mktemp -d)
+          keytool -genkeypair -v -keystore "$T/upload-keystore.jks" -storetype PKCS12 \
+            -keyalg RSA -keysize 2048 -validity 10000 -alias upload \
+            -dname "CN=TR Live, O=TR Live LLC, C=US" \
+            -storepass:env KEYSTORE_PASSWORD -keypass:env KEYSTORE_PASSWORD
+          openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -in "$T/upload-keystore.jks" -out "$ENC" -pass env:KEYSTORE_PASSWORD
+          # Doğrulama: şifre çözülünce aynı dosya çıkmalı.
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in "$ENC" -out "$T/check.jks" -pass env:KEYSTORE_PASSWORD
+          cmp "$T/upload-keystore.jks" "$T/check.jks"
+          echo "Sertifika parmak izi (Play Console'daki 'Yükleme anahtarı sertifikası' ile karşılaştırabilirsiniz):"
+          keytool -list -v -keystore "$T/upload-keystore.jks" -storepass:env KEYSTORE_PASSWORD | grep -E "SHA1|SHA256" || true
+          rm -rf "$T"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$ENC"
+          git commit -m "İmza anahtarı (şifreli) eklendi"
+          for i in 1 2 3; do
+            if git push origin HEAD:${{ github.ref_name }}; then exit 0; fi
+            git pull --rebase origin ${{ github.ref_name }}
+          done
+          exit 1
+
+      - name: Yedek
+        shell: bash
+        run: |
+          {
+            echo "### Yükleme anahtarı oluşturuldu"
+            echo "- Şifreli dosya: \`.github/signing/upload.jks.enc\` (depoda)."
+            echo "- **Şifreyi** (KEYSTORE_PASSWORD) güvenli bir yere de yazın: GitHub gizli değerleri sonradan görüntülenemez."
+            echo "- Şifre kaybolursa bu anahtar kullanılamaz; Google Play Console'dan 'yükleme anahtarını sıfırla' istenir."
+          } >> "$GITHUB_STEP_SUMMARY"

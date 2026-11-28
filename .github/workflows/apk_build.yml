@@ -390,17 +390,13 @@ jobs:
           fi
           gh release upload son-apk TR-Live.apk --clobber
 
-      - name: APK'yı çıktı olarak paylaş
-        # Depolama kotası dolarsa derleme kırmızı olmasın (APK zaten Releases'te).
-        continue-on-error: true
-        uses: actions/upload-artifact@v4
-        with:
-          name: tr-live-apk
-          path: ${{ env.APP_DIR }}/build/app/outputs/flutter-apk/*.apk
-          if-no-files-found: error
-          retention-days: 3
-          # APK zaten sıkıştırılmış: zip içinde yeniden sıkıştırılmaz.
-          compression-level: 0
+      # APK'yı ayrıca "Actions çıktısı" olarak yüklemiyoruz.
+      #
+      # Actions depolama kotası doldu ("Artifact storage quota has been hit") ve her
+      # derlemede kırmızı bir satır bırakıyordu. 72 MB'lık APK'yı iki yere koymanın
+      # bir faydası yok: üstteki adım zaten "Releases → son-apk" etiketine yüklüyor,
+      # o indirme bağlantısı kalıcı ve kotaya SAYILMIYOR. Günlükler (aşağıda) yalnızca
+      # derleme kırılırsa yükleniyor, onlar da küçük.
 
       - name: Hata günlüklerini paylaş
         if: failure()

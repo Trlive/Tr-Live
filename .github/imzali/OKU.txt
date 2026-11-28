@@ -1,0 +1,2 @@
+İmzalı (Google Play) sürüm için hazır iş akışları. Kullanmak istediğinde bu iki dosyayı .github/workflows klasörüne taşı
+(apk_build.yml mevcut olanın yerine geçer). Ayrıntı: CHANGES.md v2.79.0.

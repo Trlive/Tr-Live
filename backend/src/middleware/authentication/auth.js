@@ -5,14 +5,13 @@ import { jwtSecret } from '../../config.js';
 import { fail } from '../../shared/errors/http.js';
 import { banExpired, banMessage } from '../../modules/agencies/staff.rules.js';
 import { touchSession } from '../../modules/users/sessions.service.js';
+import { passwordRules } from './password_policy.js';
 
 export const hashPassword = (p) => bcrypt.hash(p, 12);
 export const checkPassword = (p, h) => bcrypt.compare(p, h);
 
-export function passwordRules(password) {
-  if (typeof password !== 'string' || password.length < 6) throw fail('Şifre en az 6 karakter olmalı.');
-  if (Buffer.byteLength(password, 'utf8') > 72) throw fail('Şifre en fazla 72 bayt olabilir.');
-}
+// Şifre kuralları password_policy.js'te (bağımlılıksız, birim testli); eski içe aktarmalar bozulmasın diye buradan da dışa aktarılır.
+export { passwordRules };
 
 // Eski uygulama sürümleri (cihaz bilgisi göndermeyen) için 30 günlük tek token. Yeni sürümler cihaz oturumu
 // (services/sessions.js: 1 saatlik erişim + yenileme token'ı) kullanır.

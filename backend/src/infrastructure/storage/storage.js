@@ -76,6 +76,13 @@ export async function headObject(cfg, key) {
   return { size: Number(res.headers.get('content-length') || 0) };
 }
 
+/** Dosyanın baytlarını depodan okur; depoda yoksa null. (Veritabanı kopyası silinmiş dosyaların içeriden okunması için.) */
+export async function getObject(cfg, key) {
+  const res = await send(cfg, 'GET', key, '');
+  if (res.status === 404) return null;
+  return Buffer.from(await res.arrayBuffer());
+}
+
 export async function deleteObject(cfg, key) {
   await send(cfg, 'DELETE', key, '');
 }

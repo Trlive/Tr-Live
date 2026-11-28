@@ -2,7 +2,7 @@
 
 Sesli/görüntülü canlı oda uygulaması: **Flutter** (mobil) + **Node.js/Express** + **PostgreSQL** + **LiveKit** + **WebSocket**.
 
-> **Durum: MVP / kapalı beta adayı.** Mantık katmanı 29 birim testiyle doğrulandı. SQL sorguları ve Flutter derlemesi
+> **Durum: MVP / kapalı beta adayı.** Mantık katmanı 400'den fazla birim testiyle (`backend/test`) doğrulandı. SQL sorguları ve Flutter derlemesi
 > geliştirme ortamında gerçek PostgreSQL/Flutter ile çalıştırılamadı; bu yüzden depoda **GitHub Actions** ile gerçek
 > PostgreSQL'e karşı uçtan uca test (`backend/e2e`) ve `flutter analyze` hazırdır. **İlk işiniz CI'ı çalıştırıp çıkan
 > hataları düzeltmek olmalıdır.** Rakiplerle karşılaştırma ve eksikler: [`docs/COMPARISON.md`](docs/COMPARISON.md).
@@ -19,7 +19,7 @@ koddan otomatik üretilen veritabanı / API / WebSocket belgeleri.
 - **WIP:** 10 kademe + SWIP (Yoho VIP ayrıcalıkları; her kademede isim efekti, sohbet balonu, çerçeve, giriş aracı; SWIP'te hayalet mod).
 - **Şanslı hediye:** x2–x500 kazanma şansı; geri dönüş oranı ve alıcı payı panelden ayarlanır/kapatılır.
 - **Ajans/yayıncı (Yoho tarzı):** 8 haneli ajans kodu, kodla başvuru, davet, yayın saati + Diamond hedefli **maaş kademeleri**, hedef tutmazsa kesinti, kademeli ajans komisyonu, resmi etkinlik şartı, dönem kapatma ve hesap özetleri, KYC şartı, ödendi işaretleme (ödeme platform dışında). Oranlar örnektir, panelden ayarlanır.
-- **Oda ekleri:** gizli oda (davet kodu), 8 tema (+ WIP 6 özel görsel), koltuk başına hediye sayacı, sohbet temizleme, **PK**, oda içi **Ludo** (ücretsiz, bahissiz).
+- **Oda ekleri:** gizli oda (davet kodu), 8 tema (+ WIP 6 özel görsel), koltuk başına hediye sayacı, sohbet temizleme, **PK**, oda içi **Ludo** (ücretsiz).
 - **Aile:** rol, seviye/kapasite, puan, sahiplik devri.
 - **Bayilik, yönetim paneli (canlı sunucu durumu, hata kayıtları, işlem kaydı, uzaktan ayarlar), şikâyet yönetimi, güvenlik duvarı yönetimi.**
 - **Oturum güvenliği:** cihaz oturumları (yenilenen token), Oturumlarım ekranı, uzaktan çıkış, zorunlu güncelleme.

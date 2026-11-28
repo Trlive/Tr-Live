@@ -9,21 +9,16 @@ import { BRIDGE_JS } from './bridge_client.js';
 ///
 /// ## Değişmeyen sınır: para üretimi burada yok
 ///
-/// `bet`, `settle` ve `play` v2.129'da kaldırıldı ve geri gelmeyecek. Oyun sayfası — yani
-/// kullanıcının telefonunda çalışan kod — hiçbir koşulda kazancı kendisi belirleyemez.
-/// Sonucu sunucu üretir (oyun paketinin sunucu tarafı ya da imzalı sağlayıcı API'si).
-/// Çağrılar kaldırılmadı, **açıklayıcı hata fırlatıyor**: sessizce yok olsalardı eski oyunlar
-/// hatasız ama ödülsüz çalışır, sebebi günlerce aranırdı.
+/// Oyun sayfası — yani kullanıcının telefonunda çalışan kod — hiçbir koşulda Coin hareketi başlatamaz ve
+/// sonucu kendisi belirleyemez. Coin hareketi yalnızca sunucuda olur (oyun paketinin sunucu tarafı ya da
+/// imzalı sağlayıcı API'si). Eski çarpan/ödül çağrıları kaldırıldı ve geri gelmeyecek; SDK'da bu adlarda
+/// yöntem yoktur, çağıran eski bir oyun "is not a function" hatası alır (sessizce başarısız olmaz).
 ///
 /// Ayrıntı: docs/ARCHITECTURE_AUDIT.md F-01.
 export const SDK_JS = `(function(){
 ${SESSION_JS}
 ${BRIDGE_JS}
 ${EVENTS_JS}
-
-function gone(n){return function(){return Promise.reject(new Error(
-  'TRGame.'+n+' kaldirildi: Coin bahsi artik oyun sayfasindan yapilamaz. Sonucu sunucu uretmelidir '+
-  '(oyun paketi ya da imzali saglayici API). Ayrinti: docs/ARCHITECTURE_AUDIT.md F-01.'));};}
 
 var TR={
   // --- Kimlik ve bağlam ---
@@ -70,10 +65,7 @@ var TR={
 
   // --- Uygulama köprüsü ---
   /** Oyunu kapatır (uygulamadaki pencere kapanır). */
-  close:function(){return _bridge('close');},
-
-  // --- Kaldırılanlar (bkz. F-01) ---
-  bet:gone('bet'),settle:gone('settle'),play:gone('play')
+  close:function(){return _bridge('close');}
 };
 window.TRGame=TR;
 })();`;

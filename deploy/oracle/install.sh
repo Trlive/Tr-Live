@@ -132,6 +132,8 @@ NODE_ENV='production'
 PORT='3000'
 DATABASE_URL='postgresql://trlive:${POSTGRES_PASSWORD}@postgres:5432/trlive'
 DATABASE_SSL='false'
+# Tek sunucuda PostgreSQL max_connections=100: 5'lik varsayılan havuz canlı yayın yükünde sorguları sıraya sokar. extra.env'deki değer bunu ezer.
+DATABASE_POOL_MAX='20'
 JWT_SECRET='${JWT_SECRET}'
 LIVEKIT_URL='wss://lk.${DOMAIN}'
 LIVEKIT_API_URL='http://host.docker.internal:7880'
@@ -187,6 +189,59 @@ $LKHOSTS {
 }
 EOF
 
+# ---------- Uzak yedek (isteğe bağlı) ----------
+# Panelde "Uzak yedek" girildiyse gece yedeğinin uzak kopyası için rclone gerekir (backup.sh). Girilmediyse hiçbir şey yapılmaz.
+if grep -qE "^BACKUP_REMOTE=.+" "$ENVD/extra.env" 2>/dev/null && ! command -v rclone >/dev/null 2>&1; then
+  log "Uzak yedek için rclone kuruluyor"
+  apt-get install -y rclone >/dev/null 2>&1 || log "UYARI: rclone kurulamadı; uzak yedek çalışmayacak (gece yedeği günlüğünde görünür)."
+fi
+
+# ---------- TURN (varsayılan AÇIK; kapatmak için extra.env'e TURN_ENABLED=0) ----------
+# Bazı Wi-Fi ve operatör ağları ses/görüntünün kullandığı UDP kapısını (7882) keser. TURN, medyayı TLS ile sarılı ek bir
+# yoldan (5349/tcp; yedek olarak 3478/udp) geçirir. Panelde ayar YOKTUR; sertifika alınabiliyorsa kendiliğinden devreye girer.
+# Ad: turn.<ip-tireli>.sslip.io. sslip.io joker adı sunucunun IP'sine kendiliğinden çözüldüğü için, kendi alan adın olsun
+# olmasın ek DNS kaydı GEREKMEZ. Sertifikayı Caddy alır; LiveKit onu salt okunur bağlanmış Caddy veri klasöründen okur.
+# Güvence: sertifika yoksa TURN yazılmaz; TURN'lü ayarla ses sunucusu açılmazsa TURN'süz ayara dönülür ve (sonsuz yeniden
+# başlatma olmasın diye) state/turn-failed dosyası silinene kadar bir daha denenmez.
+# <turn-helpers>
+turn_requested() {   # $1 = extra.env yolu; TURN açık mı? Varsayılan EVET; yalnızca TURN_ENABLED=0 yazılıysa hayır.
+  ! grep -qE "^TURN_ENABLED=['\"]?0['\"]?[[:space:]]*\$" "$1" 2>/dev/null
+}
+turn_cert_path() {   # $1 = Caddy veri klasörünün ana makinedeki yolu, $2 = ad → LiveKit konteynerindeki .crt yolu (yoksa boş)
+  local vol=$1 host=$2 crt
+  [ -n "$vol" ] && [ -d "$vol/caddy/certificates" ] || return 0
+  crt=$(find "$vol/caddy/certificates" -type f -path "*/$host/$host.crt" 2>/dev/null | head -n 1 || true)
+  if [ -n "$crt" ] && [ -s "$crt" ] && [ -s "${crt%.crt}.key" ]; then echo "/caddy-data${crt#"$vol"}"; fi
+  return 0
+}
+turn_block() {       # $1 = ad, $2 = konteynerdeki .crt yolu
+  printf 'turn:\n  enabled: true\n  domain: %s\n  tls_port: 5349\n  udp_port: 3478\n  cert_file: %s\n  key_file: %s\n' "$1" "$2" "${2%.crt}.key"
+}
+# </turn-helpers>
+caddy_vol() { docker volume inspect -f '{{.Mountpoint}}' trlive_caddy_data 2>/dev/null || true; }
+
+TURN_HOST="turn.$SSLIP"
+TURN_ON=0; TURN_ACTIVE=0; LK_RESTARTED=0; CERT=""
+if turn_requested "$ENVD/extra.env"; then
+  if [ -e "$STATE/turn-failed" ]; then
+    log "TURN daha önce açılamadı, kapalı tutuluyor (yeniden denemek için sunucuda $STATE/turn-failed dosyasını silin; KURULUM.md 6)."
+  else
+    TURN_ON=1
+  fi
+else
+  rm -f "$STATE/turn-failed" "$STATE/turn-cert.md5"
+fi
+cp "$ENVD/livekit.yaml" "$ENVD/livekit.yaml.noturn"   # geri dönüş kopyası: TURN'süz ayar
+if [ "$TURN_ON" = 1 ]; then
+  printf '%s {\n  respond "TURN" 200\n}\n' "$TURN_HOST" >> "$ENVD/Caddyfile"   # Caddy bu ad için sertifika alsın
+  CERT=$(turn_cert_path "$(caddy_vol)" "$TURN_HOST")
+  if [ -n "$CERT" ]; then
+    turn_block "$TURN_HOST" "$CERT" >> "$ENVD/livekit.yaml"; TURN_ACTIVE=1
+  else
+    log "TURN: sertifika henüz yok (Caddy $TURN_HOST için alıyor); kurulum sonunda beklenecek."
+  fi
+fi
+
 # ---------- 6) Başlat ----------
 FREE_KB=$(df -Pk / | awk 'NR==2{print $4}')
 log "Boş disk: $((FREE_KB / 1024)) MB"
@@ -211,6 +266,54 @@ fi
 if [ -n "$LK_OLD" ] && [ "$(md5sum "$ENVD/livekit.yaml" | cut -d' ' -f1)" != "$LK_OLD" ]; then
   log "LiveKit ayarı değişti, ses sunucusu yeniden başlatılıyor"
   $COMPOSE restart livekit
+  LK_RESTARTED=1
+fi
+
+# TURN: sertifika, Caddy yeni ada göre yeniden okuyunca gelir. İlk açılışta en çok 90 sn beklenir, gelirse etkinleştirilir.
+if [ "$TURN_ON" = 1 ] && [ "$TURN_ACTIVE" = 0 ]; then
+  if [ -n "$(find "$STATE/turn-cert-timeout" -mmin -360 2>/dev/null)" ]; then
+    # Sertifika yakın zamanda alınamadıysa her güncellemede 90 sn bekleyip kurulumu yavaşlatma.
+    log "TURN: sertifika son 6 saatte alınamamıştı; bu turda beklenmiyor."
+  else
+    for _ in $(seq 1 18); do
+      CERT=$(turn_cert_path "$(caddy_vol)" "$TURN_HOST")
+      if [ -n "$CERT" ]; then break; fi
+      sleep 5
+    done
+    if [ -n "$CERT" ]; then
+      rm -f "$STATE/turn-cert-timeout"
+      turn_block "$TURN_HOST" "$CERT" >> "$ENVD/livekit.yaml"; TURN_ACTIVE=1
+      log "TURN etkinleştiriliyor (ses sunucusu yeniden başlatılıyor)"
+      $COMPOSE restart livekit
+      LK_RESTARTED=1
+    else
+      touch "$STATE/turn-cert-timeout"
+      log "TURN sertifikası 90 sn içinde alınamadı; TURN kapalı kaldı (80/443 portlarını kontrol edin; 6 saat sonra yeniden denenir)."
+    fi
+  fi
+fi
+# Sertifika yenilenince (Caddy yaklaşık 60 günde bir) LiveKit eskisini bellekte tutar: değiştiyse yeniden başlat.
+if [ "$TURN_ACTIVE" = 1 ] && [ "$LK_RESTARTED" = 0 ] && [ -n "$CERT" ]; then
+  CRT_MD5=$(md5sum "$(caddy_vol)${CERT#/caddy-data}" 2>/dev/null | cut -d' ' -f1 || true)
+  if [ -n "$CRT_MD5" ] && [ -f "$STATE/turn-cert.md5" ] && [ "$(cat "$STATE/turn-cert.md5")" != "$CRT_MD5" ]; then
+    log "TURN sertifikası yenilendi; ses sunucusu yeniden başlatılıyor"
+    $COMPOSE restart livekit
+    LK_RESTARTED=1
+  fi
+  if [ -n "$CRT_MD5" ]; then echo "$CRT_MD5" > "$STATE/turn-cert.md5"; fi
+fi
+# Güvence: TURN'lü ayarla ses sunucusu açılmadıysa TURN'süz ayara dön (ses/görüntü kesintide kalmasın).
+if [ "$TURN_ACTIVE" = 1 ] && [ "$LK_RESTARTED" = 1 ]; then
+  sleep 10
+  LKID=$($COMPOSE ps -q livekit 2>/dev/null | head -n 1 || true)
+  LKSTATE=$(docker inspect -f '{{.State.Running}} {{.State.Restarting}}' "$LKID" 2>/dev/null || echo "false true")
+  if [ "$LKSTATE" != "true false" ]; then
+    log "UYARI: TURN'lü ayarla ses sunucusu açılmadı; TURN'süz ayara dönülüyor. TURN kapalı kaldı."
+    cp "$ENVD/livekit.yaml.noturn" "$ENVD/livekit.yaml"
+    $COMPOSE restart livekit
+    touch "$STATE/turn-failed"
+    TURN_ACTIVE=0
+  fi
 fi
 docker image prune -f >/dev/null 2>&1 || true
 

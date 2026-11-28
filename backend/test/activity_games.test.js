@@ -53,14 +53,14 @@ test('SDK sayfaya bir kez eklenir', () => {
   assert.equal(injectSdk(once), once);
 });
 
-// F-01 (v2.131.0): Coin bahsi oyun sayfasından kaldırıldı. Kazancı istemci bildiriyordu.
+// F-01 (v2.131.0): İstemci çarpanıyla çalışan Coin yolu oyun sayfasından kaldırıldı. Sonucu istemci bildiriyordu.
 test('SDK ve rotalarda istemci-çarpanlı Coin yolu kalmadı', async () => {
   const { SDK_JS } = await import('../src/modules/games/activity_games.service.js');
 
-  // SDK: bet/settle/play çağrılırsa sebebi açıklayan hata döner (sessizce başarısız olmaz).
+  // SDK: Coin hareketi başlatan yöntem ya da uç yok (eski çağrılar "is not a function" hatası verir).
   assert.ok(!/call\('\/settle'/.test(SDK_JS), 'SDK hâlâ /settle çağırıyor');
   assert.ok(!/call\('\/bet'/.test(SDK_JS), 'SDK hâlâ /bet çağırıyor');
-  assert.match(SDK_JS, /TRGame\.'\+n\+' kaldirildi/, 'kaldırılan çağrılar açıklayıcı hata vermiyor');
+  assert.ok(!/\b(bet|settle|play)\s*:/.test(SDK_JS), 'SDK hâlâ Coin yöntemi sunuyor');
   assert.match(SDK_JS, /call\('\/me'\)/, 'salt okunur /me ucu SDK’dan kalkmış');
 
   // Rota kaydı: playRouter'da yalnızca /me kaldı (kaynak üzerinden; Express sürümünden bağımsız).

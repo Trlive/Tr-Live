@@ -127,6 +127,8 @@ router.post('/:id/launch', requireAuth, userLimit('activity_launch', 60, 60e3), 
 
 // ---------------- Oyun sağlayıcısı (sunucu → sunucu) ----------------
 async function providerContext(req) {
+  // Yönetici "Etkinlikler"i kapattıysa sağlayıcı API'si de (Coin hareketi dahil) durur; eskiden yalnızca sayfa gizleniyordu.
+  if ((await getConfig()).roomActivitiesEnabled === false) return { err: [1005, 'Etkinlikler şu an kapalı.'] };
   const id = String(req.params.id ?? '');
   if (!/^[0-9a-f-]{36}$/i.test(id)) return { err: [1005, 'Etkinlik geçersiz.'] };
   const item = (await query(`SELECT id, app_secret FROM activity_items WHERE id = $1 AND enabled`, [id])).rows[0];
@@ -177,7 +179,8 @@ providerRouter.post('/:id/balance', ipLimit('activity_provider', 6000, 60e3), as
     );
     await c.query(
       `INSERT INTO wallet_transactions(user_id, transaction_type, coin_amount, reference_id, description) VALUES($1,$2,$3,$4,$5)`,
-      [u.id, amount > 0n ? 'activity_win' : 'activity_spend', amount.toString(), `${ctx.id}:${orderId}`, reason || 'Etkinlik'],
+      [u.id, amount > 0n ? 'activity_win' : 'activity_spend', amount.toString(), `${ctx.id}:${orderId}`,
+       `${amount > 0n ? 'Etkinlik kazancı' : 'Etkinlik kaybı'}${reason ? `: ${reason}` : ''}`.slice(0, 200)],
     );
     await c.query(
       `INSERT INTO financial_audit_logs(user_id, action, reference_type, reference_id, amount_coins, balance_before, balance_after, metadata)
@@ -194,9 +197,9 @@ providerRouter.post('/:id/balance', ipLimit('activity_provider', 6000, 60e3), as
 // Barındırılan HTML oyun sayfası, kendi `{token}` bileti ile oyuncunun adını ve bakiyesini okur:
 //   POST /api/activity-play/:id/me  { token }  → { uid, name, avatar, balance }
 //
-// Coin bahsi BU YOLDAN YAPILMAZ. v2.131.0'da `/bet` ve `/settle` uçları kaldırıldı: kazancı oyunun
+// Coin hareketi BU YOLDAN YAPILMAZ. v2.131.0'da istemci çarpanıyla çalışan tur uçları kaldırıldı: sonucu oyunun
 // (yani istemcinin) bildirdiği bir çarpan belirliyordu ve bileti eline geçiren oyuncu her turda azami
-// çarpanı göndererek kasayı boşaltabilirdi. Coin ile oynanan oyunun sonucu sunucuda üretilmelidir:
+// çarpanı göndererek kasayı boşaltabilirdi. Coin hareketi olan bir oyunun sonucu sunucuda üretilmelidir:
 //   • Oyun paketi (Sistem → Oyun Paketleri): motor sunucuda çalışır, cüzdana paket API'si ile erişir.
 //   • İmzalı sağlayıcı API'si (/api/activity-provider): oyun kendi sunucusunda çalışır, istekleri
 //     `app_secret` ile HMAC imzalar.

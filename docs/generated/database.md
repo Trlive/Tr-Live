@@ -153,6 +153,9 @@ Oluşturan: `006_room_features_pk_games_agency.sql`
 | video_daily_cap_minutes | `INT NOT NULL DEFAULT 0` | 076 |
 | video_min_session_minutes | `INT NOT NULL DEFAULT 0` | 076 |
 | video_shortfall_cut_bps | `INT NOT NULL DEFAULT 0` | 076 |
+| audio_shortfall_cut_bps | `INT NOT NULL DEFAULT 4000 CHECK (audio_shortfall_cut_bps BETWEEN 0 AND 10000)` | 112 |
+| instant_salary_enabled | `BOOLEAN NOT NULL DEFAULT FALSE` | 113 |
+| instant_salary_bps | `INT NOT NULL DEFAULT 5000 CHECK (instant_salary_bps BETWEEN 0 AND 10000)` | 113 |
 
 ## agency_statements
 
@@ -950,6 +953,9 @@ Oluşturan: `006_room_features_pk_games_agency.sql`
 | valid_days | `INT NOT NULL DEFAULT 0` | 047 |
 | game_seconds | `BIGINT NOT NULL DEFAULT 0` | 047 |
 | balance_diamonds | `BIGINT NOT NULL DEFAULT 0` | 047 |
+| advance_cents | `BIGINT NOT NULL DEFAULT 0` | 113 |
+| locked_cents | `BIGINT NOT NULL DEFAULT 0 CHECK (locked_cents >= 0)` | 114 |
+| diamonds_consumed | `BIGINT NOT NULL DEFAULT 0 CHECK (diamonds_consumed >= 0)` | 115 |
 | IF | `NOT EXISTS level1 INT` | 047 |
 | pay_method | `SMALLINT` | 047 |
 | consumed_diamonds | `BIGINT NOT NULL DEFAULT 0` | 047 |

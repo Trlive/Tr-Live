@@ -536,8 +536,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   }
 
   Future<void> _save() async {
-    if (_pass.text.length < 6) {
-      toast(context, tx('Şifre en az 6 karakter olmalı.'), error: true);
+    if (_pass.text.length < 8) {
+      toast(context, tx('Şifre en az 8 karakter olmalı.'), error: true);
       return;
     }
     if (_pass.text != _pass2.text) {
@@ -583,7 +583,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   List<Widget> _passwordFields() => [
         const SizedBox(height: 14),
-        TextField(controller: _pass, obscureText: true, style: const TextStyle(color: Pal.text), cursorColor: Pal.cyan, decoration: _input(tx('Yeni şifre (en az 6 karakter)'), prefix: const Icon(Icons.lock_outline, color: Pal.amber))),
+        TextField(controller: _pass, obscureText: true, style: const TextStyle(color: Pal.text), cursorColor: Pal.cyan, decoration: _input(tx('Yeni şifre (en az 8 karakter)'), prefix: const Icon(Icons.lock_outline, color: Pal.amber))),
         const SizedBox(height: 12),
         TextField(controller: _pass2, obscureText: true, style: const TextStyle(color: Pal.text), cursorColor: Pal.cyan, decoration: _input(tx('Yeni şifre (tekrar)'), prefix: const Icon(Icons.lock_outline, color: Pal.amber))),
         const SizedBox(height: 16),

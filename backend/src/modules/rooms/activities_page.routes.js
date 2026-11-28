@@ -3,7 +3,7 @@
 
 // Etkinlik kartları. Yeni etkinlik eklemek için buraya satır ekleyin (soon: true → "Yakında" görünür).
 export const ACTIVITIES = [
-  { id: 'memory', icon: '🃏', title: 'Hafıza Kartları', desc: 'Eşleşen kartları bul. Ücretsiz, bahissiz.', game: true },
+  { id: 'memory', icon: '🃏', title: 'Hafıza Kartları', desc: 'Eşleşen kartları bul. Ücretsiz.', game: true },
   { id: 'daily', icon: '🎁', title: 'Günlük Ödül', desc: 'Her gün giriş yap, ödülünü al.', soon: true },
   { id: 'wheel', icon: '🎡', title: 'Şans Çarkı', desc: 'Çarkı çevir, sürpriz ödüller kazan.', soon: true },
   { id: 'rank', icon: '🏆', title: 'Haftalık Sıralama', desc: 'Odanın en cömert destekçileri.', soon: true },
@@ -93,7 +93,7 @@ em{font-style:normal;font-size:11px;color:#1c1405;background:#f2b92a;border-radi
   }
   // Etkinlikler açıldığında coin harcayan bir işlem sonrası uygulamaya haber ver: toApp('refreshBalance')
   window.TRLiveRefresh = function () { toApp('refreshBalance'); loadBalance(); };
-  // Hafıza Kartları: tamamen istemcide, coin/bahis yok. Yeni oyun eklerken aynı biçimde bir bölüm ve data-game kartı ekleyin.
+  // Hafıza Kartları: tamamen istemcide, Coin hareketi yok. Yeni oyun eklerken aynı biçimde bir bölüm ve data-game kartı ekleyin.
   var EMOJI = ['🎵', '🎤', '🎧', '🎹', '🥁', '🎸', '🎺', '🎻'];
   var open = [], lock = false, moves = 0, found = 0;
   function startMemory() {

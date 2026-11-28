@@ -1,6 +1,8 @@
 // Ajans sistemi v2: dönem ölçümleri (toplu sorgular). Gün sınırları Türkiye saatine göredir (UTC+3).
+import { salaryGiftSql } from './salary_rules.js';
 import { query } from '../../infrastructure/database/database.js';
-import { payLevelFromRow, DEFAULT_AGENCY_GRADES, evaluatePay, evaluateVideoPay, agencyPrim } from '../games/paytable.rules.js';
+import { payLevelFromRow, DEFAULT_AGENCY_GRADES, evaluatePay, evaluateSimplePay, evaluateVideoPay, agencyPrim } from '../games/paytable.rules.js';
+import { consumedDiamondsByUser } from '../wallet/advance_ledger.service.js';
 import { validateWeights, DEFAULT_WEIGHTS } from '../wallet/salary_weights.rules.js';
 
 const DAY = 86400;
@@ -37,11 +39,14 @@ export async function loadPayConfig(run = query) {
       splitByRoomType: s.split_by_room_type !== false,
       videoDailyCapMinutes: s.video_daily_cap_minutes ?? 0, videoMinSessionMinutes: s.video_min_session_minutes ?? 0,
       videoShortfallCutBps: s.video_shortfall_cut_bps ?? 0,
+      audioShortfallCutBps: s.audio_shortfall_cut_bps ?? 0,
       // Ağırlıklı maaş hak edişi (v2.150.0). Bozuk JSON yazılmış olsa bile maaş hesabı
       // çökmesin diye doğrulamadan geçiriliyor; geçmezse varsayılana dönüyor.
       salaryWeights: safeWeights(s.salary_weights),
       salaryWeightedEnabled: s.salary_weighted_enabled === true,
       salaryAutoTransfer: s.salary_auto_transfer === true,
+      instantSalaryEnabled: s.instant_salary_enabled === true,
+      instantSalaryBps: s.instant_salary_bps ?? 5000,
       salaryTransferDayFrom: s.salary_transfer_day_from ?? 1,
       salaryTransferDayTo: s.salary_transfer_day_to ?? 3,
     },
@@ -131,7 +136,7 @@ export async function hostPeriodMetrics(hosts, start, end, validDayMinutes = 60,
        (CASE WHEN r.room_type = 'video' THEN 'video' ELSE 'audio' END) AS kind,
        SUM(COALESCE(g.diamond_amount, g.coin_amount))::text AS d
      FROM gift_transactions g JOIN x ON x.user_id = g.receiver_id LEFT JOIN rooms r ON r.id = g.room_id
-     WHERE g.sender_id <> g.receiver_id AND g.created_at >= x.from_ts AND g.created_at < $3::timestamptz
+     WHERE ${salaryGiftSql('r')} AND g.created_at >= x.from_ts AND g.created_at < $3::timestamptz
      GROUP BY 1, 2, 3`,
     [ids, froms, endIso],
   );
@@ -169,9 +174,9 @@ export async function agencyGiftRows(agencyIds, start, end, run = query) {
     `SELECT g.receiver_agency_id AS agency_id, g.receiver_id AS user_id,
        ((FLOOR(EXTRACT(EPOCH FROM g.created_at))::bigint + 10800) / 86400)::int AS day,
        SUM(COALESCE(g.diamond_amount, g.coin_amount))::text AS d
-     FROM gift_transactions g
+     FROM gift_transactions g LEFT JOIN rooms r ON r.id = g.room_id
      WHERE g.receiver_agency_id IS NOT NULL AND ($1::uuid[] IS NULL OR g.receiver_agency_id = ANY($1::uuid[]))
-       AND g.sender_id <> g.receiver_id AND g.created_at >= $2::timestamptz AND g.created_at < $3::timestamptz
+       AND ${salaryGiftSql('r')} AND g.created_at >= $2::timestamptz AND g.created_at < $3::timestamptz
      GROUP BY 1, 2, 3`,
     [agencyIds && agencyIds.length ? agencyIds : null, new Date(start).toISOString(), new Date(end).toISOString()],
   );
@@ -239,7 +244,9 @@ export const videoRules = (settings) => ({
 export function evaluateHost(cfg, m, { pref = 0, eventsOk = true, balance = 0n } = {}) {
   const split = cfg.settings.splitByRoomType !== false;
   const src = split ? m.audio : m;
-  const audio = evaluatePay({
+  // Ay içi maaş kuralı açıksa (instantSalaryEnabled) sesli maaş basit kuralla hesaplanır: şartlar tamamsa %100, biri eksikse %50 (tam dolara aşağı).
+  const evalAudio = cfg.settings.instantSalaryEnabled === true ? evaluateSimplePay : evaluatePay;
+  const audio = evalAudio({
     levels: cfg.levels, settings: cfg.settings, pref, eventsOk,
     metrics: { seconds: src.seconds, validDays: src.validDays, gameSeconds: m.gameSeconds, diamonds: src.diamonds, balance },
   });
@@ -258,12 +265,17 @@ export async function estimateHosts(hosts, cfg, bounds, run = query) {
   if (ids.length) {
     for (const r of (await run(`SELECT id, diamonds FROM users WHERE id = ANY($1::uuid[])`, [ids])).rows) bal.set(r.id, BigInt(r.diamonds));
   }
+  // Dönem içinde avansla Fasulyeye çevrilen elmas bakiyeye geri eklenir: "elmas bozdurma" şartı avansın kendi düşümüyle bozulmaz.
+  const effBal = new Map(bal);
+  if (cfg.settings.instantSalaryEnabled === true) {
+    for (const [id, c] of await consumedDiamondsByUser(run, ids, bounds.start, bounds.end)) effBal.set(id, (effBal.get(id) ?? 0n) + c);
+  }
   const ev = cfg.settings.requireOfficialEvents ? await eventCounts(ids, bounds.start, bounds.end, run) : new Map();
   const out = new Map();
   for (const h of hosts) {
     const m = metrics.get(h.user_id);
     const evOk = !cfg.settings.requireOfficialEvents || (ev.get(h.user_id) ?? 0) >= cfg.settings.minEventCount;
-    const e = evaluateHost(cfg, m, { pref: h.pay_method_pref ?? 0, eventsOk: evOk, balance: bal.get(h.user_id) ?? 0n });
+    const e = evaluateHost(cfg, m, { pref: h.pay_method_pref ?? 0, eventsOk: evOk, balance: effBal.get(h.user_id) ?? 0n });
     out.set(h.user_id, { metrics: m, eval: e, balance: bal.get(h.user_id) ?? 0n, eventCount: ev.get(h.user_id) ?? 0, eventsOk: evOk });
   }
   return out;
