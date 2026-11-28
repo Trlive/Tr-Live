@@ -192,7 +192,7 @@ EOF
 
 # Ayrı Coin yükleme sitesi (v2.154.0, isteğe bağlı): sunucu panelinde PAY_DOMAIN (ör. odeme.alanadi.com) yazılırsa o adres
 # YALNIZCA web yükleme sayfasını sunar (kök → /pay); panel, API ve diğer her şey orada 404. Alan adının DNS kaydı bu sunucuyu göstermeli.
-PAY_DOMAIN=$(grep -E "^PAY_DOMAIN=" "$ENVD/extra.env" 2>/dev/null | tail -n 1 | cut -d= -f2- | tr -d "'\" \r\n" | tr 'A-Z' 'a-z')
+PAY_DOMAIN=$( (grep -E "^PAY_DOMAIN=" "$ENVD/extra.env" 2>/dev/null || true) | tail -n 1 | cut -d= -f2- | tr -d "'\" \r\n" | tr 'A-Z' 'a-z')
 if ! [[ $PAY_DOMAIN =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$ ]] || [ "$PAY_DOMAIN" = "$DOMAIN" ] || [ "$PAY_DOMAIN" = "$SSLIP" ]; then
   [ -n "$PAY_DOMAIN" ] && log "PAY_DOMAIN geçersiz ya da ana adresle aynı: $PAY_DOMAIN (yok sayıldı)"
   PAY_DOMAIN=""

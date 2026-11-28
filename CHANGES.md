@@ -1,3 +1,14 @@
+## v2.154.3 — Sunucu güncellemesi yarıda kalıyordu (kurulum betiği düzeltmesi)
+
+- **Belirti:** 2.153.x / 2.154.x GitHub'a girdi, CI yeşildi, ama sunucu 2.152.18'de kaldı.
+- **Sebep:** `install.sh` `set -euo pipefail` ile çalışıyor. v2.154.0'da eklenen `PAY_DOMAIN` okuma satırında, sunucu panelinde `PAY_DOMAIN`
+  girilmemişse `grep` "bulunamadı" (çıkış 1) döndürüyordu. Bu hata, betiği Caddy ayarı ve servis derlemesinden ÖNCE durduruyordu.
+  Sunucu eski sürümde çalışmaya devam etti; veri ya da ayar kaybı yok.
+- **Düzeltme:** `grep` sonucu boşsa hata sayılmıyor. Kapı ve `PAY_DOMAIN` bölümleri gerçek betikten kesilip katı modda çalıştırılarak sınandı:
+  - `PAY_DOMAIN` yokken: eski satır çıkış 1, yenisi 0;
+  - `PAY_DOMAIN` varken ayrı yükleme sitesi bloğu yazılıyor.
+- Sunucu bu sürümü bir sonraki denemesinde (en geç 20 dk) kendiliğinden alır; `/panel` → "Şimdi güncelle" hemen başlatır.
+
 ## v2.154.2 — CI düzeltmesi (davranış değişikliği yok)
 
 - **`npm run check` (Backend iş akışı) kırmızıydı:** deponun adres denetimi iç içe yönlendiriciyi (`router.use('/v1', v1)`) izlemediği için
