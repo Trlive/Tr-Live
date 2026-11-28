@@ -156,7 +156,10 @@ router.post('/rooms/:roomId/gifts/send', userLimit('gift', 180, 60e3), idempoten
       if (targets.length > MAX_BULK_RECIPIENTS) throw fail(`Toplu hediye en fazla ${MAX_BULK_RECIPIENTS} kişiye gönderilebilir.`);
       allocation = targets.map((m) => ({ userId: m.user_id, quantity }));
     } else {
-      allocation = distributeGift(members, quantity, distribution, selectedUserIds);
+      // Bölüşen modlar (eski uygulama sürümleri): görüntülü odada gönderen havuza katılmaz. Katılsaydı mikrofondaki
+      // yayıncının "eşit/rastgele" gönderimi aşağıdaki kendine hediye kuralına takılıp her seferinde reddedilirdi.
+      const pool = room.room_type === 'video' ? members.filter((m) => m.user_id !== senderId) : members;
+      allocation = distributeGift(pool, quantity, distribution, selectedUserIds);
     }
 
     // Görüntülü odada kendine hediye gönderilemez (sesli odada serbest; maaş/kota kuralı için bkz. agencies/salary_rules.js).
