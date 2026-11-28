@@ -1,3 +1,11 @@
+## v2.155.2 — Panel giriş bağlantısı boş sayfa açıyordu
+
+- Caddy'de `redir /yonetim/admin/login/ 302` satırı: ilk argüman `/` ile başladığı için Caddy onu YÖNLENDİRME HEDEFİ değil EŞLEŞME KOŞULU sayıyordu.
+  Sonuç: yönlendirme hiç çalışmıyor, gizli bağlantı boş sayfa açıyordu (izin çerezi yine de bırakılıyordu).
+- Düzeltme: `redir * /yonetim/<panel>/login/ 302`: `*` her isteği eşler, hedef açık. Üç panel için de.
+- Geçici yol (bu sürüm sunucuya gelene kadar): gizli bağlantıyı bir kez açtıktan sonra aynı tarayıcıda `/yonetim/admin/login/`
+  (ajans: `/yonetim/agency/login/`, bayi: `/yonetim/dealer/login/`) açılır.
+
 ## v2.155.1 — Web yönetim paneli bağlantısı uygulamada da (sunucu paneli şifresi gerekmeden)
 
 - **Sorun:** v2.153.1'den beri web panelleri gizli bağlantıyla açılıyor. Yönetim bağlantısı yalnızca şifreli sunucu panelinde (`/panel`)

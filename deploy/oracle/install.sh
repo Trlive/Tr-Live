@@ -215,19 +215,19 @@ $HOSTS {
   handle @gate_admin {
     header +Set-Cookie "trg_a=${GATE_ADMIN}; Path=/yonetim/admin; Max-Age=31536000; Secure; HttpOnly; SameSite=Lax"
     header Cache-Control "no-store"
-    redir /yonetim/admin/login/ 302
+    redir * /yonetim/admin/login/ 302
   }
   @gate_agency path /${GATE_AGENCY} /${GATE_AGENCY}/
   handle @gate_agency {
     header +Set-Cookie "trg_g=${GATE_AGENCY}; Path=/yonetim/agency; Max-Age=31536000; Secure; HttpOnly; SameSite=Lax"
     header Cache-Control "no-store"
-    redir /yonetim/agency/login/ 302
+    redir * /yonetim/agency/login/ 302
   }
   @gate_dealer path /${GATE_DEALER} /${GATE_DEALER}/
   handle @gate_dealer {
     header +Set-Cookie "trg_d=${GATE_DEALER}; Path=/yonetim/dealer; Max-Age=31536000; Secure; HttpOnly; SameSite=Lax"
     header Cache-Control "no-store"
-    redir /yonetim/dealer/login/ 302
+    redir * /yonetim/dealer/login/ 302
   }
   @no_admin {
     path /yonetim/admin /yonetim/admin/*
