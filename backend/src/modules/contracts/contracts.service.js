@@ -1,22 +1,18 @@
 // Sözleşme onay sistemi: kim hangi sözleşmeyi onaylamalı, metin kişiye nasıl doldurulur, onay nasıl kaydedilir.
 //
-// Akış (karar: herkese uygulama içi onay; docs/sozlesmeler/OKU_once.md):
-//  1. Uygulama GET /api/contracts/:kind ile kişiye doldurulmuş metni ve özetini (SHA-256) alır, kullanıcı sonuna kadar kaydırır.
-//  2. Kullanıcı onay kutusunu işaretler ve telefonuna gelen SMS koduyla Firebase üzerinden doğrular (idToken). SMS yapılandırılmamışsa
-//     hesap şifresi istenir. Kullanılan yöntem kayda yazılır.
-//  3. POST /api/contracts/:kind/accept: sunucu metni AYNI şekilde yeniden üretir; özet uygulamanın gördüğüyle aynı olmalı (arada
-//     metin değiştiyse reddedilir). Onay ve PDF tek işlemde yazılır; kayıtlar veritabanında değiştirilemez (migration 119).
+// Akış (sahibin kararı, v2.152.21: rakiplerdeki gibi işlemle birlikte kabul; SMS ve PDF yok):
+//  - Yayıncı sözleşmesi: ajans davetini kabul ederken (ya da ajans sahibi kendini yayıncı eklerken) aynı işlemde kabul edilir.
+//    Uygulama düğmenin altında "kabul ederek sözleşmeyi kabul etmiş olursunuz" notunu ve metne bağlantıyı gösterir, istekte
+//    contract: true gönderir. Göndermeyen (eski) uygulamaya 428 contract_required döner ve sözleşme ekranı açılır.
+//  - Ajans ve bayi sözleşmesi: hesabı yönetici açar; panel ilk açılırken 428 → sözleşme ekranı → tek dokunuşla kabul.
+//  - Kayıt: kim, hangi sürüm, ne zaman, hangi işlemle (via), kişiye doldurulmuş metnin özeti, IP, cihaz. Değiştirilemez (migration 119).
 //
 // Yürürlük kuralı (sözleşme md. 20.3): yeni sürüm yayımlanınca eski sürümün onayı geçerliliğini korur; kapılar "herhangi bir sürüm
 // onaylı mı?" diye bakar, uygulama da güncel sürümü onaylatmak için kullanıcıya sorar.
 import crypto from 'node:crypto';
 import { query, tx } from '../../infrastructure/database/database.js';
 import { fail } from '../../shared/errors/http.js';
-import { getConfig, phoneVerifyOn } from '../system/app_config.service.js';
-import { verifyPhoneToken } from '../notifications/firebase_verify.service.js';
-import { checkPassword } from '../../middleware/authentication/auth.js';
-import { normalizePhone } from '../auth/auth.routes.js';
-import { buildContractPdf } from './contract_pdf.js';
+import { getConfig } from '../system/app_config.service.js';
 
 export const KINDS = Object.freeze({
   broadcaster: { prefix: 'YAY', title: 'TR LIVE Yayıncı Sözleşmesi', seq: 'contract_no_broadcaster', party: 'Yayıncı' },
@@ -102,65 +98,61 @@ export async function hasAccepted(userId, kind, run = query) {
 }
 
 
-/** Kişiye özel metin + özet (uygulamanın göstereceği). */
-export async function viewFor(user, kind) {
+/**
+ * Kişiye özel metin + özet (uygulamanın göstereceği). Yayıncı sözleşmesi, kişi henüz yayıncı değilken de (davet kabul ederken)
+ * görüntülenebilir; ajans ve bayi sözleşmesi yalnızca tarafına gösterilir.
+ */
+export async function viewFor(user, kind, run = query) {
   if (!isKind(kind)) throw fail('Sözleşme türü geçersiz.', 404);
-  const relation = await relationOf(user.id, kind);
+  let relation = await relationOf(user.id, kind, run);
+  if (!relation && kind === 'broadcaster') relation = { label: 'Yayıncı', extra: [] };
   if (!relation) throw fail('Bu sözleşme sizin için geçerli değil.', 404);
-  const template = await currentTemplate(kind);
+  const template = await currentTemplate(kind, run);
   if (!template) throw fail('Bu sözleşme henüz yayımlanmadı.', 404);
   const cfg = await getConfig();
   const text = renderContract({ kind, template, user, relation, company: cfg.contractCompany });
   return { kind, title: template.title, version: template.version, templateId: template.id, text, sha256: sha256(text), relation, template };
 }
 
-/** İkinci adım doğrulaması: SMS (Firebase idToken, hesaptaki numara) ya da SMS kapalıysa hesap şifresi. */
-async function verifySecondFactor(user, { idToken, password }) {
-  const cfg = await getConfig();
-  if (phoneVerifyOn(cfg)) {
-    if (!idToken) throw fail('Onay için telefonunuza gelen SMS kodunu girin.', 428);
-    const phone = normalizePhone(await verifyPhoneToken(idToken, cfg.firebaseProjectId));
-    if (!phone || !user.phone || phone !== user.phone) throw fail('Doğrulanan numara hesabınızdaki telefon numarasıyla aynı değil.', 403);
-    return { method: 'sms', phone };
-  }
-  if (!user.password_hash) throw fail('SMS doğrulaması kapalı ve hesabınızda şifre yok. Önce şifre belirleyin.', 409);
-  if (!password || !(await checkPassword(String(password).slice(0, 200), user.password_hash))) throw fail('Şifre hatalı.', 403);
-  return { method: 'password', phone: user.phone ?? null };
+/**
+ * Kabul kaydı (tek dokunuş). c verilirse çağıranın işleminde yazılır (ör. davet kabulüyle aynı işlem: biri olmadan diğeri olmaz).
+ * shownSha verilirse uygulamanın gösterdiği metinle karşılaştırılır (arada metin güncellendiyse 409); işlemle birlikte kabulde
+ * (davet) metin o an üretilir ve özeti kaydedilir. Aynı sürüm ikinci kez kaydedilmez.
+ */
+export async function recordAcceptance(user, kind, { shownSha = null, via = 'panel', ip = null, device = {} } = {}, c = null) {
+  const run = c ? (t, p) => c.query(t, p) : query;
+  const v = await viewFor(user, kind, run);
+  if (shownSha && shownSha !== v.sha256) throw fail('Sözleşme metni güncellendi. Lütfen güncel metni yeniden açın.', 409);
+  const write = async (cc) => {
+    // Aynı kullanıcı aynı sürümü iki kez kaydetmesin (çift dokunma, yeniden deneme): kullanıcı satırı kilitlenir.
+    await cc.query(`SELECT 1 FROM users WHERE id = $1 FOR UPDATE`, [user.id]);
+    const dup = (await cc.query(`SELECT id, contract_no FROM contract_acceptances WHERE user_id = $1 AND template_id = $2`, [user.id, v.templateId])).rows[0];
+    if (dup) return { id: dup.id, contractNo: dup.contract_no, already: true };
+    const n = (await cc.query(`SELECT nextval('${KINDS[kind].seq}') AS n`)).rows[0].n;
+    const contractNo = `${KINDS[kind].prefix}-${String(n).padStart(6, '0')}`;
+    const party = { name: user.display_name || user.username, userId: user.id, publicId: user.public_id ?? null, username: user.username, phone: user.phone ?? null, relation: v.relation.extra };
+    const row = (await cc.query(
+      `INSERT INTO contract_acceptances(contract_no, user_id, template_id, kind, version, rendered_sha256, template_sha256, party, method, phone, ip, device, via)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,'clickwrap',$9,$10,$11,$12) RETURNING id, accepted_at`,
+      [contractNo, user.id, v.templateId, kind, v.version, v.sha256, v.template.sha256, JSON.stringify(party), user.phone ?? null, ip, JSON.stringify(device ?? {}), via],
+    )).rows[0];
+    return { id: row.id, contractNo, acceptedAt: row.accepted_at, already: false };
+  };
+  return c ? write(c) : tx(write);
 }
 
-/** Onay: özet karşılaştırması, ikinci adım, numara, PDF ve değiştirilemez kayıt. */
-export async function accept(user, kind, { sha: shownSha, scrolled, idToken, password, ip, device }) {
-  const v = await viewFor(user, kind);
-  if (scrolled !== true) throw fail('Onaylamadan önce sözleşmenin tamamını okuyun.', 400);
-  if (shownSha !== v.sha256) throw fail('Sözleşme metni güncellendi. Lütfen güncel metni yeniden açıp okuyun.', 409);
-  const factor = await verifySecondFactor(user, { idToken, password });
-  return tx(async (c) => {
-    // Aynı kullanıcı aynı sürümü iki kez onaylamasın (çift dokunma, yeniden deneme): kullanıcı satırı kilitlenir.
-    await c.query(`SELECT 1 FROM users WHERE id = $1 FOR UPDATE`, [user.id]);
-    const dup = (await c.query(`SELECT id, contract_no FROM contract_acceptances WHERE user_id = $1 AND template_id = $2`, [user.id, v.templateId])).rows[0];
-    if (dup) return { id: dup.id, contractNo: dup.contract_no, already: true };
-    const n = (await c.query(`SELECT nextval('${KINDS[kind].seq}') AS n`)).rows[0].n;
-    const contractNo = `${KINDS[kind].prefix}-${String(n).padStart(6, '0')}`;
-    const acceptedAt = new Date();
-    const party = { name: user.display_name || user.username, userId: user.id, publicId: user.public_id ?? null, username: user.username, phone: factor.phone, relation: v.relation.extra };
-    const header = [
-      ['Sözleşme No', contractNo],
-      ['Sürüm', v.version],
-      ['Onay zamanı (UTC)', acceptedAt.toISOString()],
-      ['Onaylayan', `${party.name} (kullanıcı ID ${party.publicId ?? party.userId})`],
-      ['Onay yöntemi', factor.method === 'sms' ? `Metnin sonuna kadar görüntülenmesi + onay kutusu + SMS kodu (${factor.phone})` : 'Metnin sonuna kadar görüntülenmesi + onay kutusu + hesap şifresi'],
-      ['IP adresi', ip ?? '-'],
-      ['Metin özeti (SHA-256)', v.sha256],
-    ];
-    const pdf = buildContractPdf({ title: v.title, header, body: v.text, footer: contractNo, createdAt: acceptedAt });
-    const row = (await c.query(
-      `INSERT INTO contract_acceptances(contract_no, user_id, template_id, kind, version, rendered_sha256, template_sha256, party, method, phone, ip, device, accepted_at, pdf_sha256, pdf)
-       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING id`,
-      [contractNo, user.id, v.templateId, kind, v.version, v.sha256, v.template.sha256, JSON.stringify(party), factor.method, factor.phone, ip ?? null,
-        JSON.stringify(device ?? {}), acceptedAt, sha256(pdf), pdf],
-    )).rows[0];
-    return { id: row.id, contractNo, acceptedAt, already: false };
-  });
+/**
+ * İşlemle birlikte kabul (yayıncı olurken): sözleşme yayımlanmamışsa ya da zaten kabul edilmişse bir şey yapmaz. Edilmemişse ve
+ * uygulama contract: true göndermişse aynı işlemde kaydeder; göndermemişse 428 contract_required fırlatır (eski uygulama sürümü).
+ */
+export async function acceptWithAction(c, user, kind, { consent, via, ip, device }) {
+  const run = (t, p) => c.query(t, p);
+  if (!(await currentTemplate(kind, run))) return null;
+  if ((await run(`SELECT 1 FROM contract_acceptances WHERE user_id = $1 AND kind = $2 LIMIT 1`, [user.id, kind])).rowCount) return null;
+  if (consent !== true) {
+    throw Object.assign(fail(`${KINDS[kind].title} kabul edilmeden devam edilemez.`, 428), { contractKind: kind });
+  }
+  return recordAcceptance(user, kind, { via, ip, device }, c);
 }
 
 /** Yeni sürüm yayımlar (yalnızca süper yönetici). Yayımlanan metin değiştirilemez. */

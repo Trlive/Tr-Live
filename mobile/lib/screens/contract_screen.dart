@@ -1,134 +1,63 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../l10n/l10n.dart';
 import '../services/api.dart';
 import '../services/device_info.dart';
-import '../services/phone_verify.dart';
 import '../widgets/common.dart';
 
-/// Sözleşme onayı (yayıncı, ajans sahibi, Coin bayisi). Karar: uygulama içi onay.
+/// Sözleşme (yayıncı, ajans sahibi, Coin bayisi). Sahibin kararı: rakiplerdeki gibi tek dokunuşla kabul; SMS ve PDF yok.
 ///
-/// Akış: metin sunucudan kişiye doldurulmuş hâliyle gelir → kullanıcı SONUNA KADAR kaydırır → onay kutusu açılır → SMS koduyla
-/// (Firebase) ya da SMS kapalıysa hesap şifresiyle onaylar. Sunucu, uygulamanın gösterdiği metnin özetini (sha256) kendi ürettiği
-/// metinle karşılaştırır; arada metin değiştiyse onay reddedilir. Kayıt değiştirilemez, PDF kopyası "Sözleşmelerim"den indirilir.
-Future<bool> openContract(BuildContext context, String kind) async {
-  final r = await Navigator.of(context).push<bool>(MaterialPageRoute(fullscreenDialog: true, builder: (_) => ContractScreen(kind: kind)));
+/// Yayıncı sözleşmesi ajans davetini kabul ederken kabul edilir (davet kartındaki not ve bu ekranın salt okunur hâli). Ajans ve bayi
+/// sözleşmesi panel ilk açılırken bu ekranla kabul edilir. Sunucu, gösterilen metnin özetini (sha256) kendi ürettiği metinle
+/// karşılaştırır ve kim / hangi sürüm / ne zaman kaydını değiştirilemez şekilde tutar.
+Future<bool> openContract(BuildContext context, String kind, {bool readOnly = false}) async {
+  final r = await Navigator.of(context).push<bool>(MaterialPageRoute(fullscreenDialog: !readOnly, builder: (_) => ContractScreen(kind: kind, readOnly: readOnly)));
   return r == true;
 }
 
 class ContractScreen extends StatefulWidget {
   final String kind;
-  const ContractScreen({super.key, required this.kind});
+  final bool readOnly;
+  const ContractScreen({super.key, required this.kind, this.readOnly = false});
 
   @override
   State<ContractScreen> createState() => _ContractScreenState();
 }
 
 class _ContractScreenState extends State<ContractScreen> {
-  final _sc = ScrollController();
   Map<String, dynamic>? _data;
   String? _error;
-  bool _atEnd = false;
-  bool _agree = false;
   bool _busy = false;
 
   @override
   void initState() {
     super.initState();
-    _sc.addListener(_onScroll);
     _load();
-  }
-
-  @override
-  void dispose() {
-    _sc.dispose();
-    super.dispose();
   }
 
   Future<void> _load() async {
     setState(() => _error = null);
     try {
       final d = await Api.get('/api/contracts/${widget.kind}');
-      if (!mounted) return;
-      setState(() => _data = d);
-      // Metin ekrana sığıyorsa kaydırmaya gerek yok: "sonuna ulaşıldı" sayılır.
-      WidgetsBinding.instance.addPostFrameCallback((_) => _onScroll());
+      if (mounted) setState(() => _data = d);
     } catch (e) {
       if (mounted) setState(() => _error = '$e');
     }
   }
 
-  void _onScroll() {
-    if (_atEnd || !_sc.hasClients) return;
-    final p = _sc.position;
-    if (p.maxScrollExtent <= 0 || p.pixels >= p.maxScrollExtent - 32) setState(() => _atEnd = true);
-  }
-
-  /// SMS ile doğrulama: kod gönderilir, kullanıcı girer (Android kodu kendisi okuyabilirse sorulmaz). Firebase kimlik token'ı döner.
-  Future<String?> _smsToken(String phone) async {
-    final done = Completer<String?>();
-    await Verify.sendSms(
-      phone,
-      language: L10n.lang.value,
-      onSent: (verificationId, _) async {
-        if (!mounted) return done.complete(null);
-        final code = await askText(context, tx('SMS kodu'), hint: tx('{p} numarasına gelen 6 haneli kod', {'p': '${_data?['phoneMasked'] ?? ''}'}), keyboard: TextInputType.number);
-        if (code == null || code.trim().isEmpty) {
-          if (!done.isCompleted) done.complete(null);
-          return;
-        }
-        try {
-          final t = await Verify.confirmCode(verificationId, code.trim());
-          if (!done.isCompleted) done.complete(t);
-        } catch (e) {
-          if (!done.isCompleted) done.completeError(ApiException(tx('Kod doğrulanamadı. Yeniden deneyin.')));
-        }
-      },
-      onAuto: (t) {
-        if (!done.isCompleted) done.complete(t);
-      },
-      onError: (m) {
-        if (!done.isCompleted) done.completeError(ApiException(tx(m)));
-      },
-    );
-    return done.future;
-  }
-
   Future<void> _accept() async {
     final d = _data;
-    if (d == null || !_atEnd || !_agree || _busy) return;
+    if (d == null || _busy) return;
     setState(() => _busy = true);
     try {
-      final body = <String, dynamic>{'sha256': d['sha256'], 'scrolled': true, 'device': await DeviceInfo.collect()};
-      if (d['method'] == 'sms') {
-        final phone = d['phone'] as String?;
-        if (phone == null || phone.isEmpty) {
-          if (mounted) toast(context, tx('Onay için hesabınıza doğrulanmış bir telefon numarası ekleyin.'), error: true);
-          return;
-        }
-        final t = await _smsToken(phone);
-        if (t == null) return; // vazgeçildi
-        body['idToken'] = t;
-      } else {
-        if (!mounted) return;
-        final pw = await askText(context, tx('Hesap şifreniz'), hint: tx('Onaylamak için şifrenizi girin'), obscure: true);
-        if (pw == null || pw.isEmpty) return;
-        body['password'] = pw;
-      }
-      final r = await Api.post('/api/contracts/${widget.kind}/accept', body);
+      final r = await Api.post('/api/contracts/${widget.kind}/accept', {'sha256': d['sha256'], 'device': await DeviceInfo.collect()});
       if (!mounted) return;
-      toast(context, tx('Sözleşme onaylandı · {no}', {'no': '${r['contractNo'] ?? ''}'}));
+      toast(context, tx('Sözleşme kabul edildi · {no}', {'no': '${r['contractNo'] ?? ''}'}));
       Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
-      // Metin bu arada güncellendiyse yenisi yüklenir ve yeniden okunması istenir.
+      // Metin bu arada güncellendiyse yenisi yüklenir.
       if (e is ApiException && e.statusCode == 409) {
-        setState(() {
-          _atEnd = false;
-          _agree = false;
-          _data = null;
-        });
+        setState(() => _data = null);
         _load();
       }
       toast(context, '$e', error: true);
@@ -179,51 +108,33 @@ class _ContractScreenState extends State<ContractScreen> {
               ? const Center(child: CircularProgressIndicator())
               : Column(children: [
                   Expanded(
-                    child: Scrollbar(
-                      controller: _sc,
-                      thumbVisibility: true,
-                      child: SingleChildScrollView(
-                        controller: _sc,
-                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-                        child: SelectionArea(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: _paragraphs('${d['text']}'))),
-                      ),
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                      child: SelectionArea(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: _paragraphs('${d['text']}'))),
                     ),
                   ),
-                  SafeArea(
-                    top: false,
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(8, 4, 16, 12),
-                      child: Column(mainAxisSize: MainAxisSize.min, children: [
-                        if (!_atEnd)
-                          Padding(
-                            padding: const EdgeInsets.only(left: 8, bottom: 4),
-                            child: Text(tx('Onaylamak için metni sonuna kadar okuyun.'), style: const TextStyle(fontSize: 12, color: Colors.white60)),
-                          ),
-                        CheckboxListTile(
-                          value: _agree,
-                          onChanged: _atEnd && !_busy ? (v) => setState(() => _agree = v == true) : null,
-                          controlAffinity: ListTileControlAffinity.leading,
-                          contentPadding: EdgeInsets.zero,
-                          title: Text(tx('Sözleşmenin tamamını okudum, anladım ve kabul ediyorum.'), style: const TextStyle(fontSize: 13)),
-                        ),
-                        SizedBox(
+                  if (!widget.readOnly)
+                    SafeArea(
+                      top: false,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                        child: SizedBox(
                           width: double.infinity,
                           child: FilledButton(
-                            onPressed: _atEnd && _agree && !_busy ? _accept : null,
+                            onPressed: _busy ? null : _accept,
                             child: _busy
                                 ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                                : Text(d['method'] == 'sms' ? tx('SMS koduyla onayla') : tx('Şifremle onayla')),
+                                : Text(tx('Okudum, kabul ediyorum')),
                           ),
                         ),
-                      ]),
+                      ),
                     ),
-                  ),
                 ]),
     );
   }
 }
 
-/// Sözleşmelerim: durum (onaylandı / güncel sürüm bekliyor) ve onaylanan sözleşmelerin PDF kopyası.
+/// Sözleşmelerim: durum (kabul edildi / güncel sürüm bekliyor) ve kabul edilen sözleşmeler (metin uygulamada okunur).
 class MyContractsScreen extends StatefulWidget {
   const MyContractsScreen({super.key});
 
@@ -254,13 +165,6 @@ class _MyContractsScreenState extends State<MyContractsScreen> {
     });
   }
 
-  Future<void> _pdf(String id) async {
-    final r = await guard(context, () => Api.post('/api/contracts/acceptances/$id/link'));
-    final url = Api.absoluteUrl(r?['path'] as String?);
-    if (url == null) return;
-    if (!await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication) && mounted) toast(context, tx('Belge açılamadı.'), error: true);
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -276,21 +180,21 @@ class _MyContractsScreenState extends State<MyContractsScreen> {
                     subtitle: Text(s['published'] != true
                         ? tx('Henüz yayımlanmadı')
                         : s['upToDate'] == true
-                            ? tx('Güncel sürüm onaylı ({v})', {'v': '${s['version']}'})
+                            ? tx('Güncel sürüm kabul edildi ({v})', {'v': '${s['version']}'})
                             : s['accepted'] == null
-                                ? tx('Onayınızı bekliyor')
-                                : tx('Yeni sürüm ({v}) onayınızı bekliyor', {'v': '${s['version']}'})),
+                                ? tx('Kabulünüzü bekliyor')
+                                : tx('Yeni sürüm ({v}) kabulünüzü bekliyor', {'v': '${s['version']}'})),
                     trailing: s['published'] == true && s['upToDate'] != true ? FilledButton(onPressed: () async {
                       if (await openContract(context, '${s['kind']}')) _load();
-                    }, child: Text(tx('Oku ve onayla'))) : null,
+                    }, child: Text(tx('Oku ve kabul et'))) : null,
                   ),
-                if (_acc.isNotEmpty) Padding(padding: const EdgeInsets.fromLTRB(16, 16, 16, 4), child: Text(tx('Onaylanan belgeler'), style: const TextStyle(fontWeight: FontWeight.w700))),
+                if (_acc.isNotEmpty) Padding(padding: const EdgeInsets.fromLTRB(16, 16, 16, 4), child: Text(tx('Kabul ettiğiniz sözleşmeler'), style: const TextStyle(fontWeight: FontWeight.w700))),
                 for (final a in _acc)
                   ListTile(
-                    leading: const Icon(Icons.picture_as_pdf_outlined),
+                    leading: const Icon(Icons.verified_outlined),
                     title: Text('${a['contractNo']} · ${tx('Sürüm')} ${a['version']}'),
                     subtitle: Text('${a['acceptedAt']}'.replaceFirst('T', ' ').split('.').first),
-                    onTap: () => _pdf('${a['id']}'),
+                    onTap: () => openContract(context, '${a['kind']}', readOnly: true),
                   ),
                 if (_status.isEmpty && _acc.isEmpty) Padding(padding: const EdgeInsets.all(24), child: Text(tx('Size ait bir sözleşme yok.'))),
               ]),
@@ -331,9 +235,9 @@ class ContractGate {
       final go = await confirm(
         context,
         first
-            ? tx('{t} onayınızı bekliyor. Onaylanana kadar ödemeleriniz bekletilir ve ilgili paneller açılmaz.', {'t': '${s['title']}'})
-            : tx('{t} güncellendi (sürüm {v}). Yeni sürümü okuyup onaylayın.', {'t': '${s['title']}', 'v': '${s['version']}'}),
-        action: tx('Oku ve onayla'),
+            ? tx('{t} kabulünüzü bekliyor. Kabul edilene kadar ödemeleriniz bekletilir ve ilgili paneller açılmaz.', {'t': '${s['title']}'})
+            : tx('{t} güncellendi (sürüm {v}). Yeni sürümü okuyup kabul edin.', {'t': '${s['title']}', 'v': '${s['version']}'}),
+        action: tx('Oku ve kabul et'),
       );
       if (go && context.mounted) await openContract(context, '${s['kind']}');
     }

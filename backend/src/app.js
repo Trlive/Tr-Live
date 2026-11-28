@@ -58,7 +58,7 @@ import { router as assetsRouter } from './modules/assets/assets.routes.js';
 import { router as sduiRouter } from './modules/sdui/sdui.routes.js';
 import { router as sduiV2Router } from './modules/sdui/v2/sdui_v2.routes.js';
 import { router as livekitWebhookRouter } from './modules/rooms/livekit_webhook.routes.js';
-import { router as contractsRouter, adminRouter as contractsAdminRouter, publicRouter as contractPdfRouter } from './modules/contracts/contracts.routes.js';
+import { router as contractsRouter, adminRouter as contractsAdminRouter } from './modules/contracts/contracts.routes.js';
 import { redactSecrets } from './middleware/security/redact.js';
 import { r2Config } from './infrastructure/storage/storage.js';
 import { cdnUrlFor } from './modules/media/offload.service.js';
@@ -149,7 +149,7 @@ const UPDATE_EXEMPT = new Set(['/health', '/app/config', '/client-errors', '/aut
   // Google/Facebook dönüşü tarayıcıdan gelir (uygulama sürümü başlığı yok).
   '/auth/oauth/google/callback', '/auth/oauth/facebook/callback', '/legal/privacy', '/legal/privacy.json', '/legal/data-deletion', '/legal/terms']);
 app.use('/api', async (req, res, next) => {
-  if (UPDATE_EXEMPT.has(req.path) || req.path.startsWith('/emoji/') || req.path.startsWith('/contract-pdf/')) return next(); // emoji görselleri ve tarayıcıda açılan sözleşme PDF'i sürüm başlığı göndermez
+  if (UPDATE_EXEMPT.has(req.path) || req.path.startsWith('/emoji/')) return next(); // emoji görselleri sürüm başlığı göndermez
   // Web yönetim/ajans paneli bir uygulama sürümü değildir: zorunlu güncelleme yalnızca KENDİ yollarında ona uygulanmaz (bkz. update_gate.js).
   if (isWebPanelRequest(req.get('X-Client'), req.path)) return next();
   const c = await getConfig();
@@ -200,8 +200,7 @@ app.use('/api/admin/contracts', contractsAdminRouter); // sözleşme şablonlar�
 app.use('/api/admin/usd', usdAdminRouter); // dolar cüzdanı yönetimi (çekim talepleri); genel admin yönlendiricisinden önce
 app.use('/api/admin', adminRouter);
 app.use('/api/usd', usdRouter);
-app.use('/api/contracts', contractsRouter); // sözleşme görüntüleme ve onay
-app.use('/api/contract-pdf', contractPdfRouter); // imzalı, 5 dakikalık PDF bağlantısı (tarayıcıdan, oturumsuz) // dolar cüzdanı: bakiye, admin'e ve bayiye gönderim
+app.use('/api/contracts', contractsRouter); // sözleşme görüntüleme ve onay // dolar cüzdanı: bakiye, admin'e ve bayiye gönderim
 app.use('/api/events', eventsRouter);
 // Aşağıdakiler '/api' altında birden çok yol tanımladığı için en sona konur.
 app.use('/api', feedRouter);
@@ -268,6 +267,8 @@ app.use((error, req, res, next) => {
   }
   if (error.type === 'entity.parse.failed') return res.status(400).json({ message: 'Geçersiz JSON.' });
   if (error.type === 'entity.too.large') return res.status(413).json({ message: 'İstek çok büyük.' });
+  // Sözleşme gerekli (428): uygulama hangi sözleşmeyi açacağını bilsin (contracts.service.js acceptWithAction).
+  if (error.contractKind) return res.status(error.status).json({ message: error.message, code: 'contract_required', kind: error.contractKind });
   if (error.status && error.status >= 400 && error.status < 500) return res.status(error.status).json({ message: error.message });
   if (error.status === 503) return res.status(503).json({ message: error.message });
   const pg = PG_ERRORS[error.code];

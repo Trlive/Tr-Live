@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { FileSignature } from "lucide-react";
-import { api, API_BASE, getSession } from "@/core/api/api";
+import { api } from "@/core/api/api";
 import { useApi } from "@/core/api/use-api";
 import { Badge, Card, Empty, ErrorBox, Loading, PageHeader, inputCls } from "@/shared/components/ui";
 import { ActionMsg, Field, btnSmall, fmtRel, useAction } from "@/shared/components/kit";
@@ -11,31 +11,14 @@ import { useConfirm } from "@/shared/components/confirm";
 type Kind = "broadcaster" | "agency" | "dealer";
 type Template = { id: string; kind: Kind; version: string; title: string; body: string; sha256: string; publishedAt: string; publishedBy: string | null; acceptances: number };
 type TemplatesRes = { kinds: { kind: Kind; title: string; prefix: string }[]; templates: Template[]; drafts: Record<Kind, string> };
-type Acceptance = { id: string; contractNo: string; kind: Kind; version: string; method: string; phone: string | null; ip: string | null; acceptedAt: string; pdfSha256: string; name: string | null; username: string | null; publicId: string | null };
+type Acceptance = { id: string; contractNo: string; kind: Kind; version: string; method: string; via: string | null; phone: string | null; ip: string | null; acceptedAt: string; name: string | null; username: string | null; publicId: string | null };
+const viaText: Record<string, string> = { panel: "Sözleşme ekranı", agency_invite: "Ajans davetini kabul", self_join: "Ajans sahibi kendini ekledi" };
 type PendingUser = { id: string; username: string; displayName: string | null; publicId: string | null };
 
 const kindText: Record<Kind, string> = { broadcaster: "Yayıncı", agency: "Ajans sahibi", dealer: "Coin bayisi" };
 const karar = (s: string) => /\[KARAR:/i.test(s);
 
-/** PDF oturum başlığıyla indirilir (bağlantı tarayıcıda oturumsuz açılmaz). */
-async function downloadPdf(id: string, name: string) {
-  const s = getSession("admin");
-  const res = await fetch(`${API_BASE}/api/admin/contracts/acceptances/${id}/pdf`, {
-    headers: { Authorization: `Bearer ${s?.token ?? ""}`, "X-Client": "web-panel" },
-    cache: "no-store",
-  });
-  if (!res.ok) throw new Error(`Belge indirilemedi (${res.status}).`);
-  const url = URL.createObjectURL(await res.blob());
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `${name}.pdf`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 10_000);
-}
-
-/** Sözleşmeler: yayımlama (değiştirilemez sürümler), onay kayıtları ve PDF, onay bekleyenler. Karar: uygulama içi onay. */
+/** Sözleşmeler: yayımlama (değiştirilemez sürümler), kabul kayıtları, kabul bekleyenler. Karar: işlemle birlikte tek dokunuşla kabul. */
 export default function AdminContracts() {
   const [kind, setKind] = useState<Kind>("broadcaster");
   const t = useApi<TemplatesRes>("/api/admin/contracts/templates");
@@ -64,7 +47,7 @@ export default function AdminContracts() {
     run("Sözleşme yayımlandı.", async () => {
       const ok = await ask({
         title: `${kindText[kind]} sözleşmesi ${version} yayımlansın mı?`,
-        body: "Yayımlanan metin değiştirilemez ve silinemez. Bu türdeki taraflar uygulamada onaya çağrılır; onaylayana kadar ödemeleri bekletilir ve panelleri açılmaz (önceki sürümü onaylamış olanlar etkilenmez). Metnin avukat tarafından incelendiğinden emin olun.",
+        body: "Yayımlanan metin değiştirilemez ve silinemez. Bu türdeki taraflar uygulamada kabule çağrılır; kabul edene kadar ödemeleri bekletilir ve panelleri açılmaz (önceki sürümü kabul etmiş olanlar etkilenmez). Metnin avukat tarafından incelendiğinden emin olun.",
         danger: true,
       });
       if (!ok) return false;
@@ -76,7 +59,7 @@ export default function AdminContracts() {
   return (
     <div>
       {confirmNode}
-      <PageHeader icon={<FileSignature size={18} />} kicker="Sistem" title="Sözleşmeler" description="Yayıncı, ajans sahibi ve Coin bayisi sözleşmeleri. Onay uygulama içinde yapılır (metni sonuna kadar okuma + onay + SMS kodu). Yayımlanan sürümler ve onay kayıtları değiştirilemez." />
+      <PageHeader icon={<FileSignature size={18} />} kicker="Sistem" title="Sözleşmeler" description="Yayıncı, ajans sahibi ve Coin bayisi sözleşmeleri. Yayıncı sözleşmesi ajans davetini kabul ederken, ajans ve bayi sözleşmesi panel ilk açılırken tek dokunuşla kabul edilir. Yayımlanan sürümler ve kabul kayıtları değiştirilemez." />
       <div className="mb-4 flex flex-wrap gap-2">
         {(["broadcaster", "agency", "dealer"] as Kind[]).map((k) => (
           <button key={k} type="button" className={`${btnSmall} ${k === kind ? "border-[#8c713d] text-[#e5c77e]" : ""}`} onClick={() => setKind(k)}>
@@ -124,7 +107,7 @@ export default function AdminContracts() {
             )}
           </Card>
 
-          <Card title="Onay bekleyenler" subtitle="Yürürlükte sözleşme varken hiçbir sürümü onaylamamış taraflar. Ödemeleri bekletilir (kaybolmaz).">
+          <Card title="Kabul bekleyenler" subtitle="Yürürlükte sözleşme varken hiçbir sürümü kabul etmemiş taraflar. Ödemeleri bekletilir (kaybolmaz).">
             {pending.loading && !pending.data ? <Loading /> : (pending.data?.users.length ?? 0) === 0 ? <Empty title="Bekleyen yok" /> : (
               <div className="flex flex-wrap gap-2 text-sm">
                 {pending.data!.users.map((u) => <Badge key={u.id} tone="gray">{u.displayName ?? u.username} · {u.publicId ?? u.username}</Badge>)}
@@ -132,22 +115,21 @@ export default function AdminContracts() {
             )}
           </Card>
 
-          <Card title="Onay kayıtları" action={<input id="contract-search" className={`${inputCls} w-56`} placeholder="Sözleşme no, kullanıcı adı, ID" value={q} onChange={(e) => setQ(e.target.value)} />}>
+          <Card title="Kabul kayıtları" action={<input id="contract-search" className={`${inputCls} w-56`} placeholder="Sözleşme no, kullanıcı adı, ID" value={q} onChange={(e) => setQ(e.target.value)} />}>
             {acc.error && <ErrorBox message={acc.error} onRetry={acc.reload} />}
             {acc.loading && !acc.data ? <Loading /> : (acc.data?.acceptances.length ?? 0) === 0 ? <Empty title="Kayıt yok" /> : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
-                  <thead className="text-xs text-gray-500"><tr><th className="py-2">No</th><th>Taraf</th><th>Sürüm</th><th>Yöntem</th><th>Zaman</th><th>IP</th><th /></tr></thead>
+                  <thead className="text-xs text-gray-500"><tr><th className="py-2">No</th><th>Taraf</th><th>Sürüm</th><th>Nerede</th><th>Zaman</th><th>IP</th></tr></thead>
                   <tbody className="divide-y divide-[#30291e]">
                     {acc.data!.acceptances.map((a) => (
                       <tr key={a.id}>
                         <td className="py-2 font-mono text-[#e5c77e]">{a.contractNo}</td>
                         <td>{a.name ?? "-"}<div className="text-xs text-gray-500">{a.username} · {a.publicId}</div></td>
                         <td>{a.version}</td>
-                        <td>{a.method === "sms" ? `SMS ${a.phone ?? ""}` : "Şifre"}</td>
+                        <td>{viaText[a.via ?? ""] ?? (a.method === "sms" ? "SMS" : a.method === "password" ? "Şifre" : "-")}</td>
                         <td className="whitespace-nowrap">{new Date(a.acceptedAt).toLocaleString("tr-TR")}</td>
                         <td className="font-mono text-xs">{a.ip ?? "-"}</td>
-                        <td><button type="button" className={btnSmall} onClick={() => run("PDF indirildi.", () => downloadPdf(a.id, a.contractNo))}>PDF</button></td>
                       </tr>
                     ))}
                   </tbody>

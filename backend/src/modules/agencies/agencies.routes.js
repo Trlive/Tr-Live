@@ -1,3 +1,6 @@
+import { clientIp } from '../../middleware/security/firewall.js';
+import { acceptWithAction } from '../contracts/contracts.service.js';
+import { cleanDevice } from '../users/sessions.service.js';
 import { requireContract } from '../contracts/contracts.routes.js';
 import { Router } from 'express';
 import { hub } from '../../infrastructure/websocket/realtime.js';
@@ -250,6 +253,8 @@ router.post('/agency-requests/:requestId/respond', async (req, res) => {
     let result = { accepted: accept };
     if (accept) {
       if (agency.status !== 'active') throw fail('Ajans aktif değil.', 409);
+      // Yayıncı sözleşmesi daveti kabul ederken, AYNI işlemde kabul edilir (uygulama contract: true gönderir; eski sürüme 428).
+      await acceptWithAction(c, req.user, 'broadcaster', { consent: req.body?.contract === true, via: 'agency_invite', ip: clientIp(req), device: cleanDevice(req.body?.device) });
       const b = (await c.query(`SELECT status, agency_id FROM broadcasters WHERE user_id = $1 FOR UPDATE`, [q.user_id])).rows[0];
       if (b?.status === 'suspended') throw fail('Yayıncılığınız askıya alınmış. Destek ile iletişime geçin.', 409);
       if (b?.agency_id === agency.id) throw fail('Zaten bu ajansın yayıncısısınız.', 409);
@@ -309,6 +314,7 @@ router.post('/agencies/:agencyId/self-join', async (req, res) => {
     const b = (await c.query(`SELECT status, agency_id FROM broadcasters WHERE user_id = $1 FOR UPDATE`, [req.user.id])).rows[0];
     if (b?.status === 'suspended') throw fail('Yayıncılığınız askıya alınmış. Destek ile iletişime geçin.', 409);
     if (b?.agency_id === a.id && b.status === 'approved') throw fail('Zaten bu ajansın yayıncısısınız.', 409);
+    await acceptWithAction(c, req.user, 'broadcaster', { consent: req.body?.contract === true, via: 'self_join', ip: clientIp(req), device: cleanDevice(req.body?.device) });
     if (b?.agency_id && b.agency_id !== a.id) throw fail('Başka bir ajansa bağlısınız. Önce o ajanstan ayrılın.', 409);
     await c.query(
       `INSERT INTO broadcasters(user_id, agency_id, status, approved_at, joined_agency_at) VALUES($1,$2,'approved',NOW(),NOW())

@@ -9,6 +9,8 @@ import '../services/presence_service.dart';
 import '../services/socket_service.dart';
 import '../widgets/app_theme.dart';
 import '../widgets/common.dart';
+import '../l10n/l10n.dart';
+import 'contract_screen.dart';
 import '../widgets/event_results_card.dart';
 import '../widgets/presence_widgets.dart';
 import 'messages_screen.dart';
@@ -610,7 +612,8 @@ class _AgencyInvitesScreenState extends State<AgencyInvitesScreen> {
   Future<void> _respond(String id, bool accept) async {
     if (_busy.contains(id)) return;
     setState(() => _busy.add(id));
-    final r = await guard(context, () => Api.post('/api/agency-requests/$id/respond', {'accept': accept}));
+    // Daveti kabul etmek = Yayıncı Sözleşmesi'ni kabul etmek (düğmenin altındaki not). Sunucu kaydı davetle aynı işlemde yazar.
+    final r = await guard(context, () => Api.post('/api/agency-requests/$id/respond', {'accept': accept, if (accept) 'contract': true}));
     if (!mounted) return;
     setState(() => _busy.remove(id));
     if (r != null) {
@@ -694,6 +697,20 @@ class _AgencyInvitesScreenState extends State<AgencyInvitesScreen> {
             ),
           ),
         ]),
+        if (!assistant)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: GestureDetector(
+              onTap: () => openContract(context, 'broadcaster', readOnly: true),
+              child: Text.rich(
+                TextSpan(style: const TextStyle(color: Pal.textDim, fontSize: 11.5), children: [
+                  TextSpan(text: tx('Kabul ederek ')),
+                  TextSpan(text: tx('TR LIVE Yayıncı Sözleşmesi'), style: const TextStyle(color: Pal.amber, decoration: TextDecoration.underline)),
+                  TextSpan(text: tx("'ni kabul etmiş olursunuz.")),
+                ]),
+              ),
+            ),
+          ),
       ]),
     );
   }

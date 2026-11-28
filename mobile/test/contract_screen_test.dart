@@ -3,51 +3,47 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tr_live/screens/contract_screen.dart';
 import 'package:tr_live/services/api.dart';
 
+http.Response _json(Object o, [int code = 200]) => http.Response.bytes(utf8.encode(jsonEncode(o)), code, headers: {'content-type': 'application/json'});
+
 void main() {
-  final longText = List.generate(200, (i) => 'Madde $i. Sözleşme metni satırı; ğüşıöç.').join('\n');
+  setUp(() => SharedPreferences.setMockInitialValues({}));
+  final view = {'kind': 'dealer', 'title': 'Coin Bayilik Sözleşmesi', 'version': '1.0', 'text': '## MADDE 1\nMetin; ğüşıöç.', 'sha256': 'a' * 64, 'method': 'clickwrap'};
 
-  testWidgets('sonuna kadar okunmadan onay kutusu ve düğme kapalı; sona gelince açılır', (tester) async {
-    final calls = <String>[];
+  testWidgets('tek dokunuşla kabul: gösterilen metnin özeti gönderilir, ekran kapanır', (tester) async {
+    Map<String, dynamic>? sent;
     Api.client = MockClient((req) async {
-      calls.add('${req.method} ${req.url.path}');
-      return http.Response.bytes(
-        utf8.encode(jsonEncode({'kind': 'broadcaster', 'title': 'Yayıncı Sözleşmesi', 'version': '1.0', 'text': longText, 'sha256': 'a' * 64, 'method': 'password', 'phone': null})),
-        200,
-        headers: {'content-type': 'application/json'},
-      );
+      if (req.method == 'POST') {
+        sent = jsonDecode(req.body) as Map<String, dynamic>;
+        expect(req.url.path, '/api/contracts/dealer/accept');
+        return _json({'ok': true, 'contractNo': 'BAY-000001', 'already': false}, 201);
+      }
+      return _json(view);
     });
-    await tester.pumpWidget(const MaterialApp(home: ContractScreen(kind: 'broadcaster')));
+    bool? result;
+    await tester.pumpWidget(MaterialApp(home: Builder(builder: (c) => TextButton(onPressed: () async => result = await openContract(c, 'dealer'), child: const Text('aç')))));
+    await tester.tap(find.text('aç'));
     await tester.pumpAndSettle();
-    expect(calls, contains('GET /api/contracts/broadcaster'));
-
-    CheckboxListTile box() => tester.widget<CheckboxListTile>(find.byType(CheckboxListTile));
-    FilledButton button() => tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Şifremle onayla'));
-    expect(box().onChanged, isNull, reason: 'okunmadan işaretlenemez');
-    expect(button().onPressed, isNull);
-    expect(find.text('Onaylamak için metni sonuna kadar okuyun.'), findsOneWidget);
-
-    await tester.drag(find.byType(SingleChildScrollView), const Offset(0, -100000));
-    await tester.pumpAndSettle();
-    expect(box().onChanged, isNotNull, reason: 'sona gelince işaretlenebilir');
-    expect(button().onPressed, isNull, reason: 'kutu işaretlenmeden düğme kapalı');
-
-    await tester.tap(find.byType(CheckboxListTile));
-    await tester.pumpAndSettle();
-    expect(button().onPressed, isNotNull);
+    expect(find.text('MADDE 1'), findsOneWidget, reason: 'markdown başlığı düz metin');
+    await tester.tap(find.text('Okudum, kabul ediyorum'));
+    // Kabul, cihaz bilgisini (yerel depo, telefon kanalları) toplar: gerçek zamanlı çalışsın diye runAsync. Bildirim kendi
+    // zamanlayıcısıyla canlandığı için pumpAndSettle bitmez: sabit adımlarla ilerletilir.
+    for (var i = 0; i < 40 && result == null; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(sent?['sha256'], 'a' * 64);
+    expect(result, isTrue);
+    await tester.pump(const Duration(seconds: 6)); // bildirimin kapanma zamanlayıcısı bitsin
   });
 
-  testWidgets('kısa metin ekrana sığarsa kaydırma gerekmez', (tester) async {
-    Api.client = MockClient((req) async => http.Response.bytes(
-          utf8.encode(jsonEncode({'kind': 'dealer', 'title': 'Bayilik', 'version': '1.0', 'text': 'Kısa metin.', 'sha256': 'b' * 64, 'method': 'sms', 'phone': '+905551112233', 'phoneMasked': '+905••••33'})),
-          200,
-          headers: {'content-type': 'application/json'},
-        ));
-    await tester.pumpWidget(const MaterialApp(home: ContractScreen(kind: 'dealer')));
+  testWidgets('salt okunur mod: kabul düğmesi yok', (tester) async {
+    Api.client = MockClient((req) async => _json(view));
+    await tester.pumpWidget(const MaterialApp(home: ContractScreen(kind: 'broadcaster', readOnly: true)));
     await tester.pumpAndSettle();
-    expect(tester.widget<CheckboxListTile>(find.byType(CheckboxListTile)).onChanged, isNotNull);
-    expect(find.text('SMS koduyla onayla'), findsOneWidget);
+    expect(find.text('Okudum, kabul ediyorum'), findsNothing);
   });
 }

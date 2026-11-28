@@ -1,6 +1,6 @@
 # TR LIVE YAYINCI SÖZLEŞMESİ
 
-**Sözleşme No:** YAY-[otomatik] · **Sürüm:** 1.2 · **Metin özeti (SHA-256):** [sistem tarafından] · **Yürürlük:** Madde 20'deki kurulma anı
+**Sözleşme No:** YAY-[otomatik] · **Sürüm:** 1.3 · **Metin özeti (SHA-256):** [sistem tarafından] · **Yürürlük:** Madde 20'deki kurulma anı
 
 > Köşeli parantezli `[KARAR: …]` notları imzaya açılmadan önce doldurulmalı ve silinmelidir. Bu metin bir taslaktır; yürürlüğe
 > girmeden önce avukat ve mali müşavir incelemesinden geçirilmelidir.
@@ -159,12 +159,12 @@ TR LIVE markası, logosu, yazılımı, tasarımları, veri tabanları ve diğer 
 
 19.2. Görevli ve yetkili mahkeme, emredici hükümler saklı kalmak üzere kanuna göre belirlenir. Yayıncı tacir değilse yetki sözleşmesi yapılamayacağından ayrı bir yetkili mahkeme seçilmemiştir (HMK md. 17). Taraflar arasındaki ilişkinin iş ilişkisi niteliği taşıdığının tespiti hâlinde iş mahkemeleri ve zorunlu arabuluculuk hükümleri uygulanır.
 
-## MADDE 20 – KURULMA, ONAY VE SÜRÜM
+## MADDE 20 – KURULMA, KABUL VE SÜRÜM
 
-20.1. Sözleşme elektronik ortamda kurulur: yayıncı metni uygulamada sonuna kadar görüntüler, onay kutusunu işaretler ve doğrulanmış telefonuna gönderilen tek kullanımlık kodu girer. Kurulma anı, kodun doğrulanıp onayın sistem kaydına geçtiği andır.
+20.1. Sözleşme elektronik ortamda kurulur: yayıncı, bir ajansın davetini uygulamada kabul ederken (ya da ajans sahibi kendini yayıncı olarak eklerken) davet düğmesinin altında bağlantısı gösterilen bu sözleşmeyi kabul etmiş olur. Sözleşme metni uygulamada her zaman okunabilir (Ayarlar → Sözleşmelerim). Kurulma anı, kabulün sistem kaydına geçtiği andır.
 
-20.2. TR LIVE; metnin sürümünü ve özetini (SHA-256), onay zamanını, IP adresini, cihaz bilgisini, doğrulanmış telefon numarasını ve kod doğrulama kaydını değiştirilemez şekilde saklar. Yayıncı, onayladığı metnin bu bilgileri içeren PDF kopyasını uygulamadan her zaman indirebilir.
+20.2. TR LIVE; metnin sürümünü ve yayıncıya gösterilen metnin özetini (SHA-256), kabul zamanını, kabulün yapıldığı işlemi, IP adresini ve cihaz bilgisini değiştirilemez şekilde saklar. Bu kayıt, sözleşmenin kurulduğunun ve içeriğinin delilidir.
 
-20.3. Sözleşmenin yeni sürümü yeniden onay ile yürürlüğe girer; önceki sürümle doğmuş haklar saklıdır.
+20.3. Sözleşmenin yeni sürümü uygulamada yeniden kabul ile yürürlüğe girer; önceki sürümle doğmuş haklar saklıdır.
 
 **Ekler:** Kazanç ve Ödeme Politikası · Topluluk Kuralları · Gizlilik ve Aydınlatma Metni

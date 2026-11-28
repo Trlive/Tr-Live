@@ -2480,104 +2480,85 @@ test('telefonu doğrulanmamış yayıncının maaşı KAYBOLMAZ, bekler', { skip
 });
 
 // EN SONDA: yayımlanan sözleşmeler silinemez ve ödeme/panel kapılarını açar; önceki testleri etkilemesin.
-test('sözleşme onayı: yayımlama, kişiye metin, onay, değiştirilemez kayıt, PDF, ödeme ve panel kapıları', { skip, timeout: 60000 }, async () => {
+test('sözleşme: yayımlama, işlemle birlikte kabul (ajans), panelde tek dokunuş, değiştirilemez kayıt, kapılar', { skip, timeout: 60000 }, async () => {
   const host = await register('soz_y');
   const dealerOwner = await register('soz_b');
+  const owner = await register('soz_s');
   await sql(`INSERT INTO broadcasters(user_id, status, approved_at) VALUES($1, 'approved', NOW())`, [host.id]);
   const dealer = await api('POST', '/api/admin/dealers', { token: U.d.token, body: { name: `Sözleşme Bayi ${Date.now()}`, ownerUserId: dealerOwner.id } });
   status(dealer, 201);
+  const ag = (await sql(`INSERT INTO agencies(name, owner_id, status, approved_at) VALUES($1, $2, 'active', NOW()) RETURNING id`, [`Sözleşme Ajans ${Date.now()}`, owner.id])).rows[0].id;
 
   // Sözleşme yayımlanmadan: kapılar açık, sistem bugünkü gibi.
-  let st = await api('GET', '/api/contracts', { token: host.token });
+  const st = await api('GET', '/api/contracts', { token: host.token });
   ok(st);
   assert.equal(st.body.contracts.find((c) => c.kind === 'broadcaster')?.required, false);
   ok(await api('GET', '/api/dealer/me', { token: dealerOwner.token }), 'yayımlanmamışken bayi paneli açık');
 
-  // Yayımlama: yalnızca süper yönetici; [KARAR] notlu metin reddedilir; sürüm tekrarlanamaz.
+  // Yayımlama: yalnızca süper yönetici; [KARAR] notlu metin reddedilir; sürüm tekrarlanamaz; metin değiştirilemez.
   const body = `# Deneme Yayıncı Sözleşmesi\n\nMADDE 1 – Taraflar ve konu. Bu metin uçtan uca test içindir; Türkçe karakterler: ğüşıöç İĞÜŞÖÇ.\n\n${'Madde metni. '.repeat(20)}`;
   status(await api('POST', '/api/admin/contracts/templates', { token: host.token, body: { kind: 'broadcaster', version: '1.0', body } }), 403);
   status(await api('POST', '/api/admin/contracts/templates', { token: U.d.token, body: { kind: 'broadcaster', version: '1.0', body: `${body}\n[KARAR: doldur]` } }), 400, 'karar notu');
   const pub = await api('POST', '/api/admin/contracts/templates', { token: U.d.token, body: { kind: 'broadcaster', version: '1.0', body } });
   status(pub, 201);
   status(await api('POST', '/api/admin/contracts/templates', { token: U.d.token, body: { kind: 'broadcaster', version: '1.0', body } }), 409, 'aynı sürüm');
-  await assert.rejects(sql(`UPDATE contract_templates SET body = 'değişti' WHERE id = $1`, [pub.body.template.id]), /değiştirilemez/, 'yayımlanan metin değiştirilemez');
+  await assert.rejects(sql(`UPDATE contract_templates SET body = 'değişti' WHERE id = $1`, [pub.body.template.id]), /değiştirilemez/);
   await assert.rejects(sql(`DELETE FROM contract_templates WHERE id = $1`, [pub.body.template.id]), /değiştirilemez/);
-  const drafts = await api('GET', '/api/admin/contracts/templates', { token: U.d.token });
-  ok(drafts);
-  assert.match(drafts.body.drafts.dealer, /COIN BAYİLİK/, 'taslaklar sunucuda');
+  assert.match((await api('GET', '/api/admin/contracts/templates', { token: U.d.token })).body.drafts.dealer, /COIN BAYİLİK/, 'taslaklar sunucuda');
 
-  // Onaylamamış yayıncı "bekleyenler" listesinde; maaş kapısı kapalı.
-  let pend = await api('GET', '/api/admin/contracts/pending?kind=broadcaster', { token: U.d.token });
-  assert.ok(pend.body.users.some((u) => u.id === host.id));
+  // İşlemle birlikte kabul: ajans sahibi kendini yayıncı ekler. contract: true yoksa 428 ve HİÇBİR şey yazılmaz.
+  const noConsent = await api('POST', `/api/agencies/${ag}/self-join`, { token: owner.token, body: {} });
+  status(noConsent, 428);
+  assert.equal(noConsent.body.code, 'contract_required');
+  assert.equal(noConsent.body.kind, 'broadcaster');
+  assert.equal((await sql(`SELECT COUNT(*)::int AS n FROM broadcasters WHERE user_id = $1`, [owner.id])).rows[0].n, 0, '428te yayıncılık başlamaz');
+  ok(await api('POST', `/api/agencies/${ag}/self-join`, { token: owner.token, body: { contract: true, device: { platform: 'android' } } }));
+  const viaJoin = (await sql(`SELECT method, via, version, kind FROM contract_acceptances WHERE user_id = $1`, [owner.id])).rows;
+  assert.deepEqual(viaJoin, [{ method: 'clickwrap', via: 'self_join', version: '1.0', kind: 'broadcaster' }], 'yayıncılıkla aynı işlemde kayıt');
+
+  // Onaylamamış yayıncı "bekleyenler"de ve maaş kapısı kapalı; panelden tek dokunuşla kabul edince açılır.
   const payable = async () => (await sql(
     `SELECT (NOT EXISTS (SELECT 1 FROM contract_templates ct WHERE ct.kind = 'broadcaster')
             OR EXISTS (SELECT 1 FROM contract_acceptances ca WHERE ca.user_id = $1 AND ca.kind = 'broadcaster')) AS ok`, [host.id])).rows[0].ok;
+  assert.ok((await api('GET', '/api/admin/contracts/pending?kind=broadcaster', { token: U.d.token })).body.users.some((u) => u.id === host.id));
   assert.equal(await payable(), false, 'onaysız yayıncıya maaş yatmaz');
-
-  // Kişiye doldurulmuş metin; SMS yapılandırılmamış ortamda ikinci adım hesap şifresi.
   const view = await api('GET', '/api/contracts/broadcaster', { token: host.token });
   ok(view);
-  assert.equal(view.body.method, 'password');
-  assert.match(view.body.text, /SİSTEM TARAFINDAN DOLDURULAN TARAF BİLGİLERİ/);
+  assert.equal(view.body.method, 'clickwrap');
   assert.match(view.body.text, new RegExp(host.username));
-  const accept = (b) => api('POST', '/api/contracts/broadcaster/accept', { token: host.token, body: { sha256: view.body.sha256, scrolled: true, password: 'sifre123', device: { platform: 'android' }, ...b } });
-  status(await accept({ scrolled: false }), 400, 'sonuna kadar okunmadı');
-  status(await accept({ sha256: '0'.repeat(64) }), 409, 'metin değişmiş');
-  status(await accept({ password: 'yanlis-sifre' }), 403, 'şifre');
-  status(await api('POST', '/api/contracts/dealer/accept', { token: host.token, body: { sha256: view.body.sha256, scrolled: true, password: 'sifre123' } }), 404, 'taraf olmadığı sözleşme');
-  const acc = await accept();
+  status(await api('POST', '/api/contracts/broadcaster/accept', { token: host.token, body: { sha256: '0'.repeat(64) } }), 409, 'metin değişmiş');
+  status(await api('POST', '/api/contracts/dealer/accept', { token: host.token, body: { sha256: view.body.sha256 } }), 404, 'taraf olmadığı sözleşme');
+  const acc = await api('POST', '/api/contracts/broadcaster/accept', { token: host.token, body: { sha256: view.body.sha256, device: { platform: 'android' } } });
   status(acc, 201);
   assert.match(acc.body.contractNo, /^YAY-\d{6}$/);
-  const again = await accept();
-  status(again, 200);
-  assert.equal(again.body.already, true, 'aynı sürüm ikinci kez onaylanmaz');
-  assert.equal(again.body.contractNo, acc.body.contractNo);
-  assert.equal(await payable(), true, 'onaydan sonra maaş kapısı açık');
-  pend = await api('GET', '/api/admin/contracts/pending?kind=broadcaster', { token: U.d.token });
-  assert.ok(!pend.body.users.some((u) => u.id === host.id));
+  const again = await api('POST', '/api/contracts/broadcaster/accept', { token: host.token, body: { sha256: view.body.sha256 } });
+  assert.equal(again.body.already, true, 'aynı sürüm ikinci kez kaydedilmez');
+  assert.equal(await payable(), true, 'kabulden sonra maaş kapısı açık');
+  assert.ok(!(await api('GET', '/api/admin/contracts/pending?kind=broadcaster', { token: U.d.token })).body.users.some((u) => u.id === host.id));
 
-  // Kayıt değiştirilemez; PDF bütünlüğü özetle doğrulanır.
+  // Kayıt değiştirilemez; gösterilen metnin özeti kayıtlı.
   await assert.rejects(sql(`UPDATE contract_acceptances SET ip = '1.1.1.1' WHERE id = $1`, [acc.body.id]), /değiştirilemez/);
   await assert.rejects(sql(`DELETE FROM contract_acceptances WHERE id = $1`, [acc.body.id]), /değiştirilemez/);
   await assert.rejects(sql(`TRUNCATE contract_acceptances`), /değiştirilemez/);
-  const pdfRes = await fetch(`${BASE}/api/contracts/acceptances/${acc.body.id}/pdf`, { headers: { Authorization: `Bearer ${host.token}` } });
-  assert.equal(pdfRes.status, 200);
-  assert.equal(pdfRes.headers.get('content-type'), 'application/pdf');
-  const pdf = Buffer.from(await pdfRes.arrayBuffer());
-  assert.equal(pdf.subarray(0, 5).toString(), '%PDF-');
-  const { createHash } = await import('node:crypto');
-  assert.equal(createHash('sha256').update(pdf).digest('hex'), pdfRes.headers.get('x-content-sha256'), 'PDF özeti kayıttakiyle aynı');
-  const rec = (await sql(`SELECT rendered_sha256, method, ip, party FROM contract_acceptances WHERE id = $1`, [acc.body.id])).rows[0];
-  assert.equal(rec.rendered_sha256, view.body.sha256, 'kaydedilen özet kullanıcının gördüğü metnin özeti');
-  assert.equal(rec.method, 'password');
+  const rec = (await sql(`SELECT rendered_sha256, method, via, ip, party FROM contract_acceptances WHERE id = $1`, [acc.body.id])).rows[0];
+  assert.equal(rec.rendered_sha256, view.body.sha256);
+  assert.equal(rec.method, 'clickwrap');
+  assert.equal(rec.via, 'panel');
   assert.equal(rec.party.username, host.username);
-  status(await fetch(`${BASE}/api/contracts/acceptances/${acc.body.id}/pdf`, { headers: { Authorization: `Bearer ${dealerOwner.token}` } }), 404, 'başkasının belgesi');
-  const adminPdf = await fetch(`${BASE}/api/admin/contracts/acceptances/${acc.body.id}/pdf`, { headers: { Authorization: `Bearer ${U.d.token}` } });
-  assert.equal(adminPdf.status, 200);
-  // Uygulama PDF'i tarayıcıda açar: 5 dakikalık imzalı bağlantı, oturum ve sürüm başlığı olmadan çalışır.
-  const link = await api('POST', `/api/contracts/acceptances/${acc.body.id}/link`, { token: host.token });
-  ok(link);
-  const viaLink = await fetch(`${BASE}${link.body.path}`);
-  assert.equal(viaLink.status, 200);
-  assert.equal(createHash('sha256').update(Buffer.from(await viaLink.arrayBuffer())).digest('hex'), pdfRes.headers.get('x-content-sha256'));
-  status(await api('POST', `/api/contracts/acceptances/${acc.body.id}/link`, { token: dealerOwner.token }), 404, 'başkasının belgesine bağlantı yok');
-  assert.equal((await fetch(`${BASE}/api/contract-pdf/bozuk.imza`)).status, 410);
   const list = await api('GET', `/api/admin/contracts/acceptances?q=${acc.body.contractNo}`, { token: U.d.token });
   assert.equal(list.body.acceptances[0]?.contractNo, acc.body.contractNo);
+  assert.equal(list.body.acceptances[0]?.via, 'panel');
 
-  // Bayi paneli kapısı: sözleşme yayımlanınca onaydan önce 428, sonra açık.
+  // Bayi paneli kapısı: sözleşme yayımlanınca ilk açılışta 428, tek dokunuşla kabul edince açık.
   ok(await api('POST', '/api/admin/contracts/templates', { token: U.d.token, body: { kind: 'dealer', version: '1.0', body: body.replace('Yayıncı', 'Bayilik') } }));
   const gated = await api('GET', '/api/dealer/me', { token: dealerOwner.token });
   status(gated, 428);
   assert.equal(gated.body.code, 'contract_required');
   assert.equal(gated.body.kind, 'dealer');
   const dv = await api('GET', '/api/contracts/dealer', { token: dealerOwner.token });
-  ok(dv);
   assert.match(dv.body.text, /Bayi seviyesi: Ana Bayi/);
-  status(await api('POST', '/api/contracts/dealer/accept', { token: dealerOwner.token, body: { sha256: dv.body.sha256, scrolled: true, password: 'sifre123' } }), 201);
-  ok(await api('GET', '/api/dealer/me', { token: dealerOwner.token }), 'onaydan sonra bayi paneli açık');
-  const ds = await api('GET', '/api/contracts', { token: dealerOwner.token });
-  assert.equal(ds.body.contracts.find((c) => c.kind === 'dealer').upToDate, true);
-  // Kapı yalnızca tarafı etkiler: bayi olmayan kullanıcı /api/dealer'da eskisi gibi (428 değil).
-  assert.notEqual((await api('GET', '/api/dealer/me', { token: host.token })).status, 428);
+  status(await api('POST', '/api/contracts/dealer/accept', { token: dealerOwner.token, body: { sha256: dv.body.sha256 } }), 201);
+  ok(await api('GET', '/api/dealer/me', { token: dealerOwner.token }), 'kabulden sonra bayi paneli açık');
+  assert.equal((await api('GET', '/api/contracts', { token: dealerOwner.token })).body.contracts.find((c) => c.kind === 'dealer').upToDate, true);
+  assert.notEqual((await api('GET', '/api/dealer/me', { token: host.token })).status, 428, 'kapı yalnızca tarafı etkiler');
 });

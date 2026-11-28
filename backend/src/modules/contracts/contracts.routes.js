@@ -1,5 +1,4 @@
-// Sözleşme uçları: kullanıcı (/api/contracts) ve süper yönetici (/api/admin/contracts). Kurallar: contracts.service.js.
-import crypto from 'node:crypto';
+// Sözleşme uçları: kullanıcı (/api/contracts) ve süper yönetici (/api/admin/contracts). Kurallar: contracts.service.js. PDF yok (sahibin kararı).
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,37 +8,12 @@ import { requireAuth, requireSuperAdmin } from '../../middleware/authentication/
 import { userLimit, clientIp } from '../../middleware/security/firewall.js';
 import { fail, uuid } from '../../shared/errors/http.js';
 import { cleanDevice } from '../users/sessions.service.js';
-import { getConfig, phoneVerifyOn } from '../system/app_config.service.js';
 import { log } from '../../infrastructure/observability/log.js';
-import { jwtSecret } from '../../config.js';
-import { KINDS, isKind, statusFor, viewFor, accept, publishTemplate, relationOf, hasAccepted } from './contracts.service.js';
+import { KINDS, isKind, statusFor, viewFor, recordAcceptance, publishTemplate, relationOf, hasAccepted } from './contracts.service.js';
 
 export const router = Router();
 export const adminRouter = Router();
-export const publicRouter = Router();
 router.use(requireAuth);
-
-// ---------------------------------------------------------------- PDF indirme bağlantısı
-// Uygulama PDF'i telefonun tarayıcısında açar; tarayıcıda oturum başlığı olmadığı için tek belgeye özel, 5 dakikalık imzalı
-// bağlantı verilir. Bağlantıda belge kimliği ve bitiş zamanı imzalıdır; başka belgeye ya da süre sonrasına kullanılamaz.
-const LINK_TTL_SEC = 300;
-const b64u = (b) => Buffer.from(b).toString('base64url');
-const linkSig = (body) => b64u(crypto.createHmac('sha256', jwtSecret()).update(`contract-pdf|${body}`).digest());
-export function pdfLinkToken(acceptanceId, now = Date.now()) {
-  const body = b64u(`${acceptanceId}|${Math.floor(now / 1000) + LINK_TTL_SEC}`);
-  return `${body}.${linkSig(body)}`;
-}
-export function readPdfLinkToken(token, now = Date.now()) {
-  const [body, sig] = String(token ?? '').split('.');
-  if (!body || !sig || body.length > 200) return null;
-  const want = linkSig(body);
-  if (want.length !== sig.length || !crypto.timingSafeEqual(Buffer.from(want), Buffer.from(sig))) return null;
-  const [id, exp] = Buffer.from(body, 'base64url').toString().split('|');
-  if (!/^[0-9a-f-]{36}$/i.test(id ?? '') || !(Number(exp) > Math.floor(now / 1000))) return null;
-  return id;
-}
-
-const maskPhone = (p) => (p ? `${p.slice(0, 4)}••••${p.slice(-2)}` : null);
 
 /**
  * Kapı: kullanıcı bu türün tarafıysa (ör. bayi hesabı sahibi) ve o tür için yayımlanmış bir sözleşme varsa, en az bir sürümü
@@ -66,59 +40,19 @@ router.get('/acceptances', async (req, res) => {
   res.json({ acceptances: r.rows.map((x) => ({ id: x.id, contractNo: x.contract_no, kind: x.kind, version: x.version, method: x.method, acceptedAt: x.accepted_at })) });
 });
 
-async function sendPdf(res, id, ownerId = null) {
-  const r = (await query(
-    `SELECT contract_no, pdf, pdf_sha256 FROM contract_acceptances WHERE id = $1 AND ($2::uuid IS NULL OR user_id = $2)`, [id, ownerId],
-  )).rows[0];
-  if (!r) throw fail('Belge bulunamadı.', 404);
-  res.set({
-    'Content-Type': 'application/pdf',
-    'Content-Disposition': `attachment; filename="${r.contract_no}.pdf"`,
-    'X-Content-SHA256': r.pdf_sha256,
-    'Cache-Control': 'private, no-store',
-  });
-  res.send(r.pdf);
-}
-
-router.get('/acceptances/:id/pdf', async (req, res) => {
-  await sendPdf(res, uuid(req.params.id, 'Belge'), req.user.id);
-});
-
-router.post('/acceptances/:id/link', userLimit('contract_pdf_link', 30, 15 * 60e3), async (req, res) => {
-  const id = uuid(req.params.id, 'Belge');
-  const own = await query(`SELECT 1 FROM contract_acceptances WHERE id = $1 AND user_id = $2`, [id, req.user.id]);
-  if (!own.rowCount) throw fail('Belge bulunamadı.', 404);
-  res.json({ path: `/api/contract-pdf/${pdfLinkToken(id)}`, expiresIn: LINK_TTL_SEC });
-});
-
-// Oturumsuz (imzalı bağlantı). app.js'te /api/contract-pdf altına bağlanır.
-publicRouter.get('/:token', async (req, res) => {
-  const id = readPdfLinkToken(req.params.token);
-  if (!id) throw fail('Bağlantının süresi dolmuş ya da geçersiz. Uygulamadan yeniden açın.', 410);
-  await sendPdf(res, id);
-});
-
 router.get('/:kind', async (req, res) => {
   const v = await viewFor(req.user, String(req.params.kind));
-  const cfg = await getConfig();
-  const sms = phoneVerifyOn(cfg);
-  res.json({
-    kind: v.kind, title: v.title, version: v.version, text: v.text, sha256: v.sha256,
-    // Onayın ikinci adımı: SMS (Firebase) ya da SMS yapılandırılmamışsa hesap şifresi.
-    method: sms ? 'sms' : 'password', phone: sms ? req.user.phone ?? null : null, phoneMasked: maskPhone(req.user.phone),
-  });
+  res.json({ kind: v.kind, title: v.title, version: v.version, text: v.text, sha256: v.sha256, method: 'clickwrap' });
 });
 
-router.post('/:kind/accept', userLimit('contract_accept', 10, 15 * 60e3), async (req, res) => {
+// Tek dokunuşla kabul (ajans ve bayi paneli; eski uygulama sürümlerinde yayıncı da). Gösterilen metnin özeti karşılaştırılır.
+router.post('/:kind/accept', userLimit('contract_accept', 20, 15 * 60e3), async (req, res) => {
   const kind = String(req.params.kind);
   if (!isKind(kind)) throw fail('Sözleşme türü geçersiz.', 404);
   const sha = String(req.body?.sha256 ?? '');
   if (!/^[0-9a-f]{64}$/.test(sha)) throw fail('Sözleşme özeti eksik.');
-  const out = await accept(req.user, kind, {
-    sha, scrolled: req.body?.scrolled === true, idToken: req.body?.idToken, password: req.body?.password,
-    ip: clientIp(req), device: cleanDevice(req.body?.device),
-  });
-  if (!out.already) log.info('contract_accepted', { userId: req.user.id, kind, contractNo: out.contractNo });
+  const out = await recordAcceptance(req.user, kind, { shownSha: sha, via: 'panel', ip: clientIp(req), device: cleanDevice(req.body?.device) });
+  if (!out.already) log.info('contract_accepted', { userId: req.user.id, kind, contractNo: out.contractNo, via: 'panel' });
   res.status(out.already ? 200 : 201).json({ ok: true, id: out.id, contractNo: out.contractNo, already: out.already });
 });
 
@@ -159,7 +93,7 @@ adminRouter.get('/acceptances', async (req, res) => {
   const kind = req.query.kind && isKind(String(req.query.kind)) ? String(req.query.kind) : null;
   const q = String(req.query.q ?? '').trim().slice(0, 60);
   const r = await query(
-    `SELECT a.id, a.contract_no, a.kind, a.version, a.method, a.phone, a.ip, a.accepted_at, a.rendered_sha256, a.pdf_sha256, a.party
+    `SELECT a.id, a.contract_no, a.kind, a.version, a.method, a.via, a.phone, a.ip, a.accepted_at, a.rendered_sha256, a.party
      FROM contract_acceptances a
      WHERE ($1::text IS NULL OR a.kind = $1)
        AND ($2 = '' OR a.contract_no ILIKE '%' || $2 || '%' OR a.party->>'username' ILIKE '%' || $2 || '%' OR a.party->>'publicId' = $2)
@@ -169,7 +103,7 @@ adminRouter.get('/acceptances', async (req, res) => {
   res.json({
     acceptances: r.rows.map((x) => ({
       id: x.id, contractNo: x.contract_no, kind: x.kind, version: x.version, method: x.method, phone: x.phone, ip: x.ip,
-      acceptedAt: x.accepted_at, renderedSha256: x.rendered_sha256, pdfSha256: x.pdf_sha256,
+      via: x.via, acceptedAt: x.accepted_at, renderedSha256: x.rendered_sha256,
       name: x.party?.name ?? null, username: x.party?.username ?? null, publicId: x.party?.publicId ?? null,
     })),
   });
@@ -192,8 +126,4 @@ adminRouter.get('/pending', async (req, res) => {
     [kind],
   );
   res.json({ kind, users: r.rows.map((x) => ({ id: x.id, username: x.username, displayName: x.display_name, publicId: x.public_id })) });
-});
-
-adminRouter.get('/acceptances/:id/pdf', async (req, res) => {
-  await sendPdf(res, uuid(req.params.id, 'Belge'));
 });

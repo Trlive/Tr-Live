@@ -8,7 +8,7 @@
 
 | Konu | Karar | Metne / sisteme etkisi |
 |---|---|---|
-| İmza usulü | **Herkese uygulama içi onay** (metni sonuna kadar görüntüleme + onay kutusu + SMS kodu) | Üç sözleşmede son madde buna göre yazıldı. Sistemde sözleşme onay modülü kurulacak (sürüm, SHA-256, IP, cihaz, telefon, kod kaydı, PDF). |
+| İmza usulü | **İşlemle birlikte tek dokunuşla kabul** (v2.152.21; rakiplerdeki gibi). SMS ve PDF yok | Yayıncı sözleşmesi ajans davetini kabul ederken (düğmenin altında not ve bağlantı), ajans ve bayi sözleşmesi panel ilk açılırken "Okudum, kabul ediyorum" ile. Kayıt: sürüm, gösterilen metnin SHA-256 özeti, zaman, işlem, IP, cihaz; veritabanında değiştirilemez. Sözleşmeler 1.3'te son madde buna göre. |
 | Bayilik modeli | **Toptan alım-satım (bugünkü model):** bayi TR LIVE'den toptan Coin alır, kendi adına müşteriye satar, Coin'i müşterinin ID'sine yükler, kazancı alış-satış farkıdır | Bayilik sözleşmesi bu modele göre baştan yazıldı. Bayi müşteriye karşı satıcıdır (fatura/fiş, tüketici hakları, ters ibraz riski). Play kuralı: bayi uygulama içinde satış reklamı, fiyat, IBAN, iletişim paylaşamaz. |
 | Sözleşmenin tarafı olan şirket | **Henüz belli değil** | Alan boş; sistemde ayar olarak tutulacak. |
 | Kendine hediye | **Sınırla** | Dönemde sayılan toplam Diamond'ın en çok %20'si (başkalarından gelenin dörtte biri). Sistemde uygulandı (v2.152.20): maaş, avans, ajans primi ve yayıncı ekranı aynı kuralı kullanıyor. Sözleşmede Yayıncı 6.3 ve Ajans 6.2. |

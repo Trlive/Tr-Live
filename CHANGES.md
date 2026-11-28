@@ -1,3 +1,19 @@
+## v2.152.21 — Sözleşmeler rakiplerdeki gibi: işlemle birlikte tek dokunuşla kabul (SMS ve PDF kaldırıldı)
+
+Sahibin kararı: Yoho / Mico / Bigo'daki gibi sözleşme, kişinin o rolü üstlendiği işlemle birlikte kabul edilir.
+- **Yayıncı sözleşmesi:** ajans davetini kabul ederken (ya da ajans sahibi kendini yayıncı eklerken). Davet kartında "Kabul ederek TR LIVE
+  Yayıncı Sözleşmesi'ni kabul etmiş olursunuz" notu ve metne bağlantı. Kabul kaydı davetle **aynı veritabanı işleminde** yazılır: biri
+  olmadan diğeri olmaz. Eski uygulama sürümü onay göndermezse 428 alır ve sözleşme ekranı açılır.
+- **Ajans ve bayi sözleşmesi:** panel ilk açılırken tek ekran, "Okudum, kabul ediyorum". Zorunlu kaydırma, SMS kodu ve şifre kalktı.
+- **PDF kaldırıldı** (üretim, indirme bağlantısı, panel düğmesi). Kayıt yerinde: sürüm, gösterilen metnin özeti, zaman, işlem (`via`),
+  IP, cihaz; veritabanında değiştirilemez. Panelde "Nerede" sütunu (sözleşme ekranı / ajans daveti / ajans sahibi kendini ekledi).
+- Migration 120: `method` için `clickwrap`, `via` sütunu, PDF sütunları isteğe bağlı.
+- Sözleşme metinleri 1.3: kurulma maddesi yeni usule göre.
+- **Kullanıcı sözleşmesi** değişmedi: kayıtta kabul (mevcut).
+
+**Sınama:** backend 521 birim; gerçek PostgreSQL'de 53/53 e2e (davet işlemiyle birlikte kabul: onaysız istek 428 alır ve yarım kayıt kalmaz;
+panelde tek dokunuş; değiştirilemezlik; ödeme ve bayi paneli kapıları); `flutter analyze` 0 hata/0 uyarı, `flutter test` 71/71; panel `tsc` 0 hata.
+
 ## v2.152.20 — Sözleşme onay sistemi, kendine hediye sınırı, sözleşmeler 1.2
 
 **Sözleşme onay sistemi (karar: herkese uygulama içi onay).** Yayıncı, ajans sahibi ve Coin bayisi sözleşmeleri.

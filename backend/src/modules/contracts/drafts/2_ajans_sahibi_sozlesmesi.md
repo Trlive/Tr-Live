@@ -1,6 +1,6 @@
 # TR LIVE AJANS SAHİBİ VE YAYINCI YÖNETİMİ SÖZLEŞMESİ
 
-**Sözleşme No:** AJS-[otomatik] · **Sürüm:** 1.2 · **Metin özeti (SHA-256):** [sistem tarafından] · **Yürürlük:** Madde 18'deki kurulma anı
+**Sözleşme No:** AJS-[otomatik] · **Sürüm:** 1.3 · **Metin özeti (SHA-256):** [sistem tarafından] · **Yürürlük:** Madde 18'deki kurulma anı
 
 > `[KARAR: …]` notları imzaya açılmadan önce doldurulmalı ve silinmelidir. Bu metin bir taslaktır; avukat ve mali müşavir incelemesinden
 > geçirilmelidir.
@@ -125,12 +125,12 @@ Mücbir sebep, sorumluluğun sınırı (TBK md. 115 saklı), devir yasağı, bil
 
 17.4. Tacirler arasında, TR LIVE'in usulüne uygun tutulmuş elektronik kayıtları, aksi ispat edilebilmek kaydıyla delil niteliğindedir (HMK md. 193).
 
-## MADDE 18 – KURULMA, ONAY VE SÜRÜM
+## MADDE 18 – KURULMA, KABUL VE SÜRÜM
 
-18.1. Sözleşme elektronik ortamda kurulur: ajans sahibi metni uygulamada ya da panelde sonuna kadar görüntüler, onay kutusunu işaretler ve doğrulanmış telefonuna gönderilen tek kullanımlık kodu girer. Kurulma anı, kodun doğrulanıp onayın sistem kaydına geçtiği andır.
+18.1. Sözleşme elektronik ortamda kurulur: ajans sahibi, ajans panelini ilk açtığında gösterilen bu sözleşmeyi "Okudum, kabul ediyorum" düğmesiyle kabul eder. Sözleşme metni uygulamada her zaman okunabilir (Ayarlar → Sözleşmelerim). Kurulma anı, kabulün sistem kaydına geçtiği andır.
 
-18.2. TR LIVE; metnin sürümünü ve özetini (SHA-256), onay zamanını, IP adresini, cihaz bilgisini, doğrulanmış telefon numarasını ve kod doğrulama kaydını değiştirilemez şekilde saklar. Ajans sahibi, onayladığı metnin bu bilgileri içeren PDF kopyasını panelden her zaman indirebilir.
+18.2. TR LIVE; metnin sürümünü ve ajans sahibine gösterilen metnin özetini (SHA-256), kabul zamanını, IP adresini ve cihaz bilgisini değiştirilemez şekilde saklar. Bu kayıt, sözleşmenin kurulduğunun ve içeriğinin delilidir.
 
-18.3. Sözleşmenin yeni sürümü yeniden onay ile yürürlüğe girer; önceki sürümle doğmuş haklar saklıdır.
+18.3. Sözleşmenin yeni sürümü yeniden kabul ile yürürlüğe girer; önceki sürümle doğmuş haklar saklıdır.
 
 **Ekler:** Ajans Komisyon Politikası · Yetki Tablosu (asistan ve referans ajans) · Veri İşleme Sözleşmesi

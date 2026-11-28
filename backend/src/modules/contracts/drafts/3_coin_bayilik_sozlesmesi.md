@@ -1,6 +1,6 @@
 # TR LIVE COIN BAYİLİK SÖZLEŞMESİ
 
-**Sözleşme No:** BAY-[otomatik] · **Sürüm:** 1.2 · **Metin özeti (SHA-256):** [sistem tarafından] · **Yürürlük:** Madde 20'deki kurulma anı
+**Sözleşme No:** BAY-[otomatik] · **Sürüm:** 1.3 · **Metin özeti (SHA-256):** [sistem tarafından] · **Yürürlük:** Madde 20'deki kurulma anı
 
 > `[KARAR: …]` notları imzaya açılmadan önce doldurulmalı ve silinmelidir. Bu metin bir taslaktır; avukat ve mali müşavir incelemesinden
 > geçirilmelidir. Çok seviyeli bayi yapıları 6502 sayılı Kanun md. 81'deki **saadet zinciri** yasağı bakımından özellikle incelenmelidir.
@@ -148,12 +148,12 @@ Mücbir sebep, sorumluluğun sınırı (TBK md. 115 saklı), devir yasağı, bil
 
 19.3. Bayi tacir değilse yetkili mahkeme kanuna göre belirlenir.
 
-## MADDE 20 – KURULMA, ONAY VE SÜRÜM
+## MADDE 20 – KURULMA, KABUL VE SÜRÜM
 
-20.1. Sözleşme elektronik ortamda kurulur: bayi metni uygulamada ya da panelde sonuna kadar görüntüler, onay kutusunu işaretler ve doğrulanmış telefonuna gönderilen tek kullanımlık kodu girer. Kurulma anı, kodun doğrulanıp onayın sistem kaydına geçtiği andır.
+20.1. Sözleşme elektronik ortamda kurulur: bayi, bayi panelini ilk açtığında gösterilen bu sözleşmeyi "Okudum, kabul ediyorum" düğmesiyle kabul eder. Sözleşme metni uygulamada her zaman okunabilir (Ayarlar → Sözleşmelerim). Kurulma anı, kabulün sistem kaydına geçtiği andır.
 
-20.2. TR LIVE; metnin sürümünü ve özetini (SHA-256), onay zamanını, IP adresini, cihaz bilgisini, doğrulanmış telefon numarasını ve kod doğrulama kaydını değiştirilemez şekilde saklar. Bayi, onayladığı metnin bu bilgileri içeren PDF kopyasını panelden her zaman indirebilir.
+20.2. TR LIVE; metnin sürümünü ve bayiye gösterilen metnin özetini (SHA-256), kabul zamanını, IP adresini ve cihaz bilgisini değiştirilemez şekilde saklar. Bu kayıt ve Bayi Finans Defteri, sözleşmenin kurulduğunun ve içeriğinin delilidir.
 
-20.3. Sözleşmenin yeni sürümü yeniden onay ile yürürlüğe girer; önceki sürümle doğmuş haklar saklıdır.
+20.3. Sözleşmenin yeni sürümü yeniden kabul ile yürürlüğe girer; önceki sürümle doğmuş haklar saklıdır.
 
 **Ekler:** Toptan Fiyat Listesi · Hacim Primi Politikası · Yetki Tablosu
