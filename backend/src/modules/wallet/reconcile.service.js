@@ -13,7 +13,13 @@
 // Ölçek notu: sorgu `wallet_transactions` tablosunun tamamını bir kez tarar. Günde bir çalıştığı
 // için bugünkü boyutta sorun değil. Tablo ~50 milyon satırı geçerse artımlı yönteme geçilmeli
 // (o zaman commit sırası / zaman damgası farkı için güvenlik payı gerekir).
-import { query } from '../../infrastructure/database/database.js';
+import { query, tx } from '../../infrastructure/database/database.js';
+
+/** Tam tablo taraması: genel 30 sn sorgu sınırı yerine yalnızca bu sorgu için 10 dk (bkz. database.js). */
+const longQuery = (sql, params = []) => tx(async (c) => {
+  await c.query(`SET LOCAL statement_timeout = '10min'`);
+  return c.query(sql, params);
+});
 
 /** Son çalışma ve açık (çözülmemiş) fark sayısı — panel ve uyarı için. */
 export async function reconcileStatus() {
@@ -37,7 +43,7 @@ export async function runReconciliation({ manual = false, startedBy = null } = {
   )).rows[0];
   try {
     // 1) Tabanı olmayan kullanıcılar için taban al. Bakiye ve defter toplamı aynı sorguda okunur.
-    const added = await query(
+    const added = await longQuery(
       `INSERT INTO wallet_recon_baseline(user_id, coins, diamonds, led_coins, led_diamonds)
        SELECT u.id, u.coins, u.diamonds, COALESCE(w.c, 0), COALESCE(w.d, 0)
          FROM users u
@@ -48,7 +54,7 @@ export async function runReconciliation({ manual = false, startedBy = null } = {
     );
 
     // 2) Denetim: tabanı olan her kullanıcı için eşitlik kontrolü (tek sorgu = tutarlı görüntü).
-    const check = await query(
+    const check = await longQuery(
       `WITH led AS (SELECT user_id, SUM(coin_amount) AS c, SUM(diamond_amount) AS d
                       FROM wallet_transactions GROUP BY user_id),
             calc AS (

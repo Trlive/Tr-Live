@@ -1,3 +1,25 @@
+## v2.155.3 — Donma koruması: veritabanı süre sınırları (sağlamlık sıralamasında 1. madde)
+
+**Sorun:** veritabanında sorgu ve açık işlem süre sınırı yoktu. Takılan tek bir sorgu ya da yarıda bırakılmış bir işlem, havuzdaki 20 bağlantıyı
+ve tuttuğu kilitleri süresiz tutabilirdi. Sonuç: bütün uygulama donar (odalar, hediyeler, girişler).
+
+- **Sorgu sınırı** `DB_STATEMENT_TIMEOUT_MS` (varsayılan 30 sn): aşan sorgu iptal edilir (57014), istek anlaşılır bir hata alır, bağlantı serbest kalır.
+- **Açık işlem sınırı** `DB_IDLE_TX_TIMEOUT_MS` (varsayılan 60 sn): BEGIN'den sonra sorgusuz bekleyen işlem kapatılır; kilitler ve bağlantı bırakılır.
+- **Uzun işlere istisna:** yalnızca o işlem için `SET LOCAL statement_timeout = '10min'`:
+  - dönem kapanışı;
+  - mutabakatın iki tam tablo taraması.
+- **Göçler:** migration çalıştırıcısında iki sınır da kapalı (büyük indeks oluşturmak 30 sn'yi aşabilir).
+- **Bulunan çökme:** sınır testinde, veritabanı işlem bağlantısını kapattığında Node sürecinin ÇÖKTÜĞÜ görüldü. Havuzdan alınmış bağlantıda
+  `error` dinleyicisi yoktu. Bu, ağ kopması ya da veritabanı yeniden başlatılması sırasında da olabilirdi. `tx()` artık dinleyici takıyor;
+  işlem normal bir hatayla geri dönüyor, bozuk bağlantı havuza geri konmuyor.
+- **Sınama:** gerçek PostgreSQL'de:
+  1. takılan sorgu 1,1 sn'de iptal;
+  2. SET LOCAL istisnası geçiyor;
+  3. askıda kalan işlem kapatılıyor ve süreç çökmüyor;
+  4. havuz sağlam.
+
+  Ayrıca `check` 0, birim 551, e2e 57/57.
+
 ## v2.155.2 — Panel giriş bağlantısı boş sayfa açıyordu
 
 - Caddy'de `redir /yonetim/admin/login/ 302` satırı: ilk argüman `/` ile başladığı için Caddy onu YÖNLENDİRME HEDEFİ değil EŞLEŞME KOŞULU sayıyordu.
