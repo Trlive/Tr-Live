@@ -1,5 +1,13 @@
 ## v2.155.4 — Fasulye dışarı gönderim sınırı (F-05, sağlamlık sıralamasında 2. madde)
 
+**Ek: izin matrisi testi (K-03).**
+- Test, `app.js`'teki her `/api/admin…` bağlamasını ve bağlı yönlendiricilerin kaynak dosyalarını okuyarak yönetim uçlarını çıkarıyor:
+  bugün 209 uç, genel yönetim yönlendiricisinin alt dosyaları dahil.
+- Her uca gerçek istek atılıyor: misafir 401, normal kullanıcı 403 almalı. Bugün açık uç yok.
+- Yeni eklenen ve korumasız kalan bir yönetim ucu bu testi kırar.
+- **Kör nokta:** yardımcı admin (support) ile süper yönetici arasındaki ayrımı denetlemez.
+
+
 - **Sorun:** ele geçirilen bir yayıncı hesabının Fasulyesi tek seferde başka hesaba Coin olarak ya da bayiye gönderilebiliyordu.
 - **Kural:** başkasına Coin gönderme + bayiye gönderim + admine çekim talebi toplamı son 24 saatte ayarlanan sınırı aşamaz.
   - Ayar `usdDailyOutCents`: varsayılan 5.000 Fasulye; panelde Fasulye Cüzdanı; 0 = kapalı.
