@@ -314,7 +314,9 @@ class _DealerSellScreenState extends State<DealerSellScreen> {
   final _amount = TextEditingController();
   final _note = TextEditingController();
   Map<String, dynamic>? _buyer;
-  String _balance = '0';
+  // null = henüz alınamadı. Eskiden '0' ile başlıyordu: yükleme sessizce başarısız olunca bayi stokunu 0 görüyor ve satış
+  // "bakiye yetersiz" diye kilitleniyordu. Bilinmiyorsa satış açık kalır; yetersizliği sunucu zaten reddeder.
+  String? _balance;
   String? _findErr;
   bool _finding = false;
   bool _busy = false;
@@ -340,7 +342,9 @@ class _DealerSellScreenState extends State<DealerSellScreen> {
     try {
       final r = await Api.get('/api/dealer/me');
       if (mounted) setState(() => _balance = '${mapOf(r['dealer'])?['coinBalance'] ?? '0'}');
-    } catch (_) {}
+    } catch (e) {
+      if (mounted) toast(context, tx('Bakiye alınamadı: {e}', {'e': '$e'}), error: true);
+    }
   }
 
   Future<void> _find() async {
@@ -363,7 +367,10 @@ class _DealerSellScreenState extends State<DealerSellScreen> {
   }
 
   BigInt get _coins => BigInt.tryParse(_amount.text.trim()) ?? BigInt.zero;
-  bool get _tooMuch => _coins > (BigInt.tryParse(_balance) ?? BigInt.zero);
+  bool get _tooMuch {
+    final b = BigInt.tryParse(_balance ?? '');
+    return b != null && _coins > b;
+  }
 
   Future<void> _confirm() async {
     final b = _buyer;
@@ -432,7 +439,7 @@ class _DealerSellScreenState extends State<DealerSellScreen> {
         ? tx('Sipariş alındı; Coin 5 dakika sonra hesaba geçecek.')
         : tx('{n} Coin {name} hesabına yüklendi.', {'n': fmtNumber(_coins.toString()), 'name': '${b['displayName'] ?? b['username']}'}));
     setState(() {
-      _balance = '${r['dealerBalance'] ?? _balance}';
+      if (r['dealerBalance'] != null) _balance = '${r['dealerBalance']}';
       _key = Api.newIdempotencyKey();
       _amount.clear();
       _note.clear();
@@ -496,12 +503,12 @@ class _DealerSellScreenState extends State<DealerSellScreen> {
                 child: FittedBox(
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.centerLeft,
-                  child: Text(fmtNumber(_balance), style: const TextStyle(color: _dark, fontSize: 28, fontWeight: FontWeight.w900)),
+                  child: Text(_balance == null ? '—' : fmtNumber(_balance), style: const TextStyle(color: _dark, fontSize: 28, fontWeight: FontWeight.w900)),
                 ),
               ),
               TextButton(
                 onPressed: () async {
-                  await showDealerStockSheet(context, balance: _balance);
+                  await showDealerStockSheet(context, balance: _balance ?? '0');
                   _loadBalance();
                 },
                 child: Text('${tx('Şarj')} ›', style: const TextStyle(color: _dark, fontWeight: FontWeight.w800)),

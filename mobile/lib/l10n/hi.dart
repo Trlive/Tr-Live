@@ -94,6 +94,7 @@ const kHi = <String, String>{
   'Kullanıcı adı 3-30 karakter olmalı; yalnızca harf, rakam, nokta ve alt çizgi kullanılabilir.': 'यूज़रनेम 3-30 अक्षरों का होना चाहिए; केवल अक्षर, अंक, बिंदु और अंडरस्कोर इस्तेमाल कर सकते हैं।',
   'Şifre en az 8 karakter olmalı.': 'पासवर्ड कम से कम 8 अक्षरों का होना चाहिए।',
   'Şifrenizi girin.': 'अपना पासवर्ड दर्ज करें।',
+  'Bakiye alınamadı: {e}': 'बैलेंस लोड नहीं हो सका: {e}',
   'Telefon numarası geçersiz.': 'फ़ोन नंबर अमान्य है।',
   '{p} ile girişi tarayıcıda tamamlayın.\nOnay verdikten sonra uygulamaya dönün.': '{p} से लॉगिन ब्राउज़र में पूरा करें।\nअनुमति देने के बाद ऐप पर लौटें।',
   'Vazgeç': 'रद्द करें',

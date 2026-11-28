@@ -94,6 +94,7 @@ const kAr = <String, String>{
   'Kullanıcı adı 3-30 karakter olmalı; yalnızca harf, rakam, nokta ve alt çizgi kullanılabilir.': 'يجب أن يكون اسم المستخدم من 3 إلى 30 حرفًا؛ يُسمح فقط بالأحرف والأرقام والنقطة والشرطة السفلية.',
   'Şifre en az 8 karakter olmalı.': 'يجب ألا تقل كلمة المرور عن 8 أحرف.',
   'Şifrenizi girin.': 'أدخل كلمة المرور.',
+  'Bakiye alınamadı: {e}': 'تعذر تحميل الرصيد: {e}',
   'Telefon numarası geçersiz.': 'رقم الهاتف غير صالح.',
   '{p} ile girişi tarayıcıda tamamlayın.\nOnay verdikten sonra uygulamaya dönün.': 'أكمل تسجيل الدخول عبر {p} في المتصفح.\nارجع إلى التطبيق بعد الموافقة.',
   'Vazgeç': 'إلغاء',
