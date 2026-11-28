@@ -175,10 +175,13 @@ jobs:
           s = mf.read_text()
           perms = ["INTERNET", "RECORD_AUDIO", "CAMERA", "MODIFY_AUDIO_SETTINGS", "ACCESS_NETWORK_STATE", "BLUETOOTH_CONNECT",
                    "WAKE_LOCK", "POST_NOTIFICATIONS", "FOREGROUND_SERVICE", "FOREGROUND_SERVICE_MICROPHONE", "FOREGROUND_SERVICE_MEDIA_PLAYBACK",
-                   "READ_MEDIA_AUDIO", "READ_EXTERNAL_STORAGE", "DETECT_SCREEN_CAPTURE"]
-          add = "".join(f'    <uses-permission android:name="android.permission.{p}"/>\n' for p in perms if f'android.permission.{p}"' not in s)
+                   "READ_PHONE_STATE", "READ_MEDIA_AUDIO", "READ_EXTERNAL_STORAGE", "DETECT_SCREEN_CAPTURE"]
+          # READ_EXTERNAL_STORAGE yalnızca Android 12 ve altı (yerel müzik); 13+ READ_MEDIA_AUDIO kullanır.
+          extra = {"READ_EXTERNAL_STORAGE": ' android:maxSdkVersion="32"'}
+          add = "".join(f'    <uses-permission android:name="android.permission.{p}"{extra.get(p, "")}/>\n' for p in perms if f'android.permission.{p}"' not in s)
           # Google Play: kullanılmayan / gerekçe isteyen izinler (eklentiler eklese bile) çıkarılır.
-          for p in ["SYSTEM_ALERT_WINDOW", "FOREGROUND_SERVICE_SPECIAL_USE", "REQUEST_IGNORE_BATTERY_OPTIMIZATIONS", "READ_PHONE_STATE"]:
+          # READ_PHONE_STATE çıkarılmaz: telefon araması gelince oda sesi kapanır (MainActivity.kt); Play'de beyan formu gerektirmez.
+          for p in ["SYSTEM_ALERT_WINDOW", "FOREGROUND_SERVICE_SPECIAL_USE", "REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"]:
               if f'android.permission.{p}"' not in s:
                   add += f'    <uses-permission android:name="android.permission.{p}" tools:node="remove"/>\n'
           if add:
