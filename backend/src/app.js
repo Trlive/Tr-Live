@@ -80,7 +80,7 @@ app.use(timing);
 app.use('/api/activity-play', cors({ origin: true, allowedHeaders: ['Content-Type'], maxAge: 600 }));
 app.use(cors({
   origin: config.corsOrigin.includes('*') ? true : config.corsOrigin,
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-App-Version', 'Idempotency-Key', 'X-Client'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-App-Version', 'Idempotency-Key', 'X-Client', 'X-Totp-Code'],
 }));
 // LiveKit webhook'u gövdeyi HAM okur (imza baytlar üzerinden doğrulanır): JSON ayrıştırıcıdan ÖNCE ve /api dışında
 // (zorunlu güncelleme kapısı sürüm başlığı bekler; ses sunucusu göndermez).

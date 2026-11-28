@@ -2203,7 +2203,9 @@ test('oyun paketi yetkisi: dar erişim varsayılan, tam erişim bilerek açılı
 
   // Yetki değiştirme yalnızca süper adminde.
   status(await api('POST', '/api/admin/plugins/yok-boyle/trust', { token: U.a.token }), 403, 'kullanıcı yetki veremez');
-  status(await api('POST', '/api/admin/plugins/yok-boyle/trust', { token: U.d.token, body: { trusted: true } }), 404, 'olmayan paket');
+  // Tam erişim vermek (ve paket yüklemek) 2FA'sı açık yöneticiden, o anki kodla kabul edilir (K-02).
+  status(await api('POST', '/api/admin/plugins/yok-boyle/trust', { token: U.d.token, body: { trusted: true } }), 403, '2FA kapalı yönetici tam erişim veremez');
+  status(await api('POST', '/api/admin/plugins/yok-boyle/trust', { token: U.d.token, body: { trusted: false } }), 404, 'kapatmak ek doğrulama istemez; olmayan paket');
 });
 
 test('SDUI v2: taslak/yayın ayrımı, kademeli açılış, sürüm eşiği ve geri alma', { skip, timeout: 60000 }, async () => {

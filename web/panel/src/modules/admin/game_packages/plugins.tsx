@@ -27,6 +27,8 @@ export default function AdminPlugins() {
   const { data, error, loading, reload } = useApi<{ items: Pkg[] }>("/api/admin/plugins");
   const { busy, msg, run } = useAction();
   const [open, setOpen] = useState<string | null>(null);
+  // Paket yüklemek ve tam erişim vermek sunucuda kod çalıştırır: sunucu 2FA'sı açık hesaptan, o anki kodla kabul eder.
+  const [totp, setTotp] = useState("");
 
   return (
     <div>
@@ -37,6 +39,20 @@ export default function AdminPlugins() {
           veritabanına ve cüzdana erişebilir. Yalnızca kaynağına güvendiğiniz paketi yükleyin. Her yükleme,
           dosyanın özeti (SHA-256) ve yükleyen yönetici ile birlikte kayda geçer.
         </p>
+        <label className="mb-3 block text-xs text-gray-300">
+          İki adımlı doğrulama kodu (yükleme ve tam erişim için gerekli)
+          <input
+            id="plugin-totp"
+            type="text"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            maxLength={32}
+            value={totp}
+            onChange={(e) => setTotp(e.target.value.trim())}
+            placeholder="123456"
+            className="mt-1 block w-40 rounded border border-gray-600 bg-transparent px-2 py-1 text-sm text-gray-100"
+          />
+        </label>
         <input
           type="file"
           accept=".zip,application/zip"
@@ -47,7 +63,8 @@ export default function AdminPlugins() {
             e.target.value = "";
             if (!f) return;
             run("Paket yüklendi ve başlatıldı.", async () => {
-              const r = await apiBinary<{ error?: string | null; sha256?: string; sameAsPrevious?: boolean }>("/api/admin/plugins/upload", f);
+              const r = await apiBinary<{ error?: string | null; sha256?: string; sameAsPrevious?: boolean }>("/api/admin/plugins/upload", f, { "X-Totp-Code": totp });
+              setTotp(""); // kod kısa ömürlü: bir sonraki işlem yenisini ister
               reload();
               if (r.error) throw new Error(`Paket yüklendi ama başlatılamadı: ${r.error}`);
               if (r.sameAsPrevious) throw new Error("Paket yüklendi — ancak dosya bir öncekiyle birebir aynı (içerik değişmemiş).");
@@ -95,7 +112,8 @@ export default function AdminPlugins() {
                 onClick={() => {
                   if (!p.trusted && !confirm(`"${p.name}" paketine veritabanının TAMAMINA erişim verilecek.\n\nBunu yalnızca paketi kendimiz yazdıysak yapın. Üçüncü taraf bir pakette bu, tüm kullanıcı ve cüzdan verisine açık kapı demektir.`)) return;
                   run(p.trusted ? "Tam erişim kapatıldı." : "Tam erişim açıldı.", async () => {
-                    await api(`/api/admin/plugins/${p.id}/trust`, { method: "POST", body: { trusted: !p.trusted } });
+                    await api(`/api/admin/plugins/${p.id}/trust`, { method: "POST", body: { trusted: !p.trusted, totpCode: totp } });
+                    setTotp("");
                     reload();
                   });
                 }}
